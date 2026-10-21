@@ -1,26 +1,479 @@
 @import "tailwindcss";
 
+/* Paleta Melki: papel de campo, carbón, salvia; el naranja es solo de Melki (el asistente). */
+@theme {
+  --color-papel: #f4f2ee;
+  --color-papel-2: #ebe8e1;
+  --color-carbon: #2b2f2e;
+  --color-carbon-2: #4a504e;
+  --color-tenue: #6f7572;
+  --color-linea: #d9d5cc;
+  --color-salvia: #6e8f78;
+  --color-salvia-oscura: #4f6d59;
+  --color-salvia-clara: #dfe8e0;
+  --color-melki: #e07a3f;
+  --color-melki-clara: #fbe9de;
+  --color-melki-oscura: #a94f1b;
+  --color-buena: #1e7b34;
+  --color-estable: #8bd17c;
+  --color-media: #f5d33b;
+  --color-baja: #f08a2c;
+  --color-sin: #d93a2e;
+
+  --font-sans: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-cond: "Barlow Semi Condensed", "Barlow", system-ui, sans-serif;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+html,
+body {
+  background: var(--color-papel);
+  color: var(--color-carbon);
+  font-family: var(--font-sans);
+  font-feature-settings: "tnum" 1;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* Foco visible para teclado en toda la interfaz */
+:focus-visible {
+  outline: 2px solid var(--color-salvia-oscura);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Campos compactos (en la capa de componentes para que las utilidades, como pl-8, puedan ajustarlos) */
+@layer components {
+  .campo {
+    width: 100%;
+    border: 1px solid var(--color-linea);
+    background: #fffdf9;
+    border-radius: 6px;
+    padding: 5px 8px;
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--color-carbon);
+  }
+  .campo:focus {
+    outline: none;
+    border-color: var(--color-salvia);
+    box-shadow: 0 0 0 3px rgb(110 143 120 / 0.22);
+  }
+  .campo[aria-invalid="true"] {
+    border-color: var(--color-sin);
+  }
+  select.campo {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%232b2f2e' stroke-width='1.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 9px center;
+    padding-right: 26px;
+  }
+}
+
+/* Barra de desplazamiento discreta en los paneles */
+.desplazable {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-linea) transparent;
+}
+
+/* ───────────── Marcadores del mapa ───────────── */
+.marcador-raiz {
+  cursor: grab;
+}
+.marcador-raiz:active {
+  cursor: grabbing;
+}
+.torre-marcador {
+  position: relative;
+  width: 30px;
+  height: 37px;
+}
+.torre-marcador .torre {
+  width: 30px;
+  height: 37px;
+  overflow: visible;
+  display: block;
+}
+.torre-marcador .halo path {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 4.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.torre-marcador .trazo path {
+  fill: none;
+  stroke: var(--color-carbon);
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.torre-marcador .ondas {
+  opacity: 0.9;
+}
+.torre-marcador .baliza {
+  stroke: #fff;
+  stroke-width: 1.5;
+  fill: #9aa19d;
+}
+.nodo-solida .baliza {
+  fill: var(--color-buena);
+}
+.nodo-debil .baliza {
+  fill: var(--color-baja);
+}
+.nodo-aislada .baliza {
+  fill: var(--color-sin);
+}
+.nodo-pasarela .baliza {
+  fill: var(--color-carbon);
+}
+.torre-marcador.inactiva {
+  opacity: 0.45;
+}
+.torre-marcador.sel .trazo path {
+  stroke: var(--color-salvia-oscura);
+  stroke-width: 2.1;
+}
+.torre-marcador.sel .halo path {
+  stroke-width: 6;
+}
+.torre-marcador .insignia {
+  position: absolute;
+  top: 9px;
+  left: 20px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--color-carbon);
+  border: 1.5px solid #fff;
+  display: grid;
+  place-items: center;
+}
+.torre-marcador .insignia svg {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1.1;
+}
+.torre-marcador .nombre {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translate(-50%, 2px);
+  white-space: nowrap;
+  font: 600 12px/1.25 var(--font-cond);
+  color: var(--color-carbon);
+  background: rgb(255 255 255 / 0.92);
+  border-radius: 4px;
+  padding: 1px 6px;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  pointer-events: none;
+}
+.torre-marcador.sel .nombre {
+  background: var(--color-carbon);
+  color: #fff;
+}
+.torre-marcador .muestra {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+/* Nodo de campo: equipo pequeño (cuerpo + antena corta) */
+.torre-marcador.es-nodo,
+.torre-marcador.es-nodo .torre {
+  width: 26px;
+  height: 32px;
+}
+.torre-marcador .halo rect {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 4.2;
+}
+.torre-marcador .trazo rect {
+  fill: #e6edf0;
+  stroke: var(--color-carbon);
+  stroke-width: 1.7;
+}
+.torre-marcador.sel .trazo rect {
+  stroke: var(--color-salvia-oscura);
+  stroke-width: 2.1;
+}
+.torre-marcador.sel .halo rect {
+  stroke-width: 6;
+}
+.torre-marcador.es-nodo .insignia {
+  top: 12px;
+  left: 17px;
+}
+
+/* Punto marcado (búsqueda, menú del clic derecho, Melki) */
+.pin-punto {
+  width: 26px;
+  height: 36px;
+  pointer-events: none;
+  background: no-repeat center / contain
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 36'%3E%3Cpath d='M13 1.5C6.6 1.5 1.5 6.6 1.5 13c0 8.6 11.5 21.5 11.5 21.5S24.5 21.6 24.5 13C24.5 6.6 19.4 1.5 13 1.5Z' fill='%23e07a3f' stroke='%23fff' stroke-width='2'/%3E%3Ccircle cx='13' cy='13' r='4.2' fill='%23fff'/%3E%3C/svg%3E");
+  filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.45));
+}
+
+/* Etiquetas sobre el mapa: rango de alcance, anillos y regla */
+.etiqueta-mapa {
+  font: 600 11.5px/1.2 var(--font-cond);
+  white-space: nowrap;
+  pointer-events: none;
+  color: #fff;
+  text-shadow:
+    0 0 3px rgb(0 0 0 / 0.95),
+    0 0 1px #000;
+}
+.etiqueta-mapa.alcance-servicio {
+  color: #ffd29e;
+}
+.etiqueta-mapa.alcance-confiable {
+  color: #cdf2c2;
+}
+.etiqueta-mapa.anillo {
+  font-weight: 500;
+  font-size: 11px;
+}
+.etiqueta-mapa.regla-total {
+  font-size: 12px;
+  color: #fff;
+  background: #0e2a33;
+  border-left: 3px solid #1fc8f0;
+  border-radius: 4px;
+  padding: 2px 6px;
+  text-shadow: none;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.35);
+}
+.etiqueta-mapa.regla-vivo {
+  background: #1fc8f0;
+  color: #0e2a33;
+  border-left-color: #0e2a33;
+}
+.etiqueta-mapa.regla-tramo {
+  font-size: 11px;
+  font-weight: 500;
+  background: rgb(14 42 51 / 0.78);
+  border-radius: 3px;
+  padding: 1px 4px;
+  text-shadow: none;
+}
+.manija-regla {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2.5px solid #1fc8f0;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.45);
+  cursor: move;
+}
+.manija-regla.media {
+  width: 9px;
+  height: 9px;
+  border-width: 2px;
+  border-color: #fff;
+  background: #1fc8f0;
+  opacity: 0.8;
+}
+
+/* Nombres de referencia: países, departamentos, municipios y ríos.
+   Sobre el satélite van claros con sombra; sobre los mapas claros, oscuros con halo blanco. */
+.etiqueta-ref {
+  pointer-events: none;
+  white-space: nowrap;
+  font-family: var(--font-cond);
+  color: #fff;
+  text-shadow:
+    0 0 2px #000,
+    0 0 5px rgb(0 0 0 / 0.75);
+}
+.etiqueta-ref.et-pais {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.etiqueta-ref.et-departamento {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #f1e6ff;
+}
+.etiqueta-ref.et-municipio {
+  font-size: 12px;
+  font-weight: 500;
+}
+.etiqueta-ref.et-rio {
+  font-size: 11.5px;
+  font-style: italic;
+  font-weight: 500;
+  color: #bfe5ff;
+}
+:root:not([data-fondo-mapa="satelite"]) .etiqueta-ref {
+  color: #3d2a55;
+  text-shadow:
+    0 0 2px #fff,
+    0 0 4px #fff,
+    0 0 6px rgb(255 255 255 / 0.8);
+}
+:root:not([data-fondo-mapa="satelite"]) .etiqueta-ref.et-departamento {
+  color: #5b3f80;
+}
+:root:not([data-fondo-mapa="satelite"]) .etiqueta-ref.et-rio {
+  color: #1d5f99;
+}
+
+.etiqueta-enlace {
+  font: 600 11px/1 var(--font-cond);
+  padding: 2px 5px;
+  border-radius: 3px;
+  background: rgb(255 255 255 / 0.9);
+  color: var(--color-carbon);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+  border-left: 3px solid var(--color-buena);
+  pointer-events: auto;
+}
+.etiqueta-enlace.enlace-inestable {
+  border-left-color: var(--color-baja);
+}
+.etiqueta-enlace.enlace-sin {
+  border-left-color: var(--color-sin);
+}
+
+.pin-inspeccion {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  background: var(--color-carbon);
+  box-shadow:
+    0 0 0 2px var(--color-carbon),
+    0 2px 6px rgb(0 0 0 / 0.4);
+}
+
+/* Controles de MapLibre en la paleta de la app */
+.maplibregl-ctrl-group {
+  border-radius: 8px !important;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.25) !important;
+}
+.maplibregl-ctrl-scale {
+  border-color: var(--color-carbon) !important;
+  font-family: var(--font-cond);
+  background: rgb(255 255 255 / 0.85) !important;
+}
+.maplibregl-ctrl-attrib {
+  font-family: var(--font-sans);
+}
+
+/* ───────────── Melki ───────────── */
+@keyframes melki-parpadeo {
+  0%,
+  92%,
+  100% {
+    transform: scaleY(1);
+  }
+  95% {
+    transform: scaleY(0.1);
+  }
+}
+.melki-ojo {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: melki-parpadeo 5s infinite;
+}
+@keyframes melki-senal {
+  0% {
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.melki-hablando .melki-onda {
+  animation: melki-senal 1.2s ease-out infinite;
+}
+.melki-hablando .melki-onda.o2 {
+  animation-delay: 0.3s;
+}
+@keyframes melki-boca {
+  0%,
+  100% {
+    transform: scaleY(0.4);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+.melki-hablando .melki-boca {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: melki-boca 0.35s ease-in-out infinite;
+}
+
+.tour-foco {
+  position: fixed;
+  border-radius: 10px;
+  box-shadow: 0 0 0 9999px rgb(30 33 32 / 0.55);
+  transition:
+    top 0.35s ease,
+    left 0.35s ease,
+    width 0.35s ease,
+    height 0.35s ease;
+  pointer-events: none;
+  z-index: 60;
+}
+
+/* Paso práctico de un tour: solo se marca el elemento, sin oscurecer, para que se pueda usar la pantalla */
+.tour-anillo {
+  position: fixed;
+  border-radius: 10px;
+  box-shadow:
+    0 0 0 3px var(--color-melki),
+    0 0 0 9px rgb(224 122 63 / 0.25);
+  animation: tour-anillo 1.6s ease-in-out infinite;
+  transition:
+    top 0.35s ease,
+    left 0.35s ease,
+    width 0.35s ease,
+    height 0.35s ease;
+  pointer-events: none;
+  z-index: 60;
+}
+
+@keyframes tour-anillo {
+  50% {
+    box-shadow:
+      0 0 0 3px var(--color-melki),
+      0 0 0 14px rgb(224 122 63 / 0.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tour-anillo {
+    animation: none;
+  }
 }

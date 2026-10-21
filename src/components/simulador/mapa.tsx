@@ -1,0 +1,539 @@
+"use client";
+
+// Mapa base (MapLibre, fuentes abiertas), referencias (países, departamentos, municipios, ríos), nodos arrastrables,
+// capa de cobertura, rango de alcance, anillos de distancia y enlaces de la malla.
+import maplibregl, { type GeoJSONSource, type ImageSource, type Map as MapaML, type Marker } from "maplibre-gl";
+import { useEffect, useRef, useState, type Dispatch } from "react";
+
+import { CONFIG, urlsTeselas } from "@/lib/config";
+import { metrosPorGrado } from "@/lib/radio/geo";
+import { anchosHaz, esDireccional } from "@/lib/radio/patron";
+import type { Inspeccion } from "@/lib/radio/simulacion";
+import type { Antena, ResultadoSimulacion } from "@/lib/radio/tipos";
+
+import { geojsonAlcance, geojsonAnillos, type EtiquetaAlcance } from "./capa-alcance";
+import { COLORES_ANTENA, esquinas, opcionesEscala, pintarCobertura } from "./capa-cobertura";
+import { colorearReferencia, crearCapasReferencia, EtiquetasReferencia, visibilidadReferencia } from "./capas-referencia";
+import type { Accion, Estado, FondoMapa } from "./estado";
+import { estadoNodo, htmlMarcador } from "./marcador";
+
+export type SolicitudVista =
+  | { n: number; tipo: "encuadrar" }
+  | { n: number; tipo: "centrar"; lat: number; lon: number; zoom?: number }
+  | { n: number; tipo: "caja"; caja: [number, number, number, number] };
+
+export type PuntoMapa = { lat: number; lon: number; x: number; y: number };
+
+type Props = {
+  estado: Estado;
+  despachar: Dispatch<Accion>;
+  resultado: ResultadoSimulacion | null;
+  inspeccion: Inspeccion | null;
+  onInspeccionar: (lat: number, lon: number) => void;
+  solicitud: SolicitudVista | null;
+  /** Punto marcado (búsqueda o menú contextual). */
+  punto: { lat: number; lon: number } | null;
+  onMenu: (p: PuntoMapa) => void;
+  onListo: (m: MapaML) => void;
+};
+
+const FONDOS: Record<FondoMapa, string> = {
+  satelite: "fondo-satelite",
+  topografico: "fondo-topografico",
+  opentopomap: "fondo-opentopomap",
+  calles: "fondo-calles",
+};
+
+/**
+ * Acercamiento máximo del mapa (zoom de MapLibre, ≈ 0,6 m por píxel en Colombia). Más cerca, las imágenes
+ * satelitales de zonas rurales no existen y el servidor devuelve cuadros grises de «Map data not yet available»;
+ * además el relieve SRTM (≈ 30 m) no da más detalle para la simulación.
+ */
+export const ZOOM_MAXIMO = 17;
+/**
+ * Nivel de tesela (256 px) más alto que se le pide a cada servicio; por encima, MapLibre amplía la última imagen.
+ * Esri tiene nivel 17 en toda Colombia, pero el 18 falta en zonas rurales (p. ej. Vichada) y el 19 en casi todo el campo.
+ */
+const ZOOM_IMAGENES = { esri: 17, opentopomap: 17, osm: 19 } as const;
+
+function estilo(): maplibregl.StyleSpecification {
+  const raster = (url: string, attribution: string, maxzoom: number): maplibregl.RasterSourceSpecification => ({
+    type: "raster",
+    tiles: urlsTeselas(url),
+    tileSize: 256,
+    maxzoom,
+    attribution,
+  });
+  const dem: maplibregl.RasterDEMSourceSpecification = {
+    type: "raster-dem",
+    tiles: [CONFIG.relieve],
+    encoding: "terrarium",
+    tileSize: 256,
+    maxzoom: 14,
+    attribution: CONFIG.atribucion.relieve,
+  };
+  return {
+    version: 8,
+    sources: {
+      satelite: raster(CONFIG.mapas.satelite, CONFIG.atribucion.esri, ZOOM_IMAGENES.esri),
+      etiquetas: raster(CONFIG.mapas.etiquetas, CONFIG.atribucion.esri, ZOOM_IMAGENES.esri),
+      vias: raster(CONFIG.mapas.vias, CONFIG.atribucion.esri, ZOOM_IMAGENES.esri),
+      topografico: raster(CONFIG.mapas.topografico, CONFIG.atribucion.esri, ZOOM_IMAGENES.esri),
+      opentopomap: raster(CONFIG.mapas.opentopomap, CONFIG.atribucion.opentopomap, ZOOM_IMAGENES.opentopomap),
+      calles: raster(CONFIG.mapas.calles, CONFIG.atribucion.osm, ZOOM_IMAGENES.osm),
+      "dem-terreno": dem,
+      "dem-sombra": dem,
+    },
+    layers: [
+      { id: "fondo-color", type: "background", paint: { "background-color": "#DDE3DC" } },
+      { id: "fondo-satelite", type: "raster", source: "satelite", layout: { visibility: "visible" } },
+      { id: "fondo-topografico", type: "raster", source: "topografico", layout: { visibility: "none" } },
+      { id: "fondo-opentopomap", type: "raster", source: "opentopomap", layout: { visibility: "none" } },
+      { id: "fondo-calles", type: "raster", source: "calles", layout: { visibility: "none" } },
+      { id: "sombras", type: "hillshade", source: "dem-sombra", layout: { visibility: "none" }, paint: { "hillshade-exaggeration": 0.35 } },
+      { id: "capa-vias", type: "raster", source: "vias", layout: { visibility: "none" } },
+    ],
+  };
+}
+
+function circulo(lat: number, lon: number, radioM: number, n = 96): [number, number][] {
+  const m = metrosPorGrado(lat);
+  const puntos: [number, number][] = [];
+  for (let i = 0; i <= n; i++) {
+    const a = (i / n) * 2 * Math.PI;
+    puntos.push([lon + (radioM * Math.sin(a)) / m.lon, lat + (radioM * Math.cos(a)) / m.lat]);
+  }
+  return puntos;
+}
+
+/** Abanico (ancho del haz) y eje de apuntamiento de cada antena direccional activa. */
+function geojsonHaces(antenas: Antena[], radioKm: number) {
+  const features: GeoJSON.Feature[] = [];
+  const largo = Math.max(800, Math.min(radioKm * 350, 4000));
+  for (const a of antenas) {
+    if (!a.activa || !esDireccional(a)) continue;
+    const m = metrosPorGrado(a.lat);
+    const punto = (rumbo: number, d: number): [number, number] => {
+      const r = (rumbo * Math.PI) / 180;
+      return [a.lon + (d * Math.sin(r)) / m.lon, a.lat + (d * Math.cos(r)) / m.lat];
+    };
+    const az = a.azimutDeg ?? 0;
+    const ancho = Math.min(anchosHaz(a.patron, a.gananciaDbi).h, 150);
+    const arco: [number, number][] = [];
+    for (let i = 0; i <= 24; i++) arco.push(punto(az - ancho / 2 + (ancho * i) / 24, largo));
+    features.push({ type: "Feature", properties: { parte: "abanico" }, geometry: { type: "Polygon", coordinates: [[[a.lon, a.lat], ...arco, [a.lon, a.lat]]] } });
+    const punta = punto(az, largo * 1.18);
+    features.push({
+      type: "Feature",
+      properties: { parte: "eje" },
+      geometry: { type: "LineString", coordinates: [[a.lon, a.lat], punta, punto(az - 4, largo * 1.08), punta, punto(az + 4, largo * 1.08)] },
+    });
+  }
+  return { type: "FeatureCollection" as const, features };
+}
+
+/** Sincroniza un conjunto de marcadores HTML de texto (etiquetas) con una lista. */
+function sincronizarEtiquetas(m: MapaML, vivas: Map<string, Marker>, lista: EtiquetaAlcance[]) {
+  const claves = new Set(lista.map((e) => e.clave));
+  for (const [k, mk] of vivas) {
+    if (!claves.has(k)) {
+      mk.remove();
+      vivas.delete(k);
+    }
+  }
+  for (const e of lista) {
+    const existente = vivas.get(e.clave);
+    if (existente) {
+      existente.setLngLat([e.lon, e.lat]);
+      existente.getElement().textContent = e.texto;
+      continue;
+    }
+    const el = document.createElement("div");
+    el.className = `etiqueta-mapa ${e.clase}`;
+    el.textContent = e.texto;
+    vivas.set(e.clave, new maplibregl.Marker({ element: el, anchor: "bottom" }).setLngLat([e.lon, e.lat]).addTo(m));
+  }
+}
+
+export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar, solicitud, punto, onMenu, onListo }: Props) {
+  const contenedor = useRef<HTMLDivElement>(null);
+  const mapa = useRef<MapaML | null>(null);
+  const marcadores = useRef(new Map<string, Marker>());
+  const etiquetasEnlace = useRef<Marker[]>([]);
+  const etiquetasAlcance = useRef(new Map<string, Marker>());
+  const etiquetasAnillos = useRef(new Map<string, Marker>());
+  const referencias = useRef<EtiquetasReferencia | null>(null);
+  const pin = useRef<Marker | null>(null);
+  const pinPunto = useRef<Marker | null>(null);
+  const lienzo = useRef<HTMLCanvasElement | null>(null);
+  const [listo, setListo] = useState(false);
+  // Valores actuales para los manejadores registrados una sola vez
+  const actual = useRef({ estado, onInspeccionar, despachar, onMenu, onListo });
+  useEffect(() => {
+    actual.current = { estado, onInspeccionar, despachar, onMenu, onListo };
+  });
+
+  // Crear el mapa una sola vez
+  useEffect(() => {
+    if (!contenedor.current) return;
+    const antenas = actual.current.estado.escenario.antenas;
+    const m = new maplibregl.Map({
+      container: contenedor.current,
+      style: estilo(),
+      center: antenas.length ? [antenas[0].lon, antenas[0].lat] : [-74.08, 4.6],
+      zoom: antenas.length ? 10 : 5.5,
+      minZoom: 3,
+      maxZoom: ZOOM_MAXIMO,
+      attributionControl: false,
+      maxPitch: 70,
+      fadeDuration: 0,
+    });
+    m.addControl(new maplibregl.AttributionControl({ compact: true, customAttribution: CONFIG.atribucion.division }), "bottom-right");
+    m.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
+    m.addControl(new maplibregl.ScaleControl({ unit: "metric", maxWidth: 120 }), "bottom-left");
+    m.on("load", () => {
+      crearCapasReferencia(m);
+      m.addLayer({ id: "capa-etiquetas", type: "raster", source: "etiquetas", layout: { visibility: "none" } });
+      for (const id of ["circulos", "anillos", "alcance", "enlaces", "haces"]) m.addSource(id, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      m.addLayer({ id: "haces-relleno", type: "fill", source: "haces", filter: ["==", ["get", "parte"], "abanico"], paint: { "fill-color": "#FFFFFF", "fill-opacity": 0.16 } });
+      m.addLayer({
+        id: "haces-borde",
+        type: "line",
+        source: "haces",
+        filter: ["==", ["get", "parte"], "abanico"],
+        paint: { "line-color": "#FFFFFF", "line-width": 1.2, "line-dasharray": [2, 2], "line-opacity": 0.85 },
+      });
+      m.addLayer({ id: "haces-eje-halo", type: "line", source: "haces", filter: ["==", ["get", "parte"], "eje"], layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#1E2120", "line-width": 4.5, "line-opacity": 0.4 } });
+      m.addLayer({ id: "haces-eje", type: "line", source: "haces", filter: ["==", ["get", "parte"], "eje"], layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#FFFFFF", "line-width": 2.2 } });
+      m.addLayer({
+        id: "circulos",
+        type: "line",
+        source: "circulos",
+        paint: { "line-color": "#F4F2EE", "line-width": 1.2, "line-dasharray": [3, 3], "line-opacity": 0.85 },
+      });
+      m.addLayer({ id: "anillos-halo", type: "line", source: "anillos", paint: { "line-color": "#1E2120", "line-width": 3, "line-opacity": 0.25 } });
+      m.addLayer({ id: "anillos", type: "line", source: "anillos", paint: { "line-color": "#FFFFFF", "line-width": 1.1, "line-dasharray": [1.5, 2.5], "line-opacity": 0.9 } });
+      m.addLayer({ id: "alcance-halo", type: "line", source: "alcance", paint: { "line-color": "#1E2120", "line-width": 4.5, "line-opacity": 0.45 } });
+      m.addLayer({
+        id: "alcance",
+        type: "line",
+        source: "alcance",
+        layout: { "line-join": "round" },
+        paint: {
+          "line-color": ["match", ["get", "clase"], "confiable", "#8BD17C", "#FFB25B"],
+          "line-width": 2.2,
+        },
+      });
+      m.addLayer({
+        id: "enlaces-halo",
+        type: "line",
+        source: "enlaces",
+        layout: { "line-cap": "round" },
+        paint: { "line-color": "#ffffff", "line-opacity": 0.75, "line-width": ["case", ["get", "troncal"], 6.5, 4.5] },
+      });
+      for (const [clase, color, dash] of [
+        ["solido", "#1E7B34", null],
+        ["inestable", "#F08A2C", [2, 1.4]],
+        ["sin", "#D93A2E", [0.6, 1.6]],
+      ] as const) {
+        m.addLayer({
+          id: `enlaces-${clase}`,
+          type: "line",
+          source: "enlaces",
+          filter: ["==", ["get", "clase"], clase],
+          layout: { "line-cap": dash ? "butt" : "round" },
+          paint: {
+            "line-color": color,
+            "line-width": ["case", ["get", "troncal"], 4, 2.4],
+            ...(dash ? { "line-dasharray": [...dash] } : {}),
+          },
+        });
+      }
+      referencias.current = new EtiquetasReferencia(m);
+      // Créditos plegados en un botón «i» para que no tapen la leyenda (se pliegan la primera vez que aparecen)
+      const plegarCreditos = () => {
+        const creditos = contenedor.current?.querySelector(".maplibregl-ctrl-attrib");
+        if (!creditos?.classList.contains("maplibregl-compact")) return;
+        creditos.classList.remove("maplibregl-compact-show");
+        creditos.removeAttribute("open");
+        m.off("sourcedata", plegarCreditos);
+        m.off("styledata", plegarCreditos);
+      };
+      m.on("sourcedata", plegarCreditos);
+      m.on("styledata", plegarCreditos);
+      plegarCreditos();
+      setListo(true);
+      actual.current.onListo(m);
+    });
+    m.on("click", (e) => {
+      const { estado: est, onInspeccionar: inspeccionar, despachar: d } = actual.current;
+      if (est.herramienta === "agregar") d({ tipo: "agregar", lat: e.lngLat.lat, lon: e.lngLat.lng });
+      else if (est.herramienta === "inspeccionar") inspeccionar(e.lngLat.lat, e.lngLat.lng);
+      else if (est.herramienta === "mover") d({ tipo: "seleccionar", id: null });
+    });
+    m.on("contextmenu", (e) => {
+      e.preventDefault();
+      actual.current.onMenu({ lat: e.lngLat.lat, lon: e.lngLat.lng, x: e.point.x, y: e.point.y });
+    });
+    mapa.current = m;
+    const marcas = marcadores.current;
+    return () => {
+      referencias.current?.destruir();
+      marcas.clear();
+      m.remove();
+      mapa.current = null;
+    };
+  }, []);
+
+  // Cursor según la herramienta
+  useEffect(() => {
+    const m = mapa.current;
+    if (!m) return;
+    m.getCanvas().style.cursor = estado.herramienta === "mover" ? "" : "crosshair";
+  }, [estado.herramienta]);
+
+  // Mapa base, capas de referencia y relieve 3D
+  const v = estado.vista;
+  useEffect(() => {
+    const m = mapa.current;
+    if (!m || !listo) return;
+    for (const [fondo, id] of Object.entries(FONDOS)) m.setLayoutProperty(id, "visibility", fondo === v.fondo ? "visible" : "none");
+    m.setLayoutProperty("capa-etiquetas", "visibility", v.refNombres ? "visible" : "none");
+    m.setLayoutProperty("capa-vias", "visibility", v.refVias ? "visible" : "none");
+    colorearReferencia(m, v.fondo);
+    visibilidadReferencia(m, v);
+    referencias.current?.aplicarVista(v);
+    document.documentElement.dataset.fondoMapa = v.fondo;
+  }, [v, listo]);
+
+  // Cargar los datos de referencia apenas el mapa esté listo
+  useEffect(() => {
+    if (listo) void referencias.current?.cargar().catch(() => undefined);
+  }, [listo]);
+
+  useEffect(() => {
+    const m = mapa.current;
+    if (!m || !listo) return;
+    if (estado.vista.relieve3d) {
+      m.setTerrain({ source: "dem-terreno", exaggeration: 1.4 });
+      m.setLayoutProperty("sombras", "visibility", "visible");
+      if (m.getPitch() < 30) m.easeTo({ pitch: 55, duration: 700 });
+    } else {
+      m.setTerrain(null);
+      m.setLayoutProperty("sombras", "visibility", "none");
+      if (m.getPitch() > 0) m.easeTo({ pitch: 0, duration: 500 });
+    }
+  }, [estado.vista.relieve3d, listo]);
+
+  // Capa de cobertura (todas o solo la del nodo seleccionado)
+  const indiceSolo = estado.vista.soloSeleccionada && estado.seleccion && resultado ? resultado.antenas.findIndex((a) => a.id === estado.seleccion) : -1;
+  useEffect(() => {
+    const m = mapa.current;
+    if (!m || !listo) return;
+    if (!resultado) {
+      if (m.getLayer("cobertura")) m.removeLayer("cobertura");
+      if (m.getSource("cobertura")) m.removeSource("cobertura");
+      return;
+    }
+    lienzo.current ??= document.createElement("canvas");
+    const imagen = pintarCobertura(resultado, estado.vista.modo, estado.vista.mostrarSinServicio, lienzo.current, indiceSolo >= 0 ? indiceSolo : undefined, opcionesEscala(estado.vista));
+    const url = imagen.toDataURL("image/png");
+    const coordinates = esquinas(resultado);
+    const fuente = m.getSource("cobertura") as ImageSource | undefined;
+    if (fuente) fuente.updateImage({ url, coordinates });
+    else {
+      m.addSource("cobertura", { type: "image", url, coordinates });
+      m.addLayer(
+        {
+          id: "cobertura",
+          type: "raster",
+          source: "cobertura",
+          paint: { "raster-opacity": estado.vista.opacidad, "raster-resampling": "nearest", "raster-fade-duration": 0 },
+        },
+        "ref-lagos",
+      );
+    }
+  }, [resultado, estado.vista.modo, estado.vista.mostrarSinServicio, indiceSolo, listo, estado.vista.escala, estado.vista.escalaMinDbm, estado.vista.escalaMaxDbm, estado.vista.umbralDbm, estado.vista.colorUmbral]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const m = mapa.current;
+    if (!m || !listo || !m.getLayer("cobertura")) return;
+    m.setPaintProperty("cobertura", "raster-opacity", estado.vista.opacidad);
+  }, [estado.vista.opacidad, listo, resultado]);
+
+  // Círculos de estudio
+  const antenas = estado.escenario.antenas;
+  const radioKm = estado.escenario.parametros.radioKm;
+  useEffect(() => {
+    const m = mapa.current;
+    if (!m || !listo) return;
+    (m.getSource("circulos") as GeoJSONSource | undefined)?.setData({
+      type: "FeatureCollection",
+      features: estado.vista.mostrarCirculos
+        ? antenas
+            .filter((a) => a.activa && (a.tipo ?? "antena") === "antena")
+            .map((a) => ({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: circulo(a.lat, a.lon, radioKm * 1000) } }))
+        : [],
+    });
+  }, [antenas, radioKm, estado.vista.mostrarCirculos, listo]);
+
+  // Dirección de las antenas direccionales
+  useEffect(() => {
+    const m = mapa.current;
+    if (!m || !listo) return;
+    (m.getSource("haces") as GeoJSONSource | undefined)?.setData(estado.vista.mostrarHaces ? geojsonHaces(antenas, radioKm) : { type: "FeatureCollection", features: [] });
+  }, [antenas, radioKm, estado.vista.mostrarHaces, listo]);
+
+  // Rango de alcance (contornos) y anillos de distancia
+  const seleccionada = antenas.find((a) => a.id === estado.seleccion) ?? null;
+  const unicaAntena = antenas.filter((a) => a.activa && (a.tipo ?? "antena") === "antena");
+  const centroAnillos = seleccionada ?? (unicaAntena.length === 1 ? unicaAntena[0] : null);
+  useEffect(() => {
+    const m = mapa.current;
+    if (!m || !listo) return;
+    const alcance =
+      resultado && estado.vista.mostrarAlcance ? geojsonAlcance(resultado, antenas, estado.vista.soloSeleccionada ? estado.seleccion : null) : { datos: { type: "FeatureCollection" as const, features: [] }, etiquetas: [] };
+    (m.getSource("alcance") as GeoJSONSource | undefined)?.setData(alcance.datos);
+    sincronizarEtiquetas(m, etiquetasAlcance.current, alcance.etiquetas);
+    const anillos =
+      estado.vista.mostrarAnillos && centroAnillos ? geojsonAnillos(centroAnillos, radioKm) : { datos: { type: "FeatureCollection" as const, features: [] }, etiquetas: [] };
+    (m.getSource("anillos") as GeoJSONSource | undefined)?.setData(anillos.datos);
+    sincronizarEtiquetas(m, etiquetasAnillos.current, anillos.etiquetas);
+  }, [resultado, antenas, estado.vista.mostrarAlcance, estado.vista.mostrarAnillos, estado.vista.soloSeleccionada, estado.seleccion, centroAnillos, radioKm, listo]);
+
+  // Enlaces entre nodos
+  useEffect(() => {
+    const m = mapa.current;
+    if (!m || !listo) return;
+    const porId = new Map(antenas.map((a) => [a.id, a]));
+    const troncales = new Set<string>();
+    for (const n of resultado?.nodos ?? []) for (let i = 0; i + 1 < n.ruta.length; i++) troncales.add([n.ruta[i], n.ruta[i + 1]].sort().join("|"));
+    const visibles = (resultado?.enlaces ?? []).filter(
+      (e) => estado.vista.mostrarEnlaces && porId.has(e.a) && porId.has(e.b) && (e.clase !== "sin" || estado.vista.mostrarSinEnlace),
+    );
+    (m.getSource("enlaces") as GeoJSONSource | undefined)?.setData({
+      type: "FeatureCollection",
+      features: visibles.map((e) => {
+        const a = porId.get(e.a)!;
+        const b = porId.get(e.b)!;
+        return {
+          type: "Feature",
+          properties: { clase: e.clase, troncal: troncales.has([e.a, e.b].sort().join("|")) },
+          geometry: { type: "LineString", coordinates: [[a.lon, a.lat], [b.lon, b.lat]] },
+        };
+      }),
+    });
+    for (const mk of etiquetasEnlace.current) mk.remove();
+    etiquetasEnlace.current = visibles.map((e) => {
+      const a = porId.get(e.a)!;
+      const b = porId.get(e.b)!;
+      const el = document.createElement("div");
+      el.className = `etiqueta-enlace enlace-${e.clase}`;
+      el.textContent = `${e.margen.toFixed(0)} dB`;
+      el.title = `${a.nombre} – ${b.nombre}: ${e.margen.toFixed(1).replace(".", ",")} dB a ${e.distanciaKm.toFixed(2).replace(".", ",")} km`;
+      return new maplibregl.Marker({ element: el }).setLngLat([(a.lon + b.lon) / 2, (a.lat + b.lat) / 2]).addTo(m);
+    });
+  }, [resultado, antenas, estado.vista.mostrarEnlaces, estado.vista.mostrarSinEnlace, listo]);
+
+  // Marcadores de nodos
+  useEffect(() => {
+    const m = mapa.current;
+    if (!m) return;
+    const vivos = marcadores.current;
+    const nodos = new Map((resultado?.nodos ?? []).map((n) => [n.id, n]));
+    const indices = new Map((resultado?.antenas ?? []).map((a, i) => [a.id, i]));
+    const ids = new Set(antenas.map((a) => a.id));
+    for (const [id, mk] of vivos) {
+      if (!ids.has(id)) {
+        mk.remove();
+        vivos.delete(id);
+      }
+    }
+    antenas.forEach((a: Antena) => {
+      const indice = indices.get(a.id);
+      const color = estado.vista.modo === "servidor" && indice !== undefined ? COLORES_ANTENA[indice % COLORES_ANTENA.length] : undefined;
+      const html = htmlMarcador(a, estado.seleccion === a.id, estadoNodo(a, nodos.get(a.id)), color);
+      let mk = vivos.get(a.id);
+      if (!mk) {
+        const el = document.createElement("div");
+        el.className = "marcador-raiz";
+        el.dataset.antena = a.id;
+        el.addEventListener("click", (ev) => {
+          if (actual.current.estado.herramienta === "regla") return;
+          ev.stopPropagation();
+          actual.current.despachar({ tipo: "seleccionar", id: a.id });
+        });
+        mk = new maplibregl.Marker({ element: el, anchor: "bottom", draggable: true }).setLngLat([a.lon, a.lat]).addTo(m);
+        mk.on("dragend", () => {
+          const p = mk!.getLngLat();
+          actual.current.despachar({ tipo: "editar", id: a.id, cambios: { lat: Number(p.lat.toFixed(6)), lon: Number(p.lng.toFixed(6)) } });
+        });
+        vivos.set(a.id, mk);
+      }
+      const el = mk.getElement();
+      if (el.dataset.html !== html) {
+        el.innerHTML = html;
+        el.dataset.html = html;
+      }
+      el.style.zIndex = estado.seleccion === a.id ? "5" : "1";
+      el.setAttribute("aria-label", `${(a.tipo ?? "antena") === "nodo" ? "Nodo" : "Nodo antena"} ${a.nombre}`);
+      const p = mk.getLngLat();
+      if (Math.abs(p.lat - a.lat) > 1e-7 || Math.abs(p.lng - a.lon) > 1e-7) mk.setLngLat([a.lon, a.lat]);
+    });
+  }, [antenas, estado.seleccion, resultado, estado.vista.modo]);
+
+  // Punto inspeccionado y punto marcado (búsqueda / menú contextual)
+  useEffect(() => {
+    const m = mapa.current;
+    if (!m) return;
+    pin.current?.remove();
+    pin.current = null;
+    if (!inspeccion) return;
+    const el = document.createElement("div");
+    el.className = "pin-inspeccion";
+    pin.current = new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat([inspeccion.lon, inspeccion.lat]).addTo(m);
+  }, [inspeccion]);
+
+  useEffect(() => {
+    const m = mapa.current;
+    if (!m) return;
+    pinPunto.current?.remove();
+    pinPunto.current = null;
+    if (!punto) return;
+    const el = document.createElement("div");
+    el.className = "pin-punto";
+    pinPunto.current = new maplibregl.Marker({ element: el, anchor: "bottom" }).setLngLat([punto.lon, punto.lat]).addTo(m);
+  }, [punto]);
+
+  // Encuadrar o centrar a pedido de la interfaz
+  useEffect(() => {
+    const m = mapa.current;
+    if (!m || !solicitud) return;
+    if (solicitud.tipo === "centrar") {
+      m.easeTo({ center: [solicitud.lon, solicitud.lat], zoom: solicitud.zoom ?? Math.max(m.getZoom(), 12), duration: 700 });
+      return;
+    }
+    if (solicitud.tipo === "caja") {
+      const [o, s, e, n] = solicitud.caja;
+      m.fitBounds([o, s, e, n], { padding: 60, duration: 800, maxZoom: 13 });
+      return;
+    }
+    const activas = actual.current.estado.escenario.antenas;
+    if (activas.length === 0) return;
+    const r = actual.current.estado.escenario.parametros.radioKm * 1000 * 0.75;
+    const caja = new maplibregl.LngLatBounds();
+    for (const a of activas) {
+      const g = metrosPorGrado(a.lat);
+      caja.extend([a.lon - r / g.lon, a.lat - r / g.lat]);
+      caja.extend([a.lon + r / g.lon, a.lat + r / g.lat]);
+    }
+    m.fitBounds(caja, { padding: 48, duration: 700, maxZoom: 14 });
+  }, [solicitud]);
+
+  // El contenedor de MapLibre recibe «position: relative» de su hoja de estilos: se envuelve para ocupar todo el espacio.
+  return (
+    <div className="absolute inset-0" data-tour="mapa">
+      <div ref={contenedor} className="h-full w-full" />
+    </div>
+  );
+}

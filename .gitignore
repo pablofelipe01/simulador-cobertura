@@ -19,6 +19,8 @@
 
 # production
 /build
+# paquetes de avance, versión HTML y capturas de pruebas
+/dist/
 
 # misc
 .DS_Store

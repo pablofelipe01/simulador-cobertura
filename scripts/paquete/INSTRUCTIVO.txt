@@ -1,0 +1,138 @@
+SIMULADOR DE COBERTURA · Red mesh LoRa 915 MHz · avance del {{FECHA}}
+=====================================================================
+
+Herramienta para simular nodos Meshtastic ubicados en coordenadas
+específicas: cobertura con la paleta de Radio Mobile, rango de alcance,
+enlaces de la malla, saltos hasta la pasarela y factibilidad de la red.
+Incluye las funciones de Radio Mobile (parámetros de red, confiabilidad,
+Longley-Rice, antenas direccionales, pérdidas por vegetación y
+edificios, dBm/µV e informe de radioenlace), una regla para medir
+distancias y áreas, un mapa con departamentos, municipios y ríos, y a
+Melki, el asistente que ejecuta pedidos escritos con sus palabras.
+No hay que instalar nada.
+
+
+1. ABRIRLO
+----------
+OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
+1) Clic derecho sobre el ZIP > "Extraer todo..." > Extraer.
+2) Abra la carpeta "SIMULADOR-HTML" y haga doble clic en "SIMULADOR.html".
+   La carpeta "archivos" debe quedarse junto al HTML.
+{{OPCION_SERVIDOR}}
+- Mejor en Microsoft Edge o Google Chrome actualizados.
+- Necesita internet para el mapa satelital y el relieve en línea. Sin
+  internet funciona con relieve "Plano" o con archivos SRTM .hgt propios.
+- Si ya había usado una versión anterior, el navegador recuerda el
+  escenario guardado; para ver la demostración nueva use
+  "Archivo > Cargar el ejemplo".
+
+
+2. QUÉ PROBAR (unos 20 minutos)
+-------------------------------
+ a) Tours guiados: toque "Tours" (arriba a la derecha) o pídale a
+    Melki "hazme un tour". Melki pregunta cuál quiere:
+      - Tutorial básico (3 min, recomendado para empezar): su primera
+        simulación en 7 pasos, haciéndola usted mismo.
+      - Conocer la pantalla: para qué sirve cada parte.
+      - Red mesh completa, Como Radio Mobile, Medir y exportar y
+        Hablar con Melki.
+    En los pasos prácticos Melki le dice qué hacer, detecta solo cuando
+    quedó hecho y trae "Hágalo por mí" y "Omitir paso"; "Salir" termina
+    cuando quiera. Se practica en un escenario aparte: al terminar, el
+    suyo vuelve tal cual.
+ b) La demostración trae un solo nodo antena, "Ejemplo", con su
+    cobertura, su rango de alcance (línea naranja: con servicio; verde:
+    confiable) y anillos de distancia. En el panel derecho, "Cómo se
+    calculó" explica los números paso a paso.
+ c) Dos tipos de nodo: "Nodo antena" (infraestructura en mástil o torre,
+    genera cobertura) y "Nodo" (equipo de campo: portátil, sensor; se
+    revisa si se conecta a la malla). Se eligen en el panel "Nodos" o
+    arriba del mapa al pulsar "Agregar".
+ d) Melki (robot abajo a la derecha) hace las cosas por usted. Pruebe:
+      - "Inscribe una antena en esta coordenada" y luego la coordenada,
+        por ejemplo 4°13'30" N 73°21'00" O o 4.225, -73.35
+      - "Inscribe un nodo antena llamado Torre 2 en 4.25, -73.30 a 20 m"
+      - "Distancia entre Ejemplo y Torre 2"   - "Sube Torre 2 a 25 m"
+      - "Llévame a Villavicencio"   - "Activa la regla"   - "Deshaz"
+    Cuando inscribe un nodo, simula y le cuenta el alcance. Cada cambio
+    trae su botón "Deshacer".
+ e) Regla (arriba del mapa): Línea (distancia y rumbo), Trayecto (varios
+    puntos) o Área (área y perímetro). Clic en el mapa; doble clic o
+    Enter para terminar. Cada medición se puede renombrar, ocultar,
+    borrar y editar arrastrando sus puntos; el ícono de montaña muestra
+    el perfil del terreno.
+ f) Buscador (arriba): municipio, departamento, nombre de un nodo o
+    coordenadas en decimal o en grados, minutos y segundos.
+ g) Clic derecho en el mapa: agregar un nodo ahí, ver la señal, medir
+    desde ese punto, marcarlo o copiar sus coordenadas. Abajo del mapa
+    se ven las coordenadas y el municipio bajo el cursor.
+ h) Capas: mapa base (Satélite, Topográfico, OpenTopoMap con quebradas y
+    ríos pequeños con nombre, Calles), límites y nombres de departamentos
+    y municipios, ríos y lagos principales, países, poblados y vías, y
+    las capas de la simulación.
+ i) Archivo: guardar el escenario (.json, con las mediciones), nodos a
+    Excel (.csv) y cobertura para Google Earth (.kmz) con el rango de
+    alcance y las mediciones.
+ j) Dictado por voz: en la conversación con Melki, toque el micrófono
+    (junto al botón de enviar) y hable. El texto aparece en la caja:
+    revíselo, corríjalo si hace falta y envíelo (nunca se envía solo).
+    Toque el micrófono otra vez para terminar. La primera vez pregunta
+    cómo dictar; se cambia en "Ajustes de voz":
+      - Con el navegador: más preciso; el audio lo procesa Edge o Chrome
+        por internet.
+      - Privado, sin internet: el audio no sale del equipo. La primera
+        vez puede descargar el reconocedor (unos 100 MB) y luego funciona
+        sin conexión.
+    El navegador pide permiso para usar el micrófono.
+ k) Funciones de Radio Mobile:
+      - Parámetros > Propagación: modelo (Calibrado o Longley-Rice),
+        confiabilidad (Normal, Alta, Muy alta) y, en "Parámetros como
+        en Radio Mobile", clima, polarización, suelo, refractividad y
+        modo estadístico. "Restablecer" vuelve a los de las pruebas.
+      - Parámetros > Receptor: "Entorno de la zona" (cultivos,
+        plantación, bosque, pueblo, ciudad) resta la pérdida de la
+        vegetación o los edificios a los equipos bajos.
+      - Ficha de un nodo: "Tipo de antena" (Yagi, panel, sectorial,
+        parabólica) con azimut, elevación y "Apuntar hacia" otro nodo;
+        en el mapa se dibuja hacia dónde apunta. "Radioenlace" abre el
+        perfil con el informe completo (como "Radio Link"), que se
+        puede copiar o descargar.
+      - Capas > Escala de la señal: margen, dBm, µV o dBµV/m, y colores
+        por clases, arcoíris entre dos niveles o un solo umbral.
+    A Melki también se lo puede pedir: "confiabilidad del 90 %",
+    "clima continental templado", "ponle una Yagi a Ejemplo apuntando
+    a Torre 2", "simula con vegetación densa", "muestra la señal en
+    dBm", "colores arcoíris de -120 a -70 dBm" o "informe del enlace
+    Ejemplo y Torre 2".
+
+
+3. BUENO SABER
+--------------
+- El modelo recomendado es el calibrado con las simulaciones de Radio
+  Mobile (espacio libre + difracción del obstáculo principal, tierra
+  4/3): se desvía unos 3 dB en los enlaces y 5 dB en el mapa. Si cambia
+  los parámetros de red, se corrige con Longley-Rice (ITM 1.2.2), el
+  modelo de Radio Mobile, que también se puede usar solo. Es una
+  herramienta de planeación: confirme en campo con la prueba de alcance
+  de Meshtastic antes de instalar.
+- Los límites y nombres de departamentos y municipios son del DANE (vía
+  geoBoundaries); los ríos y lagos principales, de Natural Earth. Para
+  quebradas y caños con nombre use el mapa base OpenTopoMap o Topográfico.
+- Los escenarios se guardan solo en este navegador. La versión HTML y la
+  versión con servidor no comparten datos: use "Archivo > Guardar
+  escenario" para pasar un escenario de una a otra.
+- El mapa base (Esri, OpenTopoMap, OpenStreetMap) y el relieve en línea
+  solo reciben la zona que se ve en pantalla; no se envían nodos,
+  mediciones ni resultados.
+- Melki entiende y ejecuta los pedidos aquí mismo, sin internet. El
+  dictado «Con el navegador» sí usa internet (el audio lo procesa Edge o
+  Chrome); el dictado «Privado» no envía el audio a ningún lado.
+- La demostración es genérica: no contiene datos de ningún cliente.
+
+
+Contenido
+  INSTRUCTIVO.txt          este instructivo
+  {{ZIP_HTML}}
+    SIMULADOR.html         abre el simulador (doble clic)
+    archivos\              la aplicación, estilos y tipografías
+{{CONTENIDO_SERVIDOR}}  Versión {{COMMIT}}
