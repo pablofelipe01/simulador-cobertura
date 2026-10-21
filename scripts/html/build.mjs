@@ -92,10 +92,8 @@ export async function construirHtml(salida = path.join(repo, "dist", "html", "SI
   css = css.replaceAll("url(/_next/static/media/", "url(../media/");
   writeFileSync(path.join(archivos, "chunks", "simulador.css"), css);
 
-  // Ícono como data: URL (desde file:// el navegador bloquea los íconos externos)
-  const icono = `data:image/svg+xml,${encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -1 34 41"><path d="M16 9 L9.5 38 M16 9 L22.5 38 M11.4 29.5 H20.6 M12.9 22.5 H19.1 M11.4 29.5 L19.1 22.5 M20.6 29.5 L12.9 22.5 M7 38 H25 M10.2 3.2 a8 8 0 0 0 0 10.4 M21.8 3.2 a8 8 0 0 1 0 10.4" fill="none" stroke="#2B2F2E" stroke-width="2.4" stroke-linecap="round"/><circle cx="16" cy="8.4" r="3.6" fill="#6E8F78"/></svg>',
-  )}`;
+  // Ícono como data: URL (desde file:// el navegador bloquea los íconos externos); el mismo de src/app/icon.svg
+  const icono = `data:image/svg+xml,${encodeURIComponent(readFileSync(path.join(repo, "src", "app", "icon.svg"), "utf8").replace(/<!--[\s\S]*?-->/g, "").replace(/\s+/g, " ").trim())}`;
 
   writeFileSync(
     path.join(salida, "SIMULADOR.html"),
