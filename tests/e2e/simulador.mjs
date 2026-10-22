@@ -873,6 +873,53 @@ await flujo(
   { tamano: { width: 390, height: 844 } },
 );
 
+await flujo("ajuste-automatico", async (page, foto) => {
+  await esperarSimulacion(page);
+  await page.getByRole("button", { name: /Abrir a Melki/ }).click();
+  const pregunta = page.getByLabel("Pregunta para Melki");
+  const chat = page.getByRole("region", { name: "Conversación con Melki" });
+  // Un nodo lejano y bajo: la red queda sin ruta al gateway
+  await pregunta.fill("inscribe un nodo antena llamado Lejano en 4.2, -73.2 a 9 m");
+  await page.keyboard.press("Enter");
+  await chat.getByText(/Listo: inscribí el nodo antena «Lejano»/).waitFor();
+  await esperarSimulacion(page);
+  await page.waitForTimeout(600);
+  await esperarSimulacion(page);
+  await page.getByRole("button", { name: "Cerrar a Melki" }).click().catch(() => {});
+  const resultado = page.locator("aside[aria-label=Resultados]");
+  // El botón del Inge: «Ajústamelo automáticamente»
+  const boton = resultado.getByRole("button", { name: /Ajústamelo automáticamente|Optimizar la red/ });
+  await boton.waitFor({ timeout: 30000 });
+  await boton.click();
+  const propuesta = resultado.getByLabel("Propuesta de ajuste");
+  await propuesta.waitFor({ timeout: 120000 });
+  await propuesta.getByText("Lo que necesita").waitFor();
+  afirmar((await propuesta.locator("li").count()) >= 1, "La propuesta no dice lo que necesita");
+  afirmar(!/\$|millones|pesos/.test(await propuesta.innerText()), "La propuesta no debe mostrar precios");
+  afirmar((await page.locator(".ajuste-etiqueta, .pieza.propuesto").count()) >= 1, "El mapa no muestra la propuesta");
+  await foto("propuesta");
+  const antes = await nodosEnLista(page);
+  await propuesta.getByRole("button", { name: "Aplicar y simular" }).click();
+  await resultado.getByText(/Se aplicó «/).waitFor({ timeout: 30000 });
+  await esperarSimulacion(page);
+  await page.getByText(/Cobertura del área objetivo/).first().waitFor({ timeout: 30000 });
+  await foto("aplicada");
+  await resultado.getByRole("button", { name: "Deshacer" }).click();
+  await page.waitForFunction((n) => document.querySelectorAll("[data-tour=lista-antenas] > li").length === n, antes, { timeout: 10000 });
+  await esperarSimulacion(page);
+
+  // Por chat: «¿qué necesito para que sea factible?» → propuesta con sus opciones
+  await page.getByRole("button", { name: /Abrir a Melki/ }).click();
+  await pregunta.fill("¿qué necesito para que sea factible sin pasar de 20 m?");
+  await page.keyboard.press("Enter");
+  await chat.getByText(/Analizo la red como lo haría un planeador/).waitFor();
+  await chat.getByText(/¿La aplico\?/).waitFor({ timeout: 120000 });
+  afirmar(!/Torre más alta[\s\S]{0,40}\b(2[1-9]|30) m/.test(await resultado.innerText()), "Con «sin pasar de 20 m» no debe proponer torres más altas");
+  await chat.getByRole("button", { name: /^Aplicar «.*» \(recomendada\)$/ }).last().click();
+  await chat.getByText(/Listo: apliqué la opción/).waitFor({ timeout: 120000 });
+  await foto("chat");
+});
+
 let fallos = 0;
 for (const r of resultados) {
   console.log(`${r.ok ? "✓" : "✗"} ${r.nombre}${r.ok ? "" : ` — ${r.error}`}`);
