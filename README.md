@@ -37,6 +37,17 @@ Ejemplo apuntando a Torre 2», «simula con vegetación densa», «muestra la se
   25 m», «la persona»), órdenes en lote («sube todos los repetidores a 20 m», «borra todas las personas»), rol y
   equipo de un nodo, capas y fondo del mapa, modos de cobertura, «simular al cambiar», relieve plano o real, nombre del
   escenario, duplicar y seleccionar nodos, y su propia voz. Si no entiende un pedido de acción, lo dice y da ejemplos
+- **Ajuste inteligente** («Ajústamelo automáticamente» en el Resultado, o pidiéndoselo a Melki): cuando la red sale
+  «No factible» o «Factible con ajustes», analiza con el relieve real cómo dejarla factible con la mejor relación
+  cobertura–costo: subir o bajar torres en tramos de 3 m (nunca más de 30 m), correr nodos a lomas cercanas, cambiar a
+  antena sectorial y sugerir antenas de apoyo (puntos con coordenadas, o solo en los sitios que dé el usuario). Propone
+  hasta tres opciones (económica, recomendada y máxima cobertura) con lo que necesita cada una, las muestra en el mapa
+  y las aplica o descarta; si la red ya es factible, la optimiza («misma cobertura, menos costo»). Melki lo entiende con
+  límites: «hazla factible sin pasar de 20 m», «máximo 2 antenas de apoyo», «no muevas los nodos», «solo alturas»,
+  «la más económica», «¿qué necesito para que sea factible?»
+- **Área objetivo y cobertura útil**: la factibilidad pide que la cobertura útil (señal media o mejor, ≥ 30 dB) llegue
+  al 60 % del área de estudio, o a la meta del área objetivo (un área de la regla: «usa el área que medí como área
+  objetivo con el 95 %»; el diseño por área la deja marcada)
 - **Nodos** (modo avanzado): *nodo antena* (infraestructura en mástil; genera la cobertura) y *nodo* de campo
   (portátil, sensor; participa en la malla)
 - **Funciones de Radio Mobile**: parámetros de red (clima, polarización, suelo, refractividad, modo estadístico y
@@ -88,7 +99,9 @@ src/
   lib/radio/                motor: modelo, relieve, perfil, cobertura, malla, factibilidad, worker;
                             estado-red (piezas y guía), siembra (repetidores automáticos), mensaje (viaje por la malla),
                             alcance-plano (alcance de referencia), area (áreas objetivo y cobertura dentro de ellas),
-                            diseno (diseño de la malla por área); components/simulador/animacion-malla.ts (flujo animado)
+                            diseno (diseño de la malla por área), ajuste (ajuste inteligente cobertura–costo),
+                            costos (costo interno de referencia, no se muestra);
+                            components/simulador/animacion-malla.ts (flujo animado), panel-ajuste.tsx (propuesta)
   lib/config.ts             fuentes de mapas y relieve (reemplazables con variables de entorno)
 scripts/                    versión HTML, paquetes de avance y compresor ZIP
 tests/                      pruebas del motor y de extremo a extremo
@@ -107,6 +120,10 @@ Error típico frente a Radio Mobile: ≈ 3 dB en los enlaces de prueba y ≈ 5 d
 Media ≥ 30, Baja ≥ 20, Sin servicio < 20. Enlaces entre nodos: sólido ≥ 30 dB, inestable 20–30 dB. El rango de alcance de
 cada nodo antena es, en cada uno de 72 sectores de 5°, la celda más lejana con servicio (≥ 20 dB) y con servicio
 confiable (≥ 37 dB).
+
+**Factibilidad**: todos los nodos llegan a la pasarela dentro del límite de saltos, por enlaces sólidos, y la cobertura
+útil (señal media o mejor, ≥ 30 dB) alcanza el 60 % del área de estudio o la meta del área objetivo. El panel muestra
+la cobertura útil, la confiable (≥ 37 dB), la que tiene servicio (≥ 20 dB) y el respaldo.
 
 ### Funciones de Radio Mobile
 
@@ -157,6 +174,25 @@ confiable (≥ 37 dB).
   del mapa, así que la meta estimada coincide con la simulada. «Respaldo» exige dos nodos con ese margen en cada
   punto. Al terminar Melki pone los nodos, simula y cuenta la cobertura real por clase; si no llega, ofrece más
   repetidores, torres más altas o ver un punto sin cobertura.
+
+### Ajuste inteligente (cobertura–costo)
+
+- **Qué mide** (`src/lib/radio/ajuste.ts`, en el Web Worker): la cobertura útil en una zona fija, el área objetivo o,
+  sin ella, la «zona de la red» (el contorno de los círculos de estudio de los nodos antena), para comparar opciones
+  sobre la misma superficie. Al aplicar una opción sin área objetivo, esa zona queda guardada como área objetivo.
+- **Cómo decide**: primero repara la conectividad (nodos sin ruta, con más saltos que el límite o con enlaces débiles)
+  y luego crece la cobertura eligiendo en cada paso el cambio con más cobertura nueva por unidad de costo, sin
+  empeorar la red. Los candidatos son: alturas de torre de 6 a 30 m, las 5 lomas más altas a 150, 300 y 500 m de
+  cada nodo (nunca el gateway ni los nodos fijos), antenas sectoriales de 90° y 120° hacia donde falta cobertura, y
+  sitios de apoyo en una cuadrícula de ~220 puntos llevados a la loma más alta de su celda (o solo los sitios que dé
+  el usuario), con relevos cuando un buen sitio no alcanza la red. Después poda lo que sobra verificando con las
+  celdas del mapa y elige: la económica (el codo donde cada antena más rinde la mitad que las primeras), la
+  recomendada (la que cumple la meta, o la más cercana) y la de máxima cobertura; descarta las que cuestan más sin
+  cubrir más.
+- **Costo** (`src/lib/radio/costos.ts`): precios de referencia en Colombia (octubre de 2026) que solo sirven para
+  comparar opciones; no se muestran. Mástil liviano hasta 12 m, torre riendada de 15 a 30 m y, por encima, torre
+  autosoportada (unas 8 veces más cara, por eso nunca se propone). Cada sitio suma el nodo, el montaje y su operación
+  durante 3 años, así que a igual cobertura gana la red con menos antenas.
 
 Es una herramienta de planeación: confirme en campo con la prueba de alcance de Meshtastic antes de instalar.
 
