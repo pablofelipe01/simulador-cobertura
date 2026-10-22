@@ -1,6 +1,7 @@
 // Cliente del motor: envía trabajos al Web Worker y devuelve promesas.
 import { crearWorker } from "./crear-worker";
 import type { Entrada, Fase, PuntoDestino, Salida } from "./protocolo";
+import type { PedidoSiembra, Siembra } from "./siembra";
 import type { Inspeccion } from "./simulacion";
 import type { Antena, FuenteRelieve, Parametros, Perfil, PerfilTerreno, ResultadoSimulacion } from "./tipos";
 
@@ -48,6 +49,9 @@ export class MotorCobertura {
       case "perfil-terreno":
         p.resolver(m.perfil);
         break;
+      case "siembra":
+        p.resolver(m.siembra);
+        break;
       case "hgt":
         p.resolver({ archivos: m.archivos, errores: m.errores });
         break;
@@ -81,6 +85,11 @@ export class MotorCobertura {
 
   perfilTerreno(puntos: [number, number][], relieve: FuenteRelieve) {
     return this.enviar<PerfilTerreno>({ tipo: "perfil-terreno", puntos, relieve });
+  }
+
+  /** Propone repetidores desde la red conectada hacia los destinos (sembrado automático). */
+  sembrar(pedido: PedidoSiembra, relieve: FuenteRelieve) {
+    return this.enviar<Siembra>({ tipo: "sembrar", pedido, relieve });
   }
 
   async cargarHgt(archivos: File[]) {

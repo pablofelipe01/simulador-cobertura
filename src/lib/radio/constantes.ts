@@ -43,18 +43,20 @@ export type Preset = {
   sensibilidadDbm: number;
   /** Velocidad aproximada de datos (kbps) según la documentación de Meshtastic. */
   velocidadKbps: number;
+  /** Tasa de código LoRa 4/cr (5 = 4/5, 8 = 4/8), como en el firmware de Meshtastic. */
+  cr: number;
 };
 
 export const PRESETS: readonly Preset[] = [
-  { id: "SHORT_TURBO", nombre: "Short Turbo", sf: 7, anchoBandaKhz: 500, sensibilidadDbm: -118.5, velocidadKbps: 21.88 },
-  { id: "SHORT_FAST", nombre: "Short Fast", sf: 7, anchoBandaKhz: 250, sensibilidadDbm: -121.5, velocidadKbps: 10.94 },
-  { id: "SHORT_SLOW", nombre: "Short Slow", sf: 8, anchoBandaKhz: 250, sensibilidadDbm: -124, velocidadKbps: 6.25 },
-  { id: "MEDIUM_FAST", nombre: "Medium Fast", sf: 9, anchoBandaKhz: 250, sensibilidadDbm: -126.5, velocidadKbps: 3.52 },
-  { id: "MEDIUM_SLOW", nombre: "Medium Slow", sf: 10, anchoBandaKhz: 250, sensibilidadDbm: -129, velocidadKbps: 1.95 },
+  { id: "SHORT_TURBO", nombre: "Short Turbo", sf: 7, anchoBandaKhz: 500, sensibilidadDbm: -118.5, velocidadKbps: 21.88, cr: 5 },
+  { id: "SHORT_FAST", nombre: "Short Fast", sf: 7, anchoBandaKhz: 250, sensibilidadDbm: -121.5, velocidadKbps: 10.94, cr: 5 },
+  { id: "SHORT_SLOW", nombre: "Short Slow", sf: 8, anchoBandaKhz: 250, sensibilidadDbm: -124, velocidadKbps: 6.25, cr: 5 },
+  { id: "MEDIUM_FAST", nombre: "Medium Fast", sf: 9, anchoBandaKhz: 250, sensibilidadDbm: -126.5, velocidadKbps: 3.52, cr: 5 },
+  { id: "MEDIUM_SLOW", nombre: "Medium Slow", sf: 10, anchoBandaKhz: 250, sensibilidadDbm: -129, velocidadKbps: 1.95, cr: 5 },
   // Fórmula: −131,5 dBm; se usa −131 dBm, el mismo valor de las simulaciones de Radio Mobile que calibraron el modelo.
-  { id: "LONG_FAST", nombre: "Long Fast", sf: 11, anchoBandaKhz: 250, sensibilidadDbm: -131, velocidadKbps: 1.07 },
-  { id: "LONG_MODERATE", nombre: "Long Moderate", sf: 11, anchoBandaKhz: 125, sensibilidadDbm: -134.5, velocidadKbps: 0.34 },
-  { id: "LONG_SLOW", nombre: "Long Slow", sf: 12, anchoBandaKhz: 125, sensibilidadDbm: -137, velocidadKbps: 0.18 },
+  { id: "LONG_FAST", nombre: "Long Fast", sf: 11, anchoBandaKhz: 250, sensibilidadDbm: -131, velocidadKbps: 1.07, cr: 5 },
+  { id: "LONG_MODERATE", nombre: "Long Moderate", sf: 11, anchoBandaKhz: 125, sensibilidadDbm: -134.5, velocidadKbps: 0.34, cr: 8 },
+  { id: "LONG_SLOW", nombre: "Long Slow", sf: 12, anchoBandaKhz: 125, sensibilidadDbm: -137, velocidadKbps: 0.18, cr: 8 },
 ];
 
 export function presetPorId(id: PresetId): Preset {
