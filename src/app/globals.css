@@ -225,6 +225,434 @@ body {
   left: 17px;
 }
 
+/* Modo «Sembrar la malla»: cada pieza se pinta según su conexión con el gateway */
+.red-gateway .baliza {
+  fill: var(--color-carbon);
+}
+.red-conectado {
+  --relleno: var(--color-buena);
+}
+.red-lejos,
+.red-aislado {
+  --relleno: var(--color-baja);
+}
+.red-sin-cobertura {
+  --relleno: var(--color-sin);
+}
+.red-pendiente {
+  --relleno: #9aa19d;
+}
+.red-conectado .baliza,
+.red-lejos .baliza,
+.red-aislado .baliza,
+.red-sin-cobertura .baliza,
+.red-pendiente .baliza {
+  fill: var(--relleno);
+}
+.torre-marcador.es-persona,
+.torre-marcador.es-persona .torre {
+  width: 24px;
+  height: 30px;
+}
+.torre-marcador .halo circle {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 4.2;
+}
+.torre-marcador.es-persona .trazo path,
+.torre-marcador.es-persona .trazo circle {
+  fill: var(--relleno, #9aa19d);
+  stroke: var(--color-carbon);
+  stroke-width: 1.6;
+}
+.torre-marcador.es-persona.sel .trazo circle {
+  stroke: var(--color-salvia-oscura);
+  stroke-width: 2.1;
+}
+.torre-marcador .saltos {
+  position: absolute;
+  top: -5px;
+  left: -9px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--color-carbon);
+  color: #fff;
+  border: 1.5px solid #fff;
+  font: 700 11px/14px var(--font-cond);
+  text-align: center;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+  pointer-events: none;
+}
+.torre-marcador .aura {
+  position: absolute;
+  left: 50%;
+  bottom: -30px;
+  width: 60px;
+  height: 60px;
+  transform: translateX(-50%);
+  border: 2px dashed var(--color-baja);
+  border-radius: 50%;
+  background: rgb(240 138 44 / 0.14);
+  pointer-events: none;
+}
+.torre-marcador.propuesto {
+  pointer-events: none;
+}
+.torre-marcador.propuesto .torre {
+  animation: propuesto-latido 1.6s ease-in-out infinite;
+}
+.torre-marcador.propuesto .trazo path {
+  stroke: var(--color-melki-oscura);
+  stroke-dasharray: 2.6 1.8;
+}
+.torre-marcador.propuesto .baliza {
+  fill: var(--color-melki);
+}
+.torre-marcador.propuesto .nombre {
+  background: var(--color-melki);
+  color: #fff;
+}
+@keyframes propuesto-latido {
+  50% {
+    opacity: 0.55;
+  }
+}
+.destino-siembra {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 3px solid var(--color-melki);
+  background: rgb(224 122 63 / 0.22);
+  box-shadow:
+    0 0 0 2px #fff,
+    0 1px 4px rgb(0 0 0 / 0.4);
+  pointer-events: none;
+}
+
+/* Piezas redondas del modo «Sembrar la malla» (como en Trama): brillan, laten y parpadean según su estado */
+.pieza {
+  --anillo: #a3aba7;
+  position: relative;
+  width: 32px;
+  height: 32px;
+}
+.pieza.red-gateway {
+  --anillo: #3ee6c8;
+}
+.pieza.red-conectado {
+  --anillo: #3fd68b;
+}
+.pieza.red-lejos {
+  --anillo: #fbbf24;
+}
+.pieza.red-sin-cobertura {
+  --anillo: #ff5a4e;
+}
+.pieza.red-aislado {
+  --anillo: #ff9f43;
+}
+.pieza-disco {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #2f4f49, #0f1f1c 72%);
+  border: 2px solid var(--anillo);
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.5),
+    0 0 12px 1px color-mix(in srgb, var(--anillo) 60%, transparent);
+  transition: transform 0.15s;
+}
+.pieza-disco svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.pieza-disco svg .lleno {
+  fill: #fff;
+  stroke: none;
+}
+.pieza.sel .pieza-disco {
+  transform: scale(1.12);
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 16px 3px color-mix(in srgb, var(--anillo) 75%, transparent);
+}
+.pieza.inactiva {
+  opacity: 0.45;
+}
+/* Onda que late alrededor de las piezas conectadas y del gateway */
+.pieza-onda {
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  border: 2px solid var(--anillo);
+  opacity: 0;
+  pointer-events: none;
+}
+.pieza.red-conectado .pieza-onda {
+  animation: pieza-latido 2.8s ease-out infinite;
+}
+.pieza.red-gateway .pieza-onda {
+  animation: pieza-latido 1.9s ease-out infinite;
+}
+@keyframes pieza-latido {
+  0% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  100% {
+    transform: scale(2.1);
+    opacity: 0;
+  }
+}
+/* Sin cobertura o sin red: el aro parpadea */
+.pieza.red-sin-cobertura .pieza-disco,
+.pieza.red-aislado .pieza-disco {
+  animation: pieza-parpadeo 1.3s ease-in-out infinite;
+}
+@keyframes pieza-parpadeo {
+  50% {
+    border-color: color-mix(in srgb, var(--anillo) 35%, #0f1f1c);
+    box-shadow:
+      0 0 0 1px rgb(0 0 0 / 0.5),
+      0 0 2px 0 transparent;
+  }
+}
+/* Destello al retransmitir y cuando un vecino escucha el mensaje */
+.pieza.transmite .pieza-disco {
+  animation: pieza-destello 0.75s ease-out;
+}
+.pieza.oye .pieza-disco {
+  animation: pieza-oye 0.7s ease-out;
+}
+@keyframes pieza-destello {
+  0% {
+    transform: scale(1);
+    background: radial-gradient(circle at 50% 50%, #c8fff4, #3ee6c8 70%);
+    box-shadow: 0 0 22px 8px rgb(62 230 200 / 0.85);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes pieza-oye {
+  0% {
+    box-shadow: 0 0 16px 5px rgb(255 255 255 / 0.75);
+  }
+}
+.pieza .saltos {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: #0f1f1c;
+  color: #fff;
+  border: 1.5px solid var(--anillo);
+  font: 700 11px/14px var(--font-cond);
+  text-align: center;
+  pointer-events: none;
+}
+.pieza .aura {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 66px;
+  height: 66px;
+  transform: translate(-50%, -50%);
+  border: 2px dashed var(--anillo);
+  border-radius: 50%;
+  background: rgb(255 159 67 / 0.12);
+  pointer-events: none;
+}
+.pieza .nombre {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translate(-50%, 4px);
+  white-space: nowrap;
+  font: 700 12px/1.25 var(--font-cond);
+  color: #fff;
+  background: rgb(15 31 28 / 0.82);
+  border-radius: 4px;
+  padding: 1px 6px;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.35);
+  pointer-events: none;
+}
+.pieza.sel .nombre {
+  background: #fff;
+  color: var(--color-carbon);
+}
+/* La nube «IA» del gateway: brilla suave y «piensa» cuando le llega un mensaje */
+.pieza-ia {
+  position: absolute;
+  left: 50%;
+  top: -27px;
+  width: 34px;
+  height: 22px;
+  transform: translateX(-50%);
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  filter: drop-shadow(0 0 5px rgb(62 230 200 / 0.75));
+  animation: ia-brillo 3.2s ease-in-out infinite;
+}
+.pieza-ia svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  fill: #3ee6c8;
+  stroke: #0f1f1c;
+  stroke-width: 1;
+}
+.pieza-ia b {
+  position: relative;
+  margin-top: 3px;
+  font: 800 10px/1 var(--font-cond);
+  letter-spacing: 0.04em;
+  color: #0f1f1c;
+}
+.pieza-ia.piensa {
+  animation: ia-piensa 0.55s ease-in-out 3;
+}
+@keyframes ia-brillo {
+  50% {
+    filter: drop-shadow(0 0 9px rgb(62 230 200 / 0.95));
+  }
+}
+@keyframes ia-piensa {
+  50% {
+    transform: translateX(-50%) scale(1.3);
+    filter: drop-shadow(0 0 14px rgb(255 255 255 / 0.95));
+  }
+}
+.pieza-quitar {
+  position: absolute;
+  top: -9px;
+  left: -9px;
+  width: 19px;
+  height: 19px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #ff5a4e;
+  color: #fff;
+  font: 700 14px/1 var(--font-sans, sans-serif);
+  border: 1.5px solid #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.45);
+  cursor: pointer;
+}
+.pieza-quitar:hover {
+  background: #d93a2e;
+}
+.pieza.propuesto {
+  --anillo: #e07a3f;
+  pointer-events: none;
+}
+.pieza.propuesto .pieza-disco {
+  border-style: dashed;
+  background: rgb(15 31 28 / 0.55);
+  animation: propuesto-latido 1.6s ease-in-out infinite;
+}
+.pieza.propuesto .nombre {
+  background: var(--color-melki);
+}
+@media (prefers-reduced-motion: reduce) {
+  .pieza-onda,
+  .pieza-disco,
+  .pieza-ia {
+    animation: none !important;
+  }
+}
+
+/* Mensaje que viaja por la malla */
+.paquete-mensaje {
+  z-index: 8;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--color-melki);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 5px rgb(0 0 0 / 0.5);
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.paquete-mensaje svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.paquete-mensaje.entregado {
+  background: var(--color-buena);
+  animation: paquete-fin 3.4s ease-in forwards;
+}
+@keyframes paquete-fin {
+  0%,
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.paquete-mensaje.perdido {
+  background: var(--color-sin);
+}
+.paquete-mensaje.respuesta {
+  background: #3ee6c8;
+  box-shadow: 0 0 14px 3px rgb(62 230 200 / 0.8);
+}
+.paquete-mensaje.respuesta b {
+  font: 800 9.5px/1 var(--font-cond);
+  color: #0f1f1c;
+}
+.pulso-nodo {
+  z-index: 7;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+}
+.pulso-nodo i {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 3px solid var(--color-melki);
+  animation: pulso-nodo 0.9s ease-out forwards;
+}
+@keyframes pulso-nodo {
+  from {
+    transform: scale(0.6);
+    opacity: 1;
+  }
+  to {
+    transform: scale(4.2);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pulso-nodo i,
+  .torre-marcador.propuesto .torre {
+    animation: none;
+  }
+}
+
 /* Punto marcado (búsqueda, menú del clic derecho, Melki) */
 .pin-punto {
   width: 26px;
