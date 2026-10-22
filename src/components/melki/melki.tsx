@@ -24,7 +24,7 @@ import {
   type EstadoDictado,
   type ModoDictado,
 } from "./dictado";
-import { ejecutarOrden, interpretarOrden, textoRed, type Api, type Pendiente } from "./ordenes";
+import { dividirEnPasos, ejecutarOrden, interpretarOrden, textoRed, type Api, type Orden, type Pendiente } from "./ordenes";
 import type { IdTour } from "./tours";
 import { callar, hablar, vozDisponible } from "./voz";
 
@@ -86,6 +86,9 @@ function resumenMalla(r: ResultadoSimulacion, api: Api, id: string): Respuesta {
 }
 
 /** Resumen que Melki da cuando termina la simulación que él mismo pidió. */
+/** Órdenes que necesitan la red calculada: dentro de varias órdenes seguidas, esperan la simulación. */
+const NECESITA_RED = new Set<Orden["tipo"]>(["sembrar", "mensaje", "que-hago", "exportar", "informe"]);
+
 function resumenResultado(r: ResultadoSimulacion, api: Api, id: string): Respuesta {
   if (api.modo() === "sembrar") return resumenMalla(r, api, id);
   const nombres = new Map(api.antenas().map((a) => [a.id, a]));
@@ -166,6 +169,8 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   const siguiente = useRef(1);
   const pendiente = useRef<Pendiente>(null);
   const esperando = useRef<string | null>(null);
+  /** Último nodo que Melki puso o cambió: «súbelo a 20 m», «muévelo 2 km al norte». */
+  const ultimoNodo = useRef<string | null>(null);
   const ultimoDeshacer = useRef<Escenario | null>(null);
   const actual = useRef({ abierto, vozActiva, api, mensajes });
   useEffect(() => {
@@ -322,14 +327,62 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     agregarMelki({ texto: "Listo, deshice ese cambio." });
   };
 
-  const ejecutar = (orden: Parameters<typeof ejecutarOrden>[0]) => {
+  const ejecutar = (orden: Orden) => {
     const res = ejecutarOrden(orden, api);
     pendiente.current = res.pendiente ?? null;
+    if (res.nodo) ultimoNodo.current = res.nodo;
     if (res.deshacer) ultimoDeshacer.current = res.deshacer;
     if (res.esperar) esperando.current = res.esperar;
     agregarMelki(res);
-    // Órdenes que tardan (el sembrado automático): la respuesta llega cuando el motor termina
+    // Órdenes que tardan (el sembrado automático, el diseño por área): la respuesta llega cuando el motor termina
     if (res.luego) void res.luego.then((r) => agregarMelki(r)).catch(() => agregarMelki({ texto: "No pude terminar ese cálculo. Intente de nuevo." }));
+  };
+
+  /**
+   * Varias órdenes en un mensaje: se interpretan y ejecutan una tras otra (cada una ve lo que hizo la anterior).
+   * Las que necesitan la red calculada esperan la simulación; al final se puede deshacer todo junto.
+   */
+  const ejecutarPlan = async (pasos: string[], primera: Orden) => {
+    const antesPlan = api.instantanea();
+    const total = pasos.length;
+    let hechos = 0;
+    let conCambios = false;
+    let verboPlan = "";
+    for (let i = 0; i < total; i++) {
+      // «Pon el gateway en X, un repetidor a 10 km al este»: el paso que empieza sin verbo usa el del anterior
+      const sinVerbo = /^(un|una|otro|otra|el|la|los|las|\d)/i.test(pasos[i].trim());
+      if (i > 0 && sinVerbo && verboPlan) pasos[i] = `${verboPlan} ${pasos[i]}`;
+      let orden = i === 0 ? primera : interpretarOrden(pasos[i], api, pendiente.current, { ultimoNodo: ultimoNodo.current });
+      if (!orden && i > 0 && verboPlan && !pasos[i].startsWith(verboPlan)) orden = interpretarOrden(`${verboPlan} ${pasos[i]}`, api, pendiente.current, { ultimoNodo: ultimoNodo.current });
+      if (!sinVerbo) verboPlan = pasos[i].trim().split(/\s+/)[0];
+      if (!orden) {
+        agregarMelki({ texto: `Paso ${i + 1} de ${total}: no entendí «${pasos[i]}». ${hechos ? "Hice los anteriores; d" : "D"}ígamelo de otra forma.` });
+        break;
+      }
+      if (NECESITA_RED.has(orden.tipo)) await api.esperarResultado();
+      const res = ejecutarOrden(orden, api);
+      pendiente.current = res.pendiente ?? null;
+      if (res.nodo) ultimoNodo.current = res.nodo;
+      if (res.deshacer) conCambios = true;
+      // Solo el último paso cuenta el resultado de la simulación
+      if (res.esperar && i === total - 1) esperando.current = res.esperar;
+      agregarMelki({ ...res, texto: `Paso ${i + 1} de ${total}: ${res.texto}`, acciones: res.acciones?.filter((a) => a.accion !== "deshacer") });
+      if (res.luego) {
+        const r: Respuesta = await res.luego.catch(() => ({ texto: "No pude terminar ese cálculo." }));
+        agregarMelki({ ...r, acciones: r.acciones?.filter((a) => a.accion !== "deshacer") });
+      }
+      hechos++;
+      if (res.pendiente) break;
+      // Deja que la pantalla se actualice antes del siguiente paso
+      await new Promise((ok) => window.setTimeout(ok, 80));
+    }
+    if (hechos > 1) {
+      const resumen = `Listo, hice ${hechos === total ? `los ${total} pasos` : `${hechos} de los ${total} pasos`}.`;
+      if (conCambios) {
+        ultimoDeshacer.current = antesPlan;
+        agregarMelki({ texto: `${resumen} Si algo no le gustó, puedo deshacerlo todo de una vez.`, acciones: [{ texto: "Deshacer todo", accion: "deshacer", escenario: antesPlan }] });
+      } else agregarMelki({ texto: resumen });
+    }
   };
 
   const preguntar = (q: string) => {
@@ -338,6 +391,22 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     if (sesion.current || control.current) cortarDictado();
     setMensajes((m) => [...m, { id: siguiente.current++, de: "usuario", texto: pregunta }]);
     setTexto("");
+    // La voz de Melki
+    const sinAcentos = pregunta.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (/\b(activa|enciende|prende|pon)\w* (tu |la )?voz\b|\bhablame\b|\blee(me)? en voz alta\b/.test(sinAcentos) && vozDisponible()) {
+      onVoz(true);
+      guardarPreferencias({ voz: true });
+      agregarMelki({ texto: "Listo, ahora le leo en voz alta lo que respondo." });
+      return;
+    }
+    if (/\b(desactiva|apaga|quita|silencia)\w* (tu |la )?voz\b|\bcallate\b|\bsilencio\b|\bno hables\b/.test(sinAcentos)) {
+      callar();
+      setHablando(false);
+      onVoz(false);
+      guardarPreferencias({ voz: false });
+      agregarMelki({ texto: "Listo, ya no hablo en voz alta; sigo respondiendo por escrito." });
+      return;
+    }
     if (/\b(deshac\w*|deshaz|revierte|revertir|anula lo [uú]ltimo)\b/i.test(pregunta)) {
       deshacer(ultimoDeshacer.current);
       return;
@@ -348,7 +417,16 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       agregarMelki(tour);
       return;
     }
-    const orden = interpretarOrden(pregunta, api, pendiente.current);
+    // Varias órdenes en un mismo mensaje
+    const pasos = dividirEnPasos(pregunta);
+    if (pasos.length > 1 && interpretarOrden(pregunta, api, pendiente.current, { ultimoNodo: ultimoNodo.current })?.tipo !== "disenar") {
+      const primera = interpretarOrden(pasos[0], api, pendiente.current, { ultimoNodo: ultimoNodo.current });
+      if (primera) {
+        void ejecutarPlan(pasos, primera);
+        return;
+      }
+    }
+    const orden = interpretarOrden(pregunta, api, pendiente.current, { ultimoNodo: ultimoNodo.current });
     if (orden) {
       ejecutar(orden);
       return;
@@ -523,7 +601,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
             {mensajes.map((m) => (
               <div key={m.id} data-mensaje={m.id} className={m.de === "usuario" ? "flex justify-end" : "flex gap-2"}>
                 {m.de === "melki" && <MelkiAvatar className="mt-0.5 h-7 w-7 shrink-0" />}
-                <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-[14px] leading-snug ${m.de === "usuario" ? "rounded-br-md bg-carbon text-white" : "rounded-tl-md bg-papel"}`}>
+                <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-[14px] leading-snug whitespace-pre-line ${m.de === "usuario" ? "rounded-br-md bg-carbon text-white" : "rounded-tl-md bg-papel"}`}>
                   {m.texto}
                   {m.acciones?.some((a) => a.detalle) && (
                     <div className="mt-2 space-y-1.5" role="group" aria-label="Tours guiados">

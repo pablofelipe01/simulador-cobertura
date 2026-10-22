@@ -1,16 +1,18 @@
 // Órdenes para Melki: entiende pedidos en español con coordenadas (decimales o en grados, minutos y segundos)
 // y los ejecuta en el simulador: inscribir, mover, editar o borrar nodos, cambiar parámetros, simular, ir a un lugar,
 // medir distancias, ver perfiles y la señal en un punto. Todo se procesa aquí mismo, sin servicios externos.
-import { PRESETS, presetPorId, type PresetId } from "@/lib/radio/constantes";
+import { EQUIPOS, PRESETS, presetPorId, type EquipoId, type PresetId } from "@/lib/radio/constantes";
 import { entornoPorId, perdidaEntorno } from "@/lib/radio/entorno";
-import { consejoRed, type EstadoRed, type Pieza } from "@/lib/radio/estado-red";
+import { consejoRed, piezaDe, type EstadoRed, type Pieza } from "@/lib/radio/estado-red";
 import type { ViajeMensaje } from "@/lib/radio/mensaje";
 import type { DestinoSiembra, Siembra } from "@/lib/radio/siembra";
-import { aDecimal, aGMS, distanciaM, formatoDistancia, leerCoordenada, puntoCardinal, rumbo, rumboTexto } from "@/lib/radio/geo";
+import type { Diseno } from "@/lib/radio/diseno";
+import { areaM2, cajaPoligono, conArea, coberturaEnArea, poligonoCirculo, poligonoRectangulo, porcentajeSobre, radioDeArea, type Poligono } from "@/lib/radio/area";
+import { aDecimal, aGMS, desplazar, distanciaM, formatoDistancia, leerCoordenada, puntoCardinal, rumbo, rumboTexto } from "@/lib/radio/geo";
 import type { ClimaItm } from "@/lib/radio/itm";
 import { anchosHaz, esDireccional, patronPorId } from "@/lib/radio/patron";
 import { CLIMAS, CONFIABILIDADES, RED_REFERENCIA, SUELOS, VARIABILIDADES } from "@/lib/radio/red";
-import type { Antena, EntornoId, Escenario, Medicion, Parametros, PatronId, ResultadoSimulacion, SueloId, TipoNodo, VariabilidadId } from "@/lib/radio/tipos";
+import type { Antena, EntornoId, Escenario, Medicion, Parametros, PatronId, ResultadoSimulacion, Rol, SueloId, TipoNodo, VariabilidadId } from "@/lib/radio/tipos";
 import { textoNivel, uvADbm, type UnidadId } from "@/lib/radio/unidades";
 import type { Lugar } from "@/lib/geo/referencia";
 
@@ -18,7 +20,41 @@ import type { EscalaSenal, ModoApp, Vista } from "../simulador/estado";
 import type { Respuesta } from "./cerebro";
 
 /** Cambios de la vista que Melki puede pedir (unidad y escala de colores del mapa de señal). */
-export type CambiosVista = Partial<Pick<Vista, "unidad" | "escala" | "escalaMinDbm" | "escalaMaxDbm" | "umbralDbm" | "modo" | "animarRed">>;
+export type CambiosVista = Partial<
+  Pick<
+    Vista,
+    | "unidad"
+    | "escala"
+    | "escalaMinDbm"
+    | "escalaMaxDbm"
+    | "umbralDbm"
+    | "modo"
+    | "animarRed"
+    | "fondo"
+    | "refDivision"
+    | "refRios"
+    | "refNombres"
+    | "refVias"
+    | "mostrarEnlaces"
+    | "mostrarAlcance"
+    | "mostrarCirculos"
+    | "relieve3d"
+    | "opacidad"
+    | "mostrarSinServicio"
+    | "mostrarAnillos"
+    | "mostrarHaces"
+  >
+>;
+
+/** Dónde va el área del diseño: un punto, el gateway o el centro del mapa que está viendo el usuario. */
+export type CentroArea = { tipo: "coord"; coord: Coordenada; nombre?: string } | { tipo: "gateway" } | { tipo: "mapa" };
+
+/** Área pedida para el diseño: una forma alrededor de un centro, o un área medida con la regla. */
+export type AreaPedida =
+  | { forma: "circulo" | "cuadrado" | "rectangulo"; areaM2: number; anchoM?: number; altoM?: number; centro: CentroArea }
+  | { forma: "medicion"; id: string }
+  /** Un polígono ya conocido (para rehacer o ampliar un diseño); `dibujar` lo vuelve a poner como medición. */
+  | { forma: "poligono"; puntos: Poligono; nombre: string; dibujar: boolean };
 
 export type Coordenada = { lat: number; lon: number; corregido?: boolean };
 
@@ -55,7 +91,30 @@ export type Orden =
   | { tipo: "mensaje"; id?: string }
   | { tipo: "modo"; modo: ModoApp }
   | { tipo: "ejemplo-malla" }
-  | { tipo: "que-hago" };
+  | { tipo: "que-hago" }
+  /* Agente: diseño por área, órdenes en lote y vista */
+  | {
+      tipo: "disenar";
+      area: AreaPedida;
+      margenDb: number;
+      clases: string;
+      porcentaje: number;
+      respaldo: boolean;
+      alturaM: number;
+      gateway: Coordenada | null;
+      maxRepetidores: number;
+      /** Escenario al que se vuelve antes de diseñar de nuevo (rehacer con otras torres o meta). */
+      reemplazar?: Escenario;
+    }
+  | { tipo: "eliminar-varios"; ids: string[]; descripcion: string }
+  | { tipo: "editar-varios"; ids: string[]; cambios: Partial<Antena>; descripcion: string }
+  | { tipo: "auto"; valor: boolean }
+  | { tipo: "encuadrar" }
+  | { tipo: "cobertura-area"; id: string; margenDb: number }
+  | { tipo: "relieve"; valor: "teselas" | "plano" }
+  | { tipo: "nombre-escenario"; nombre: string }
+  | { tipo: "duplicar"; id: string }
+  | { tipo: "seleccionar"; id: string };
 
 export type Referencia = { tipo: "nodo"; id: string } | { tipo: "coord"; coord: Coordenada };
 
@@ -75,7 +134,8 @@ export type Api = {
   centrar(lat: number, lon: number, zoom?: number): void;
   encuadrarCaja(caja: [number, number, number, number]): void;
   marcar(lat: number, lon: number, titulo: string): void;
-  medir(m: Medicion): void;
+  /** Dibuja una medición; con `seleccionar` = false no abre el panel de la regla (el área de un diseño). */
+  medir(m: Medicion, seleccionar?: boolean): void;
   perfil(a: Antena, b: Antena | { lat: number; lon: number }, informe?: boolean): void;
   vista(cambios: CambiosVista): void;
   senal(lat: number, lon: number): void;
@@ -104,6 +164,36 @@ export type Api = {
   /** Envía un mensaje desde ese nodo hasta el gateway y lo anima en el mapa (null si falta simular). */
   enviarMensaje(desdeId: string): ViajeMensaje | null;
   ejemploMalla(): void;
+  /* Agente: varias órdenes, lotes, vista y diseño por área */
+  seleccionar(id: string | null): void;
+  eliminarVarias(ids: string[]): void;
+  restaurar(e: Escenario): void;
+  encuadrarTodo(): void;
+  autoSimular(): boolean;
+  fijarAutoSimular(v: boolean): void;
+  /** Centro del mapa que está viendo el usuario. */
+  centroMapa(): { lat: number; lon: number } | null;
+  mediciones(): Medicion[];
+  /** Diseña la malla para cubrir el área (gateway y repetidores) con el relieve real; no cambia el escenario. */
+  disenarArea(o: OpcionesDiseno): Promise<Diseno | null>;
+  /** Pone los nodos del diseño; devuelve los nodos puestos. */
+  aplicarDiseno(d: Diseno, alturaRepetidorM: number): Antena[];
+  /** Simula (si hace falta) y entrega el próximo resultado al día. */
+  esperarResultado(): Promise<ResultadoSimulacion | null>;
+  fijarRelieve(v: "teselas" | "plano"): void;
+  renombrarEscenario(nombre: string): void;
+  duplicar(id: string): void;
+};
+
+/** Pedido de diseño por área que arma Melki. */
+export type OpcionesDiseno = {
+  area: Poligono;
+  margenDb: number;
+  porcentaje: number;
+  respaldo: boolean;
+  alturaRepetidorM: number;
+  gateway: Coordenada | null;
+  maxRepetidores: number;
 };
 
 const n = (t: string) =>
@@ -334,16 +424,392 @@ function unidadEnTexto(texto: string, tn: string): UnidadId | null {
   return null;
 }
 
+/* ───────────── Números, áreas, lugares y posiciones relativas ───────────── */
+
+/** Minúsculas y sin tildes, conservando símbolos como «²» y «%». */
+const sinTildes = (t: string) => t.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+
+/**
+ * Número escrito en español: «11.226» y «1.500» (miles con punto), «1.234,5», «99,9», «99.9», «11 mil».
+ * Un punto seguido de exactamente tres cifras es separador de miles, como se escribe en Colombia.
+ */
+export function leerNumero(s: string): number {
+  const t = s.trim().replace(/\s+/g, " ");
+  const mil = /\s*mil(es)?$/.test(t);
+  const base = t.replace(/\s*mil(es)?$/, "");
+  let v: number;
+  if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(base)) v = Number(base.replace(/\./g, "").replace(",", "."));
+  else if (/^\d{1,3}(,\d{3}){2,}(\.\d+)?$/.test(base)) v = Number(base.replace(/,/g, ""));
+  else v = Number(base.replace(",", "."));
+  return mil ? v * 1000 : v;
+}
+
+const NUMERO = String.raw`(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+(?:[.,]\d+)?)(?:\s*(mil(?:es)?)\b)?`;
+const UNIDAD_AREA = String.raw`(hectareas?|hectarias?|has?(?![a-z])|km\s?2(?![0-9])|km²|kms?\s+cuadrados?|kilometros?\s+cuadrados?|metros?\s+cuadrados?|m\s?2(?![0-9])|m²|fanegadas?|acres?)`;
+
+function factorArea(unidad: string): number {
+  const u = unidad.replace(/\s+/g, " ");
+  if (/^h/.test(u)) return 1e4;
+  if (/^(km|kms|kilometro)/.test(u)) return 1e6;
+  if (/^fanegada/.test(u)) return 6400;
+  if (/^acre/.test(u)) return 4046.86;
+  return 1;
+}
+
+/** Área pedida en el texto (m²). Si después se corrige («11.000 ha… exactos 11.226»), vale la corrección. */
+export function areaEnTexto(bajo: string): { m2: number; unidad: string } | null {
+  const lista = [...bajo.matchAll(new RegExp(`${NUMERO}\\s*${UNIDAD_AREA}`, "g"))];
+  if (!lista.length) return null;
+  const ultimo = lista[lista.length - 1];
+  const unidad = ultimo[3];
+  let m2 = leerNumero(`${ultimo[1]}${ultimo[2] ? " mil" : ""}`) * factorArea(unidad);
+  const resto = bajo.slice((ultimo.index ?? 0) + ultimo[0].length);
+  const correccion = resto.match(new RegExp(`\\b(?:exact\\w*|en realidad|mejor dicho|o sea|perdon|corrijo|correccion|siendo precis\\w*|precisamente|en total)\\b[^0-9]{0,24}${NUMERO}(?!\\s*(?:%|por ciento|m\\b|metros|km\\b|kilometros|db|dbi|dbm|repetidor))`));
+  if (correccion) m2 = leerNumero(`${correccion[1]}${correccion[2] ? " mil" : ""}`) * factorArea(unidad);
+  return m2 > 0 ? { m2, unidad } : null;
+}
+
+/** «11.226 ha (112,26 km²)», «850 ha», «3,5 ha». */
+export function textoArea(m2: number): string {
+  const ha = m2 / 1e4;
+  const haTxt = ha >= 100 ? Math.round(ha).toLocaleString("es-CO") : f1(ha, ha < 10 ? 1 : 0);
+  const km2 = m2 / 1e6;
+  return m2 >= 1e6 ? `${haTxt} ha (${f1(km2, km2 >= 100 ? 1 : 2).replace(/,0+$/, "")} km²)` : `${haTxt} ha`;
+}
+
+/** Lugar de Colombia nombrado en el texto («en Cumaral», «cerca de Puerto López», «en el Meta»). */
+function lugarEnTexto(tn: string, api: Api): Lugar | null {
+  const re = /\b(?:en|alrededor de|cerca de|junto a|sobre|por|del municipio de|municipio de|de)\s+(?:el municipio de |el pueblo de |la ciudad de |el departamento del? |el )?([a-z][a-z ]{2,48})/g;
+  for (const m of tn.matchAll(re)) {
+    const frase = m[1].split(/\s+(?:a|con|que|y|para|al|hacia|cubr\w*|con)\s+|\s+\d/)[0].trim();
+    if (frase.length < 3 || /^(la|las|los|un|una|mi|su|este|esta|ese|esa|area|zona|mapa|campo|loma|lomas|casa|finca|punto|centro|red|malla|torre|altura|metros|km)\b/.test(frase)) continue;
+    for (const l of api.buscarLugar(frase).slice(0, 6)) {
+      const nombre = n(l.nombre);
+      if (nombre.length >= 4 && new RegExp(`(^|[^a-z])${nombre.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^a-z])`).test(tn)) return l;
+    }
+  }
+  return null;
+}
+
+const RUMBOS = "norte|sur|este|oeste|oriente|occidente|noreste|noroeste|sureste|suroeste|nororiente|noroccidente|suroriente|suroccidente|sudeste|sudoeste";
+
+/**
+ * Posición relativa: «a 10 km al norte del gateway», «2 km al noreste de Repetidor 1», «a 500 m al sur de
+ * 4.2, -73.37», «a 8 km del gateway hacia el oriente», «5 km al este de Cumaral».
+ */
+function relativaEnTexto(texto: string, tn: string, api: Api, antenas: Antena[], ultimo?: Antena): (Coordenada & { desde: string }) | null {
+  const dist = String.raw`(\d+(?:[.,]\d+)?)\s*(km|kms|kilometros?|m|mts?|metros?)`;
+  const a = tn.match(new RegExp(`${dist}\\s+(?:mas\\s+)?(?:al|hacia el|hacia|rumbo al?|en direccion al?)?\\s*(${RUMBOS})\\s+(?:de|del|desde)\\s+(.{2,60})`));
+  const b = a ? null : tn.match(new RegExp(`${dist}\\s+(?:de|del|desde)\\s+(.{2,40}?)\\s+(?:al|hacia el|hacia|rumbo al?)\\s+(${RUMBOS})\\b`));
+  // Sin punto de partida («un repetidor a 10 km al este»): desde el último nodo que se tocó o desde el gateway
+  if (!a && !b) {
+    const c = tn.match(new RegExp(`${dist}\\s+(?:mas\\s+)?(?:al|hacia el|hacia|rumbo al?|en direccion al?)\\s*(${RUMBOS})\\b(?!\\s+(?:de|del|desde)\\b)`));
+    const desde = ultimo ?? antenas.find((x) => x.pasarela && x.activa);
+    if (!c || !desde) return null;
+    const metrosC = num(c[1]) * (/^k/.test(c[2]) ? 1000 : 1);
+    const g = CARDINALES.find(([re]) => re.test(c[3]))?.[1];
+    if (g === undefined || !(metrosC > 0) || metrosC > 200000) return null;
+    const q = desplazar(desde.lat, desde.lon, metrosC, g);
+    return { lat: q.lat, lon: q.lon, desde: `a ${formatoDistancia(metrosC)} al ${c[3]} de ${desde.nombre}` };
+  }
+  const metros = num((a ?? b)![1]) * (/^k/.test((a ?? b)![2]) ? 1000 : 1);
+  const rumboTxt = a ? a[3] : b![4];
+  const frase = ` ${a ? a[4] : b![3]} `;
+  const grados = CARDINALES.find(([re]) => re.test(rumboTxt))?.[1];
+  if (grados === undefined || !(metros > 0) || metros > 200000) return null;
+  let base: { lat: number; lon: number; nombre: string } | null = null;
+  const nodo = nodosMencionados(frase, antenas)[0] ?? piezaGenerica(frase, antenas, ultimo);
+  if (nodo) base = { lat: nodo.lat, lon: nodo.lon, nombre: nodo.nombre };
+  if (!base) {
+    const c = extraerCoordenadas(texto);
+    if (c) base = { lat: c.lat, lon: c.lon, nombre: "ese punto" };
+  }
+  if (!base) {
+    const l = lugarEnTexto(`en${frase}`, api);
+    if (l) base = { lat: l.lat, lon: l.lon, nombre: l.nombre };
+  }
+  if (!base) return null;
+  const q = desplazar(base.lat, base.lon, metros, grados);
+  return { lat: q.lat, lon: q.lon, desde: `a ${formatoDistancia(metros)} al ${rumboTxt} de ${base.nombre}` };
+}
+
+/**
+ * «El repetidor», «la persona», «el gateway» sin nombre: el último que se tocó si es de ese tipo,
+ * si no el último de ese tipo en la lista.
+ */
+function piezaGenerica(frase: string, antenas: Antena[], ultimo?: Antena): Antena | undefined {
+  const tipo: Pieza | null = /\b(gateway|getway|internet|pasarela)\b/.test(frase)
+    ? "gateway"
+    : /^\s*(?:(?:desde|de|del|al)\s+)?(?:el\s+|ese\s+|este\s+)?(repetidor|router)\b(?!\s*\d)/.test(frase)
+      ? "repetidor"
+      : /^\s*(?:(?:desde|de|del)\s+)?(?:la\s+|esa\s+|esta\s+)?persona\b(?!\s*\d)/.test(frase)
+        ? "persona"
+        : null;
+  if (!tipo) return undefined;
+  if (ultimo && piezaDe(ultimo) === tipo) return ultimo;
+  return [...antenas].reverse().find((a) => a.activa && piezaDe(a) === tipo);
+}
+
+/** Coordenada del pedido: relativa («a 10 km al norte del gateway»), escrita, o el centro de un lugar nombrado. */
+function ubicacionEnTexto(texto: string, tn: string, api: Api, antenas: Antena[], conLugar: boolean): (Coordenada & { desde?: string }) | null {
+  const rel = relativaEnTexto(texto, tn, api, antenas);
+  if (rel) return rel;
+  const c = extraerCoordenadas(texto);
+  if (c) return c;
+  if (!conLugar) return null;
+  const l = lugarEnTexto(tn, api);
+  return l ? { lat: l.lat, lon: l.lon, desde: `en ${l.nombre}${l.tipo === "municipio" ? ` (${l.detalle})` : ""}` } : null;
+}
+
+/* ───────────── Diseño de la malla por área ───────────── */
+
+const UMBRALES_SENAL: [RegExp, number][] = [
+  [/\bbuenas?\b/, 45],
+  [/\bestables?\b/, 37],
+  [/\bconfiables?\b/, 37],
+  [/\bmedias?\b/, 30],
+  [/\bbajas?\b/, 20],
+  [/\b(con servicio|servicio minimo|cualquier senal|minima)\b/, 20],
+];
+
+/** Calidad de señal pedida: el mínimo de las clases nombradas («entre buena, estable y media» → media, 30 dB). */
+function margenPedido(tn: string): { margenDb: number; clases: string } {
+  const i = tn.search(/\b(senal|calidad|nivel|clase|cobertura|margen)\b/);
+  const zona = i >= 0 ? tn.slice(i) : tn;
+  const db = zona.match(/\b(\d{1,2})\s*db\b/);
+  if (db && /\b(margen|al menos|minimo|sobre|mayor|mas de)\b/.test(zona)) {
+    const v = Math.min(60, Math.max(10, Number(db[1])));
+    return { margenDb: v, clases: `margen de al menos ${v} dB` };
+  }
+  const halladas = UMBRALES_SENAL.filter(([re]) => re.test(zona)).map(([, v]) => v);
+  const m = halladas.length ? Math.min(...halladas) : 30;
+  const clases = m >= 45 ? "señal buena (≥ 45 dB)" : m >= 37 ? "señal estable o mejor (≥ 37 dB)" : m >= 30 ? "señal media o mejor (buena, estable o media; ≥ 30 dB)" : "servicio (≥ 20 dB)";
+  return { margenDb: m, clases };
+}
+
+function interpretarDiseno(texto: string, tn: string, api: Api, antenas: Antena[]): Orden | null {
+  if (!/\b(cubr\w*|cobertura|abarc\w*|red|malla|repetidor\w*|senal|disen\w*|arm\w*|planific\w*|cuant\w* (repetidores|nodos|antenas))\b/.test(tn)) return null;
+  const bajo = sinTildes(texto);
+  const area = areaEnTexto(bajo);
+  const verboFuerte = /\b(cubr\w*|abarc\w*|cobertura|disen\w*|arm\w*|planific\w*)\b/.test(tn);
+  const radio = verboFuerte ? bajo.match(/\b(?:radio de|en un radio de)\s*(\d+(?:[.,]\d+)?)\s*(km|kilometros?|m|metros?)\b|(\d+(?:[.,]\d+)?)\s*(km|kilometros?|m|metros?)\s*(?:de radio|a la redonda)/) : null;
+  const rect = bajo.match(/(\d+(?:[.,]\d+)?)\s*(km|kilometros?|m|metros?)?\s*(?:por|x)\s*(\d+(?:[.,]\d+)?)\s*(km|kilometros?|m|metros?)\b/);
+  const lado = bajo.match(/cuadrad\w*\s+de\s+(\d+(?:[.,]\d+)?)\s*(km|kilometros?|m|metros?)\s+(?:de lado|por lado)/);
+  const medida = (/\b(area|zona|poligono)\b.{0,30}\b(medi|medida|medido|dibuj\w*|marq\w*|traz\w*)\b|\b(area|zona|poligono)\b.{0,20}\bregla\b/.test(tn) || /\bcubr\w* (esta|esa|el|la) (area|zona|poligono)\b(?! de)/.test(tn));
+  if (!area && !radio && !(rect && verboFuerte) && !lado && !medida) return null;
+  if (!verboFuerte && !/\b(red|malla|repetidor\w*|cuant\w* (repetidores|nodos|antenas))\b/.test(tn)) return null;
+
+  const metros = (v: string, u?: string) => num(v) * (u && /^k/.test(u) ? 1000 : 1);
+  let pedida: AreaPedida | null = null;
+  const pcts = [...bajo.matchAll(/(\d{1,3}(?:[.,]\d+)?)\s*(?:%|por ciento)/g)].map((m) => leerNumero(m[1])).filter((v) => v > 0 && v <= 100);
+  const porcentaje = pcts.length ? pcts[pcts.length - 1] : 95;
+  const { margenDb, clases } = margenPedido(tn);
+  const respaldo = /\b(respaldo|redundan\w*|doble cobertura|dos nodos|dos repetidores por punto)\b/.test(tn);
+  const altura = tn.match(/\b(?:repetidor\w*|torres?|mastiles?)\s+(?:de|a|con|en)\s+(\d{1,2}(?:[.,]\d+)?)\s*(?:m|mts?|metros?)\b/) ?? tn.match(/\b(\d{1,2}(?:[.,]\d+)?)\s*(?:m|mts?|metros?)\s+de altura\b/);
+  const alturaM = altura ? Math.min(60, Math.max(3, num(altura[1]))) : 15;
+  const maxTxt = tn.match(/\b(?:maximo|max|no mas de|hasta|como mucho)\s+(?:de\s+)?(\d{1,3})\s+(?:repetidores|repetidoras|torres|nodos)\b/);
+  const maxRepetidores = maxTxt ? Math.min(200, Math.max(1, Number(maxTxt[1]))) : 60;
+
+  // Gateway en un punto pedido («con el gateway en 4.2, -73.37»)
+  let gateway: Coordenada | null = null;
+  const tramoGw = tn.match(/\b(?:gateway|getway|internet|starlink)\s+(?:en|ubicad[oa] en|queda en|esta en|sobre)\b/);
+  if (tramoGw) gateway = extraerCoordenadas(texto.slice(Math.max(0, (tramoGw.index ?? 0) - 2)));
+
+  if (medida && !area && !radio && !rect && !lado) {
+    const m = [...api.mediciones()].reverse().find((x) => x.tipo === "area");
+    if (m) pedida = { forma: "medicion", id: m.id };
+    else return { tipo: "disenar", area: { forma: "medicion", id: "" }, margenDb, clases, porcentaje, respaldo, alturaM, gateway, maxRepetidores };
+  } else {
+    // Centro del área
+    let centro: CentroArea;
+    const u: (Coordenada & { desde?: string }) | null = gateway ? { ...gateway, desde: "alrededor del gateway" } : ubicacionEnTexto(texto, tn, api, antenas, true);
+    if (u) centro = { tipo: "coord", coord: { lat: u.lat, lon: u.lon }, nombre: u.desde };
+    else if (antenas.some((a) => a.pasarela && a.activa)) centro = { tipo: "gateway" };
+    else centro = { tipo: "mapa" };
+    if (lado) {
+      const l = metros(lado[1], lado[2]);
+      pedida = { forma: "cuadrado", areaM2: l * l, anchoM: l, altoM: l, centro };
+    } else if (rect && !area) {
+      const a1 = metros(rect[1], rect[2] ?? rect[4]);
+      const a2 = metros(rect[3], rect[4]);
+      pedida = { forma: "rectangulo", areaM2: a1 * a2, anchoM: a1, altoM: a2, centro };
+    } else if (radio && !area) {
+      const r = metros(radio[1] ?? radio[3], radio[2] ?? radio[4]);
+      pedida = { forma: "circulo", areaM2: Math.PI * r * r, centro };
+    } else if (area) {
+      const cuadrado = /\bcuadrad\w*/.test(tn);
+      pedida = cuadrado ? { forma: "cuadrado", areaM2: area.m2, anchoM: Math.sqrt(area.m2), altoM: Math.sqrt(area.m2), centro } : { forma: "circulo", areaM2: area.m2, centro };
+    }
+  }
+  if (!pedida) return null;
+  return { tipo: "disenar", area: pedida, margenDb, clases, porcentaje, respaldo, alturaM, gateway, maxRepetidores };
+}
+
+/* ───────────── Órdenes en lote, capas del mapa y otras de la pantalla ───────────── */
+
+function interpretarLote(texto: string, tn: string, antenas: Antena[]): Orden | null {
+  const g = tn.match(/\btod[oa]s\s+(?:l[oa]s\s+)?(repetidores|repetidoras|personas|gente|nodos de campo|nodos antena|antenas|nodos|torres|gateways|piezas)\b/);
+  const menosGateway = /\btodo menos (el|los) gateways?\b|\btodos? (los nodos )?(excepto|menos) (el|los) gateways?\b/.test(tn);
+  if (!g && !menosGateway) return null;
+  const grupo = g?.[1] ?? "menos-gateway";
+  const activas = antenas;
+  const ids = activas
+    .filter((a) => {
+      const p = piezaDe(a);
+      if (grupo === "menos-gateway") return p !== "gateway";
+      if (/^(repetidor|torres)/.test(grupo)) return p === "repetidor";
+      if (/^(personas|gente|nodos de campo)$/.test(grupo)) return (a.tipo ?? "antena") === "nodo";
+      if (/^(antenas|nodos antena)$/.test(grupo)) return (a.tipo ?? "antena") === "antena";
+      if (grupo === "gateways") return a.pasarela;
+      return true;
+    })
+    .map((a) => a.id);
+  const nombre = grupo === "menos-gateway" ? "todos los nodos menos el gateway" : `${/^(personas|gente|antenas|torres|piezas)$/.test(grupo) ? "todas las" : "todos los"} ${grupo === "gente" ? "personas" : grupo}`;
+  if (/\b(borra\w*|elimina\w*|quita\w*|saca\w*|suprim\w*)\b/.test(tn) && !/\bpasarela\b/.test(tn)) return { tipo: "eliminar-varios", ids, descripcion: nombre };
+  const alturaTxt = texto.match(/(\d{1,3}(?:[.,]\d+)?)\s*(?:m|mts?|metros?)\b/i);
+  if (alturaTxt && /\b(sube|subir|subelos|baja|bajar|bajalos|pon\w*|cambia\w*|deja\w*|altura)\b/.test(tn)) {
+    const h = Math.min(300, Math.max(0.5, num(alturaTxt[1])));
+    return { tipo: "editar-varios", ids, cambios: { alturaM: h }, descripcion: `${nombre} quedan a ${fn(h)} m` };
+  }
+  if (/\b(desactiv\w*|exclu\w*|apaga\w*)\b/.test(tn)) return { tipo: "editar-varios", ids, cambios: { activa: false }, descripcion: `${nombre} quedan fuera de la simulación` };
+  if (/\b(activ\w*|inclu\w*|enciend\w*|prende\w*)\b/.test(tn)) return { tipo: "editar-varios", ids, cambios: { activa: true }, descripcion: `${nombre} vuelven a la simulación` };
+  const rol = rolEnTexto(tn);
+  if (rol) return { tipo: "editar-varios", ids, cambios: { rol }, descripcion: `${nombre} quedan con rol ${rol}` };
+  return null;
+}
+
+function rolEnTexto(tn: string): Rol | null {
+  if (!/\b(rol|como|modo|sea|sean|que retransmit\w*)\b/.test(tn)) return null;
+  if (/\b(client ?mute|cliente mudo|mudo|mudos|silencios\w*|no retransmit\w*)\b/.test(tn)) return "CLIENT_MUTE";
+  if (/\b(router|enrutador|retransmisor)\b/.test(tn)) return "ROUTER";
+  if (/\b(client|cliente|clientes)\b/.test(tn)) return "CLIENT";
+  return null;
+}
+
+function equipoEnTexto(tn: string): EquipoId | null {
+  if (!/\bequipo\b|\bradio portatil\b|\bnodo solar\b/.test(tn)) return null;
+  if (/\b(portatil|de mano|handy)\b/.test(tn)) return "portatil-2dbi";
+  if (/\b(solar|fibra|5[.,]8)\b/.test(tn)) return "nodo-solar-58";
+  if (/\b3 ?dbi\b|\bantena de 3\b/.test(tn)) return "nodo-3dbi";
+  return null;
+}
+
+function interpretarPantalla(tn: string): Orden | null {
+  if (PREGUNTA.test(tn) && !/\b(puedes|podrias)\b/.test(tn)) return null;
+  // Simular al cambiar
+  if (/\b(simular al cambiar|simulacion automatica|calculo automatico|simule solo|calcule solo|simula sol[oa]|calcula sol[oa])\b/.test(tn)) {
+    if (/\b(desactiva\w*|apaga\w*|quita\w*|no|deten\w*|para)\b/.test(tn)) return { tipo: "auto", valor: false };
+    return { tipo: "auto", valor: true };
+  }
+  // Relieve: real (teselas de elevación) o terreno plano
+  if (/\b(terreno plano|sin relieve|relieve plano|tierra plana)\b/.test(tn) && !/\b(alcance|referencia)\b/.test(tn)) return { tipo: "relieve", valor: "plano" };
+  if (/\b(relieve real|con relieve|terreno real|elevacion real|usa el relieve|usa la elevacion)\b/.test(tn)) return { tipo: "relieve", valor: "teselas" };
+  // Ver toda la red
+  if (/\b(muestrame|ensename|ver|veo|encuadra\w*|ajusta\w*|centra\w*|zoom)\b.*\b(toda la (red|malla)|todos los nodos|todas las antenas|todo)\b/.test(tn) && !/\b(antena|nodo|repetidor|persona) \d/.test(tn))
+    return { tipo: "encuadrar" };
+  const on = /\b(muestra\w*|mostrar|activa\w*|enciende|prende|pon\w*|quiero ver|ver|ensena\w*|agrega\w*)\b/.test(tn);
+  const off = /\b(quita\w*|oculta\w*|apaga\w*|esconde\w*|desactiva\w*|sin|no quiero ver)\b/.test(tn);
+  // Fondo del mapa
+  if (/\b(mapa|fondo|vista|capa|base)\b/.test(tn) && (on || /\b(cambia\w*|usa\w*)\b/.test(tn))) {
+    const fondo = /\b(satelit\w*|imagenes satelitales|satelite)\b/.test(tn)
+      ? "satelite"
+      : /\bopentopomap|curvas de nivel\b/.test(tn)
+        ? "opentopomap"
+        : /\btopografic\w*/.test(tn)
+          ? "topografico"
+          : /\b(calles|callejero|openstreetmap|osm|carreteras)\b/.test(tn) && /\bmapa de\b/.test(tn)
+            ? "calles"
+            : null;
+    if (fondo) return { tipo: "vista", cambios: { fondo }, descripcion: { satelite: "se ve con imágenes satelitales", topografico: "se ve con el mapa topográfico", opentopomap: "se ve con OpenTopoMap (curvas de nivel, ríos y quebradas)", calles: "se ve con el mapa de calles" }[fondo] };
+  }
+  if (!on && !off) return null;
+  // Con cantidades («radio de 12 km», «20 m», «-100 dBm») es un parámetro o un nodo, no una capa
+  if (/\d\s*(km|kilometros?|m|metros?|db|dbm|dbi|mhz)\b/.test(tn)) return null;
+  const valor = !off;
+  const capas: [RegExp, keyof CambiosVista, string][] = [
+    [/\b(vias|carreteras|caminos|trochas)\b/, "refVias", "las vías"],
+    [/\b(rios|quebradas|cauces)\b/, "refRios", "los ríos"],
+    [/\b(limites|division politica|municipios|departamentos|fronteras)\b/, "refDivision", "los límites de municipios y departamentos"],
+    [/\b(nombres|etiquetas|poblados|pueblos|veredas)\b/, "refNombres", "los nombres de poblados y lugares"],
+    [/\benlaces\b/, "mostrarEnlaces", "los enlaces entre nodos"],
+    [/\b(alcance|rango de alcance|contorno\w*)\b/, "mostrarAlcance", "el rango de alcance"],
+    [/\b(circulos|circulos de estudio)\b/, "mostrarCirculos", "los círculos de estudio"],
+    [/\b(3d|tres dimensiones|relieve en 3d|relieve 3d)\b/, "relieve3d", "el relieve en 3D"],
+    [/\b(zonas? sin servicio|areas? sin servicio|lo rojo)\b/, "mostrarSinServicio", "las zonas sin servicio"],
+    [/\banillos\b/, "mostrarAnillos", "los anillos de distancia"],
+    [/\b(haces|direccion de las antenas)\b/, "mostrarHaces", "la dirección de las antenas direccionales"],
+  ];
+  const cambios: CambiosVista = {};
+  const partes: string[] = [];
+  for (const [re, clave, nombre] of capas) {
+    if (!re.test(tn)) continue;
+    (cambios as Record<string, unknown>)[clave] = valor;
+    partes.push(nombre);
+  }
+  // Modo del mapa de cobertura
+  if (valor && /\b(mejor antena|mejor servidor|quien atiende|que antena atiende|servidor)\b/.test(tn)) {
+    cambios.modo = "servidor";
+    partes.push("cuál nodo antena atiende cada zona");
+  } else if (valor && /\b(mapa|modo|ver|muestra\w*)\b.*\b(respaldo|redundancia)\b/.test(tn)) {
+    cambios.modo = "redundancia";
+    partes.push("el respaldo (cuántos nodos antena llegan a cada punto)");
+  } else if (valor && /\b(mapa|modo) de (la )?senal\b/.test(tn)) {
+    cambios.modo = "senal";
+    partes.push("el mapa de señal");
+  }
+  const op = tn.match(/\b(opacidad|transparencia)\b\D{0,14}(\d{1,3})\s*%?/);
+  if (op) {
+    const v = Math.min(100, Math.max(5, Number(op[2]))) / 100;
+    cambios.opacidad = op[1] === "transparencia" ? Math.max(0.05, 1 - v) : v;
+    partes.push(`la cobertura con ${Math.round((cambios.opacidad ?? 0) * 100)} % de opacidad`);
+  }
+  if (!partes.length) return null;
+  return { tipo: "vista", cambios, descripcion: `${valor ? "ahora muestra" : "ya no muestra"} ${partes.join(", ")}` };
+}
+
+/* ───────────── Varias órdenes en un mensaje ───────────── */
+
+const VERBO_PASO =
+  "pon|ponme|ponle|agrega|agregale|anade|crea|creame|inscribe|registra|instala|mueve|muevelo|muevela|borra|borralo|elimina|quita|quitale|sube|subelo|subela|baja|bajalo|bajala|cambia|cambiale|renombra|llama|llamalo|simula|calcula|envia|manda|conecta|siembra|lleva|muestra|muestrame|activa|desactiva|exporta|descarga|usa|marca|apunta|dale|haz|abre|ve|llevame|mide|cubre|arma|armame|disena|ponlo|ponla";
+
+/** Divide un mensaje con varias órdenes: «pon el gateway en X, luego un repetidor a 10 km al norte y simula». */
+/** Los verbos se reconocen con o sin tilde («súbela», «envía»). */
+const VERBOS_PASO = VERBO_PASO.replace(/[aeiou]/g, (v) => `[${v}${{ a: "á", e: "é", i: "í", o: "ó", u: "ú" }[v]}]`);
+
+export function dividirEnPasos(texto: string): string[] {
+  const t = texto.replace(/\s+/g, " ").trim();
+  // No se corta dentro de comillas
+  const protegido = t.replace(/["“«][^"”»]*["”»]/g, (m) => m.replace(/[,;.]/g, (c) => ({ ",": "\u0001", ";": "\u0002", ".": "\u0003" })[c]!));
+  const corte = new RegExp(
+    String.raw`\s*;\s*|\.\s+(?=\S)|,?\s+(?:y\s+)?(?:luego|despues|después|a continuacion|a continuación|enseguida|por ultimo|por último|finalmente|al final)\s*,?\s+|,?\s+y\s+(?:tambien\s+|además\s+|ademas\s+)?(?=(?:${VERBOS_PASO})\b)|,\s+(?=(?:${VERBOS_PASO})\b)|(?:,\s*|\s+y\s+)(?=(?:un|una|otro|otra)\s+(?:repetidor|repetidora|persona|gateway|nodo|antena)\b)`,
+    "giu",
+  );
+  const pasos = protegido
+    .split(corte)
+    .map((p) => p.replace(/[\u0001]/g, ",").replace(/[\u0002]/g, ";").replace(/[\u0003]/g, ".").replace(/^[,.;\s]+|[,.;\s]+$/g, "").trim())
+    .filter((p) => p.length >= 3);
+  return pasos.length ? pasos : [t];
+}
+
 /* ───────────── Interpretación ───────────── */
 
 const VERBO_AGREGAR = /\b(inscrib\w*|registr\w*|agreg\w*|anad\w*|adicion\w*|ingres\w*|instal\w*|coloc\w*|crea|crear|creame|crealo|pon|poner|ponme|monta\w*|ubica (?:una|un|otra|otro)|ubicar (?:una|un|otra|otro)|nuev[oa]|mete|meter|incorpor\w*)\b/;
 const OBJETO = /\b(antena|antenas|nodo|nodos|torre|repetidor|pasarela|router|sensor|equipo)\b/;
 
-export function interpretarOrden(texto: string, api: Api, pendiente: Pendiente): Orden | null {
+/** Contexto de la conversación: el último nodo que Melki puso o cambió («súbelo a 20 m»). */
+export type ContextoOrden = { ultimoNodo?: string | null };
+
+const CLITICO =
+  /\b(subelo|subela|bajalo|bajala|muevelo|muevela|borralo|borrala|eliminalo|eliminala|quitalo|quitala|renombralo|renombrala|llamalo|llamala|apuntalo|apuntala|conviertelo|conviertela|activalo|activala|desactivalo|desactivala|ponle|dale|cambiale|subele|bajale|quitale|agregale|dejalo|dejala|elevalo|elevala|trasladalo|trasladala|reubicalo|reubicala|giralo|girala|inclinalo|inclinala|ese (nodo|repetidor|gateway|equipo)|este (nodo|repetidor|gateway|equipo)|esa (persona|antena|torre)|esta (persona|antena|torre))\b/;
+
+export function interpretarOrden(texto: string, api: Api, pendiente: Pendiente, contexto: ContextoOrden = {}): Orden | null {
   const tn = n(texto);
   if (!tn) return null;
   const antenas = api.antenas();
-  const coord = extraerCoordenadas(texto);
+  const ultimo = contexto.ultimoNodo ? antenas.find((x) => x.id === contexto.ultimoNodo) : undefined;
+  // «Mueve Repetidor 1 2 km al sur»: la distancia se cuenta desde ese mismo nodo
+  const movido = /\b(mueve|mover|muevelo|muevela|traslad\w*|reubic\w*|desplaz\w*|corre|correlo)\b/.test(tn) ? nodosMencionados(tn, antenas)[0] : undefined;
+  const coord: Coordenada | null = relativaEnTexto(texto, tn, api, antenas, movido ?? ultimo) ?? extraerCoordenadas(texto);
   const sel = api.seleccion();
 
   if (/\b(deshace\w*|deshaz|revierte|revertir|anula lo ultimo)\b/.test(tn)) return null; // lo maneja Melki (necesita la instantánea)
@@ -359,10 +825,29 @@ export function interpretarOrden(texto: string, api: Api, pendiente: Pendiente):
   }
 
   if (/\b(borra|borrar|elimina|eliminar|quita|quitar)\b.*\b(medicion|mediciones|regla|medidas)\b/.test(tn)) return { tipo: "borrar-mediciones" };
-  if (/\b(nuevo escenario|escenario nuevo|empezar de cero|borra todo|borrar todo|limpia todo|limpiar todo)\b/.test(tn)) return { tipo: "nuevo" };
+  if (/\b(nuevo escenario|escenario nuevo|empezar de cero|empieza de cero|empecemos de cero|empezamos de cero|desde cero|borra todo|borrar todo|limpia todo|limpiar todo|limpia el mapa|quita todo|vacia el mapa|vaciar el mapa|vacia todo)\b/.test(tn)) return { tipo: "nuevo" };
   if (/\b(carga\w*|muestra\w*|abre|abrir|ver|pon)\b.*\b(ejemplo|demostracion|demo)\b/.test(tn)) return /\b(malla|sembr\w*|siembra|trama|gateway|repetidor\w*|personas?|gente)\b/.test(tn) ? { tipo: "ejemplo-malla" } : { tipo: "ejemplo" };
 
-  const malla = interpretarMalla(texto, tn, api, coord);
+  const nombreEsc = texto.match(/(?:(?:ll[aá]ma|nombra|renombra|ponle (?:de )?nombre|nombre)\s+(?:al|el)\s+escenario|escenario\s+(?:se llama|llamado))\s*(?:como|a|:)?\s*["“«]?([^"”»]{2,60}?)["”»]?\s*$/i);
+  if (nombreEsc) return { tipo: "nombre-escenario", nombre: nombreEsc[1].trim() };
+  const recep = texto.match(/(?:ganancia del? receptor|receptor (?:con|de))\D{0,14}(\d{1,2}(?:[.,]\d+)?)\s*dbi\b/i);
+  if (recep) return { tipo: "parametros", cambios: { gananciaRxDbi: num(recep[1]) }, descripcion: `la ganancia del receptor a ${recep[1]} dBi` };
+
+  // Agente: cobertura del área medida, diseño por área, órdenes en lote y vista del mapa
+  if (/\b(cuanto|que porcentaje|que %|como (queda|esta|va)|que tanto)\b.*\b(cubr\w*|cobertura|senal)\b.*\b(area|zona|poligono)\b/.test(tn)) {
+    const m = [...api.mediciones()].reverse().find((x) => x.tipo === "area");
+    if (m) return { tipo: "cobertura-area", id: m.id, margenDb: margenPedido(tn).margenDb };
+  }
+  const diseno = interpretarDiseno(texto, tn, api, antenas);
+  if (diseno) return diseno;
+  const lote = interpretarLote(texto, tn, antenas);
+  if (lote) return lote;
+  const pantalla = interpretarPantalla(tn);
+  if (pantalla) return pantalla;
+
+  // Las piezas también se ponen en un lugar nombrado («pon el gateway en Cumaral»)
+  const enLugar = !coord && VERBO_AGREGAR.test(tn) && /\b(gateway|getway|repetidor\w*|persona|gente)\b/.test(tn) ? ubicacionEnTexto(texto, tn, api, antenas, true) : null;
+  const malla = interpretarMalla(texto, tn, api, coord ?? enLugar, ultimo);
   if (malla) return malla;
 
   // Órdenes sobre un nodo existente. «Inscribe una antena…» pide un nodo nuevo aunque ya exista uno solo,
@@ -370,9 +855,11 @@ export function interpretarOrden(texto: string, api: Api, pendiente: Pendiente):
   const nombrado = nodosMencionados(tn, antenas)[0];
   const pideNuevo = VERBO_AGREGAR.test(tn) && OBJETO.test(tn) && !nombrado && !/\b(la|el|esta|este|esa|ese|su)\s+(antena|nodo|torre)\b/.test(tn);
   // El nodo del pedido es el primero que se nombra («ponle una Yagi a Ejemplo apuntando a Torre NE» → Ejemplo)
-  const nodo = pideNuevo ? null : (nombrado ?? buscarNodo(tn, antenas, sel));
+  const nodo = pideNuevo ? null : (nombrado ?? buscarNodo(tn, antenas, sel) ?? (ultimo && CLITICO.test(tn) ? ultimo : null));
   if (nodo) {
     if (/\b(elimina\w*|borra\w*|quita\w*|suprim\w*|saca\w*)\b/.test(tn) && !/\bpasarela\b/.test(tn)) return { tipo: "eliminar", id: nodo.id };
+    if (/\b(duplic\w*|copia\w*|clona\w*)\b/.test(tn)) return { tipo: "duplicar", id: nodo.id };
+    if (/^(selecciona\w*|elige|escoge|abre|muestrame|ver|enfoca\w*)\b/.test(tn) && !/\b(perfil|informe|senal|distancia)\b/.test(tn)) return { tipo: "seleccionar", id: nodo.id };
     if (/\b(mueve|mover|muevela|muevelo|traslad\w*|reubic\w*|desplaz\w*|cambia la ubicacion|cambiar la ubicacion|cambia las coordenadas|cambiar las coordenadas)\b/.test(tn))
       return { tipo: "mover", id: nodo.id, coord: coord ?? undefined };
     const ren = texto.match(/(?:renombr\w*|cambi\w* (?:el )?nombre(?: de)?|ll[aá]mal[ao])\b.*?\b(?:a|por|como)\s+["“«]?([^"”»,.;]{2,40})["”»]?\s*$/i);
@@ -420,6 +907,19 @@ export function interpretarOrden(texto: string, api: Api, pendiente: Pendiente):
         return { tipo: "editar", id: nodo.id, cambios: { elevacionDeg: e }, descripcion: `el haz queda ${e === 0 ? "horizontal" : `${fn(Math.abs(e))}° hacia ${e < 0 ? "abajo" : "arriba"}`}` };
       }
     }
+    const rol = rolEnTexto(tn);
+    if (rol)
+      return {
+        tipo: "editar",
+        id: nodo.id,
+        cambios: { rol },
+        descripcion: `queda con rol ${rol}${rol === "ROUTER" ? " (retransmite primero, como un repetidor)" : rol === "CLIENT" ? " (retransmite después de los ROUTER)" : " (no retransmite mensajes de otros)"}`,
+      };
+    const eq = equipoEnTexto(tn);
+    if (eq) {
+      const q = EQUIPOS.find((x) => x.id === eq)!;
+      return { tipo: "editar", id: nodo.id, cambios: { equipo: q.id, potenciaDbm: q.potenciaDbm, gananciaDbi: q.gananciaDbi, perdidaCableDb: q.perdidaCableDb }, descripcion: `ahora usa el equipo «${q.nombre}»` };
+    }
     const alturaTxt = texto.match(/(\d{1,3}(?:[.,]\d+)?)\s*(?:m|mts?|metros?)\b(?!\s*s\.?\s*n)/i);
     if (alturaTxt && /\b(altura|sube|subir|subela|subelo|eleva\w*|baja|bajar|bajala|bajalo|pon\w*|cambi\w*|deja\w*)\b/.test(tn) && !/\breceptor\b/.test(tn))
       return { tipo: "editar", id: nodo.id, cambios: { alturaM: Math.min(300, Math.max(0.5, num(alturaTxt[1]))) }, descripcion: `altura ${fn(num(alturaTxt[1]))} m` };
@@ -431,7 +931,7 @@ export function interpretarOrden(texto: string, api: Api, pendiente: Pendiente):
 
   // Inscribir un nodo nuevo
   if (VERBO_AGREGAR.test(tn) && OBJETO.test(tn) && !/\b(mide|medir|distancia|perfil)\b/.test(tn)) {
-    return { tipo: "agregar", datos: datosNodo(texto, tn), coord: coord ?? undefined };
+    return { tipo: "agregar", datos: datosNodo(texto, tn), coord: coord ?? ubicacionEnTexto(texto, tn, api, antenas, true) ?? undefined };
   }
 
   // Parámetros de la simulación
@@ -511,7 +1011,11 @@ const PALABRA_PIEZA: [Pieza, RegExp][] = [
 /** Gateway, repetidor o persona mencionados como pieza nueva (no «Repetidor 2», que es el nombre de un nodo). */
 function piezaEnTexto(tn: string, antenas: Antena[]): Pieza | null {
   const otroEquipo = /\b(antena|antenas|nodo|nodos|torre|sensor|equipo|router|pasarela)\b/.test(tn);
-  for (const [pieza, re] of PALABRA_PIEZA) {
+  // La pieza que se nombra primero es la que se pone («agrega un repetidor a 8 km al norte del gateway»)
+  const orden = PALABRA_PIEZA.map(([pieza, re]) => ({ pieza, re, i: tn.search(re) }))
+    .filter((x) => x.i >= 0)
+    .sort((a, b) => a.i - b.i);
+  for (const { pieza, re } of orden) {
     const m = tn.match(re);
     if (!m) continue;
     // «Inscribe un nodo antena en mi casa» o «antena con internet» siguen siendo nodos del modo avanzado
@@ -524,7 +1028,7 @@ function piezaEnTexto(tn: string, antenas: Antena[]): Pieza | null {
   return null;
 }
 
-function interpretarMalla(texto: string, tn: string, api: Api, coord: Coordenada | null): Orden | null {
+function interpretarMalla(texto: string, tn: string, api: Api, coord: Coordenada | null, ultimo?: Antena): Orden | null {
   if (PREGUNTA.test(tn) && !/\b(puedes|podrias|me ayudas)\b/.test(tn)) return null;
   const antenas = api.antenas();
   // Modo de la pantalla
@@ -540,7 +1044,7 @@ function interpretarMalla(texto: string, tn: string, api: Api, coord: Coordenada
   }
   // Enviar un mensaje por la malla
   if (/\b(envi\w*|mand\w*|prueb\w*|simul\w*)\b.*\b(mensaje|mensajes|sms|texto|sos|alerta|chat)\b/.test(tn)) {
-    const desde = nodosMencionados(tn, antenas)[0];
+    const desde = nodosMencionados(tn, antenas)[0] ?? piezaGenerica(tn.replace(/.*\b(desde|de)\b/, " $1 "), antenas, ultimo);
     return { tipo: "mensaje", id: desde?.id };
   }
   // Sembrado automático: «conecta a los que faltan», «siembra repetidores hacia…», «lleva la red a…»
@@ -723,7 +1227,14 @@ function interpretarRed(texto: string, tn: string, api: Api): Orden | null {
 
 /* ───────────── Ejecución ───────────── */
 
-export type ResultadoOrden = Respuesta & { deshacer?: Escenario; esperar?: string; pendiente?: Pendiente; luego?: Promise<Respuesta> };
+export type ResultadoOrden = Respuesta & {
+  deshacer?: Escenario;
+  esperar?: string;
+  pendiente?: Pendiente;
+  luego?: Promise<Respuesta>;
+  /** Nodo que puso o cambió la orden (para «súbelo», «muévelo»… en la siguiente). */
+  nodo?: string;
+};
 
 function textoCoord(c: { lat: number; lon: number }) {
   return `${aGMS(c.lat, "lat")}, ${aGMS(c.lon, "lon")} (${aDecimal(c.lat)}, ${aDecimal(c.lon)})`;
@@ -759,6 +1270,7 @@ export function ejecutarOrden(o: Orden, api: Api): ResultadoOrden {
         acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }],
         deshacer: antes,
         esperar: nueva.id,
+        nodo: nueva.id,
       };
     }
     case "mover": {
@@ -773,6 +1285,7 @@ export function ejecutarOrden(o: Orden, api: Api): ResultadoOrden {
         acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }],
         deshacer: antes,
         esperar: a.id,
+        nodo: a.id,
       };
     }
     case "eliminar": {
@@ -785,13 +1298,13 @@ export function ejecutarOrden(o: Orden, api: Api): ResultadoOrden {
       const a = porId.get(o.id);
       if (!a) return { texto: "No encontré ese nodo." };
       api.editar(a.id, { nombre: o.nombre.slice(0, 60) });
-      return { texto: `Ahora «${a.nombre}» se llama «${o.nombre}».`, acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }], deshacer: antes };
+      return { texto: `Ahora «${a.nombre}» se llama «${o.nombre}».`, acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }], deshacer: antes, nodo: a.id };
     }
     case "editar": {
       const a = porId.get(o.id);
       if (!a) return { texto: "No encontré ese nodo." };
       api.editar(a.id, o.cambios);
-      return { texto: `Hecho: «${a.nombre}», ${o.descripcion}. Recalculo la simulación.`, acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }], deshacer: antes, esperar: a.id };
+      return { texto: `Hecho: «${a.nombre}», ${o.descripcion}. Recalculo la simulación.`, acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }], deshacer: antes, esperar: a.id, nodo: a.id };
     }
     case "parametros": {
       api.parametrosCambiar(o.cambios);
@@ -805,7 +1318,8 @@ export function ejecutarOrden(o: Orden, api: Api): ResultadoOrden {
             ? "Listo: la malla se ve con el flujo animado. Las líneas turquesa avanzan hacia el gateway, los pulsos saltan de nodo en nodo, cada pieza destella al retransmitir y la nube «IA» del gateway se enciende cuando le llega algo."
             : "Listo: la malla queda quieta, sin la animación del flujo. Para volver a verla, dígame «anima la red» o use el interruptor del panel.",
         };
-      return { texto: `Listo: el mapa de señal se ve ${o.descripcion}. Lo puede ajustar en Capas → Escala de la señal.` };
+      if (o.cambios.unidad || o.cambios.escala) return { texto: `Listo: el mapa de señal se ve ${o.descripcion}. Lo puede ajustar en Capas → Escala de la señal.` };
+      return { texto: `Listo: el mapa ${o.descripcion}. Todo esto también está en «Capas».` };
     case "informe": {
       const a = porId.get(o.a);
       const b = puntoDe(o.b);
@@ -950,6 +1464,7 @@ export function ejecutarOrden(o: Orden, api: Api): ResultadoOrden {
           acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }],
           deshacer: antes,
           esperar: gw.id,
+          nodo: gw.id,
         };
       }
       const nueva = api.ponerPieza(o.pieza, lat, lon, o.datos);
@@ -959,6 +1474,7 @@ export function ejecutarOrden(o: Orden, api: Api): ResultadoOrden {
         acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }],
         deshacer: antes,
         esperar: nueva.id,
+        nodo: nueva.id,
       };
     }
     case "sembrar": {
@@ -1062,5 +1578,230 @@ export function ejecutarOrden(o: Orden, api: Api): ResultadoOrden {
         ],
       };
     }
+    case "disenar":
+      return ejecutarDiseno(o, api, antes);
+    case "relieve":
+      api.fijarRelieve(o.valor);
+      return {
+        texto:
+          o.valor === "plano"
+            ? "Listo: simulo sobre terreno plano (sin lomas ni valles). Sirve para comparar; para planear en serio vuelva al relieve real con «usa el relieve real»."
+            : "Listo: simulo con el relieve real (teselas de elevación abiertas, sin costo).",
+        esperar: antenas.some((a) => a.activa) ? "*" : undefined,
+      };
+    case "nombre-escenario":
+      api.renombrarEscenario(o.nombre.slice(0, 80));
+      return { texto: `Listo: el escenario se llama «${o.nombre.slice(0, 80)}». Así sale en los archivos que exporte.`, acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }], deshacer: antes };
+    case "duplicar": {
+      const a = porId.get(o.id);
+      if (!a) return { texto: "No encontré ese nodo." };
+      api.duplicar(a.id);
+      return { texto: `Dupliqué «${a.nombre}»: la copia quedó al lado, con los mismos datos. Arrástrela o dígame a dónde la muevo.`, acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }], deshacer: antes, esperar: "*" };
+    }
+    case "seleccionar": {
+      const a = porId.get(o.id);
+      if (!a) return { texto: "No encontré ese nodo." };
+      api.seleccionar(a.id);
+      api.centrar(a.lat, a.lon, 13);
+      return { texto: `Aquí está «${a.nombre}»: lo dejé seleccionado para editarlo.`, nodo: a.id };
+    }
+    case "eliminar-varios": {
+      const quitar = antenas.filter((a) => o.ids.includes(a.id));
+      if (!quitar.length) return { texto: `No hay ${o.descripcion.replace(/^tod[oa]s (l[oa]s )?/, "")} para borrar.` };
+      api.eliminarVarias(quitar.map((a) => a.id));
+      return {
+        texto: `Borré ${quitar.length === 1 ? "1 nodo" : `${quitar.length} nodos`} (${o.descripcion}): ${quitar.map((a) => a.nombre).join(", ")}.${antenas.length > quitar.length ? " Recalculo la red." : ""}`,
+        acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }],
+        deshacer: antes,
+        esperar: antenas.length > quitar.length ? "*" : undefined,
+      };
+    }
+    case "editar-varios": {
+      const cambiar = antenas.filter((a) => o.ids.includes(a.id));
+      if (!cambiar.length) return { texto: "No encontré nodos de ese tipo." };
+      for (const a of cambiar) api.editar(a.id, o.cambios);
+      return {
+        texto: `Hecho: ${o.descripcion} (${cambiar.map((a) => a.nombre).join(", ")}). Recalculo la simulación.`,
+        acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }],
+        deshacer: antes,
+        esperar: "*",
+      };
+    }
+    case "auto":
+      api.fijarAutoSimular(o.valor);
+      if (o.valor) api.simular();
+      return {
+        texto: o.valor
+          ? "Listo: «Simular al cambiar» quedó encendido. Cada vez que cambie algo, recalculo la cobertura solo."
+          : "Listo: «Simular al cambiar» quedó apagado. Cuando quiera ver el resultado, dígame «simula» o toque «Simular».",
+      };
+    case "encuadrar":
+      if (!antenas.length) return { texto: "Aún no hay nodos en el mapa." };
+      api.encuadrarTodo();
+      return { texto: `Le muestro toda la red: ${antenas.length} ${antenas.length === 1 ? "nodo" : "nodos"}.` };
+    case "cobertura-area": {
+      const m = api.mediciones().find((x) => x.id === o.id);
+      if (!m) return { texto: "No encuentro esa área medida." };
+      const r = api.resultado();
+      if (!r || !api.red().alDia) {
+        if (!antenas.some((a) => a.activa)) return { texto: "Todavía no hay nodos que den cobertura en esa área." };
+        return {
+          texto: `Calculo la cobertura dentro de «${m.nombre}»…`,
+          luego: api.esperarResultado().then((x) => (x ? textoCoberturaArea(x, m, o.margenDb) : { texto: "No pude terminar la simulación." })),
+        };
+      }
+      return textoCoberturaArea(r, m, o.margenDb);
+    }
   }
+}
+
+/* ───────────── Diseño por área: ejecución y respuesta ───────────── */
+
+/** «99,9», «95», «100». */
+const fp = (v: number) => (v >= 99.95 && v < 100 ? "99,9" : Number.isInteger(Math.round(v * 10) / 10) ? String(Math.round(v)) : f1(Math.floor(v * 10) / 10));
+
+const resumenClases = (c: { porClase: Record<string, number> }) =>
+  `buena ${fp(c.porClase.buena)} %, estable ${fp(c.porClase.estable)} %, media ${fp(c.porClase.media)} %, baja ${fp(c.porClase.baja)} % y sin servicio ${fp(c.porClase.sin)} %`;
+
+function textoCoberturaArea(r: ResultadoSimulacion, m: Medicion, margenDb: number): Respuesta {
+  const c = coberturaEnArea(r, m.puntos);
+  const pct = porcentajeSobre(c, margenDb);
+  return {
+    texto: `En «${m.nombre}» (${textoArea(c.areaKm2 * 1e6)}) el ${fp(pct)} % tiene margen de al menos ${margenDb} dB${margenDb === 30 ? " (señal media o mejor)" : ""}. Por clase: ${resumenClases(c)}.${c.fueraKm2 > 0.01 ? ` Una parte (${f1(c.fueraKm2, 2)} km²) queda fuera del radio de estudio: súbalo para verla.` : ""}`,
+  };
+}
+
+function ejecutarDiseno(o: Extract<Orden, { tipo: "disenar" }>, api: Api, antes: Escenario): ResultadoOrden {
+  if (o.reemplazar) api.restaurar(o.reemplazar);
+  const base = o.reemplazar ?? antes;
+  const antenas = o.reemplazar ? o.reemplazar.antenas : api.antenas();
+  let poligono: Poligono;
+  let donde = "";
+  let dibujar = true;
+  let nombreArea = "";
+  if (o.area.forma === "medicion") {
+    const id = o.area.id;
+    const m = api.mediciones().find((x) => x.id === id) ?? [...api.mediciones()].reverse().find((x) => x.tipo === "area");
+    if (!m)
+      return {
+        texto: "No encuentro un área medida. Dibújela con la regla (Área) y pídamelo de nuevo, o dígame el tamaño: «cubre 500 hectáreas alrededor del gateway con señal media en el 99 %».",
+        acciones: [{ texto: "Activar la regla", accion: "orden", orden: { tipo: "herramienta", herramienta: "regla" } }],
+      };
+    poligono = m.puntos;
+    dibujar = false;
+    nombreArea = m.nombre;
+    donde = `en el área «${m.nombre}»`;
+  } else if (o.area.forma === "poligono") {
+    poligono = o.area.puntos;
+    dibujar = o.area.dibujar;
+    donde = o.area.nombre;
+  } else {
+    const a = o.area;
+    let centro: { lat: number; lon: number } | null = null;
+    if (a.centro.tipo === "coord") {
+      centro = a.centro.coord;
+      const lugar = api.ubicacion(centro.lat, centro.lon);
+      donde = a.centro.nombre ? `${a.centro.nombre.startsWith("a ") || a.centro.nombre.startsWith("en ") || a.centro.nombre.startsWith("alrededor") ? "" : "en "}${a.centro.nombre}` : `alrededor de ${aDecimal(centro.lat)}, ${aDecimal(centro.lon)}${lugar ? ` (${lugar})` : ""}`;
+    } else if (a.centro.tipo === "gateway") {
+      const g = antenas.find((x) => x.pasarela && x.activa);
+      if (g) {
+        centro = { lat: g.lat, lon: g.lon };
+        donde = `alrededor del gateway «${g.nombre}»`;
+      }
+    }
+    if (!centro) {
+      centro = api.centroMapa();
+      const lugar = centro ? api.ubicacion(centro.lat, centro.lon) : null;
+      donde = `en el centro del mapa que está viendo${lugar ? `, en ${lugar}` : ""}`;
+    }
+    if (!centro) return { texto: "¿Dónde armo la malla? Dígame un municipio, una coordenada o dibuje el área con la regla." };
+    if (a.areaM2 < 5000) return { texto: "Esa área es muy pequeña (menos de media hectárea): con un solo nodo basta. Dígame un área más grande o ponga el gateway directamente." };
+    if (a.areaM2 > 3e9) return { texto: "Esa área es muy grande para diseñarla de una vez (más de 300.000 ha). Divídala en zonas y pídamelas por partes, por ejemplo por municipio." };
+    poligono =
+      a.forma === "circulo"
+        ? conArea(poligonoCirculo(centro.lat, centro.lon, radioDeArea(a.areaM2)), a.areaM2)
+        : conArea(poligonoRectangulo(centro.lat, centro.lon, a.anchoM ?? Math.sqrt(a.areaM2), a.altoM ?? Math.sqrt(a.areaM2)), a.areaM2);
+  }
+  const area = areaM2(poligono);
+  if (area > 3e9) return { texto: "Esa área es muy grande para diseñarla de una vez (más de 300.000 ha). Divídala en zonas y pídamelas por partes." };
+  const gw = antenas.find((x) => x.pasarela && x.activa);
+  if (o.gateway && gw) api.editar(gw.id, { lat: Number(o.gateway.lat.toFixed(6)), lon: Number(o.gateway.lon.toFixed(6)), activa: true });
+  const forma = o.area.forma === "cuadrado" ? "cuadrada" : o.area.forma === "rectangulo" ? "rectangular" : "";
+  if (dibujar) {
+    nombreArea = `Área objetivo · ${textoArea(area)}`;
+    api.medir({ id: `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, nombre: nombreArea, tipo: "area", puntos: poligono, visible: true }, false);
+  } else {
+    const b = cajaPoligono(poligono);
+    api.encuadrarCaja([b.oeste, b.sur, b.este, b.norte]);
+  }
+  const meta = `${o.clases} en el ${fp(o.porcentaje)} % del área${o.respaldo ? ", con respaldo (cada punto con dos nodos)" : ""}`;
+  const pedido = { area: poligono, margenDb: o.margenDb, porcentaje: o.porcentaje, respaldo: o.respaldo, alturaRepetidorM: o.alturaM, gateway: o.gateway, maxRepetidores: o.maxRepetidores };
+  const luego = (async (): Promise<Respuesta> => {
+    const d = await api.disenarArea(pedido);
+    if (!d) return { texto: "No pude calcular el diseño (el relieve no cargó o el motor se detuvo). Intente de nuevo en un momento.", acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: base }] };
+    const puestas = api.aplicarDiseno(d, o.alturaM);
+    const r = await api.esperarResultado();
+    return textoDiseno(o, d, puestas, r, poligono, nombreArea || donde, base, api);
+  })();
+  return {
+    texto: `Diseño la malla para ${textoArea(area)}${forma ? ` (área ${forma})` : ""} ${donde}: ${meta}. ${dibujar ? "Dibujé el área en el mapa. " : ""}Busco con el relieve real dónde va ${gw || o.gateway ? "cada repetidor" : "el gateway y cada repetidor"} (torres de ${fn(o.alturaM)} m), siempre enlazados a la red. Tardo unos segundos.`,
+    acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: base }],
+    deshacer: base,
+    luego,
+  };
+}
+
+function textoDiseno(o: Extract<Orden, { tipo: "disenar" }>, d: Diseno, puestas: Antena[], r: ResultadoSimulacion | null, poligono: Poligono, nombreArea: string, base: Escenario, api: Api): Respuesta {
+  const area = areaM2(poligono);
+  const gw = puestas.find((a) => a.pasarela);
+  const reps = puestas.filter((a) => !a.pasarela);
+  const real = r ? coberturaEnArea(r, poligono, o.respaldo ? "segundo" : "mejor") : null;
+  const pct = real ? porcentajeSobre(real, o.margenDb) : d.coberturaPct;
+  const ok = pct >= o.porcentaje - 1e-6;
+  const partes: string[] = [];
+  partes.push(
+    ok
+      ? `Listo: la malla cubre el ${fp(pct)} % de las ${textoArea(area)} con ${o.clases}${o.respaldo ? " desde al menos dos nodos (respaldo)" : ""}. Meta cumplida (${fp(o.porcentaje)} %).`
+      : `Llegué al ${fp(pct)} % de las ${textoArea(area)} con ${o.clases}; la meta era ${fp(o.porcentaje)} %.`,
+  );
+  const lugarGw = gw ? api.ubicacion(gw.lat, gw.lon) : null;
+  const nodosR = r ? new Map(r.nodos.map((x) => [x.id, x])) : null;
+  const saltos = reps.map((a) => nodosR?.get(a.id)?.saltos ?? null);
+  const sinRuta = reps.filter((_, i) => saltos[i] === null).length;
+  const maxSaltos = Math.max(0, ...saltos.filter((x): x is number => x !== null));
+  const enlaces = d.nodos.filter((x) => x.pieza === "repetidor" && x.enlaceDb !== null).map((x) => x.enlaceDb!);
+  const gwTxt = gw ? `Puse el gateway «${gw.nombre}» en ${aDecimal(gw.lat)}, ${aDecimal(gw.lon)}${lugarGw ? `, en ${lugarGw},` : ""} donde más área cubre; si el internet entra en otro sitio, dígame dónde y lo rehago.` : "";
+  if (!reps.length) partes.push(`${gwTxt ? `${gwTxt} ` : ""}${gw ? "Con el gateway" : "Con la red que ya había"} basta: no hizo falta ningún repetidor.`);
+  else {
+    const lista = reps.length <= 4 ? reps.map((a) => a.nombre).join(", ") : `${reps[0].nombre} a ${reps[reps.length - 1].nombre}`;
+    const uno = reps.length === 1;
+    const saltosTxt = `${maxSaltos} ${maxSaltos === 1 ? "salto" : "saltos"}`;
+    partes.push(
+      `${gwTxt ? `${gwTxt} ` : ""}Sembré ${uno ? "1 repetidor" : `${reps.length} repetidores`} de ${fn(o.alturaM)} m (${lista}), ${uno ? "en el sitio que más área nueva cubría, enlazado" : "cada uno en el sitio que más área nueva cubría y enlazado"} a la red${enlaces.length ? (uno ? ` con ${f1(enlaces[0], 0)} dB` : ` con al menos ${f1(Math.min(...enlaces), 0)} dB`) : ""}${nodosR ? (uno ? `; llega al gateway en ${saltosTxt}` : `; llegan al gateway en máximo ${saltosTxt}`) : ""}.${sinRuta ? ` Ojo: ${sinRuta} no ${sinRuta === 1 ? "quedó" : "quedaron"} con ruta al gateway en la simulación.` : ""}${maxSaltos > api.parametros().limiteSaltos ? ` ${uno ? "Pasa" : "Algunos pasan"} del límite de ${api.parametros().limiteSaltos} saltos: súbalo o use torres más altas.` : ""}`,
+    );
+  }
+  if (real) partes.push(o.respaldo ? `Respaldo dentro del área (señal del segundo mejor nodo): ${resumenClases(real)}.` : `Dentro del área: ${resumenClases(real)}.`);
+  // Cuántos repetidores hicieron falta para cada nivel (el último tramo suele ser el más caro)
+  const curva = d.nodos.filter((x) => x.pieza === "repetidor").map((x) => x.coberturaPct);
+  if (curva.length >= 4 && o.porcentaje > 97) {
+    const a95 = curva.findIndex((v) => v >= 95);
+    const a99 = curva.findIndex((v) => v >= 99);
+    if (a95 >= 0 && a99 > a95 + 1) partes.push(`Con ${a95 + 1} ${a95 === 0 ? "repetidor" : "repetidores"} ya se llegaba al 95 % y con ${a99 + 1} al 99 %; los demás tapan huecos pequeños detrás de lomas y en hondonadas.`);
+  }
+  if (!ok && d.motivo) partes.push(d.motivo);
+  partes.push(ok ? "Antes de instalar, revise en campo el acceso, la energía y que nada tape las antenas." : "Puedo probar con torres más altas, o puede aceptar este resultado.");
+  const conPoligono = (cambios: Partial<Extract<Orden, { tipo: "disenar" }>>): Orden => ({ ...o, area: { forma: "poligono", puntos: poligono, nombre: `en el área «${nombreArea}»`, dibujar: Boolean(cambios.reemplazar) }, ...cambios });
+  const acciones: Respuesta["acciones"] = [{ texto: "Deshacer", accion: "deshacer", escenario: base }];
+  if (!ok) {
+    if (d.motivo?.startsWith("Llegué al máximo") && o.maxRepetidores < 200) {
+      const mas = Math.min(200, Math.max(60, o.maxRepetidores * 3));
+      acciones.push({ texto: `Rehacer con hasta ${mas} repetidores`, accion: "orden", orden: conPoligono({ maxRepetidores: mas, reemplazar: base }) });
+    }
+    for (const h of [20, 30]) if (h > o.alturaM) acciones.push({ texto: `Rehacer con torres de ${h} m`, accion: "orden", orden: conPoligono({ alturaM: h, reemplazar: base }) });
+    if (d.huecos[0]) acciones.push({ texto: "Ver un punto sin cobertura", accion: "orden", orden: { tipo: "ir", coord: { lat: d.huecos[0][1], lon: d.huecos[0][0] } } });
+  } else {
+    if (!o.respaldo) acciones.push({ texto: "Agregar respaldo (dos nodos por punto)", accion: "orden", orden: conPoligono({ respaldo: true }) });
+    if (o.porcentaje < 99.9) acciones.push({ texto: "Subir la meta a 99,9 %", accion: "orden", orden: conPoligono({ porcentaje: 99.9 }) });
+  }
+  return { texto: partes.join("\n"), acciones };
 }
