@@ -8,8 +8,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const entrada = `
-export { interpretarOrden, ejecutarOrden, extraerCoordenadas } from "./src/components/melki/ordenes";
-export { responder } from "./src/components/melki/cerebro";
+export { interpretarOrden, ejecutarOrden, extraerCoordenadas, dividirEnPasos, leerNumero, areaEnTexto } from "./src/components/melki/ordenes";
+export { responder, noEntendiOrden } from "./src/components/melki/cerebro";
+export { areaM2, poligonoCirculo } from "./src/lib/radio/area";
 export { normalizarDictado, componerTexto, quitarRepeticiones } from "./src/components/melki/dictado";
 export { TOURS } from "./src/components/melki/tours";
 export { estadoInicial, reductor } from "./src/components/simulador/estado";
@@ -131,6 +132,35 @@ function crearApi(antenas) {
       return { llega: true, motivo: null, ruta: [id, "g"], saltos: 1, limiteSaltos: 3, tramos: [], bytes: 62, aireMs: 722.9, totalMs: { min: 722.9, tipica: 722.9, max: 722.9 }, probabilidad: 0.95, probabilidadReintentos: 0.9999, preset: "Long Fast" };
     },
     ejemploMalla: () => llamadas.push(["ejemplo-malla"]),
+    // Agente (v10)
+    medicionesActuales: [],
+    centro: { lat: 4.15, lon: -73.6 },
+    mediciones: () => api.medicionesActuales,
+    centroMapa: () => api.centro,
+    seleccionar: (id) => llamadas.push(["seleccionar", id]),
+    eliminarVarias: (ids) => llamadas.push(["eliminar-varias", ids]),
+    restaurar: (e) => llamadas.push(["restaurar", e]),
+    encuadrarTodo: () => llamadas.push(["encuadrar"]),
+    autoSimular: () => true,
+    fijarAutoSimular: (v) => llamadas.push(["auto", v]),
+    fijarRelieve: (v) => llamadas.push(["relieve", v]),
+    renombrarEscenario: (nombre) => llamadas.push(["nombre", nombre]),
+    duplicar: (id) => llamadas.push(["duplicar", id]),
+    disenoFalso: null,
+    disenarArea: (o) => {
+      llamadas.push(["disenar", o]);
+      return Promise.resolve(api.disenoFalso);
+    },
+    aplicarDiseno: (d, h) => {
+      llamadas.push(["aplicar", d, h]);
+      return d.nodos.map((q, k) => {
+        const a = base(`d${k}`, q.pieza === "gateway" ? "Gateway" : `Repetidor ${k}`, q.lat, q.lon, { pasarela: q.pieza === "gateway", alturaM: q.pieza === "gateway" ? 8 : h });
+        antenas.push(a);
+        return a;
+      });
+    },
+    resultadoFalso: null,
+    esperarResultado: () => Promise.resolve(api.resultadoFalso),
   };
   return api;
 }
@@ -485,6 +515,121 @@ function crearApi(antenas) {
   caso("«Anima la red» enciende el flujo animado", anima?.tipo === "vista" && anima.cambios.animarRed === true);
   caso("Responde qué es la animación (flujo, destellos e IA)", /turquesa/.test(m.responder("¿por qué parpadean y brillan los nodos?", c).texto) && /IA/.test(m.responder("¿qué son las líneas que se mueven?", c).texto));
   caso("El mensaje cuenta la respuesta de la IA", /IA del gateway le contesta/.test(m.ejecutarOrden({ tipo: "mensaje", id: "p1" }, api).texto));
+}
+
+// 11) Melki agente (v10): diseño por área, varias órdenes, posiciones relativas, lugares, lotes y vista
+{
+  const g = base("g", "Gateway", 4.2, -73.37, { pasarela: true, alturaM: 8 });
+  const r1 = base("r1", "Repetidor 1", 4.25, -73.3);
+  const p1 = base("p1", "Persona 1", 4.21, -73.4, { tipo: "nodo", alturaM: 1.5, gananciaDbi: 2, rol: "CLIENT" });
+  const antenas = [g, r1, p1];
+  const api = crearApi(antenas);
+  const orden = (t, ctx = {}) => m.interpretarOrden(t, api, null, ctx);
+
+  // La frase exacta de Giancarlo
+  const frase =
+    "Hola corazón puedes ayudarme con algo viene siendo algo muy sencillo necesito que me armes una red que cubra un área de 11.000 hectáreas bueno al hacer exactos 11.226 una malla completa que cubre esa área con repetidores queden para que el 99.9% de esa área que una señal entre buena estable y media";
+  const d = orden(frase);
+  caso("La frase de las 11.226 ha → diseño por área", d?.tipo === "disenar" && d.area.forma === "circulo" && cerca(d.area.areaM2, 112260000, 1) && d.porcentaje === 99.9 && d.margenDb === 30, JSON.stringify(d).slice(0, 200));
+  caso("Sin decir dónde, el área va alrededor del gateway", d?.area.centro?.tipo === "gateway");
+  const sinGw = m.interpretarOrden(frase, crearApi([r1]), null);
+  caso("Sin gateway, el área va en el centro del mapa", sinGw?.area.centro?.tipo === "mapa");
+  caso("Números: «11.226», «1.500», «99.9», «1.234,5», «11 mil», «2,5»", [m.leerNumero("11.226"), m.leerNumero("1.500"), m.leerNumero("99.9"), m.leerNumero("1.234,5"), m.leerNumero("11 mil"), m.leerNumero("2,5")].join("|") === "11226|1500|99.9|1234.5|11000|2.5");
+  const areas = ["11 mil hectáreas", "2,5 km²", "300 fanegadas", "4.500 m2", "1.500 ha"].map((t) => Math.round(m.areaEnTexto(t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase())?.m2 ?? 0));
+  caso("Áreas en hectáreas, km², fanegadas y m²", areas.join("|") === "110000000|2500000|1920000|4500|15000000", areas.join("|"));
+  const lugar = orden("cubre 500 ha alrededor de Villavicencio con repetidores de 20 m");
+  caso("«Cubre 500 ha alrededor de Villavicencio con repetidores de 20 m»", lugar?.tipo === "disenar" && lugar.area.centro.tipo === "coord" && cerca(lugar.area.centro.coord.lat, 4.14) && lugar.alturaM === 20 && lugar.porcentaje === 95);
+  const redonda = orden("cubre 5 km a la redonda del gateway con señal buena en el 95 %");
+  caso("«5 km a la redonda… señal buena» → círculo de 5 km y 45 dB", redonda?.area.forma === "circulo" && cerca(redonda.area.areaM2, Math.PI * 25e6, 1) && redonda.margenDb === 45);
+  const cuadrada = orden("ármame una red para un área cuadrada de 2.000 hectáreas con respaldo y máximo 15 repetidores");
+  caso("Área cuadrada, respaldo y máximo de repetidores", cuadrada?.area.forma === "cuadrado" && cuadrada.respaldo && cuadrada.maxRepetidores === 15 && cerca(cuadrada.area.anchoM, Math.sqrt(2e7), 0.01));
+  const rect = orden("cubre un área de 10 por 12 km con señal estable al 99 %");
+  caso("«10 por 12 km… señal estable al 99 %»", rect?.area.forma === "rectangulo" && rect.area.anchoM === 10000 && rect.area.altoM === 12000 && rect.margenDb === 37 && rect.porcentaje === 99);
+  const pregunta = orden("¿cuántos repetidores necesito para cubrir 1.500 ha?");
+  caso("«¿Cuántos repetidores necesito para cubrir 1.500 ha?» → diseño", pregunta?.tipo === "disenar" && cerca(pregunta.area.areaM2, 1.5e7, 1));
+  api.medicionesActuales = [{ id: "m1", nombre: "Lote", tipo: "area", puntos: [[-73.4, 4.2], [-73.35, 4.2], [-73.35, 4.25], [-73.4, 4.25]], visible: true }];
+  const medida = orden("cubre el área que medí al 99 %");
+  caso("«Cubre el área que medí» → el área de la regla", medida?.tipo === "disenar" && medida.area.forma === "medicion" && medida.area.id === "m1" && medida.porcentaje === 99);
+  const cuanto = orden("¿cuánto cubre el área?");
+  caso("«¿Cuánto cubre el área?» → cobertura del área medida", cuanto?.tipo === "cobertura-area" && cuanto.id === "m1");
+  const radioEstudio = orden("radio de estudio de 12 km");
+  caso("«Radio de estudio de 12 km» sigue siendo un parámetro", radioEstudio?.tipo === "parametros" && radioEstudio.cambios.radioKm === 12);
+
+  // Ejecutar el diseño con un motor de mentira: dibuja el área, diseña, pone los nodos y cuenta el resultado
+  api.disenoFalso = {
+    nodos: [{ id: "diseno-1", pieza: "repetidor", lat: 4.22, lon: -73.35, sueloM: 300, desdeId: "g", enlaceDb: 41, saltos: 1, coberturaPct: 99.95 }],
+    areaKm2: 112.26, muestras: 1000, inicialPct: 90, coberturaPct: 99.95, objetivoPct: 99.9, margenObjetivoDb: 30, respaldo: false, alcanzado: true, motivo: null, huecos: [],
+  };
+  const poligono = m.poligonoCirculo(4.2, -73.37, 6000);
+  const lons = poligono.map((q) => q[0]);
+  const lats = poligono.map((q) => q[1]);
+  const caja = { oeste: Math.min(...lons) - 0.05, este: Math.max(...lons) + 0.05, sur: Math.min(...lats) - 0.05, norte: Math.max(...lats) + 0.05 };
+  api.resultadoFalso = { malla: { caja, ancho: 60, alto: 60, celdaM: 300 }, mejor: new Float32Array(3600).fill(40), segundo: new Float32Array(3600).fill(25), nodos: [{ id: "d0", saltos: 1 }] };
+  const res = m.ejecutarOrden(d, api);
+  caso("El diseño dibuja el área y avisa que está calculando", /Diseño la malla para 11\.226 ha/.test(res.texto) && api.llamadas.some((l) => l[0] === "medir" && /Área objetivo/.test(l[1].nombre)) && res.deshacer && res.luego);
+  const final = await res.luego;
+  caso("Al terminar cuenta la cobertura real dentro del área y los repetidores", /^Listo: la malla cubre el 100 %/.test(final.texto) && /Sembré 1 repetidor de 15 m/.test(final.texto) && /buena 0 %, estable 100 %/.test(final.texto), final.texto.slice(0, 160).replace(/\n/g, " "));
+  caso("Ofrece deshacer y agregar respaldo", final.acciones?.some((a) => a.accion === "deshacer") && final.acciones?.some((a) => /respaldo/.test(a.texto) && a.orden?.respaldo === true));
+  api.disenoFalso = { ...api.disenoFalso, alcanzado: false, coberturaPct: 80, motivo: "Llegué al máximo de 3 repetidores.", huecos: [[-73.3, 4.2]] };
+  api.resultadoFalso = { ...api.resultadoFalso, mejor: new Float32Array(3600).fill(10) };
+  const corto = await m.ejecutarOrden({ ...d, maxRepetidores: 3 }, api).luego;
+  caso("Si no llega, lo dice y ofrece más repetidores, torres más altas y ver un hueco", /^Llegué al/.test(corto.texto) && corto.acciones.some((a) => /hasta 60 repetidores/.test(a.texto)) && corto.acciones.some((a) => /torres de 20 m/.test(a.texto)) && corto.acciones.some((a) => a.orden?.tipo === "ir"));
+
+  // Varias órdenes en un mensaje
+  const pasos = m.dividirEnPasos("pon el gateway en 4.2, -73.37, luego un repetidor a 10 km al este, una persona a 3 km al sur del repetidor y envía un mensaje desde la persona");
+  caso("Divide un mensaje con varias órdenes", pasos.length === 4 && pasos[1] === "un repetidor a 10 km al este" && /^envía un mensaje/.test(pasos[3]), JSON.stringify(pasos));
+  caso("No divide coordenadas, comillas ni «distancia entre X y Y»", m.dividirEnPasos('inscribe una antena llamada "Loma, alta" en 4.2, -73.3').length === 1 && m.dividirEnPasos("distancia entre Ejemplo y Torre 2").length === 1);
+  caso("Los verbos con tilde también separan («y súbela a 20 m»)", m.dividirEnPasos("pon un repetidor en 4.2, -73.3 y súbela a 20 m").length === 2);
+
+  // Posiciones relativas y lugares
+  const norte = orden("agrega un repetidor a 8 km al norte del gateway");
+  caso("«Un repetidor a 8 km al norte del gateway»", norte?.tipo === "pieza" && norte.pieza === "repetidor" && cerca(norte.coord.lat, 4.2 + 8000 / 110580, 0.002) && cerca(norte.coord.lon, -73.37), JSON.stringify(norte));
+  const oriente = orden("pon una persona a 2 km del gateway hacia el oriente");
+  caso("«A 2 km del gateway hacia el oriente»", oriente?.pieza === "persona" && oriente.coord.lon > -73.37 && cerca(oriente.coord.lat, 4.2, 0.001));
+  const sinBase = orden("pon un repetidor a 5 km al sur", { ultimoNodo: "r1" });
+  caso("Sin punto de partida, desde el último nodo que se tocó", sinBase?.pieza === "repetidor" && sinBase.coord.lat < 4.25 && cerca(sinBase.coord.lon, -73.3));
+  const mover = orden("mueve Repetidor 1 2 km al sur");
+  caso("«Mueve Repetidor 1 2 km al sur» se cuenta desde ese nodo", mover?.tipo === "mover" && mover.id === "r1" && mover.coord.lat < 4.25 && cerca(mover.coord.lon, -73.3));
+  const enLugar = orden("pon el gateway en Villavicencio");
+  caso("«Pon el gateway en Villavicencio» → en el municipio", enLugar?.tipo === "pieza" && enLugar.pieza === "gateway" && cerca(enLugar.coord.lat, 4.14));
+  const inscribir = orden("inscribe un nodo antena en Villavicencio a 20 m");
+  caso("«Inscribe un nodo antena en Villavicencio a 20 m»", inscribir?.tipo === "agregar" && cerca(inscribir.coord.lon, -73.63) && inscribir.datos.alturaM === 20);
+  caso("«Súbelo a 25 m» se aplica al último nodo que se tocó", (() => {
+    const o = orden("súbelo a 25 m", { ultimoNodo: "r1" });
+    return o?.tipo === "editar" && o.id === "r1" && o.cambios.alturaM === 25;
+  })());
+  const msj = m.interpretarOrden("envía un mensaje desde la persona", api, null, {});
+  caso("«Envía un mensaje desde la persona» → la persona", msj?.tipo === "mensaje" && msj.id === "p1");
+
+  // Órdenes en lote, rol, equipo y otras de la pantalla
+  const subir = orden("sube todos los repetidores a 20 m");
+  caso("«Sube todos los repetidores a 20 m»", subir?.tipo === "editar-varios" && subir.ids.includes("r1") && !subir.ids.includes("g") && !subir.ids.includes("p1") && subir.cambios.alturaM === 20);
+  const borrar = orden("borra todas las personas");
+  caso("«Borra todas las personas»", borrar?.tipo === "eliminar-varios" && borrar.ids.join() === "p1");
+  const menos = orden("elimina todo menos el gateway");
+  caso("«Elimina todo menos el gateway»", menos?.tipo === "eliminar-varios" && menos.ids.includes("r1") && menos.ids.includes("p1") && !menos.ids.includes("g"));
+  m.ejecutarOrden(borrar, api);
+  caso("Ejecuta el borrado en lote", api.llamadas.some((l) => l[0] === "eliminar-varias" && l[1].join() === "p1"));
+  caso("«Pon a Repetidor 1 como cliente» → rol CLIENT", orden("pon a Repetidor 1 como cliente")?.cambios?.rol === "CLIENT");
+  caso("«Repetidor 1 en modo mudo» → CLIENT_MUTE", orden("pon Repetidor 1 en modo mudo")?.cambios?.rol === "CLIENT_MUTE");
+  caso("«Usa en Persona 1 el equipo radio portátil»", orden("usa en Persona 1 el equipo radio portátil")?.cambios?.equipo === "portatil-2dbi");
+  const vias = orden("muestra las vías");
+  caso("«Muestra las vías» / «quita los ríos y los nombres»", vias?.cambios?.refVias === true && orden("quita los ríos y los nombres")?.cambios?.refRios === false && orden("quita los ríos y los nombres")?.cambios?.refNombres === false);
+  caso("«Pon el mapa topográfico»", orden("pon el mapa topográfico")?.cambios?.fondo === "topografico");
+  caso("«Muestra el respaldo» y «muestra la mejor antena»", orden("muestra el respaldo")?.cambios?.modo === "redundancia" && orden("muestra la mejor antena")?.cambios?.modo === "servidor");
+  caso("«Muéstrame toda la red» → encuadrar", orden("muéstrame toda la red")?.tipo === "encuadrar");
+  caso("«Apaga simular al cambiar»", orden("apaga simular al cambiar")?.valor === false && orden("activa la simulación automática")?.valor === true);
+  caso("«Simula con terreno plano» / «usa el relieve real»", orden("simula con terreno plano")?.valor === "plano" && orden("usa el relieve real")?.valor === "teselas");
+  caso("«Llama al escenario Finca La Esperanza»", orden("llama al escenario Finca La Esperanza")?.nombre === "Finca La Esperanza");
+  caso("«Duplica Repetidor 1» y «selecciona Persona 1»", orden("duplica Repetidor 1")?.tipo === "duplicar" && orden("selecciona Persona 1")?.tipo === "seleccionar");
+  caso("«Ganancia del receptor de 3 dBi»", orden("ganancia del receptor de 3 dBi")?.cambios?.gananciaRxDbi === 3);
+  caso("«Empieza de cero» → escenario nuevo", orden("empieza de cero")?.tipo === "nuevo");
+
+  // Cerebro: el tema del diseño, las capacidades y un pedido que no se entiende
+  const c = { antenas, parametros: PARAMETROS, resultado: null, desactualizado: false, relieve: "teselas", modo: "sembrar" };
+  caso("Explica cómo pedir el diseño por área", /cubra 11\.226 hectáreas/.test(m.responder("¿cómo diseño la red para cubrir un área?", c).texto));
+  caso("«¿Qué puedes hacer?» incluye diseñar y varias órdenes", /Diseñar una red/.test(m.responder("¿qué puedes hacer?", c).texto) && /Varias órdenes/.test(m.responder("¿qué puedes hacer?", c).texto));
+  caso("Un pedido que no entiende no se responde con un tema al azar", /no logré convertirlo en una orden/.test(m.responder("hazme el café por favor", c).texto));
 }
 
 console.log(fallos ? `\n✗ ${fallos} prueba(s) fallaron` : "\n✓ Melki verificado");
