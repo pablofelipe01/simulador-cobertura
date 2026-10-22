@@ -13,6 +13,7 @@ export { responder } from "./src/components/melki/cerebro";
 export { normalizarDictado, componerTexto, quitarRepeticiones } from "./src/components/melki/dictado";
 export { TOURS } from "./src/components/melki/tours";
 export { estadoInicial, reductor } from "./src/components/simulador/estado";
+export { estadoRed } from "./src/lib/radio/estado-red";
 `;
 const tmp = mkdtempSync(path.join(os.tmpdir(), "melki-"));
 const archivo = path.join(tmp, "melki.mjs");
@@ -85,7 +86,51 @@ function crearApi(antenas) {
     exportar: (f) => (llamadas.push(["exportar", f]), true),
     borrarMediciones: () => llamadas.push(["borrar-mediciones"]),
     ubicacion: () => "Cumaral (Meta)",
-    buscarLugar: (t) => (/villavicencio/.test(t) ? [{ tipo: "municipio", nombre: "Villavicencio", detalle: "Meta", lat: 4.14, lon: -73.63, caja: [-73.8, 3.9, -73.3, 4.3] }] : []),
+    buscarLugar: (t) =>
+      /villavicencio/.test(t)
+        ? [{ tipo: "municipio", nombre: "Villavicencio", detalle: "Meta", lat: 4.14, lon: -73.63, caja: [-73.8, 3.9, -73.3, 4.3] }]
+        : /paratebueno/.test(t)
+          ? [{ tipo: "municipio", nombre: "Paratebueno", detalle: "Cundinamarca", lat: 4.37, lon: -73.21 }]
+          : [],
+    // Modo «Sembrar la malla»
+    modoActual: "sembrar",
+    propuestaActual: null,
+    redActual: null,
+    modo: () => api.modoActual,
+    cambiarModo: (v) => {
+      api.modoActual = v;
+      llamadas.push(["modo", v]);
+    },
+    ponerPieza: (pieza, lat, lon, datos = {}) => {
+      const nombre = { gateway: "Gateway", repetidor: `Repetidor ${++n}`, persona: `Persona ${++n}` }[pieza];
+      const a = base(`p${++n}`, nombre, lat, lon, { tipo: pieza === "persona" ? "nodo" : "antena", alturaM: pieza === "persona" ? 1.5 : pieza === "gateway" ? 8 : 15, pasarela: pieza === "gateway", ...datos });
+      antenas.push(a);
+      llamadas.push(["pieza", pieza, lat, lon, datos]);
+      return a;
+    },
+    armarPieza: (p) => llamadas.push(["armar", p]),
+    red: () => api.redActual ?? m.estadoRed(antenas, null, 3, false),
+    sembrar: (d) => {
+      llamadas.push(["sembrar", d]);
+      api.propuestaActual = { puntos: [{ id: "propuesto-1", desdeId: "g", lat: 4.25, lon: -73.2, sueloM: 300, margenDb: 34, distanciaKm: 12, desde: "Gateway", destino: 0 }], destinos: d.map(() => ({ llega: true, margenDb: 27, desde: "Propuesto 1", desdeId: "propuesto-1", motivo: null })), margenObjetivoDb: 30 };
+      return Promise.resolve(api.propuestaActual);
+    },
+    propuesta: () => api.propuestaActual,
+    aceptarSiembra: () => {
+      if (!api.propuestaActual) return 0;
+      llamadas.push(["aceptar"]);
+      api.propuestaActual = null;
+      return 1;
+    },
+    descartarSiembra: () => {
+      api.propuestaActual = null;
+      llamadas.push(["descartar"]);
+    },
+    enviarMensaje: (id) => {
+      llamadas.push(["mensaje", id]);
+      return { llega: true, motivo: null, ruta: [id, "g"], saltos: 1, limiteSaltos: 3, tramos: [], bytes: 62, aireMs: 722.9, totalMs: { min: 722.9, tipica: 722.9, max: 722.9 }, probabilidad: 0.95, probabilidadReintentos: 0.9999, preset: "Long Fast" };
+    },
+    ejemploMalla: () => llamadas.push(["ejemplo-malla"]),
   };
   return api;
 }
@@ -235,11 +280,11 @@ function crearApi(antenas) {
   const c = { antenas: [], parametros: PARAMETROS, resultado: null, desactualizado: false, relieve: "teselas" };
   const menu = m.responder("Hazme un tour", c);
   caso(
-    "«Hazme un tour» → menú con los 6 tours, el básico primero",
-    menu.acciones?.length === 6 && menu.acciones[0].tour === "basico" && /recomendado/.test(menu.acciones[0].texto) && menu.acciones.every((a) => a.accion === "recorrido" && a.detalle),
+    "«Hazme un tour» → menú con los 7 tours, el básico primero",
+    menu.acciones?.length === 7 && menu.acciones[0].tour === "basico" && /recomendado/.test(menu.acciones[0].texto) && menu.acciones.every((a) => a.accion === "recorrido" && a.detalle),
     menu.acciones?.map((a) => a.tour).join(","),
   );
-  caso("«Ayuda» → menú de tours", m.responder("ayuda", c).acciones?.length === 6);
+  caso("«Ayuda» → menú de tours", m.responder("ayuda", c).acciones?.length === 7);
   const pedido = (q) => m.responder(q, c).acciones?.[0]?.tour;
   for (const [q, id] of [
     ["quiero el tutorial", "basico"],
@@ -249,13 +294,15 @@ function crearApi(antenas) {
     ["enséñame a medir distancias y exportar a Google Earth", "medir"],
     ["tour de la red mesh con varios nodos", "mesh"],
     ["guíame para hablar con Melki y dictarle", "melki"],
+    ["hazme el tour de sembrar la malla", "sembrar"],
+    ["enséñame a poner el gateway y los repetidores", "sembrar"],
   ])
     caso(`«${q}» → tour ${id}`, pedido(q) === id, pedido(q));
   caso("Una pregunta sin pedir tour no abre el menú", !m.responder("¿qué es la confiabilidad?", c).acciones?.some((a) => a.detalle));
   caso("«¿Qué puedes hacer?» ofrece los tours", m.responder("¿qué puedes hacer?", c).acciones?.some((a) => a.accion === "tours"));
 
   const ids = m.TOURS.map((x) => x.id);
-  caso("Seis tours con nombre, detalle e introducción", ids.length === 6 && new Set(ids).size === 6 && m.TOURS.every((x) => x.nombre && x.detalle && x.pasos.length >= 4 && !x.pasos[0].objetivo && !x.pasos[0].tarea));
+  caso("Siete tours con nombre, detalle e introducción", ids.length === 7 && new Set(ids).size === 7 && m.TOURS.every((x) => x.nombre && x.detalle && x.pasos.length >= 4 && !x.pasos[0].objetivo && !x.pasos[0].tarea));
   caso("El tutorial básico tiene 7 pasos", m.TOURS[0].id === "basico" && m.TOURS[0].pasos.length === 8);
 
   // Cada paso práctico: no está hecho al entrar, «Hágalo por mí» lo hace y se detecta (con un simulador de mentira)
@@ -266,12 +313,23 @@ function crearApi(antenas) {
     let inspeccion = null;
     let perfil = null;
     let perfilTerreno = false;
+    let siembra = "nada";
+    let propuesta = null;
+    let mensaje = 0;
     const despachar = (a) => {
       estado = m.reductor(estado, a);
-      if (["insertar", "editar", "parametros", "eliminar"].includes(a.tipo)) alDia = false;
+      if (["insertar", "editar", "parametros", "eliminar", "insertar-varias"].includes(a.tipo)) alDia = false;
     };
+    // Red de mentira: la última persona queda sin cobertura hasta que se pone la propuesta
+    const red = () => {
+      const r = m.estadoRed(estado.escenario.antenas, null, 3, false);
+      const sin = siembra === "puesta" ? [] : r.personas.slice(-1);
+      const con = r.personas.filter((a) => !sin.includes(a));
+      return { ...r, alDia: true, conectadas: con, sinCobertura: sin, porNodo: new Map(con.map((a) => [a.id, { estado: "conectado", saltos: 2 }])) };
+    };
+    const encuadres = [];
     const t = {
-      foto: () => ({ estado, inspeccion, perfil, perfilTerreno }),
+      foto: () => ({ estado, inspeccion, perfil, perfilTerreno, siembra, mensaje }),
       alDia: () => alDia,
       despachar,
       perfilTerreno: () => (perfilTerreno = true),
@@ -285,6 +343,28 @@ function crearApi(antenas) {
         perfil: (a, b, informe) => (perfil = { informe: Boolean(informe) }),
         medir: (med) => despachar({ tipo: "medicion-agregar", medicion: med }),
         simular: () => (alDia = estado.escenario.antenas.length > 0),
+        ponerPieza: (pieza, lat, lon) => {
+          const a = { id: `p${Math.random()}`, nombre: pieza, tipo: pieza === "persona" ? "nodo" : "antena", lat, lon, alturaM: 10, pasarela: pieza === "gateway", activa: true, rol: "ROUTER" };
+          despachar({ tipo: "insertar", antena: a });
+          return a;
+        },
+        red,
+        sembrar: (d) => {
+          propuesta = { puntos: [{ id: "propuesto-1", lat: 4.3, lon: -73.2 }], destinos: d.map(() => ({ llega: true })) };
+          siembra = "propuesta";
+          return Promise.resolve(propuesta);
+        },
+        propuesta: () => (siembra === "propuesta" ? propuesta : null),
+        aceptarSiembra: () => {
+          despachar({ tipo: "insertar-varias", antenas: [{ id: "r-prop", nombre: "Repetidor", tipo: "antena", lat: 4.3, lon: -73.2, alturaM: 15, activa: true, pasarela: false }] });
+          siembra = "puesta";
+          return 1;
+        },
+        enviarMensaje: () => {
+          mensaje++;
+          return {};
+        },
+        encuadrarCaja: (c) => encuadres.push(c),
       },
     };
     let ok = true;
@@ -304,11 +384,107 @@ function crearApi(antenas) {
         malos.push(`${paso.titulo} (antes ${antes}, después ${despues})`);
       }
     }
+    // «El flujo de la malla» encuadra todas las piezas (para ver el flujo completo)
+    if (tour.id === "sembrar") {
+      const caja = encuadres.at(-1);
+      const piezas = estado.escenario.antenas;
+      const dentro = caja && piezas.every((q) => q.lon >= caja[0] && q.lat >= caja[1] && q.lon <= caja[2] && q.lat <= caja[3]);
+      if (!dentro) {
+        ok = false;
+        malos.push("El flujo de la malla no encuadró toda la red");
+      }
+    }
     caso(`Tour «${tour.nombre}»: cada paso práctico se detecta y «Hágalo por mí» lo cumple`, ok, malos.join("; "));
   }
+  const sembrar = m.TOURS.find((x) => x.id === "sembrar");
+  caso("«Sembrar la malla» corre en su modo, sobre un escenario vacío", sembrar.modo === "sembrar" && sembrar.practica.escenario().antenas.length === 0 && sembrar.practica.autoSimular);
   const basico = m.TOURS[0].practica;
   caso("El tutorial básico practica sin nodos y sin simular solo", basico.escenario().antenas.length === 0 && basico.autoSimular === false);
   caso("«Como Radio Mobile» practica con dos nodos antena y una pasarela", m.TOURS.find((x) => x.id === "radiomobile").practica.escenario().antenas.filter((a) => a.pasarela).length === 1);
+}
+
+// 10) Sembrar la malla: piezas, sembrado automático, mensajes, modo y conocimiento de Trama
+{
+  const g = base("g", "Gateway", 4.2, -73.37, { pasarela: true, alturaM: 8 });
+  const r1 = base("r1", "Repetidor 1", 4.21, -73.26);
+  const p1 = base("p1", "Persona 1", 4.19, -73.39, { tipo: "nodo", alturaM: 1.5, gananciaDbi: 2, rol: "CLIENT" });
+  const p2 = base("p2", "Persona 2", 4.3, -73.1, { tipo: "nodo", alturaM: 1.5, gananciaDbi: 2, rol: "CLIENT" });
+  const antenas = [g, r1, p1, p2];
+  const api = crearApi(antenas);
+  const orden = (t, pend = null) => m.interpretarOrden(t, api, pend);
+  const gw = orden("pon el gateway en 4.22, -73.36");
+  caso("«Pon el gateway en…» → pieza gateway", gw?.tipo === "pieza" && gw.pieza === "gateway" && cerca(gw.coord.lat, 4.22), JSON.stringify(gw));
+  const resGw = m.ejecutarOrden(gw, api);
+  caso("En el modo «Sembrar» el gateway es uno: se mueve", api.llamadas.some((l) => l[0] === "editar" && l[1] === "g") && !api.llamadas.some((l) => l[0] === "pieza") && resGw.deshacer && /Moví el gateway/.test(resGw.texto), resGw.texto);
+  const rep = orden("agrega un repetidor en 4.25, -73.30 a 20 m");
+  caso("«Agrega un repetidor en… a 20 m» → pieza repetidor con altura", rep?.tipo === "pieza" && rep.pieza === "repetidor" && rep.datos.alturaM === 20, JSON.stringify(rep));
+  const resRep = m.ejecutarOrden(rep, api);
+  caso("Pone el repetidor y espera el cálculo", api.llamadas.some((l) => l[0] === "pieza" && l[1] === "repetidor") && resRep.esperar && /repetidor/.test(resRep.texto));
+  const per = orden("pon una persona en 4.31, -73.22");
+  caso("«Pon una persona en…» → pieza persona", per?.tipo === "pieza" && per.pieza === "persona");
+  const casa = orden("agrega una casa en 4.31, -73.22");
+  caso("«Agrega una casa en…» → persona", casa?.tipo === "pieza" && casa.pieza === "persona");
+  const antenaCasa = orden("inscribe un nodo antena en mi casa en 4.31, -73.22");
+  caso("«Inscribe un nodo antena en mi casa» sigue siendo un nodo antena", antenaCasa?.tipo === "agregar" && antenaCasa.datos.tipo === "antena", JSON.stringify(antenaCasa));
+  const sinCoord = orden("pon un repetidor");
+  const resSin = m.ejecutarOrden(sinCoord, api);
+  caso("Sin coordenada: arma la herramienta y queda pendiente", sinCoord?.tipo === "pieza" && api.llamadas.some((l) => l[0] === "armar" && l[1] === "repetidor") && resSin.pendiente?.tipo === "pieza");
+  const completa = orden("4.28, -73.25", resSin.pendiente);
+  caso("La coordenada siguiente completa la pieza", completa?.tipo === "pieza" && completa.pieza === "repetidor" && cerca(completa.coord.lat, 4.28));
+  caso("«Sube Repetidor 1 a 25 m» edita ese nodo", orden("sube Repetidor 1 a 25 m")?.tipo === "editar");
+  caso("«Elimina Persona 2» elimina ese nodo", orden("elimina Persona 2")?.tipo === "eliminar");
+
+  const falt = orden("conecta a los que faltan");
+  caso("«Conecta a los que faltan» → sembrado hacia los faltantes", falt?.tipo === "sembrar" && falt.destino === "faltantes");
+  const hacia = orden("siembra repetidores hacia 4.4, -73.0");
+  caso("«Siembra repetidores hacia…» → sembrado hacia la coordenada", hacia?.tipo === "sembrar" && cerca(hacia.destino.coord.lat, 4.4));
+  const lugar = orden("lleva la red a Paratebueno");
+  caso("«Lleva la red a Paratebueno» → sembrado hacia el municipio", lugar?.tipo === "sembrar" && lugar.destino.nombre === "Paratebueno", JSON.stringify(lugar));
+  caso("«Llévame a Villavicencio» sigue siendo ir al mapa", orden("llévame a Villavicencio")?.tipo === "ir");
+  const aPersona = orden("conecta a Persona 2");
+  caso("«Conecta a Persona 2» → sembrado hacia esa persona", aPersona?.tipo === "sembrar" && aPersona.destino.id === "p2");
+  caso("«¿Está conectada Persona 2?» no siembra", orden("¿está conectada Persona 2?")?.tipo !== "sembrar");
+
+  // Con la red calculada: Persona 2 sin cobertura
+  api.redActual = { ...m.estadoRed(antenas, null, 3, false), alDia: true, conectadas: [p1], sinCobertura: [p2], aislados: [], lejos: [], saltosMax: 2, areaKm2: 300, porNodo: new Map([["g", { estado: "gateway", saltos: 0 }], ["p1", { estado: "conectado", saltos: 2 }], ["p2", { estado: "sin-cobertura", saltos: null }]]) };
+  const resSiembra = m.ejecutarOrden(falt, api);
+  caso("El sembrado responde de una vez y la propuesta llega después", /Busco lomas/.test(resSiembra.texto) && resSiembra.luego instanceof Promise && api.llamadas.some((l) => l[0] === "sembrar" && l[1][0].antena?.id === "p2"));
+  const propuesta = await resSiembra.luego;
+  caso("La propuesta trae «Poner» y «Descartar»", /Propongo un repetidor/.test(propuesta.texto) && propuesta.acciones?.[0]?.orden?.tipo === "aceptar-siembra" && propuesta.acciones?.[1]?.orden?.tipo === "descartar-siembra", propuesta.texto);
+  caso("Con propuesta pendiente, «ponlos» la acepta", orden("ponlos")?.tipo === "aceptar-siembra");
+  const resAcepta = m.ejecutarOrden({ tipo: "aceptar-siembra" }, api);
+  caso("Aceptar pone los nodos con deshacer y recalcula", /puse 1 nodo/.test(resAcepta.texto) && resAcepta.deshacer && resAcepta.esperar === "*");
+
+  const msg = orden("envía un mensaje desde Persona 1");
+  caso("«Envía un mensaje desde Persona 1» → mensaje", msg?.tipo === "mensaje" && msg.id === "p1");
+  const resMsg = m.ejecutarOrden(msg, api);
+  caso("El mensaje cuenta saltos, tiempo y probabilidad", /llega al gateway en 1 salto/.test(resMsg.texto) && /intentos/.test(resMsg.texto) && api.llamadas.some((l) => l[0] === "mensaje" && l[1] === "p1"), resMsg.texto);
+  caso("Sin decir desde dónde, sale de la persona conectada más lejana", m.ejecutarOrden(orden("manda un mensaje de prueba"), api) && api.llamadas.filter((l) => l[0] === "mensaje").at(-1)[1] === "p1");
+
+  caso("«Modo avanzado» cambia el modo", orden("pasa al modo avanzado")?.modo === "avanzado");
+  caso("«Vuelve a sembrar la malla» cambia el modo", orden("vuelve a sembrar la malla")?.modo === "sembrar");
+  caso("«Modo accidental» sigue siendo un parámetro de Radio Mobile", orden("modo accidental")?.tipo === "parametros");
+  caso("«Carga el ejemplo de malla» → ejemplo de malla", orden("carga el ejemplo de malla")?.tipo === "ejemplo-malla");
+  caso("«Carga el ejemplo» → el de siempre", orden("carga el ejemplo")?.tipo === "ejemplo");
+
+  // Conocimiento: Trama, repetidores, personas, mensajes y por qué alguien está en rojo
+  const c = { antenas, parametros: PARAMETROS, resultado: null, desactualizado: false, relieve: "teselas", modo: "sembrar", red: api.redActual };
+  caso("¿Qué es Trama? → gateway, repetidores y gente", /Gateway \+ Internet/.test(m.responder("¿qué es trama?", c).texto) && /repetidores/.test(m.responder("¿cómo siembro la red?", c).texto));
+  caso("¿Cómo viaja un mensaje? → inundación, ROUTER y tiempo en el aire", /inundación/.test(m.responder("¿cómo viaja un mensaje?", c).texto) && /ROUTER/.test(m.responder("¿cómo viaja un mensaje?", c).texto) && /en el aire/.test(m.responder("¿cuánto tarda un mensaje?", c).texto));
+  caso("¿Dónde pongo los repetidores? → lomas y distancias", /loma/.test(m.responder("¿dónde pongo los repetidores?", c).texto));
+  caso("¿Qué hago ahora? → el siguiente paso de la red", /sin cobertura|Persona 2/.test(m.responder("¿qué hago ahora?", c).texto), m.responder("¿qué hago ahora?", c).texto);
+  caso("¿Cómo está la red? → conectadas y sin cobertura", /1 de 2 personas conectadas/.test(m.responder("¿cómo está la red?", c).texto), m.responder("¿cómo está la red?", c).texto);
+  caso("Los colores en el modo «Sembrar» hablan de las piezas", /verde = conectada/.test(m.responder("¿qué significa el rojo?", c).texto));
+  caso("La pasarela se explica como gateway con internet", /Starlink/.test(m.responder("¿qué es el gateway?", c).texto));
+  caso("El gateway lleva la IA que contesta", /inteligencia artificial/.test(m.responder("¿qué es el gateway?", c).texto));
+
+  // v9: animación del flujo y respuesta de la IA
+  const quita = orden("quita la animación");
+  caso("«Quita la animación» apaga el flujo animado", quita?.tipo === "vista" && quita.cambios.animarRed === false, JSON.stringify(quita));
+  const anima = orden("anima la red");
+  caso("«Anima la red» enciende el flujo animado", anima?.tipo === "vista" && anima.cambios.animarRed === true);
+  caso("Responde qué es la animación (flujo, destellos e IA)", /turquesa/.test(m.responder("¿por qué parpadean y brillan los nodos?", c).texto) && /IA/.test(m.responder("¿qué son las líneas que se mueven?", c).texto));
+  caso("El mensaje cuenta la respuesta de la IA", /IA del gateway le contesta/.test(m.ejecutarOrden({ tipo: "mensaje", id: "p1" }, api).texto));
 }
 
 console.log(fallos ? `\n✗ ${fallos} prueba(s) fallaron` : "\n✓ Melki verificado");
