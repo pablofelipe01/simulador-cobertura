@@ -1,17 +1,17 @@
 // Tours guiados de Melki. Cada tour es una lista de pasos: los de explicación resaltan una parte de la pantalla;
 // los prácticos piden hacer algo (inscribir un nodo, simular, medir…), detectan solos cuando quedó hecho y traen
 // «Hágalo por mí». Los tours prácticos corren sobre un escenario de práctica: al salir, el del usuario vuelve tal cual.
-import { escenarioEjemplo, escenarioVacio, nuevaAntena, type Accion, type Estado, type Vista } from "@/components/simulador/estado";
+import { escenarioEjemplo, escenarioVacio, nuevaAntena, type Accion, type Estado, type ModoApp, type Vista } from "@/components/simulador/estado";
 import { desplazar, rumbo } from "@/lib/radio/geo";
 import type { Inspeccion } from "@/lib/radio/simulacion";
 import type { Antena, Escenario, Medicion } from "@/lib/radio/tipos";
 
 import type { Api } from "./ordenes";
 
-export type IdTour = "basico" | "pantalla" | "mesh" | "radiomobile" | "medir" | "melki";
+export type IdTour = "basico" | "sembrar" | "pantalla" | "mesh" | "radiomobile" | "medir" | "melki";
 
 /** Panel que se abre antes de un paso («mapa» cierra la hoja en el celular para dejar ver el mapa). */
-export type Preparacion = "antenas" | "parametros" | "resultados" | "mapa" | null;
+export type Preparacion = "antenas" | "parametros" | "resultados" | "mapa" | "sembrar" | null;
 
 /** Lo que el tour puede ver del simulador en un momento dado. */
 export type FotoTour = {
@@ -20,6 +20,9 @@ export type FotoTour = {
   /** Perfil del enlace abierto y si muestra el informe de radioenlace. */
   perfil: { informe: boolean } | null;
   perfilTerreno: boolean;
+  /** Sembrado automático (modo «Sembrar la malla») y número del último mensaje enviado (0 si ninguno). */
+  siembra: "nada" | "buscando" | "propuesta" | "puesta" | "error";
+  mensaje: number;
 };
 
 /** Lo que el tour puede hacer en el simulador. */
@@ -69,6 +72,8 @@ export type Tour = {
   detalle: string;
   minutos: number;
   practica?: Practica;
+  /** Modo de la pantalla durante el tour (por defecto, el avanzado, con sus pestañas). */
+  modo?: ModoApp;
   pasos: Paso[];
   final: string;
 };
@@ -127,6 +132,57 @@ function practicaConDos(): Escenario {
 }
 
 const renombrado = (e: Escenario, nombre: string): Escenario => ({ ...e, nombre });
+
+/* ───────────── Sembrar la malla ───────────── */
+
+const piezas = (f: FotoTour, p: "gateway" | "repetidor" | "persona") => antenas(f).filter((a) => (p === "gateway" ? a.pasarela : p === "repetidor" ? !a.pasarela && (a.tipo ?? "antena") === "antena" : (a.tipo ?? "antena") === "nodo"));
+
+const gatewayDe = (t: ApiTour) => piezas(t.foto(), "gateway")[0];
+
+/** Encuadra todas las piezas para que se vea el flujo completo de la malla. */
+function encuadrarMalla(t: ApiTour) {
+  const a = antenas(t.foto());
+  if (!a.length) return;
+  const lons = a.map((x) => x.lon);
+  const lats = a.map((x) => x.lat);
+  t.melki.encuadrarCaja([Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)]);
+}
+
+function asegurarGateway(t: ApiTour) {
+  if (!gatewayDe(t)) t.melki.ponerPieza("gateway", CENTRO.lat, CENTRO.lon);
+}
+
+/** Repite una acción hasta que se pueda (la red calculada, la propuesta lista), sin pasar de unos segundos. */
+function cuandoSePueda(listo: () => boolean, hacer: () => void, intentos = 40) {
+  if (listo()) {
+    hacer();
+    return;
+  }
+  if (intentos > 0) globalThis.setTimeout(() => cuandoSePueda(listo, hacer, intentos - 1), 400);
+}
+
+function sembrarFaltantes(t: ApiTour) {
+  cuandoSePueda(
+    () => t.melki.red().alDia,
+    () => {
+      const r = t.melki.red();
+      const g = r.gateways[0] ?? CENTRO;
+      const destinos = r.sinCobertura.length ? r.sinCobertura.map((a) => ({ lat: a.lat, lon: a.lon, nombre: a.nombre, antena: a })) : [{ ...desplazar(g.lat, g.lon, 28000, 70), nombre: "El punto de práctica" }];
+      void t.melki.sembrar(destinos);
+    },
+  );
+}
+
+function enviarDePrueba(t: ApiTour) {
+  cuandoSePueda(
+    () => t.melki.red().alDia,
+    () => {
+      const r = t.melki.red();
+      const desde = [...r.conectadas, ...r.lejos].sort((a, b) => (r.porNodo.get(b.id)?.saltos ?? 0) - (r.porNodo.get(a.id)?.saltos ?? 0))[0] ?? r.personas[0] ?? r.repetidores[0];
+      if (desde) t.melki.enviarMensaje(desde.id);
+    },
+  );
+}
 
 /* ───────────── Pasos de la pantalla (el recorrido de siempre) ───────────── */
 
@@ -240,6 +296,115 @@ export const TOURS: Tour[] = [
       },
     ],
     final: "Ya sabe lo básico: inscribir un nodo, ajustarlo, simular, leer los colores, medir la señal y ver si es factible.",
+  },
+  {
+    id: "sembrar",
+    nombre: "Sembrar la malla",
+    detalle: "Gateway, repetidores y gente, como en Trama, y un mensaje de prueba.",
+    minutos: 4,
+    modo: "sembrar",
+    practica: { escenario: () => renombrado(escenarioVacio(), "Práctica: sembrar la malla"), autoSimular: true, centro: [CENTRO.lat, CENTRO.lon + 0.12, 10] },
+    pasos: [
+      {
+        titulo: "Sembrar la malla",
+        texto: "Vamos a armar una red como en Trama: primero el Gateway + Internet, después los repetidores según la distancia y al final la gente. Yo calculo con el relieve real quién queda conectado. Estamos en un escenario de práctica: al terminar, el suyo vuelve tal cual.",
+      },
+      {
+        objetivo: "modo",
+        titulo: "Dos modos",
+        texto: "Aquí cambia entre «Sembrar la malla», el modo sencillo y guiado, y el «Modo avanzado», con la lista de nodos, todos los parámetros y las herramientas. En el celular, use la pestaña «Sembrar» de abajo.",
+      },
+      {
+        objetivo: ["piezas", "pieza-mapa"],
+        preparar: "sembrar",
+        titulo: "1 · El Gateway + Internet",
+        texto: "Toque «Gateway + Internet» y luego el mapa, en el sitio donde entra el internet: la casa o la finca con Starlink. De ahí sale la malla.",
+        tarea: {
+          hecho: (t, base) => piezas(t.foto(), "gateway").length > piezas(base, "gateway").length,
+          hacer: (t) => t.melki.ponerPieza("gateway", CENTRO.lat, CENTRO.lon),
+        },
+      },
+      {
+        objetivo: ["piezas", "pieza-mapa"],
+        preparar: "sembrar",
+        titulo: "2 · Un repetidor",
+        texto: "Toque «Repetidor» y póngalo a unos 8 a 10 km del gateway, por ejemplo hacia el oriente (los anillos blancos marcan las distancias). Debe alcanzar al gateway: si queda en naranja, acérquelo.",
+        asegurar: asegurarGateway,
+        tarea: {
+          hecho: (t, base) => piezas(t.foto(), "repetidor").length > piezas(base, "repetidor").length,
+          hacer: (t) => {
+            const g = gatewayDe(t) ?? CENTRO;
+            const p = desplazar(g.lat, g.lon, 9000, 80);
+            t.melki.ponerPieza("repetidor", p.lat, p.lon);
+          },
+        },
+      },
+      {
+        objetivo: ["piezas", "pieza-mapa"],
+        preparar: "sembrar",
+        titulo: "3 · La gente",
+        texto: "Toque «Persona» y ponga dos: una cerca del repetidor y otra lejos, a unos 25 a 30 km del gateway. Verde es conectada al gateway (el número son los saltos); rojo, sin cobertura.",
+        asegurar: asegurarGateway,
+        tarea: {
+          hecho: (t, base) => piezas(t.foto(), "persona").length >= piezas(base, "persona").length + 2,
+          hacer: (t) => {
+            const g = gatewayDe(t) ?? CENTRO;
+            const cerca = desplazar(g.lat, g.lon, 11500, 95);
+            const lejos = desplazar(g.lat, g.lon, 30000, 70);
+            t.melki.ponerPieza("persona", cerca.lat, cerca.lon);
+            t.melki.ponerPieza("persona", lejos.lat, lejos.lon);
+          },
+        },
+      },
+      {
+        objetivo: "estado-red",
+        preparar: "sembrar",
+        titulo: "Estado de la red",
+        texto: "Aquí ve cuántas personas quedan conectadas, cuántas sin cobertura, los km² cubiertos por la red conectada y los saltos. Arriba, el recuadro le dice qué hacer a continuación.",
+        tarea: { hecho: (t) => t.alDia(), hacer: (t) => t.melki.simular(), aviso: "Listo: la red ya está calculada." },
+      },
+      {
+        objetivo: "sembrar-auto",
+        preparar: "sembrar",
+        titulo: "Conectar a los que faltan",
+        texto: "Toque «Conectar a los que faltan»: busco con el relieve real las lomas donde un repetidor alcanza a la persona en rojo y se las propongo en el mapa como torres naranjas punteadas.",
+        tarea: {
+          hecho: (t) => ["propuesta", "puesta"].includes(t.foto().siembra),
+          hacer: sembrarFaltantes,
+          aviso: "Ahí está la propuesta.",
+        },
+      },
+      {
+        objetivo: ["propuesta", "sembrar-auto"],
+        preparar: "sembrar",
+        titulo: "Póngalos",
+        texto: "Revise la propuesta (dónde queda cada repetidor y con cuántos dB) y toque «Poner». La red se recalcula sola; si se arrepiente, «Deshacer» los quita.",
+        tarea: {
+          hecho: (t) => t.foto().siembra === "puesta",
+          hacer: (t) => cuandoSePueda(() => t.melki.propuesta() !== null, () => t.melki.aceptarSiembra()),
+        },
+      },
+      {
+        objetivo: "mapa",
+        preparar: "mapa",
+        titulo: "El flujo de la malla",
+        texto: "Mire el mapa: la información viaja por las líneas turquesa hacia el gateway. Cada pulso sale de una persona y salta de nodo en nodo; el que lo retransmite destella (casi siempre el repetidor más cercano con buen enlace) y la nube «IA» del gateway se enciende al recibirlo. En rojo y parpadeando, quien no tiene cobertura.",
+        asegurar: encuadrarMalla,
+      },
+      {
+        objetivo: "enviar-mensaje",
+        preparar: "sembrar",
+        titulo: "Envíe un mensaje",
+        texto: "Toque «Enviar»: el mensaje sale de la persona más lejana y salta de nodo en nodo hasta el gateway, como en Meshtastic. Le digo los saltos, el tiempo y qué tan seguro llega.",
+        tarea: { hecho: (t, base) => t.foto().mensaje > base.mensaje, hacer: enviarDePrueba },
+      },
+      {
+        objetivo: "melki",
+        titulo: "Pregúnteme",
+        texto: "Pregúnteme «¿cómo viaja un mensaje?», «¿por qué Persona 2 está en rojo?» o «¿qué hago ahora?», o pídame «pon un repetidor en 4.25, -73.30 a 20 m» o «lleva la red a Paratebueno».",
+      },
+    ],
+    final: "Ya sabe sembrar la malla: el gateway, los repetidores, la gente, conectar a los que faltan y probar un mensaje.",
   },
   {
     id: "pantalla",

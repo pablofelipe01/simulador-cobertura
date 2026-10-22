@@ -3,10 +3,14 @@
 import { CLASES, presetPorId, PRESETS } from "@/lib/radio/constantes";
 import { entornoPorId, ENTORNOS, perdidaEntorno } from "@/lib/radio/entorno";
 import { anchosHaz, esDireccional, PATRONES, patronPorId } from "@/lib/radio/patron";
+import { consejoRed, type EstadoRed } from "@/lib/radio/estado-red";
+import { tiempoEnAireMs, bytesMensaje } from "@/lib/radio/mensaje";
 import { esReferencia, resumenRed as resumenParametros } from "@/lib/radio/red";
 import type { Antena, Escenario, Parametros, ResultadoSimulacion } from "@/lib/radio/tipos";
 
-import type { Orden } from "./ordenes";
+import type { ModoApp } from "../simulador/estado";
+
+import { textoRed, type Orden } from "./ordenes";
 import { TOURS, type IdTour } from "./tours";
 
 /** «recorrido» empieza el tour indicado; «tours» muestra el menú de tours. */
@@ -23,6 +27,9 @@ export type ContextoMelki = {
   resultado: ResultadoSimulacion | null;
   desactualizado: boolean;
   relieve: "teselas" | "hgt" | "plano";
+  /** Modo de la pantalla y estado de la red frente al gateway (modo «Sembrar la malla»). */
+  modo?: ModoApp;
+  red?: EstadoRed;
 };
 
 const f = (n: number, d = 1) => n.toFixed(d).replace(".", ",");
@@ -40,7 +47,20 @@ export function normalizar(t: string) {
 
 type Tema = { id: string; claves: string[]; responder: (c: ContextoMelki) => Respuesta };
 
+/** Estado de la malla sembrada: personas conectadas, sin cobertura y qué sigue. */
+function resumenMalla(c: ContextoMelki): Respuesta | null {
+  const red = c.red;
+  if (c.modo !== "sembrar" || !red) return null;
+  const consejo = consejoRed(red, c.parametros.limiteSaltos);
+  const acciones: AccionRespuesta[] = [];
+  if (red.alDia && red.sinCobertura.length) acciones.push({ texto: "Conectar a los que faltan", accion: "orden", orden: { tipo: "sembrar", destino: "faltantes" } });
+  if (red.alDia && red.conectadas.length) acciones.push({ texto: "Enviar un mensaje de prueba", accion: "orden", orden: { tipo: "mensaje" } });
+  return { texto: `${textoRed(red, c.parametros.limiteSaltos)} ${consejo.paso ? `Paso ${consejo.paso}: ` : ""}${consejo.titulo}. ${consejo.texto}`, acciones: acciones.length ? acciones : undefined };
+}
+
 function resumenRed(c: ContextoMelki): Respuesta {
+  const malla = resumenMalla(c);
+  if (malla) return malla;
   const r = c.resultado;
   if (!r) {
     return c.antenas.length
@@ -77,7 +97,7 @@ const TEMAS: Tema[] = [
     claves: ["para que sirve", "que hace", "que es esto", "simulador", "como funciona", "como se usa", "como empiezo", "empezar"],
     responder: () => ({
       texto:
-        "El simulador estima la cobertura de nodos antena Meshtastic (LoRa 915 MHz) sobre el relieve real. Usted ubica nodos por coordenadas, en el mapa o pidiéndomelo; ajusta altura, potencia y ganancia, y al simular ve el nivel de señal con los colores de Radio Mobile, el rango de alcance de cada nodo antena, los enlaces de la malla, los saltos hasta la pasarela y un veredicto de factibilidad con recomendaciones. La regla mide distancias y áreas como en Google Earth.",
+        "El simulador estima la cobertura de nodos antena Meshtastic (LoRa 915 MHz) sobre el relieve real. Tiene dos modos: «Sembrar la malla», el sencillo, donde pone el Gateway + Internet, los repetidores y la gente y le guío paso a paso; y el modo avanzado, con todos los paneles. Usted ubica nodos por coordenadas, en el mapa o pidiéndomelo; ajusta altura, potencia y ganancia, y al simular ve el nivel de señal con los colores de Radio Mobile, el rango de alcance de cada nodo antena, los enlaces de la malla, los saltos hasta la pasarela y un veredicto de factibilidad con recomendaciones. La regla mide distancias y áreas como en Google Earth.",
       acciones: [{ texto: "Ver los tours guiados", accion: "tours" }],
     }),
   },
@@ -95,7 +115,7 @@ const TEMAS: Tema[] = [
     claves: ["que puedes hacer", "que sabes hacer", "que haces", "comandos", "ordenes", "en que me ayudas", "como me ayudas", "que me puedes ayudar"],
     responder: () => ({
       texto:
-        "Puedo hacer cosas en el simulador si me lo pide con sus palabras. Por ejemplo: «inscribe un nodo antena en 4°30'44\" N 73°07'24\" O a 20 m», «mueve Ejemplo a 4.25, -73.40», «sube Ejemplo a 25 m», «marca Torre 2 como pasarela», «elimina Nodo 1», «usa Long Moderate», «radio de 12 km», «distancia entre Ejemplo y Torre 2», «perfil de Ejemplo a Torre 2», «señal en 4.21, -73.35», «llévame a Villavicencio», «¿en qué municipio está Ejemplo?», «activa la regla», «simula» o «exporta a Google Earth». También manejo las funciones de Radio Mobile: «confiabilidad del 90 %», «clima continental templado», «polarización horizontal», «suelo húmedo», «usa Longley-Rice», «ponle una Yagi a Ejemplo apuntando a Torre 2», «inclina Ejemplo 3° hacia abajo», «simula con vegetación densa», «muestra la señal en dBm» o «en µV», «colores arcoíris de -120 a -70 dBm» e «informe del enlace Ejemplo y Torre 2». Si prefiere hablar, toque el micrófono y revise el texto antes de enviarlo. Todo lo que hago se puede deshacer. Y si quiere aprender paso a paso, pídame un tour guiado.",
+        "Puedo hacer cosas en el simulador si me lo pide con sus palabras. Para sembrar la malla: «pon el gateway en 4.2, -73.37», «agrega un repetidor en 4.25, -73.30 a 20 m», «pon una persona en 4.31, -73.22», «conecta a los que faltan», «lleva la red a Paratebueno», «envía un mensaje desde Persona 1», «¿qué hago ahora?» o «modo avanzado». En el modo avanzado: «inscribe un nodo antena en 4°30'44\" N 73°07'24\" O a 20 m», «mueve Ejemplo a 4.25, -73.40», «sube Ejemplo a 25 m», «marca Torre 2 como pasarela», «elimina Nodo 1», «usa Long Moderate», «radio de 12 km», «distancia entre Ejemplo y Torre 2», «perfil de Ejemplo a Torre 2», «señal en 4.21, -73.35», «llévame a Villavicencio», «¿en qué municipio está Ejemplo?», «activa la regla», «simula» o «exporta a Google Earth». También manejo las funciones de Radio Mobile: «confiabilidad del 90 %», «clima continental templado», «polarización horizontal», «suelo húmedo», «usa Longley-Rice», «ponle una Yagi a Ejemplo apuntando a Torre 2», «inclina Ejemplo 3° hacia abajo», «simula con vegetación densa», «muestra la señal en dBm» o «en µV», «colores arcoíris de -120 a -70 dBm» e «informe del enlace Ejemplo y Torre 2». Si prefiere hablar, toque el micrófono y revise el texto antes de enviarlo. Todo lo que hago se puede deshacer. Y si quiere aprender paso a paso, pídame un tour guiado.",
       acciones: [{ texto: "Ver los tours guiados", accion: "tours" }],
     }),
   },
@@ -172,9 +192,14 @@ const TEMAS: Tema[] = [
   {
     id: "colores",
     claves: ["colores", "leyenda", "verde", "amarillo", "naranja", "rojo", "que significa", "significado"],
-    responder: () => ({
+    responder: (c) =>
+      c.modo === "sembrar"
+        ? {
+            texto: "En «Sembrar la malla» cada pieza tiene un aro del color de su conexión con el gateway: turquesa el gateway (con la nube «IA»), verde = conectada (el número es cuántos saltos hasta el gateway), rojo que parpadea = persona sin cobertura, naranja con aro punteado = repetidor que no alcanza la red, ámbar = llega con más saltos que el límite. Las líneas turquesa que avanzan son el flujo de la información hacia el gateway, y el contorno turquesa es hasta dónde llega cada nodo con servicio. Debajo, el color del terreno es la señal: verde oscuro buena, amarillo media, naranja baja y rojo sin servicio.",
+          }
+        : {
       texto: `Los colores son el margen de señal sobre la sensibilidad del receptor, con la misma paleta de las simulaciones de Radio Mobile: ${CLASES.map((k) => `${k.nombre.toLowerCase()} ${k.id === "sin" ? "por debajo de 20 dB" : `desde ${k.minimoDb} dB`}`).join(", ")}. Verde oscuro tolera follaje y movimiento; naranja funciona a ratos; rojo no tiene servicio. En Capas → Escala de la señal puede cambiar a dBm, µV o dBµV/m y usar colores arcoíris entre dos niveles o un solo umbral, como en Radio Mobile.`,
-    }),
+          },
   },
   {
     id: "margen",
@@ -218,7 +243,7 @@ const TEMAS: Tema[] = [
   },
   {
     id: "malla",
-    claves: ["malla", "mesh", "enlace", "enlaces", "entre antenas", "retransmite", "retransmitir", "repetidor", "red mesh"],
+    claves: ["malla", "mesh", "enlace", "enlaces", "entre antenas", "retransmite", "retransmitir", "red mesh"],
     responder: (c) => {
       const r = c.resultado;
       const base =
@@ -242,7 +267,7 @@ const TEMAS: Tema[] = [
     responder: (c) => {
       const p = c.antenas.filter((a) => a.pasarela).map((a) => a.nombre);
       return {
-        texto: `La pasarela es el nodo conectado a internet o al servidor (por ejemplo con MQTT). Todo mensaje del campo debe llegar a ella. ${p.length ? `Ahora son pasarela: ${p.join(", ")}.` : "No hay ninguna marcada: abra una antena y active «Pasarela»."} Con más de tres antenas conviene una segunda pasarela de respaldo.`,
+        texto: `La pasarela o gateway es el nodo conectado a internet o al servidor (por ejemplo con MQTT). Todo mensaje del campo debe llegar a ella. En el modo «Sembrar la malla» es la pieza «Gateway + Internet»: se pone donde haya luz y señal —la cabecera, una finca—, es la única pieza con conexión a internet (un Starlink o fibra; el router va a su lado) y lleva el cerebro de inteligencia artificial (la nube «IA» sobre el gateway), que contesta los mensajes de la gente por la misma ruta; de ahí sale la malla hacia los repetidores y la gente. ${p.length ? `Ahora ${p.length === 1 ? "es" : "son"} gateway: ${p.join(", ")}.` : "Todavía no hay ninguno: póngalo primero."} Con muchas personas conviene un segundo gateway de respaldo.`,
       };
     },
   },
@@ -424,6 +449,8 @@ const TEMAS: Tema[] = [
     id: "mejorar",
     claves: ["mejorar", "recomendacion", "recomendaciones", "que hago", "sugerencia", "sugerencias", "optimizar", "aumentar cobertura", "mas cobertura", "como arreglo"],
     responder: (c) => {
+      const malla = resumenMalla(c);
+      if (malla) return malla;
       const r = c.resultado;
       if (!r) return { texto: "Simule primero y le doy recomendaciones concretas para este escenario.", acciones: [{ texto: "Simular ahora", accion: "simular" }] };
       const recs = r.factibilidad.recomendaciones.slice(0, 3);
@@ -437,6 +464,85 @@ const TEMAS: Tema[] = [
       texto:
         "En la ficha de cada antena elige el equipo: nodo solar con antena de fibra de 5,8 dBi, nodo con antena de 3 dBi, radio portátil de 2 dBi o Personalizado. Al elegirlo lleno potencia, ganancia y pérdida del cable; si cambia un valor a mano, el equipo pasa a Personalizado.",
     }),
+  },
+  {
+    id: "trama",
+    claves: ["trama", "meshtrama", "sembrar", "sembrar la malla", "siembra", "sembrado", "modo sembrar", "como siembro", "como armo la red", "armar la red", "disenar la red", "planear la red", "como hago la red"],
+    responder: () => ({
+      texto:
+        "«Sembrar la malla» es el modo sencillo, como en Trama. Cómo se juega: ponga el Gateway + Internet donde haya luz y señal, riegue repetidores por las lomas para llegar lejos y suelte personas por el campo; las que quedan en rojo no tienen cobertura: acérqueles un repetidor. 1) El Gateway + Internet: el sitio donde entra el internet (un Starlink o fibra), con un nodo LoRa y un computador pequeño que tiene el servidor y la inteligencia artificial. 2) Los repetidores: nodos en torres o lomas, puestos según la distancia; cada uno debe alcanzar al gateway o a otro repetidor conectado. 3) La gente: cada persona con un radio de mano y la aplicación en el celular, para mensajes, SOS, ubicación GPS, correo y consultas a la IA por radio, sin señal celular. Yo calculo con el relieve real quién queda conectado (verde), quién no (rojo) y cuántos saltos hay; también propongo dónde poner repetidores y envío mensajes de prueba para ver cómo viajan.",
+      acciones: [
+        { texto: "Cargar el ejemplo de malla", accion: "orden", orden: { tipo: "ejemplo-malla" } },
+        { texto: "Tour «Sembrar la malla»", accion: "recorrido", tour: "sembrar" },
+      ],
+    }),
+  },
+  {
+    id: "animacion",
+    claves: ["animacion", "animaciones", "parpadea", "parpadean", "brilla", "brillan", "destella", "destellan", "lineas que se mueven", "puntos que se mueven", "flujo", "turquesa", "nube", "nube ia", "ia del gateway", "inteligencia artificial"],
+    responder: (c) => ({
+      texto: `La animación muestra cómo trabaja la malla. Las líneas turquesa avanzan por las rutas hacia el gateway: es por donde viaja la información. Cada pulso sale de una persona y salta de nodo en nodo; el que lo retransmite destella (casi siempre el repetidor más cercano con buen enlace) y, al llegar, la nube «IA» del gateway se enciende, porque ahí vive el cerebro de inteligencia artificial que contesta. Las piezas conectadas laten en verde; las que están sin cobertura parpadean en rojo y los repetidores sin red, en naranja. Con «Enviar un mensaje» se ve además la inundación de Meshtastic: cada vez que un nodo transmite se abre una onda y destellan los vecinos que lo escuchan; luego la respuesta de la IA vuelve por la misma ruta.${c.modo === "sembrar" ? " Se apaga con el interruptor «Animar el flujo de la información» o diciéndome «quita la animación»." : " Se ve en el modo «Sembrar la malla»."}`,
+      acciones: c.red?.alDia && c.red.conectadas.length ? [{ texto: "Enviar un mensaje de prueba", accion: "orden", orden: { tipo: "mensaje" } }] : undefined,
+    }),
+  },
+  {
+    id: "repetidor",
+    claves: ["repetidor", "repetidores", "donde pongo el repetidor", "donde pongo", "distancia entre repetidores", "cada cuanto", "cada cuantos km", "torre del repetidor", "lomas"],
+    responder: (c) => {
+      const red = c.red;
+      const ahora = red?.repetidores.length
+        ? ` Ahora hay ${red.repetidores.length} ${red.repetidores.length === 1 ? "repetidor" : "repetidores"}${red.alDia && red.aislados.length ? ` y ${red.aislados.length === 1 ? "uno no alcanza" : `${red.aislados.length} no alcanzan`} la red (${red.aislados.map((a) => a.nombre).join(", ")})` : ""}.`
+        : "";
+      return {
+        texto: `Un repetidor es un nodo en una torre o en una loma, con rol ROUTER: recibe los mensajes y los vuelve a enviar, primero que los demás. Para que sirva debe alcanzar al gateway o a otro repetidor conectado; si no, queda en naranja. En terreno plano y despejado, entre torres de 15 m el modelo da enlaces sólidos hasta unos 15 a 20 km, y una persona con su radio alcanza un repetidor a unos 10 a 15 km; con árboles, lomas o casas en medio es bastante menos. Póngalos en lo alto, empiece a 5–10 km del anterior y mire si queda en verde; o pídame «conecta a los que faltan» y busco las lomas por usted.${ahora}`,
+        acciones: red?.alDia && red.sinCobertura.length ? [{ texto: "Conectar a los que faltan", accion: "orden", orden: { tipo: "sembrar", destino: "faltantes" } }] : undefined,
+      };
+    },
+  },
+  {
+    id: "persona",
+    claves: ["persona", "personas", "gente", "usuarios", "usuario", "radio de mano", "aplicacion", "app", "bluetooth", "familias"],
+    responder: (c) => {
+      const red = c.red;
+      const ahora = red?.personas.length && red.alDia ? ` Ahora: ${red.conectadas.length} de ${red.personas.length} conectadas${red.sinCobertura.length ? `, ${red.sinCobertura.length} sin cobertura` : ""}.` : "";
+      return {
+        texto: `Cada persona lleva un radio Meshtastic pequeño conectado por Bluetooth a la aplicación del celular: con eso escribe mensajes, manda un SOS o su ubicación aunque no haya señal celular, y el mensaje salta por la malla hasta el gateway. En el mapa la pongo a 1,5 m con antena de 2 dBi. Verde = llega al gateway (el número es cuántos saltos); rojo = no alcanza ningún nodo; ámbar = llega con más saltos que el límite.${ahora}`,
+      };
+    },
+  },
+  {
+    id: "mensaje",
+    claves: ["como viaja", "como viaja un mensaje", "viaja el mensaje", "mensaje", "mensajes", "inundacion", "flooding", "tiempo en el aire", "airtime", "cuanto tarda", "cuanto demora", "latencia", "retransmision", "colision", "colisiones", "llega el mensaje", "sos"],
+    responder: (c) => {
+      const p = presetPorId(c.parametros.preset);
+      const bytes = bytesMensaje(40);
+      const aire = tiempoEnAireMs(bytes, p);
+      const t = (ms: number) => (ms < 1000 ? `${Math.round(ms)} ms` : `${f(ms / 1000)} s`);
+      const red = c.red;
+      return {
+        texto: `En Meshtastic un mensaje viaja por inundación: quien lo envía lo transmite una vez y cada nodo que lo escucha lo retransmite una sola vez, restando un salto; al llegar al límite (${c.parametros.limiteSaltos} saltos) ya no se reenvía. Antes de retransmitir cada nodo espera su turno: los repetidores (ROUTER) salen primero y, entre los demás, el que recibió más débil (el más lejano) sale antes, para que el mensaje avance rápido. Con ${p.nombre}, un mensaje de 40 caracteres (${bytes} bytes) ocupa ${t(aire)} en el aire en cada salto; por 3 saltos tarda unos ${t(3 * aire + 2 * 0.3 * aire)}. Si dos nodos transmiten a la vez, los paquetes chocan; por eso no conviene subir mucho el límite de saltos ni usar presets lentos con mucha gente.${red?.alDia && red.conectadas.length ? " Pídame «envía un mensaje desde» una persona y lo verá viajar en el mapa." : ""}`,
+        acciones: red?.alDia && red.conectadas.length ? [{ texto: "Enviar un mensaje de prueba", accion: "orden", orden: { tipo: "mensaje" } }] : undefined,
+      };
+    },
+  },
+  {
+    id: "sin-cobertura",
+    claves: ["sin cobertura", "por que esta en rojo", "esta en rojo", "estan en rojo", "no se conecta", "no se conectan", "no alcanza", "desconectada", "desconectado", "aislado", "aislada", "por que no llega", "no llegan"],
+    responder: (c) => {
+      const red = c.red;
+      const r = c.resultado;
+      if (!red?.alDia || !r) return { texto: "Una persona queda en rojo cuando ningún nodo de la red le llega con al menos 20 dB, y un repetidor queda en naranja cuando no alcanza al gateway ni a otro repetidor conectado. Las causas: la distancia, una loma en medio, árboles o poca altura. Simule y le digo cuál es el caso." };
+      const nombres = new Map(c.antenas.map((a) => [a.id, a.nombre]));
+      const detalle = [...red.sinCobertura, ...red.aislados].slice(0, 4).map((a) => {
+        const mejor = r.enlaces.filter((e) => e.a === a.id || e.b === a.id).sort((x, y) => y.margen - x.margen)[0];
+        return mejor ? `${a.nombre}: su mejor enlace es con ${nombres.get(mejor.a === a.id ? mejor.b : mejor.a)} (${f(mejor.margen)} dB a ${f(mejor.distanciaKm)} km; se necesitan 20 dB)` : `${a.nombre}: no tiene ningún nodo cerca`;
+      });
+      if (!detalle.length) return { texto: "Ahora no hay nadie sin cobertura: todas las piezas llegan al gateway. 🙂" };
+      return {
+        texto: `${detalle.join("; ")}. Para arreglarlo: ponga un repetidor en una loma entre los dos, suba el repetidor más cercano o acérquelo. También puedo proponerlo yo con el relieve real.`,
+        acciones: red.sinCobertura.length ? [{ texto: "Conectar a los que faltan", accion: "orden", orden: { tipo: "sembrar", destino: "faltantes" } }] : undefined,
+      };
+    },
   },
   {
     id: "recorrido",
@@ -471,6 +577,7 @@ const PIDE_TOUR = /\b(tour|tours|recorrido|tutorial|guia|guiame|guiado|paso a pa
 
 /** Tema de cada tour, para atender «hazme el tour de Radio Mobile» o «tutorial básico». */
 const TEMA_TOUR: [IdTour, RegExp][] = [
+  ["sembrar", /\b(sembrar|siembra|sembrado|trama|gateway|repetidor\w*|personas|gente)\b/],
   ["basico", /\b(basico|basica|primera simulacion|principiante|desde cero|lo basico|empezar)\b/],
   ["pantalla", /\b(pantalla|partes|botones|interfaz|cada parte)\b/],
   ["radiomobile", /\b(radio ?mobile|propagacion|longley|confiabilidad|direccional|yagi|dbm|radioenlace|radio enlace|informe)\b/],
@@ -502,10 +609,23 @@ function sobreAntena(t: string, c: ContextoMelki): Respuesta | null {
   const r = c.resultado;
   const s = r?.antenas.find((x) => x.id === antena.id);
   const n = r?.nodos.find((x) => x.id === antena.id);
+  const nombres = new Map(c.antenas.map((a) => [a.id, a.nombre]));
+  const destino = c.modo === "sembrar" ? "al gateway" : "a la pasarela";
+  // Nodos de campo (personas): no tienen alcance propio; importa si llegan a la red
+  if (r && !s && n && !c.desactualizado) {
+    if (n.saltos === null) {
+      const mejor = r.enlaces.filter((e) => e.a === antena.id || e.b === antena.id).sort((x, y) => y.margen - x.margen)[0];
+      const otro = mejor ? nombres.get(mejor.a === antena.id ? mejor.b : mejor.a) : null;
+      return {
+        texto: `${antena.nombre} no llega ${destino}${mejor && otro ? `: su mejor enlace es con ${otro} (${f(mejor.margen)} dB a ${f(mejor.distanciaKm)} km; se necesitan 20 dB)` : ""}. Acérquelo, súbalo o ponga un repetidor en una loma entre los dos.`,
+        acciones: c.modo === "sembrar" ? [{ texto: `Conectar a ${antena.nombre}`, accion: "orden", orden: { tipo: "sembrar", destino: { id: antena.id } } }] : undefined,
+      };
+    }
+    return { texto: `${antena.nombre} llega ${destino} en ${n.saltos} ${n.saltos === 1 ? "salto" : "saltos"} (${n.ruta.map((id) => nombres.get(id)).join(" → ")})${n.cuelloDb !== null ? `, con ${f(n.cuelloDb)} dB en su enlace más débil` : ""}${n.saltos > c.parametros.limiteSaltos ? `; pasa el límite de ${c.parametros.limiteSaltos} saltos` : ""}.` };
+  }
   if (!r || !s) {
     return { texto: `${antena.nombre} está a ${f(antena.alturaM)} m con ${f(antena.gananciaDbi)} dBi. ${antena.activa ? "Simule para conocer su alcance." : "Está excluida de la simulación."}`, acciones: antena.activa ? [{ texto: "Simular ahora", accion: "simular" }] : undefined };
   }
-  const nombres = new Map(c.antenas.map((a) => [a.id, a.nombre]));
   let texto = `${antena.nombre}: terreno a ${s.elevacionM} m, alcance con servicio ${s.alcanceLimitado ? "de al menos " : ""}${f(s.alcanceKm, 2)} km y ${f(s.areaServicioKm2)} km² servidos; da la mejor señal en ${f(s.porcentajeMejorServidor, 0)} % del área.`;
   if (antena.pasarela) texto += " Es pasarela.";
   else if (!n || n.saltos === null) texto += " No tiene ruta hacia la pasarela.";
@@ -548,4 +668,4 @@ export function responder(pregunta: string, c: ContextoMelki): Respuesta {
   };
 }
 
-export const SUGERENCIAS = ["Hazme un tour", "¿Qué puedes hacer?", "Inscribe un nodo antena", "¿Es factible la red?"];
+export const SUGERENCIAS = ["Hazme un tour", "¿Qué puedes hacer?", "¿Qué hago ahora?", "¿Cómo viaja un mensaje?"];
