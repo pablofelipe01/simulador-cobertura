@@ -1,23 +1,24 @@
 // Órdenes para Melki: entiende pedidos en español con coordenadas (decimales o en grados, minutos y segundos)
 // y los ejecuta en el simulador: inscribir, mover, editar o borrar nodos, cambiar parámetros, simular, ir a un lugar,
 // medir distancias, ver perfiles y la señal en un punto. Todo se procesa aquí mismo, sin servicios externos.
-import { EQUIPOS, PRESETS, presetPorId, type EquipoId, type PresetId } from "@/lib/radio/constantes";
+import { EQUIPOS, META_UTIL_ESTUDIO_PCT, PRESETS, presetPorId, type EquipoId, type PresetId } from "@/lib/radio/constantes";
 import { entornoPorId, perdidaEntorno } from "@/lib/radio/entorno";
 import { consejoRed, piezaDe, type EstadoRed, type Pieza } from "@/lib/radio/estado-red";
 import type { ViajeMensaje } from "@/lib/radio/mensaje";
 import type { DestinoSiembra, Siembra } from "@/lib/radio/siembra";
 import type { Diseno } from "@/lib/radio/diseno";
+import { resumenCambios, textoCambio, type Ajuste, type PermisosAjuste, type SitioAjuste } from "@/lib/radio/ajuste";
 import { areaM2, cajaPoligono, conArea, coberturaEnArea, poligonoCirculo, poligonoRectangulo, porcentajeSobre, radioDeArea, type Poligono } from "@/lib/radio/area";
 import { aDecimal, aGMS, desplazar, distanciaM, formatoDistancia, leerCoordenada, puntoCardinal, rumbo, rumboTexto } from "@/lib/radio/geo";
 import type { ClimaItm } from "@/lib/radio/itm";
 import { anchosHaz, esDireccional, patronPorId } from "@/lib/radio/patron";
 import { CLIMAS, CONFIABILIDADES, RED_REFERENCIA, SUELOS, VARIABILIDADES } from "@/lib/radio/red";
-import type { Antena, EntornoId, Escenario, Medicion, Parametros, PatronId, ResultadoSimulacion, Rol, SueloId, TipoNodo, VariabilidadId } from "@/lib/radio/tipos";
+import type { Antena, AreaObjetivo, EntornoId, Escenario, Medicion, ObjetivoArea, Parametros, PatronId, ResultadoSimulacion, Rol, SueloId, TipoNodo, VariabilidadId } from "@/lib/radio/tipos";
 import { textoNivel, uvADbm, type UnidadId } from "@/lib/radio/unidades";
 import type { Lugar } from "@/lib/geo/referencia";
 
 import type { EscalaSenal, ModoApp, Vista } from "../simulador/estado";
-import type { Respuesta } from "./cerebro";
+import type { AccionRespuesta, Respuesta } from "./cerebro";
 
 /** Cambios de la vista que Melki puede pedir (unidad y escala de colores del mapa de señal). */
 export type CambiosVista = Partial<
@@ -114,7 +115,14 @@ export type Orden =
   | { tipo: "relieve"; valor: "teselas" | "plano" }
   | { tipo: "nombre-escenario"; nombre: string }
   | { tipo: "duplicar"; id: string }
-  | { tipo: "seleccionar"; id: string };
+  | { tipo: "seleccionar"; id: string }
+  /* Ajuste inteligente (cobertura–costo) y área objetivo */
+  | { tipo: "ajustar"; aplicar: boolean; opcion: OpcionAjusteId; opciones: OpcionesAjuste; avisos: string[] }
+  | { tipo: "aplicar-ajuste"; ajuste: Ajuste; indice: number; base: Escenario }
+  | { tipo: "descartar-ajuste" }
+  | { tipo: "area-objetivo"; quitar: boolean; id?: string; metaPct?: number; margenDb?: number };
+
+export type OpcionAjusteId = "economica" | "recomendada" | "maxima";
 
 export type Referencia = { tipo: "nodo"; id: string } | { tipo: "coord"; coord: Coordenada };
 
@@ -180,9 +188,27 @@ export type Api = {
   aplicarDiseno(d: Diseno, alturaRepetidorM: number): Antena[];
   /** Simula (si hace falta) y entrega el próximo resultado al día. */
   esperarResultado(): Promise<ResultadoSimulacion | null>;
+  /** Ajuste inteligente (cobertura–costo): calcula las opciones y las muestra en el panel y el mapa. */
+  ajustarRed(o?: OpcionesAjuste): Promise<Ajuste | null>;
+  /** Aplica una opción del ajuste (sobre la base, si se da: «usar la económica» después de otra); devuelve los apoyos puestos. */
+  aplicarAjuste(a: Ajuste, i: number, base?: Escenario): Antena[] | null;
+  mostrarAjuste(a: Ajuste, i?: number): void;
+  descartarAjuste(): void;
+  areaObjetivo(): AreaObjetivo | null;
+  /** Marca un área de la regla como área objetivo (o la quita con id null). */
+  fijarAreaObjetivo(id: string | null, objetivo?: ObjetivoArea): void;
   fijarRelieve(v: "teselas" | "plano"): void;
   renombrarEscenario(nombre: string): void;
   duplicar(id: string): void;
+};
+
+/** Pedido de ajuste automático que arma Melki (qué puede cambiar, límites y sitios dados). */
+export type OpcionesAjuste = {
+  permisos?: Partial<PermisosAjuste>;
+  alturaMaxM?: number;
+  maxApoyos?: number;
+  sitios?: SitioAjuste[];
+  fijos?: string[];
 };
 
 /** Pedido de diseño por área que arma Melki. */
@@ -263,6 +289,26 @@ export function extraerCoordenadas(texto: string): Coordenada | null {
     return ajustarColombia(lat, lon, Boolean(m[2] || m[4]));
   }
   return null;
+}
+
+/** Todas las coordenadas de un texto («en 4.51, -73.12; 4.60, -73.05 y 4°30' N 73°10' O»). */
+export function extraerVariasCoordenadas(texto: string): Coordenada[] {
+  const t = texto.replace(/[’′´`]/g, "'").replace(/[”″“]/g, '"').replace(/''/g, '"').replace(/º/g, "°");
+  const salida: Coordenada[] = [];
+  const gms = [...t.matchAll(/(-?\d{1,3})\s*°\s*(?:(\d{1,2}(?:[.,]\d+)?)\s*'\s*)?(?:(\d{1,2}(?:[.,]\d+)?)\s*"\s*)?\s*(norte|sur|oeste|occidente|este|[NSEOW](?![a-zA-Z]))?/gi)];
+  if (gms.length >= 4) {
+    for (let i = 0; i + 1 < gms.length; i += 2) {
+      const c = extraerCoordenadas(`${gms[i][0]} ${gms[i + 1][0]}`);
+      if (c) salida.push(c);
+    }
+    return salida;
+  }
+  const limpio = t.replace(/\b(latitud|lat|longitud|long|lon|lng)\b\s*:?/gi, " ");
+  for (const m of limpio.matchAll(/(-?\d{1,3}(?:\.\d+|,\d{2,}))\s*°?\s*([NS](?![a-zA-Z]))?\s*(?:[,;/]|\sy\s|\s)\s*(-?\d{1,3}(?:\.\d+|,\d{2,}))\s*°?\s*([EOW](?![a-zA-Z]))?/gi)) {
+    const c = extraerCoordenadas(m[0]);
+    if (c) salida.push(c);
+  }
+  return salida;
 }
 
 /* ───────────── Nodos y datos en el texto ───────────── */
@@ -587,6 +633,69 @@ function margenPedido(tn: string): { margenDb: number; clases: string } {
   return { margenDb: m, clases };
 }
 
+/**
+ * Ajuste inteligente: «ajústamelo», «optimiza la red», «hazla factible», «mejora la cobertura al menor costo»,
+ * «¿qué necesito para que sea factible?», con límites («sin pasar de 20 m», «máximo 3 antenas de apoyo», «no muevas
+ * los nodos», «solo alturas») y sitios dados («las antenas de apoyo pueden ir en 4.51, -73.12; 4.6, -73.05»).
+ */
+function interpretarAjuste(texto: string, tn: string, antenas: Antena[]): Orden | null {
+  const verbo =
+    /\b(ajust(a|ala|alo|ame|amela|amelo|ar|arla|arlo|en|e)|reajust\w*|optimiz\w*|hazla factible|hacerla factible|volverla factible|vuelvela factible|dejala factible|dejarla factible|(que|para que) (sea|quede) (factible|viable)|mejor(a|ar|e|ame|amela|ala) (la |mi )?(red|malla|cobertura)|mejor relacion|relacion (costo|cobertura)|costo[- ]?beneficio|(al|con el) menor costo|menos costo|mas economic\w*|(que|lo que) (le )?falta para (ser|que sea|quedar) (factible|viable)|que necesit\w* para (ser|que sea|hacerla|dejarla|que quede) (factible|viable)|como (la )?(hago|dejo|vuelvo|pongo) (factible|viable)|antenas? de apoyo|apoyos?\b.*\b(sugi\w*|propon\w*|donde)|(sugi\w*|propon\w*|recomiend\w*) (antenas|puntos|sitios|apoyos|donde poner))\b/;
+  if (!verbo.test(tn)) return null;
+  // No es el ajuste de la red: la vista, un parámetro o un nodo con su altura
+  if (/\b(vista|pantalla|zoom|encuadr\w*|centra\w*|muestrame toda|ver toda)\b/.test(tn)) return null;
+  if (/\b(radio de estudio|confiabilidad|preset|frecuencia|limite de saltos|hop|potencia|ganancia|altura del receptor|escala|unidad|opacidad|capa)\b/.test(tn)) return null;
+  const nombrado = nodosMencionados(tn, antenas)[0];
+  if (nombrado && /\b\d{1,2}(?:[.,]\d+)?\s*(m|mts?|metros?|dbi|dbm)\b/.test(tn) && !/\b(sin pasar de|maximo|max|hasta|no mas de|como mucho)\b/.test(tn)) return null;
+
+  const pregunta = /\b(que necesit\w*|que (le )?falta|como (la )?(hago|dejo|vuelvo|pongo)|propon\w*|sugi\w*|recomiend\w*|muestr\w*|ensen\w*|que opciones|cuales opciones|como quedaria|que harias|que me recomiendas|donde (pongo|pondria|irian|van))\b/.test(tn) || texto.trim().startsWith("¿") || /\?\s*$/.test(texto);
+  const opcion: OpcionAjusteId = /\b(mas economic\w*|la economica|lo minimo|lo mas barato|mas barat\w*|minimo indispensable)\b/.test(tn)
+    ? "economica"
+    : /\b(maxima cobertura|la maxima|cubr\w* (todo|lo maximo|al maximo)|la mejor cobertura|toda la cobertura posible)\b/.test(tn)
+      ? "maxima"
+      : "recomendada";
+  const avisos: string[] = [];
+  const opciones: OpcionesAjuste = {};
+  const alto = tn.match(/\b(?:sin pasar de|maximo|max|hasta|no mas de|como mucho|menos de|de maximo)\s+(?:de\s+)?(\d{1,3})\s*(?:m|mts?|metros?)\b/);
+  if (alto) {
+    const h = Number(alto[1]);
+    if (h > 30) avisos.push(`Más de 30 m no lo propongo: exige torres autosoportadas, mucho más costosas; trabajo con hasta 30 m.`);
+    opciones.alturaMaxM = Math.max(6, Math.min(30, h));
+  }
+  const cuantas = tn.match(/\b(?:maximo|max|no mas de|hasta|como mucho|con)\s+(?:de\s+)?(\d{1,2}|una|un|dos|tres|cuatro|cinco)\s+(?:antenas?|apoyos?|repetidor\w*|nodos?)(?: de apoyo)?\b/);
+  if (cuantas) {
+    const v = { una: 1, un: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5 }[cuantas[1] as "una"] ?? Number(cuantas[1]);
+    opciones.maxApoyos = Math.max(0, Math.min(40, v));
+  }
+  const permisos: OpcionesAjuste["permisos"] = {};
+  if (/\b(no (muevas|mueva|movamos|corras|cambies de sitio)|sin mover|dejalos (donde estan|en su sitio)|en el mismo sitio)\b/.test(tn)) permisos.mover = false;
+  if (/\b(sin (antenas de )?apoyos?|sin agregar|no agregues|no pongas (mas|nuevas)|sin (mas|nuevas) antenas|sin nodos nuevos|con lo que (hay|tengo))\b/.test(tn)) permisos.apoyos = false;
+  if (/\b(no (cambies|toques) (las |el tipo de |los tipos de )?antenas?|sin (antenas )?sectoriales|solo omni\w*)\b/.test(tn)) permisos.antenas = false;
+  if (/\b(sin subir|no subas|no cambies las alturas|sin cambiar (las )?alturas|misma altura)\b/.test(tn)) permisos.alturas = false;
+  if (/\bsolo (con |subiendo |cambiando )?(las )?(alturas?|torres)\b/.test(tn)) Object.assign(permisos, { apoyos: false, mover: false, antenas: false, alturas: true });
+  if (/\bsolo (con )?(antenas de )?apoyos?\b/.test(tn)) Object.assign(permisos, { apoyos: true, mover: false, antenas: false, alturas: false });
+  if (Object.keys(permisos).length) opciones.permisos = permisos;
+  // Sitios dados: coordenadas en el pedido («las antenas de apoyo pueden ir en …», «usa estos puntos …»)
+  const coords = extraerVariasCoordenadas(texto);
+  if (coords.length && /\b(apoyo|sitios?|puntos?|fincas?|coordenadas|lugares|ubicaciones|pueden ir|podrian ir|disponibles|posibles)\b/.test(tn)) {
+    opciones.sitios = coords.map((c, i) => ({ lat: c.lat, lon: c.lon, nombre: `el sitio ${i + 1}` }));
+  }
+  return { tipo: "ajustar", aplicar: !pregunta, opcion, opciones, avisos };
+}
+
+/** «Usa el área que medí como área objetivo», «mide la factibilidad en esa área», «quita el área objetivo». */
+function interpretarAreaObjetivo(texto: string, tn: string, api: Api): Orden | null {
+  if (/\b(quita\w*|borra\w*|elimina\w*|sin)\b.*\barea objetivo\b|\b(evalua|mide|medir) (la factibilidad )?en (toda )?el area de estudio\b/.test(tn)) return { tipo: "area-objetivo", quitar: true };
+  const fijar =
+    /\barea objetivo\b/.test(tn) && /\b(usa|usar|pon|poner|marca|marcar|toma|tomar|deja|dejar|es|sea|como)\b/.test(tn) ||
+    /\b(mide|medir|evalua|evaluar|calcula) (la )?(factibilidad|cobertura) (en|sobre|dentro de) (el|esta|esa|la) (area|zona|poligono)\b/.test(tn);
+  if (!fijar) return null;
+  const m = [...api.mediciones()].reverse().find((x) => x.tipo === "area");
+  const pct = texto.toLowerCase().match(/(\d{1,3}(?:[.,]\d+)?)\s*(?:%|por ciento)/);
+  const { margenDb } = margenPedido(tn);
+  return { tipo: "area-objetivo", quitar: false, id: m?.id, metaPct: pct ? Math.min(100, Math.max(1, leerNumero(pct[1]))) : undefined, margenDb };
+}
+
 function interpretarDiseno(texto: string, tn: string, api: Api, antenas: Antena[]): Orden | null {
   if (!/\b(cubr\w*|cobertura|abarc\w*|red|malla|repetidor\w*|senal|disen\w*|arm\w*|planific\w*|cuant\w* (repetidores|nodos|antenas))\b/.test(tn)) return null;
   const bajo = sinTildes(texto);
@@ -840,6 +949,10 @@ export function interpretarOrden(texto: string, api: Api, pendiente: Pendiente, 
   }
   const diseno = interpretarDiseno(texto, tn, api, antenas);
   if (diseno) return diseno;
+  const objetivo = interpretarAreaObjetivo(texto, tn, api);
+  if (objetivo) return objetivo;
+  const ajuste = interpretarAjuste(texto, tn, antenas);
+  if (ajuste) return ajuste;
   const lote = interpretarLote(texto, tn, antenas);
   if (lote) return lote;
   const pantalla = interpretarPantalla(tn);
@@ -1580,6 +1693,41 @@ export function ejecutarOrden(o: Orden, api: Api): ResultadoOrden {
     }
     case "disenar":
       return ejecutarDiseno(o, api, antes);
+    case "ajustar":
+      return ejecutarAjuste(o, api, antes);
+    case "aplicar-ajuste": {
+      const op = o.ajuste.opciones[o.indice];
+      if (!op) return { texto: "Esa opción ya no está disponible. Pídame el ajuste de nuevo." };
+      api.aplicarAjuste(o.ajuste, o.indice, o.base);
+      return {
+        texto: `Aplico la opción «${op.titulo}» y simulo…`,
+        deshacer: o.base,
+        luego: api.esperarResultado().then((r) => textoAjusteAplicado(o.ajuste, o.indice, r, o.base)),
+      };
+    }
+    case "descartar-ajuste":
+      api.descartarAjuste();
+      return { texto: "Listo, descarté la propuesta de ajuste. La red quedó como estaba." };
+    case "area-objetivo": {
+      if (o.quitar) {
+        if (!api.areaObjetivo()) return { texto: "No hay área objetivo: la factibilidad ya se mide en el área de estudio (los círculos alrededor de los nodos antena)." };
+        api.fijarAreaObjetivo(null);
+        return { texto: "Listo: quité el área objetivo. La factibilidad vuelve a medirse en el área de estudio (60 % con señal media o mejor).", esperar: antenas.some((a) => a.activa) ? "*" : undefined };
+      }
+      const m = o.id ? api.mediciones().find((x) => x.id === o.id) : undefined;
+      if (!m)
+        return {
+          texto: "No encuentro un área medida. Dibújela con la regla (Área) y pídamelo de nuevo: «usa el área que medí como área objetivo con el 95 %».",
+          acciones: [{ texto: "Activar la regla", accion: "orden", orden: { tipo: "herramienta", herramienta: "regla" } }],
+        };
+      const meta = o.metaPct ?? 90;
+      const margen = o.margenDb ?? 30;
+      api.fijarAreaObjetivo(m.id, { metaPct: meta, margenDb: margen });
+      return {
+        texto: `Listo: «${m.nombre}» es el área objetivo. La factibilidad ahora pide el ${fp(meta)} % de esa área con ${margen >= 45 ? "señal buena" : margen >= 37 ? "señal estable o mejor" : "señal media o mejor"} (≥ ${margen} dB)${o.metaPct === undefined ? " (meta por defecto; dígame otra: «con el 99 %»)" : ""}.`,
+        esperar: antenas.some((a) => a.activa) ? "*" : undefined,
+      };
+    }
     case "relieve":
       api.fijarRelieve(o.valor);
       return {
@@ -1671,6 +1819,113 @@ function textoCoberturaArea(r: ResultadoSimulacion, m: Medicion, margenDb: numbe
   };
 }
 
+/* ───────────── Ajuste inteligente ───────────── */
+
+/** «62 % del área de estudio con señal útil (media o mejor)» o, con área objetivo, «88 % de «Lote 3» con señal media o mejor (meta 95 %)». */
+export function textoCoberturaUtil(r: ResultadoSimulacion): string {
+  const o = r.areaObjetivo;
+  if (o) {
+    const senal = o.margenDb >= 45 ? "señal buena" : o.margenDb >= 37 ? "señal estable o mejor" : "señal media o mejor";
+    return `${fp(o.utilPct)} % de «${o.nombre}» con ${senal} (meta ${fp(o.metaPct)} %)`;
+  }
+  return `${fp(r.porcentajeUtil)} % del área de estudio con cobertura útil, señal media o mejor (meta ${META_UTIL_ESTUDIO_PCT} %)`;
+}
+
+/** El botón «Ajústamelo automáticamente» (u «Optimizar la red») para las respuestas de Melki. */
+export function accionAjuste(r: ResultadoSimulacion | null): AccionRespuesta | null {
+  if (!r) return null;
+  const orden: Orden = { tipo: "ajustar", aplicar: false, opcion: "recomendada", opciones: {}, avisos: [] };
+  return { texto: r.factibilidad.nivel === "factible" ? "Optimizar el costo" : "Ajústamelo automáticamente", accion: "orden", orden };
+}
+
+const indiceOpcion = (a: Ajuste, id: OpcionAjusteId) => {
+  const i = a.opciones.findIndex((x) => x.id === id);
+  return i >= 0 ? i : a.recomendada;
+};
+
+function ejecutarAjuste(o: Extract<Orden, { tipo: "ajustar" }>, api: Api, antes: Escenario): ResultadoOrden {
+  const activas = api.antenas().filter((a) => a.activa);
+  if (!activas.length)
+    return {
+      texto: "Todavía no hay red que ajustar. Ponga el gateway y los nodos, o pídame una red completa para un área: «ármame una malla que cubra 500 hectáreas alrededor de Cumaral con señal media en el 99 %».",
+    };
+  if (!activas.some((a) => a.pasarela))
+    return {
+      texto: "Primero ponga el Gateway + Internet (la pasarela): el ajuste parte de él. Dígame dónde entra el internet: «pon el gateway en 4.2, -73.37».",
+      acciones: [{ texto: "Poner el gateway", accion: "orden", orden: { tipo: "pieza", pieza: "gateway", datos: {} } }],
+    };
+  const area = api.areaObjetivo();
+  const limites: string[] = [];
+  if (o.opciones.alturaMaxM !== undefined && o.opciones.alturaMaxM < 30) limites.push(`torres de hasta ${fn(o.opciones.alturaMaxM)} m`);
+  if (o.opciones.maxApoyos !== undefined) limites.push(o.opciones.maxApoyos === 0 ? "sin antenas de apoyo" : `máximo ${o.opciones.maxApoyos} ${o.opciones.maxApoyos === 1 ? "antena" : "antenas"} de apoyo`);
+  if (o.opciones.permisos?.mover === false) limites.push("sin mover nodos");
+  if (o.opciones.permisos?.apoyos === false && o.opciones.maxApoyos === undefined) limites.push("sin antenas de apoyo");
+  if (o.opciones.permisos?.antenas === false) limites.push("sin cambiar antenas");
+  if (o.opciones.permisos?.alturas === false) limites.push("sin cambiar alturas");
+  if (o.opciones.sitios?.length) limites.push(`apoyos solo en ${o.opciones.sitios.length === 1 ? "el sitio que me dio" : `los ${o.opciones.sitios.length} sitios que me dio`}`);
+  const luego = (async (): Promise<Respuesta> => {
+    const a = await api.ajustarRed(o.opciones);
+    if (!a) return { texto: "No pude calcular el ajuste (el relieve no cargó o el motor se detuvo). Intente de nuevo en un momento." };
+    const i = indiceOpcion(a, o.opcion);
+    const op = a.opciones[i];
+    if (o.aplicar && op && op.cambios.length) {
+      api.aplicarAjuste(a, i, antes);
+      const r = await api.esperarResultado();
+      return textoAjusteAplicado(a, i, r, antes);
+    }
+    api.mostrarAjuste(a, i);
+    return textoAjustePropuesta(a, i, antes);
+  })();
+  return {
+    texto: `${o.avisos.length ? `${o.avisos.join(" ")} ` : ""}Analizo la red como lo haría un planeador, con el relieve real: pruebo subir o bajar cada torre (hasta ${fn(o.opciones.alturaMaxM ?? 30)} m), correr nodos a lomas cercanas, cambiar el tipo de antena y sugerir antenas de apoyo, y comparo cuánto cubre cada opción contra lo que cuesta${area ? ` en «${area.nombre}»` : ""}${limites.length ? ` (${limites.join(", ")})` : ""}. Tardo unos segundos.`,
+    luego,
+  };
+}
+
+/** Cómo quedó la red después de aplicar una opción del ajuste (con la simulación real). */
+function textoAjusteAplicado(a: Ajuste, i: number, r: ResultadoSimulacion | null, base: Escenario): Respuesta {
+  const op = a.opciones[i];
+  const partes: string[] = [];
+  const f = r?.factibilidad;
+  const util = r ? (r.areaObjetivo ? r.areaObjetivo.utilPct : r.porcentajeUtil) : op.resumen.utilPct;
+  const zona = r?.areaObjetivo ? `de «${r.areaObjetivo.nombre}»` : "del área de estudio";
+  partes.push(
+    `Listo: apliqué la opción «${op.titulo}»${f ? ` y la red quedó ${f.nivel === "factible" ? "factible" : f.titulo.toLowerCase()} (${f.puntaje}/100)` : ""}: cobertura útil del ${fp(util)} % ${zona}, antes ${fp(a.inicial.utilPct)} %.`,
+  );
+  const cambios = op.cambios.map(textoCambio);
+  partes.push(`Lo que cambié: ${cambios.slice(0, 6).join("; ")}${cambios.length > 6 ? `; y ${cambios.length - 6} cambios más (los ve en el mapa y en la lista de nodos)` : ""}.`);
+  if (a.area.tipo === "zona") partes.push("Como no había un área pedida, dejé la zona de la red como área objetivo: así la factibilidad se mide siempre en la misma zona.");
+  const otras = a.analisis.filter((t) => /^(La de máxima|Si quiere más|Si basta)/.test(t));
+  if (otras.length) partes.push(otras.join(" "));
+  if (f && f.nivel !== "factible" && f.recomendaciones[0]) partes.push(`Todavía: ${f.recomendaciones[0]}`);
+  if (a.motivo) partes.push(a.motivo);
+  partes.push("Las antenas de apoyo son puntos sugeridos: antes de instalar, revise en campo el acceso, la energía y que nada tape las antenas.");
+  const acciones: Respuesta["acciones"] = [{ texto: "Deshacer", accion: "deshacer", escenario: base }];
+  a.opciones.forEach((x, k) => {
+    if (k !== i && x.cambios.length) acciones.push({ texto: `Usar «${x.titulo}»`, accion: "orden", orden: { tipo: "aplicar-ajuste", ajuste: a, indice: k, base } });
+  });
+  return { texto: partes.join("\n"), acciones };
+}
+
+/** La propuesta del ajuste, sin aplicar: diagnóstico, opciones y recomendación. */
+function textoAjustePropuesta(a: Ajuste, i: number, base: Escenario): Respuesta {
+  const partes = [...a.analisis];
+  const op = a.opciones[i];
+  if (!a.opciones.length || !op?.cambios.length) {
+    partes.push(a.modo === "optimizar" ? "No hay nada que cambiar: la red ya está bien dimensionada para su meta." : "No encontré cambios que mejoren la red con esos límites.");
+    return { texto: partes.join("\n") };
+  }
+  const cambios = op.cambios.map(textoCambio);
+  partes.push(`«${op.titulo}» necesita ${resumenCambios(op)}:\n${cambios.slice(0, 8).map((t) => `• ${t}`).join("\n")}${cambios.length > 8 ? `\n• y ${cambios.length - 8} cambios más (en el panel)` : ""}`);
+  partes.push("Le dejé la propuesta en el panel Resultado y en el mapa (las antenas de apoyo se ven como torres punteadas). ¿La aplico?");
+  const acciones: Respuesta["acciones"] = a.opciones
+    .map((x, k) => ({ x, k }))
+    .filter(({ x }) => x.cambios.length)
+    .map(({ x, k }) => ({ texto: `Aplicar «${x.titulo}»${k === a.recomendada ? " (recomendada)" : ""}`, accion: "orden" as const, orden: { tipo: "aplicar-ajuste" as const, ajuste: a, indice: k, base } }));
+  acciones.push({ texto: "Descartar", accion: "orden", orden: { tipo: "descartar-ajuste" } });
+  return { texto: partes.join("\n"), acciones };
+}
+
 function ejecutarDiseno(o: Extract<Orden, { tipo: "disenar" }>, api: Api, antes: Escenario): ResultadoOrden {
   if (o.reemplazar) api.restaurar(o.reemplazar);
   const base = o.reemplazar ?? antes;
@@ -1679,6 +1934,7 @@ function ejecutarDiseno(o: Extract<Orden, { tipo: "disenar" }>, api: Api, antes:
   let donde = "";
   let dibujar = true;
   let nombreArea = "";
+  let idArea: string | null = null;
   if (o.area.forma === "medicion") {
     const id = o.area.id;
     const m = api.mediciones().find((x) => x.id === id) ?? [...api.mediciones()].reverse().find((x) => x.tipo === "area");
@@ -1690,11 +1946,19 @@ function ejecutarDiseno(o: Extract<Orden, { tipo: "disenar" }>, api: Api, antes:
     poligono = m.puntos;
     dibujar = false;
     nombreArea = m.nombre;
+    idArea = m.id;
     donde = `en el área «${m.nombre}»`;
   } else if (o.area.forma === "poligono") {
-    poligono = o.area.puntos;
+    const puntos = o.area.puntos;
+    poligono = puntos;
     dibujar = o.area.dibujar;
     donde = o.area.nombre;
+    // Rehacer sobre la misma área: se sigue usando su medición
+    const m = api.mediciones().find((x) => x.tipo === "area" && x.puntos.length === puntos.length && x.puntos.every((p, i) => p[0] === puntos[i][0] && p[1] === puntos[i][1]));
+    if (m && !dibujar) {
+      idArea = m.id;
+      nombreArea = m.nombre;
+    }
   } else {
     const a = o.area;
     let centro: { lat: number; lon: number } | null = null;
@@ -1729,7 +1993,8 @@ function ejecutarDiseno(o: Extract<Orden, { tipo: "disenar" }>, api: Api, antes:
   const forma = o.area.forma === "cuadrado" ? "cuadrada" : o.area.forma === "rectangulo" ? "rectangular" : "";
   if (dibujar) {
     nombreArea = `Área objetivo · ${textoArea(area)}`;
-    api.medir({ id: `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, nombre: nombreArea, tipo: "area", puntos: poligono, visible: true }, false);
+    idArea = `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+    api.medir({ id: idArea, nombre: nombreArea, tipo: "area", puntos: poligono, visible: true }, false);
   } else {
     const b = cajaPoligono(poligono);
     api.encuadrarCaja([b.oeste, b.sur, b.este, b.norte]);
@@ -1740,6 +2005,8 @@ function ejecutarDiseno(o: Extract<Orden, { tipo: "disenar" }>, api: Api, antes:
     const d = await api.disenarArea(pedido);
     if (!d) return { texto: "No pude calcular el diseño (el relieve no cargó o el motor se detuvo). Intente de nuevo en un momento.", acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: base }] };
     const puestas = api.aplicarDiseno(d, o.alturaM);
+    // El área del diseño queda como área objetivo: la factibilidad se mide ahí y con la meta pedida
+    if (idArea) api.fijarAreaObjetivo(idArea, { metaPct: o.porcentaje, margenDb: o.margenDb, respaldo: o.respaldo || undefined });
     const r = await api.esperarResultado();
     return textoDiseno(o, d, puestas, r, poligono, nombreArea || donde, base, api);
   })();
@@ -1799,7 +2066,9 @@ function textoDiseno(o: Extract<Orden, { tipo: "disenar" }>, d: Diseno, puestas:
     }
     for (const h of [20, 30]) if (h > o.alturaM) acciones.push({ texto: `Rehacer con torres de ${h} m`, accion: "orden", orden: conPoligono({ alturaM: h, reemplazar: base }) });
     if (d.huecos[0]) acciones.push({ texto: "Ver un punto sin cobertura", accion: "orden", orden: { tipo: "ir", coord: { lat: d.huecos[0][1], lon: d.huecos[0][0] } } });
+    acciones.push({ texto: "Ajústamelo (alturas, lomas y apoyos)", accion: "orden", orden: { tipo: "ajustar", aplicar: false, opcion: "recomendada", opciones: {}, avisos: [] } });
   } else {
+    acciones.push({ texto: "Optimizar el costo (misma cobertura)", accion: "orden", orden: { tipo: "ajustar", aplicar: false, opcion: "recomendada", opciones: {}, avisos: [] } });
     if (!o.respaldo) acciones.push({ texto: "Agregar respaldo (dos nodos por punto)", accion: "orden", orden: conPoligono({ respaldo: true }) });
     if (o.porcentaje < 99.9) acciones.push({ texto: "Subir la meta a 99,9 %", accion: "orden", orden: conPoligono({ porcentaje: 99.9 }) });
   }

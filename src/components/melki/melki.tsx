@@ -24,7 +24,7 @@ import {
   type EstadoDictado,
   type ModoDictado,
 } from "./dictado";
-import { dividirEnPasos, ejecutarOrden, interpretarOrden, textoRed, type Api, type Orden, type Pendiente } from "./ordenes";
+import { accionAjuste, dividirEnPasos, ejecutarOrden, interpretarOrden, textoCoberturaUtil, textoRed, type Api, type Orden, type Pendiente } from "./ordenes";
 import type { IdTour } from "./tours";
 import { callar, hablar, vozDisponible } from "./voz";
 
@@ -120,8 +120,8 @@ function resumenResultado(r: ResultadoSimulacion, api: Api, id: string): Respues
     }
   }
   return {
-    texto: `Simulación lista: ${f1(r.porcentajeServicio, 0)} % del área con servicio y ${f1(r.porcentajeConfiable, 0)} % confiable. ${red}${r.factibilidad.recomendaciones[0] ? ` Sugerencia: ${r.factibilidad.recomendaciones[0]}` : ""}`,
-    acciones: [{ texto: "Ver resultados", accion: "resultados" }],
+    texto: `Simulación lista: ${textoCoberturaUtil(r)}. ${red}${r.factibilidad.recomendaciones[0] ? ` Sugerencia: ${r.factibilidad.recomendaciones[0]}` : ""}`,
+    acciones: [{ texto: "Ver resultados", accion: "resultados" }, ...(r.factibilidad.nivel !== "factible" && accionAjuste(r) ? [accionAjuste(r)!] : [])],
   };
 }
 

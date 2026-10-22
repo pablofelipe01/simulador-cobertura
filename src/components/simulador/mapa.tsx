@@ -6,6 +6,7 @@ import maplibregl, { type GeoJSONSource, type ImageSource, type Map as MapaML, t
 import { useEffect, useRef, useState, type Dispatch } from "react";
 
 import { CONFIG, urlsTeselas } from "@/lib/config";
+import type { CambioAjuste } from "@/lib/radio/ajuste";
 import type { EstadoRed } from "@/lib/radio/estado-red";
 import { metrosPorGrado } from "@/lib/radio/geo";
 import { anchosHaz, esDireccional } from "@/lib/radio/patron";
@@ -66,6 +67,8 @@ type Props = {
   onPieza?: (lat: number, lon: number) => void;
   /** Clic con la herramienta «destino»: punto hacia el que se siembra la malla. */
   onDestino?: (lat: number, lon: number) => void;
+  /** Propuesta del ajuste automático: antenas de apoyo, nodos que se corren y cambios de torre o antena. */
+  ajuste?: CambioAjuste[] | null;
 };
 
 const VACIO: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
@@ -189,7 +192,7 @@ function sincronizarEtiquetas(m: MapaML, vivas: Map<string, Marker>, lista: Etiq
   }
 }
 
-export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar, solicitud, punto, onMenu, onListo, sembrar, onPieza, onDestino }: Props) {
+export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar, solicitud, punto, onMenu, onListo, sembrar, onPieza, onDestino, ajuste }: Props) {
   const contenedor = useRef<HTMLDivElement>(null);
   const mapa = useRef<MapaML | null>(null);
   const marcadores = useRef(new Map<string, Marker>());
@@ -230,7 +233,7 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
     m.on("load", () => {
       crearCapasReferencia(m);
       m.addLayer({ id: "capa-etiquetas", type: "raster", source: "etiquetas", layout: { visibility: "none" } });
-      for (const id of ["circulos", "anillos", "alcance", "enlaces", "haces", "propuesta", "ruta-mensaje"]) m.addSource(id, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      for (const id of ["circulos", "anillos", "alcance", "enlaces", "haces", "propuesta", "ajuste", "ruta-mensaje"]) m.addSource(id, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       m.addLayer({ id: "haces-relleno", type: "fill", source: "haces", filter: ["==", ["get", "parte"], "abanico"], paint: { "fill-color": "#FFFFFF", "fill-opacity": 0.16 } });
       m.addLayer({
         id: "haces-borde",
@@ -288,6 +291,9 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
       // Sembrado propuesto (cadena de repetidores) y ruta del mensaje
       m.addLayer({ id: "propuesta-halo", type: "line", source: "propuesta", layout: { "line-cap": "round" }, paint: { "line-color": "#ffffff", "line-width": 5, "line-opacity": 0.8 } });
       m.addLayer({ id: "propuesta", type: "line", source: "propuesta", paint: { "line-color": "#A94F1B", "line-width": 2.6, "line-dasharray": [2, 1.5] } });
+      // Ajuste automático: enlaces de las antenas de apoyo y nodos que se corren a una loma
+      m.addLayer({ id: "ajuste-halo", type: "line", source: "ajuste", layout: { "line-cap": "round" }, paint: { "line-color": "#ffffff", "line-width": 5, "line-opacity": 0.8 } });
+      m.addLayer({ id: "ajuste", type: "line", source: "ajuste", paint: { "line-color": "#A94F1B", "line-width": 2.6, "line-dasharray": [2, 1.5] } });
       m.addLayer({ id: "ruta-mensaje-halo", type: "line", source: "ruta-mensaje", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": 9, "line-opacity": 0.85 } });
       m.addLayer({ id: "ruta-mensaje", type: "line", source: "ruta-mensaje", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#E07A3F", "line-width": 4.5 } });
       // Flujo animado de la malla (modo «Sembrar»): por encima de los enlaces y de la ruta del mensaje
@@ -618,6 +624,58 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
     }
     fuente?.setData({ type: "FeatureCollection", features });
   }, [propuesta, antenas, listo]);
+
+  // Propuesta del ajuste automático: apoyos como torres punteadas, flecha a la loma y etiquetas de cada cambio
+  const ajustados = useRef<Marker[]>([]);
+  useEffect(() => {
+    const m = mapa.current;
+    if (!m || !listo) return;
+    for (const mk of ajustados.current) mk.remove();
+    ajustados.current = [];
+    const fuente = m.getSource("ajuste") as GeoJSONSource | undefined;
+    if (!ajuste?.length) {
+      fuente?.setData(VACIO);
+      return;
+    }
+    const porNombre = new Map<string, [number, number]>(antenas.map((a) => [a.nombre, [a.lon, a.lat]]));
+    const porId = new Map(antenas.map((a) => [a.id, a]));
+    for (const c of ajuste) if (c.tipo === "apoyo") porNombre.set(c.nombre, [c.lon, c.lat]);
+    for (const c of ajuste) if (c.tipo === "mover") porNombre.set(c.nombre, [c.lon, c.lat]);
+    const features: GeoJSON.Feature[] = [];
+    const etiquetas = new Map<string, string[]>();
+    const etiquetar = (id: string, t: string) => etiquetas.set(id, [...(etiquetas.get(id) ?? []), t]);
+    const poner = (el: HTMLElement, lngLat: [number, number], anchor: "center" | "bottom" = "center", offset: [number, number] = [0, 0]) =>
+      ajustados.current.push(new maplibregl.Marker({ element: el, anchor, offset }).setLngLat(lngLat).addTo(m));
+    for (const c of ajuste) {
+      if (c.tipo === "apoyo") {
+        const desde = c.enlazaCon ? porNombre.get(c.enlazaCon) : undefined;
+        if (desde) features.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [desde, [c.lon, c.lat]] } });
+        const el = document.createElement("div");
+        el.className = "marcador-raiz";
+        el.innerHTML = htmlPiezaPropuesta(`${c.nombre} · ${c.alturaM} m`, c.enlaceDb ?? 0);
+        poner(el, [c.lon, c.lat]);
+      } else if (c.tipo === "mover") {
+        const a = porId.get(c.id);
+        if (a) features.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [[a.lon, a.lat], [c.lon, c.lat]] } });
+        const el = document.createElement("div");
+        el.className = "marcador-raiz";
+        el.innerHTML = htmlPiezaPropuesta(`${c.nombre} (nuevo sitio)`, 0);
+        poner(el, [c.lon, c.lat]);
+      } else if (c.tipo === "altura") etiquetar(c.id, `${c.aM > c.deM ? "↑" : "↓"} ${c.aM} m`);
+      else if (c.tipo === "antena") etiquetar(c.id, c.patron === "omni" ? "omni" : `${c.patron === "sectorial-90" ? "sector 90°" : c.patron === "sectorial-120" ? "sector 120°" : c.patron} → ${Math.round(c.azimutDeg)}°`);
+      else if (c.tipo === "quitar") etiquetar(c.id, "quitar");
+    }
+    for (const [id, textos] of etiquetas) {
+      const a = porId.get(id);
+      if (!a) continue;
+      const movido = ajuste.find((c): c is Extract<CambioAjuste, { tipo: "mover" }> => c.tipo === "mover" && c.id === id);
+      const el = document.createElement("div");
+      el.className = "ajuste-etiqueta";
+      el.textContent = textos.join(" · ");
+      poner(el, movido ? [movido.lon, movido.lat] : [a.lon, a.lat], "bottom", [0, -24]);
+    }
+    fuente?.setData({ type: "FeatureCollection", features });
+  }, [ajuste, antenas, listo]);
 
   // Flujo vivo de la malla: rutas de la gente conectada hasta el gateway (y de los repetidores, para la troncal)
   const animarRed = estado.vista.animarRed;

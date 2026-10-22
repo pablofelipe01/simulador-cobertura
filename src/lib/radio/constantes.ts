@@ -87,6 +87,10 @@ export const CLASES: readonly Clase[] = [
 export const UMBRAL_SERVICIO_DB = 20;
 /** Margen mínimo de servicio confiable (Estable o Buena). */
 export const UMBRAL_CONFIABLE_DB = 37;
+/** Cobertura útil: señal media o mejor (con lo que se planea la red). */
+export const UMBRAL_UTIL_DB = 30;
+/** Meta de cobertura útil del área de estudio para que la red sea factible (sin un área objetivo con su meta). */
+export const META_UTIL_ESTUDIO_PCT = 60;
 
 /** Clasificación de enlaces entre antenas (margen mínimo de ambos sentidos). */
 export const ENLACES = {

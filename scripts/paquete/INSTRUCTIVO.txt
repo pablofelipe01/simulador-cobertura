@@ -29,7 +29,7 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
   (al final del panel izquierdo) o "Archivo > Cargar el ejemplo".
 
 
-2. QUÉ PROBAR (unos 20 minutos)
+2. QUÉ PROBAR (unos 25 minutos)
 -------------------------------
  a) Sembrar la malla (el modo con que abre; arriba del panel izquierdo
     se cambia a "Modo avanzado"):
@@ -114,24 +114,49 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
       - Mapa: "muestra las vías", "quita los ríos", "pon el mapa
         topográfico", "muestra el respaldo", "muéstrame toda la red",
         "apaga simular al cambiar", "activa tu voz".
- f) Regla (arriba del mapa): Línea (distancia y rumbo), Trayecto (varios
+ f) Ajústamelo automáticamente: cuando el Resultado dice "No factible
+    todavía" o "Factible con ajustes", el botón "Ajústamelo
+    automáticamente" (debajo de los criterios) busca, con el relieve
+    real, la red factible con la mejor relación cobertura-costo:
+      - Sube o baja las torres en tramos de 3 m, nunca por encima de
+        30 m (más alto exige una torre autosoportada, muy costosa).
+      - Corre un nodo a una loma cercana, cambia a antena sectorial
+        hacia donde falta cobertura y sugiere antenas de apoyo: puntos
+        con coordenadas donde conviene poner un nodo.
+      - Da hasta tres opciones (Económica, Recomendada con estrella y
+        Máxima cobertura), cada una con "Lo que necesita" y su cobertura
+        útil antes y después. En el mapa se ven las antenas de apoyo
+        como torres punteadas y las alturas nuevas en etiquetas
+        naranjas. "Aplicar y simular" la pone; "Deshacer" la quita.
+      - Si la red ya es factible, el botón dice "Optimizar la red": busca
+        la misma cobertura con menos infraestructura.
+    También se le puede pedir a Melki, con límites: "ajústamelo",
+    "¿qué necesito para que sea factible?", "hazla factible sin pasar
+    de 20 m", "máximo 2 antenas de apoyo", "no muevas los nodos",
+    "solo alturas", "la más económica", "optimiza el costo" o "las
+    antenas de apoyo pueden ir en 4.51, -73.12; 4.60, -73.05".
+    La factibilidad ahora pide cobertura útil (señal media o mejor) en
+    el 60 % del área de estudio, o la meta de un área objetivo: mida un
+    área con la regla y dígale a Melki "usa el área que medí como área
+    objetivo con el 95 %" (el diseño por área la deja marcada sola).
+ g) Regla (arriba del mapa): Línea (distancia y rumbo), Trayecto (varios
     puntos) o Área (área y perímetro). Clic en el mapa; doble clic o
     Enter para terminar. Cada medición se puede renombrar, ocultar,
     borrar y editar arrastrando sus puntos; el ícono de montaña muestra
     el perfil del terreno.
- g) Buscador (arriba): municipio, departamento, nombre de un nodo o
+ h) Buscador (arriba): municipio, departamento, nombre de un nodo o
     coordenadas en decimal o en grados, minutos y segundos.
- h) Clic derecho en el mapa: agregar un nodo ahí, ver la señal, medir
+ i) Clic derecho en el mapa: agregar un nodo ahí, ver la señal, medir
     desde ese punto, marcarlo o copiar sus coordenadas. Abajo del mapa
     se ven las coordenadas y el municipio bajo el cursor.
- i) Capas: mapa base (Satélite, Topográfico, OpenTopoMap con quebradas y
+ j) Capas: mapa base (Satélite, Topográfico, OpenTopoMap con quebradas y
     ríos pequeños con nombre, Calles), límites y nombres de departamentos
     y municipios, ríos y lagos principales, países, poblados y vías, y
     las capas de la simulación.
- j) Archivo: guardar el escenario (.json, con las mediciones), nodos a
+ k) Archivo: guardar el escenario (.json, con las mediciones), nodos a
     Excel (.csv) y cobertura para Google Earth (.kmz) con el rango de
     alcance y las mediciones.
- k) Dictado por voz: en la conversación con Melki, toque el micrófono
+ l) Dictado por voz: en la conversación con Melki, toque el micrófono
     (junto al botón de enviar) y hable. El texto aparece en la caja:
     revíselo, corríjalo si hace falta y envíelo (nunca se envía solo).
     Toque el micrófono otra vez para terminar. La primera vez pregunta
@@ -142,7 +167,7 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
         vez puede descargar el reconocedor (unos 100 MB) y luego funciona
         sin conexión.
     El navegador pide permiso para usar el micrófono.
- l) Funciones de Radio Mobile:
+ m) Funciones de Radio Mobile:
       - Parámetros > Propagación: modelo (Calibrado o Longley-Rice),
         confiabilidad (Normal, Alta, Muy alta) y, en "Parámetros como
         en Radio Mobile", clima, polarización, suelo, refractividad y
@@ -185,6 +210,10 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
 - Melki entiende y ejecuta los pedidos aquí mismo, sin internet. El
   dictado «Con el navegador» sí usa internet (el audio lo procesa Edge o
   Chrome); el dictado «Privado» no envía el audio a ningún lado.
+- El ajuste automático compara opciones con precios de referencia en
+  Colombia solo por dentro, para decidir; no los muestra. Las antenas
+  de apoyo son sugerencias: revise en campo el acceso, la energía y la
+  línea de vista antes de instalar.
 - La demostración es genérica: no contiene datos de ningún cliente.
 
 

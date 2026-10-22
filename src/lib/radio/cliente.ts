@@ -1,10 +1,11 @@
 // Cliente del motor: envía trabajos al Web Worker y devuelve promesas.
 import { crearWorker } from "./crear-worker";
 import type { Entrada, Fase, PuntoDestino, Salida } from "./protocolo";
+import type { Ajuste, PedidoAjuste } from "./ajuste";
 import type { Diseno, PedidoDiseno } from "./diseno";
 import type { PedidoSiembra, Siembra } from "./siembra";
 import type { Inspeccion } from "./simulacion";
-import type { Antena, FuenteRelieve, Parametros, Perfil, PerfilTerreno, ResultadoSimulacion } from "./tipos";
+import type { Antena, AreaObjetivo, FuenteRelieve, Parametros, Perfil, PerfilTerreno, ResultadoSimulacion } from "./tipos";
 
 type Pendiente = {
   resolver: (valor: unknown) => void;
@@ -56,6 +57,9 @@ export class MotorCobertura {
       case "diseno":
         p.resolver(m.diseno);
         break;
+      case "ajuste":
+        p.resolver(m.ajuste);
+        break;
       case "hgt":
         p.resolver({ archivos: m.archivos, errores: m.errores });
         break;
@@ -75,8 +79,8 @@ export class MotorCobertura {
   }
 
   /** Simula la cobertura; devuelve null si otra simulación la reemplazó. */
-  simular(antenas: Antena[], parametros: Parametros, relieve: FuenteRelieve, progreso?: Pendiente["progreso"]) {
-    return this.enviar<ResultadoSimulacion | null>({ tipo: "simular", antenas, parametros, relieve }, [], progreso);
+  simular(antenas: Antena[], parametros: Parametros, relieve: FuenteRelieve, progreso?: Pendiente["progreso"], area: AreaObjetivo | null = null) {
+    return this.enviar<ResultadoSimulacion | null>({ tipo: "simular", antenas, parametros, relieve, area }, [], progreso);
   }
 
   inspeccionar(lat: number, lon: number, antenas: Antena[], parametros: Parametros, relieve: FuenteRelieve) {
@@ -94,6 +98,11 @@ export class MotorCobertura {
   /** Propone repetidores desde la red conectada hacia los destinos (sembrado automático). */
   sembrar(pedido: PedidoSiembra, relieve: FuenteRelieve) {
     return this.enviar<Siembra>({ tipo: "sembrar", pedido, relieve });
+  }
+
+  /** Ajuste inteligente: opciones para dejar la red factible con la mejor relación cobertura–costo. */
+  ajustar(pedido: PedidoAjuste, relieve: FuenteRelieve) {
+    return this.enviar<Ajuste>({ tipo: "ajustar", pedido, relieve });
   }
 
   /** Diseña la malla para cubrir un área (gateway y repetidores) con el relieve real. */

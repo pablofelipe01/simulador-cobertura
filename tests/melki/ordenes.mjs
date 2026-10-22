@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const entrada = `
-export { interpretarOrden, ejecutarOrden, extraerCoordenadas, dividirEnPasos, leerNumero, areaEnTexto } from "./src/components/melki/ordenes";
+export { interpretarOrden, ejecutarOrden, extraerCoordenadas, extraerVariasCoordenadas, dividirEnPasos, leerNumero, areaEnTexto } from "./src/components/melki/ordenes";
 export { responder, noEntendiOrden } from "./src/components/melki/cerebro";
 export { areaM2, poligonoCirculo } from "./src/lib/radio/area";
 export { normalizarDictado, componerTexto, quitarRepeticiones } from "./src/components/melki/dictado";
@@ -161,6 +161,25 @@ function crearApi(antenas) {
     },
     resultadoFalso: null,
     esperarResultado: () => Promise.resolve(api.resultadoFalso),
+    // Ajuste inteligente (v11)
+    objetivo: null,
+    areaObjetivo: () => api.objetivo,
+    fijarAreaObjetivo: (id, o) => {
+      llamadas.push(["area-objetivo", id, o]);
+      const med = api.medicionesActuales.find((x) => x.id === id);
+      api.objetivo = id && med ? { ...o, nombre: med.nombre, puntos: med.puntos } : null;
+    },
+    ajusteFalso: null,
+    ajustarRed: (o) => {
+      llamadas.push(["ajustar", o]);
+      return Promise.resolve(api.ajusteFalso);
+    },
+    aplicarAjuste: (a, i, b) => {
+      llamadas.push(["aplicar-ajuste", i, b]);
+      return [];
+    },
+    mostrarAjuste: (a, i) => llamadas.push(["mostrar-ajuste", i]),
+    descartarAjuste: () => llamadas.push(["descartar-ajuste"]),
   };
   return api;
 }
@@ -570,6 +589,8 @@ function crearApi(antenas) {
   const final = await res.luego;
   caso("Al terminar cuenta la cobertura real dentro del área y los repetidores", /^Listo: la malla cubre el 100 %/.test(final.texto) && /Sembré 1 repetidor de 15 m/.test(final.texto) && /buena 0 %, estable 100 %/.test(final.texto), final.texto.slice(0, 160).replace(/\n/g, " "));
   caso("Ofrece deshacer y agregar respaldo", final.acciones?.some((a) => a.accion === "deshacer") && final.acciones?.some((a) => /respaldo/.test(a.texto) && a.orden?.respaldo === true));
+  caso("El área del diseño queda como área objetivo con la meta pedida", api.llamadas.some((l) => l[0] === "area-objetivo" && l[1] && l[2]?.metaPct === 99.9 && l[2]?.margenDb === 30));
+  caso("Con la meta cumplida ofrece optimizar el costo", final.acciones?.some((a) => a.orden?.tipo === "ajustar"));
   api.disenoFalso = { ...api.disenoFalso, alcanzado: false, coberturaPct: 80, motivo: "Llegué al máximo de 3 repetidores.", huecos: [[-73.3, 4.2]] };
   api.resultadoFalso = { ...api.resultadoFalso, mejor: new Float32Array(3600).fill(10) };
   const corto = await m.ejecutarOrden({ ...d, maxRepetidores: 3 }, api).luego;
@@ -630,6 +651,92 @@ function crearApi(antenas) {
   caso("Explica cómo pedir el diseño por área", /cubra 11\.226 hectáreas/.test(m.responder("¿cómo diseño la red para cubrir un área?", c).texto));
   caso("«¿Qué puedes hacer?» incluye diseñar y varias órdenes", /Diseñar una red/.test(m.responder("¿qué puedes hacer?", c).texto) && /Varias órdenes/.test(m.responder("¿qué puedes hacer?", c).texto));
   caso("Un pedido que no entiende no se responde con un tema al azar", /no logré convertirlo en una orden/.test(m.responder("hazme el café por favor", c).texto));
+}
+
+// 12) Ajuste inteligente (v11): «ajústamelo», límites, sitios dados, área objetivo y la propuesta con sus opciones
+{
+  const g = base("g", "Gateway", 4.2, -73.37, { pasarela: true, alturaM: 8 });
+  const r1 = base("r1", "Repetidor 1", 4.25, -73.3);
+  const p1 = base("p1", "Persona 1", 4.21, -73.4, { tipo: "nodo", alturaM: 1.5, gananciaDbi: 2, rol: "CLIENT" });
+  const antenas = [g, r1, p1];
+  const api = crearApi(antenas);
+  const orden = (t) => m.interpretarOrden(t, api, null, {});
+
+  const aj = orden("ajústamelo automáticamente");
+  caso("«Ajústamelo automáticamente» → ajuste aplicado con la recomendada", aj?.tipo === "ajustar" && aj.aplicar && aj.opcion === "recomendada", JSON.stringify(aj));
+  const que = orden("¿qué necesito para que sea factible?");
+  caso("«¿Qué necesito para que sea factible?» → propuesta sin aplicar", que?.tipo === "ajustar" && !que.aplicar);
+  const alto = orden("hazla factible sin pasar de 20 m");
+  caso("«Hazla factible sin pasar de 20 m» → torres de hasta 20 m", alto?.tipo === "ajustar" && alto.opciones.alturaMaxM === 20);
+  const muy = orden("ajústala con torres hasta 40 metros");
+  caso("Más de 30 m no: lo limita a 30 m y avisa", muy?.tipo === "ajustar" && muy.opciones.alturaMaxM === 30 && muy.avisos.length === 1);
+  const lim = orden("optimiza la red con máximo 2 antenas de apoyo y no muevas los nodos");
+  caso("«Máximo 2 antenas de apoyo y no muevas los nodos»", lim?.tipo === "ajustar" && lim.opciones.maxApoyos === 2 && lim.opciones.permisos?.mover === false, JSON.stringify(lim?.opciones));
+  const solo = orden("ajústala solo con alturas");
+  caso("«Solo con alturas» → sin apoyos, sin mover ni cambiar antenas", solo?.tipo === "ajustar" && solo.opciones.permisos?.alturas === true && solo.opciones.permisos?.apoyos === false && solo.opciones.permisos?.mover === false && solo.opciones.permisos?.antenas === false);
+  const sitios = orden("ajústamelo, las antenas de apoyo pueden ir en 4.51, -73.12; 4.60, -73.05");
+  caso("Sitios dados para las antenas de apoyo", sitios?.tipo === "ajustar" && sitios.opciones.sitios?.length === 2 && cerca(sitios.opciones.sitios[1].lat, 4.6) && cerca(sitios.opciones.sitios[1].lon, -73.05), JSON.stringify(sitios?.opciones));
+  const gms = m.extraerVariasCoordenadas(`4°30'44" N 73°07'24" O y 4°35'00" N 73°10'00" O`);
+  caso("Varias coordenadas en grados, minutos y segundos", gms.length === 2 && cerca(gms[0].lat, 4.5122, 1e-3) && cerca(gms[1].lon, -73.1667, 1e-3), JSON.stringify(gms));
+  caso("«La más económica para que sea factible» → opción económica", orden("dame la opción más económica para que sea factible")?.opcion === "economica");
+  caso("«Optimiza el costo» → ajuste", orden("optimiza el costo de la red")?.tipo === "ajustar");
+  caso("«Ajusta la vista a toda la red» no es el ajuste", orden("ajusta la vista a toda la red")?.tipo !== "ajustar");
+  const altura = orden("ajusta la altura de Repetidor 1 a 20 m");
+  caso("«Ajusta la altura de Repetidor 1 a 20 m» edita ese nodo", altura?.tipo !== "ajustar", JSON.stringify(altura));
+  caso("«Sube todos los repetidores a 20 m» sigue siendo un lote", orden("sube todos los repetidores a 20 m")?.tipo === "editar-varios");
+
+  api.medicionesActuales = [{ id: "m1", nombre: "Lote 3", tipo: "area", puntos: [[-73.4, 4.2], [-73.35, 4.2], [-73.35, 4.25], [-73.4, 4.25]], visible: true }];
+  const obj = orden("usa el área que medí como área objetivo con el 95 %");
+  caso("«Usa el área que medí como área objetivo con el 95 %»", obj?.tipo === "area-objetivo" && !obj.quitar && obj.id === "m1" && obj.metaPct === 95, JSON.stringify(obj));
+  const rObj = m.ejecutarOrden(obj, api);
+  caso("Fija el área objetivo y lo cuenta", api.objetivo?.nombre === "Lote 3" && /«Lote 3» es el área objetivo/.test(rObj.texto) && /95 %/.test(rObj.texto));
+  const quitar = orden("quita el área objetivo");
+  caso("«Quita el área objetivo»", quitar?.tipo === "area-objetivo" && quitar.quitar);
+  m.ejecutarOrden(quitar, api);
+  caso("Quita el área objetivo", api.objetivo === null);
+
+  // Ejecutar con un motor de mentira
+  const resumen = (u) => ({ utilPct: u, confiablePct: u - 10, servicioPct: u + 10, conectada: true, saltosOk: true, solidas: true, coberturaOk: u >= 60, factible: u >= 60, nodosAntena: 3, apoyos: 1, alturaMaxM: 21 });
+  const cambios = [
+    { tipo: "altura", id: "r1", nombre: "Repetidor 1", deM: 15, aM: 21 },
+    { tipo: "apoyo", id: "nuevo-apoyo-1", nombre: "Apoyo 1", lat: 4.3, lon: -73.25, alturaM: 15, sueloM: 420, enlazaCon: "Repetidor 1", enlaceDb: 38 },
+  ];
+  api.ajusteFalso = {
+    modo: "ajustar",
+    area: { nombre: "Zona de la red", tipo: "zona", poligono: [[-73.4, 4.2], [-73.3, 4.2], [-73.3, 4.3]], areaKm2: 50 },
+    metaPct: 60, margenDb: 30, alturaMaxM: 30,
+    inicial: { ...resumen(42), coberturaOk: false, factible: false, problemas: ["Cobertura útil de 42 % (meta 60 %)"] },
+    opciones: [
+      { id: "economica", titulo: "Económica", porQue: "Lo mínimo", cambios: cambios.slice(0, 1), antenas: [], resumen: resumen(61), costoRelativo: 1 },
+      { id: "recomendada", titulo: "Recomendada", porQue: "La mejor relación", cambios, antenas: [], resumen: resumen(78), costoRelativo: 1.6 },
+    ],
+    recomendada: 1,
+    analisis: ["La red no es factible: la cobertura útil es 42 % y la meta es 60 %.", "Si basta con cumplir, la económica llega al 61 %."],
+    motivo: null,
+  };
+  const rProp = m.ejecutarOrden(que, api);
+  caso("Avisa que analiza sin decir precios", /Analizo la red/.test(rProp.texto) && !/\$|millones|pesos/.test(rProp.texto) && rProp.luego);
+  const prop = await rProp.luego;
+  caso("Propuesta: diagnóstico, lo que necesita y la pregunta", /no es factible/.test(prop.texto) && /Subir Repetidor 1 de 15 a 21 m/.test(prop.texto) && /Antena de apoyo «Apoyo 1»/.test(prop.texto) && /¿La aplico\?/.test(prop.texto), prop.texto.replace(/\n/g, " ").slice(0, 200));
+  caso("Muestra la propuesta en el panel y ofrece aplicar cada opción y descartar", api.llamadas.some((l) => l[0] === "mostrar-ajuste" && l[1] === 1) && prop.acciones.filter((a) => a.orden?.tipo === "aplicar-ajuste").length === 2 && prop.acciones.some((a) => a.orden?.tipo === "descartar-ajuste"));
+  caso("Sin aplicar no toca la red", !api.llamadas.some((l) => l[0] === "aplicar-ajuste"));
+
+  api.resultadoFalso = { porcentajeUtil: 78, areaObjetivo: null, factibilidad: { nivel: "factible", titulo: "Factible", puntaje: 92, recomendaciones: [] } };
+  const rAp = m.ejecutarOrden(aj, api);
+  const ap = await rAp.luego;
+  caso("«Ajústamelo» aplica la recomendada sobre la red de antes", api.llamadas.some((l) => l[0] === "aplicar-ajuste" && l[1] === 1 && l[2]?.antenas));
+  caso("Cuenta cómo quedó, lo que cambió y que las de apoyo son sugerencias", /^Listo: apliqué la opción «Recomendada» y la red quedó factible \(92\/100\): cobertura útil del 78 %/.test(ap.texto) && /Lo que cambié: Subir Repetidor 1/.test(ap.texto) && /puntos sugeridos/.test(ap.texto), ap.texto.replace(/\n/g, " ").slice(0, 220));
+  caso("Ofrece deshacer y usar la otra opción", ap.acciones.some((a) => a.accion === "deshacer") && ap.acciones.some((a) => a.orden?.tipo === "aplicar-ajuste" && a.orden.indice === 0));
+
+  const sinGw = crearApi([base("r9", "Repetidor 9", 4.2, -73.3)]);
+  caso("Sin gateway pide ponerlo primero", /Primero ponga el Gateway/.test(m.ejecutarOrden({ tipo: "ajustar", aplicar: true, opcion: "recomendada", opciones: {}, avisos: [] }, sinGw).texto));
+
+  // Cerebro: costos sin precios y el área objetivo
+  const c = { antenas, parametros: PARAMETROS, resultado: null, desactualizado: false, relieve: "teselas", modo: "sembrar" };
+  const costos = m.responder("¿cuánto cuesta una torre de 30 metros?", c).texto;
+  caso("Explica cómo pesa el costo sin dar precios", /30 m/.test(costos) && /no los muestro/.test(costos) && !/\$|millones|\d{3}\.\d{3}/.test(costos));
+  caso("Explica la cobertura útil y el área objetivo", /60 %/.test(m.responder("¿qué es el área objetivo?", c).texto));
+  caso("«¿Qué puedes hacer?» incluye ajustar la red", /Ajustar la red/.test(m.responder("¿qué puedes hacer?", c).texto));
 }
 
 console.log(fallos ? `\n✗ ${fallos} prueba(s) fallaron` : "\n✓ Melki verificado");

@@ -10,7 +10,7 @@ import type { Antena, Escenario, Parametros, ResultadoSimulacion } from "@/lib/r
 
 import type { ModoApp } from "../simulador/estado";
 
-import { textoRed, type Orden } from "./ordenes";
+import { accionAjuste, textoCoberturaUtil, textoRed, type Orden } from "./ordenes";
 import { TOURS, type IdTour } from "./tours";
 
 /** «recorrido» empieza el tour indicado; «tours» muestra el menú de tours. */
@@ -69,11 +69,12 @@ function resumenRed(c: ContextoMelki): Respuesta {
   }
   const fac = r.factibilidad;
   const fallan = fac.criterios.filter((k) => !k.ok).map((k) => k.nombre.charAt(0).toLowerCase() + k.nombre.slice(1));
-  let texto = `Resultado: ${fac.titulo.toLowerCase()} (${fac.puntaje}/100). ${f(r.porcentajeServicio, 0)} % del área tiene servicio y ${f(r.porcentajeConfiable, 0)} % es confiable.`;
+  let texto = `Resultado: ${fac.titulo.toLowerCase()} (${fac.puntaje}/100). ${textoCoberturaUtil(r)}.`;
   if (fallan.length) texto += ` Falta cumplir: ${fallan.join("; ")}.`;
   if (fac.recomendaciones[0]) texto += ` Mi primera sugerencia: ${fac.recomendaciones[0]}`;
   if (c.desactualizado) texto += " Ojo: cambió algo después de simular; conviene simular de nuevo.";
-  return { texto, acciones: [{ texto: "Ver resultados", accion: "resultados" }] };
+  const ajuste = c.desactualizado ? null : accionAjuste(r);
+  return { texto, acciones: [{ texto: "Ver resultados", accion: "resultados" }, ...(ajuste ? [ajuste] : [])] };
 }
 
 const TEMAS: Tema[] = [
@@ -118,6 +119,7 @@ const TEMAS: Tema[] = [
         "Manejo el simulador con sus palabras; puede pedirme varias cosas en un mismo mensaje y todo se puede deshacer. Por ejemplo:",
         "• Diseñar una red: «ármame una malla que cubra 11.226 hectáreas con señal media o mejor en el 99,9 %», «cubre 500 ha alrededor de Cumaral con repetidores de 20 m», «cubre el área que medí con respaldo».",
         "• Sembrar la malla: «pon el gateway en Cumaral», «agrega un repetidor a 8 km al norte del gateway», «pon una persona en 4.31, -73.22», «conecta a los que faltan», «envía un mensaje desde Persona 1», «¿qué hago ahora?».",
+        "• Ajustar la red al mejor costo: «ajústamelo», «hazla factible sin pasar de 20 m», «¿qué necesito para que sea factible?», «optimiza el costo», «la más económica», «máximo 2 antenas de apoyo», «no muevas los nodos», «las antenas de apoyo pueden ir en 4.51, -73.12; 4.60, -73.05», «usa el área que medí como área objetivo con el 95 %».",
         "• Varias órdenes seguidas: «pon el gateway en 4.2, -73.37, luego un repetidor a 10 km al este y simula».",
         "• Nodos: «inscribe un nodo antena en 4°30'44\" N 73°07'24\" O a 20 m», «mueve Ejemplo 2 km al sur», «súbelo a 25 m» (el último que toqué), «sube todos los repetidores a 20 m», «borra todas las personas», «pon a Repetidor 2 como cliente», «marca Torre 2 como pasarela».",
         "• Mapa: «muestra las vías», «quita los ríos», «pon el mapa topográfico», «muestra el respaldo», «muéstrame toda la red», «llévame a Villavicencio», «apaga simular al cambiar».",
@@ -258,7 +260,7 @@ const TEMAS: Tema[] = [
     claves: ["altura", "mastil", "elevar", "subir antena", "mas alto", "torre", "metros de altura"],
     responder: () => ({
       texto:
-        "La altura es lo que más mejora el alcance: despeja la zona de Fresnel sobre el follaje y el relieve. Pruebe subir la antena en pasos de 3 a 5 m y compare el porcentaje confiable. Un enlace entre dos mástiles altos suele ser mucho mejor que hacia un radio en la mano a 2,5 m.",
+        "La altura es lo que más mejora el alcance: despeja la zona de Fresnel sobre el follaje y el relieve. Pruebe subir la antena en pasos de 3 m y compare la cobertura útil (señal media o mejor). Un enlace entre dos mástiles altos suele ser mucho mejor que hacia un radio en la mano a 2,5 m. Ojo con el costo: hasta unos 12 m basta un mástil liviano; de 15 a 30 m ya es una torre riendada, y por encima de 30 m hace falta una torre autosoportada, muy costosa: casi siempre sale mejor una loma cercana o una antena de apoyo. Pídame «ajústamelo» y comparo esas opciones con el relieve real.",
     }),
   },
   {
@@ -474,7 +476,42 @@ const TEMAS: Tema[] = [
       const r = c.resultado;
       if (!r) return { texto: "Simule primero y le doy recomendaciones concretas para este escenario.", acciones: [{ texto: "Simular ahora", accion: "simular" }] };
       const recs = r.factibilidad.recomendaciones.slice(0, 3);
-      return { texto: recs.length ? `Esto es lo que haría: ${recs.map((x, i) => `${i + 1}) ${x}`).join(" ")}` : "La red cumple los criterios. Valide en campo con una prueba de alcance." };
+      const ajuste = c.desactualizado ? null : accionAjuste(r);
+      const texto = recs.length ? `Esto es lo que haría: ${recs.map((x, i) => `${i + 1}) ${x}`).join(" ")}` : "La red cumple los criterios. Valide en campo con una prueba de alcance.";
+      return {
+        texto: `${texto} ${r.factibilidad.nivel === "factible" ? "Si quiere, busco la misma cobertura con menos infraestructura." : "O pídame «ajústamelo»: comparo alturas, lomas cercanas, tipo de antena y antenas de apoyo, y le propongo la red factible con la mejor relación cobertura–costo."}`,
+        acciones: ajuste ? [ajuste] : undefined,
+      };
+    },
+  },
+  {
+    id: "ajuste",
+    claves: ["ajustamelo", "ajuste automatico", "ajustar automaticamente", "costo", "costos", "cuanto cuesta", "precio", "precios", "economico", "mas barato", "costo beneficio", "antenas de apoyo", "antena de apoyo", "cobertura costo", "menos antenas", "torre de 30", "mas de 30 metros"],
+    responder: (c) => {
+      const ajuste = c.desactualizado ? null : accionAjuste(c.resultado);
+      return {
+        texto: [
+          "Con «Ajústamelo automáticamente» (en el Resultado, o pidiéndomelo) analizo la red como un planeador: busco que todos los nodos lleguen al gateway por enlaces sólidos y cubrir la meta con la menor infraestructura posible.",
+          "Comparo, con el relieve real: correr un nodo a una loma cercana (lo más barato), subir o bajar torres en tramos de 3 m hasta 30 m (hasta 12 m basta un mástil liviano; de 15 m en adelante es torre riendada; más de 30 m nunca lo propongo), cambiar a una antena sectorial hacia donde falta cobertura y sugerir antenas de apoyo. Cada sitio nuevo cuenta también lo que cuesta mantenerlo, así que a igual cobertura prefiero menos antenas.",
+          "Las antenas de apoyo no son un equipo distinto: son puntos sugeridos, con coordenadas, donde conviene poner un nodo. Si usted me da sitios posibles («pueden ir en 4.51, -73.12; 4.60, -73.05»), solo uso esos.",
+          "Le doy hasta tres opciones: la más económica que cumple, la recomendada (donde cada antena más ya rinde poco) y la de máxima cobertura. Uso precios de referencia en Colombia solo para comparar; no los muestro porque cambian con el proveedor y el sitio.",
+        ].join("\n"),
+        acciones: ajuste ? [ajuste] : undefined,
+      };
+    },
+  },
+  {
+    id: "area-objetivo",
+    claves: ["area objetivo", "cobertura util", "senal util", "meta de cobertura", "60 %", "60 por ciento", "zona de la red", "area de estudio"],
+    responder: (c) => {
+      const o = c.resultado?.areaObjetivo;
+      return {
+        texto: [
+          "La red es factible cuando todos los nodos llegan al gateway por enlaces sólidos (≥ 30 dB) dentro del límite de saltos y la cobertura útil —señal media o mejor, ≥ 30 dB— alcanza la meta.",
+          "Sin área objetivo, la meta es el 60 % del área de estudio (los círculos alrededor de los nodos antena). Si mide un área con la regla y me dice «usa el área que medí como área objetivo con el 95 %», la factibilidad se mide ahí, con esa meta y esa señal.",
+          o ? `Ahora el área objetivo es «${o.nombre}»: ${f(o.utilPct, 1)} % cubierto de una meta del ${f(o.metaPct, 1)} %.` : "Ahora no hay área objetivo.",
+        ].join("\n"),
+      };
     },
   },
   {
