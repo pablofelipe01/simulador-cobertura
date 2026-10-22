@@ -9,6 +9,7 @@ import { anguloElevacion, atenuacionPatron } from "./patron";
 import { calcularPerfil, pasoPerfil, type ExtremoPerfil } from "./perfil";
 import { calculoRed, completarParametros, resumenRed } from "./red";
 import { relieveDesdeHgt, relieveDesdeTeselas, relievePlano, type CargarTesela, type ColeccionHgt, type Relieve } from "./relieve";
+import { cajaDiseno, disenar, type Diseno, type PedidoDiseno } from "./diseno";
 import { cajaSiembra, sembrar as proponerSiembra, type PedidoSiembra, type Siembra } from "./siembra";
 import type { Antena, Caja, FuenteRelieve, InformeEnlace, Parametros, Perfil, PerfilTerreno, PuntoPerfil, ResultadoSimulacion } from "./tipos";
 import { geometriaTrayecto, perdidasTrayecto } from "./trayecto";
@@ -260,6 +261,13 @@ export async function sembrarMalla(pedido: PedidoSiembra, fuente: FuenteRelieve,
   const caja = cajaSiembra(pedido.origenes, pedido.destinos);
   const relieve = await obtenerRelieve(caja, fuente, ctx);
   return proponerSiembra(pedido, relieve, caja);
+}
+
+/** Diseño de la malla por área: gateway y repetidores para cubrir el polígono con la señal pedida. */
+export async function disenarMallaArea(pedido: PedidoDiseno, fuente: FuenteRelieve, ctx: Contexto): Promise<Diseno> {
+  const caja = cajaDiseno(pedido.area, pedido.existentes);
+  const relieve = await obtenerRelieve(caja, fuente, ctx);
+  return disenar(pedido, relieve, caja);
 }
 
 /** Perfil del terreno a lo largo de una ruta de puntos [lon, lat] (para la regla de medición). */

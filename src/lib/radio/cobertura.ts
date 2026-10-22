@@ -91,6 +91,48 @@ export type Cobertura = {
 
 type Avisar = (avance: number) => void | Promise<void>;
 
+/**
+ * Margen de una antena hacia receptores en puntos sueltos (a la altura del receptor configurado), con el mismo
+ * cálculo que cada celda del mapa de cobertura. Lo usa el diseño de la malla por área.
+ */
+export function evaluadorMargen(ant: Antena, p: Parametros, relieve: Relieve): (lat: number, lon: number) => number {
+  const lambda = longitudOnda(p.frecuenciaMhz);
+  const red = calculoRed(p);
+  const conPerfil = red.necesitaPerfil;
+  const itmPuro = red.modelo === "itm";
+  const presupuesto = presupuestoCobertura(ant, p);
+  const [ax, ay] = relieve.pixel(ant.lat, ant.lon);
+  const za = relieve.muestra(ax, ay) + ant.alturaM;
+  const paso = pasoPerfil(relieve, ant.lat);
+  const m = metrosPorGrado(ant.lat);
+  const fijo = perdidaEntorno(p.entorno, p.alturaRxM, p.frecuenciaMhz) + perdidaEntorno(p.entorno, ant.alturaM, p.frecuenciaMhz);
+  const direccional = esDireccional(ant);
+  return (lat, lon) => {
+    const dLat = (lat - ant.lat) * m.lat;
+    const dLon = (lon - ant.lon) * m.lon;
+    let d = Math.sqrt(dLat * dLat + dLon * dLon);
+    if (d < DISTANCIA_MINIMA_M) d = DISTANCIA_MINIMA_M;
+    const [bx, by] = relieve.pixel(lat, lon);
+    const zb = relieve.muestra(bx, by) + p.alturaRxM;
+    let mg: number;
+    if (!conPerfil) {
+      const v = vMaximo(relieve, ax, ay, za, bx, by, zb, d, lambda, paso);
+      mg = margen(presupuesto, p.frecuenciaMhz, d, difraccion(v), ant.alturaM);
+    } else {
+      const n = intervalosPerfil(d, paso);
+      const z = muestrearPerfil(relieve, ax, ay, bx, by, n);
+      if (itmPuro) mg = presupuesto - red.itm(z, n + 1, d, ant.alturaM, p.alturaRxM).perdidaDb;
+      else {
+        const v = vDePerfil(z, n, za, zb, d, lambda);
+        mg = margen(presupuesto, p.frecuenciaMhz, d, difraccion(v), ant.alturaM) - red.ajuste(z, n + 1, d, ant.alturaM, p.alturaRxM);
+      }
+    }
+    if (fijo) mg -= fijo;
+    if (direccional) mg -= atenuacionPatron(ant, rumboLocal(dLon, dLat), anguloElevacion(za, zb, d));
+    return mg;
+  };
+}
+
 /** Número de sectores para el alcance por dirección (5° cada uno, desde el norte en sentido horario). */
 export const SECTORES = 72;
 function sectorDe(este: number, norte: number) {
