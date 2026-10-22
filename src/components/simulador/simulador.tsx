@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { Melki } from "@/components/melki/melki";
 import { Recorrido } from "@/components/melki/recorrido";
 import type { AccionMelki } from "@/components/melki/cerebro";
-import type { Api } from "@/components/melki/ordenes";
+import type { Api, OpcionesDiseno } from "@/components/melki/ordenes";
 import { avisarMelki, tourPorId, type ApiTour, type IdTour, type Preparacion } from "@/components/melki/tours";
 import { CONFIG } from "@/lib/config";
 import { buscarLugares, cargarReferencia, textoUbicacion } from "@/lib/geo/referencia";
@@ -17,6 +17,7 @@ import { metrosPorGrado } from "@/lib/radio/geo";
 import { MotorCobertura } from "@/lib/radio/cliente";
 import { estadoRed, type EstadoRed } from "@/lib/radio/estado-red";
 import { simularMensaje, type ViajeMensaje } from "@/lib/radio/mensaje";
+import type { Diseno, PedidoDiseno } from "@/lib/radio/diseno";
 import type { DestinoSiembra, Siembra } from "@/lib/radio/siembra";
 import type { Fase } from "@/lib/radio/protocolo";
 import type { Inspeccion } from "@/lib/radio/simulacion";
@@ -96,6 +97,10 @@ export function Simulador() {
   const [voz, setVoz] = useState(false);
   const [solicitud, setSolicitud] = useState<SolicitudVista | null>({ n: 0, tipo: "encuadrar" });
   const [mapa, setMapa] = useState<MapaML | null>(null);
+  const mapaRef = useRef<MapaML | null>(null);
+  useEffect(() => {
+    mapaRef.current = mapa;
+  }, [mapa]);
   const [punto, setPunto] = useState<PuntoMarcado | null>(null);
   const [menu, setMenu] = useState<PuntoMapa | null>(null);
   const [perfilTerreno, setPerfilTerreno] = useState<{ titulo: string; perfil: PerfilTerreno | null } | null>(null);
@@ -409,6 +414,71 @@ export function Simulador() {
     setSiembra({ fase: "nada" });
   }, []);
 
+  /** Diseño por área (Melki): el motor elige gateway y repetidores; el escenario no cambia hasta aplicarlo. */
+  const disenarArea = useCallback((o: OpcionesDiseno): Promise<Diseno | null> => {
+    const m = motor.current;
+    if (!m) return Promise.resolve(null);
+    const { estado: e, fuente: f } = ultimo.current;
+    const lista = existentes();
+    // Si ya hay gateway y se pidió otro sitio, se diseña con el gateway movido (Melki lo mueve también)
+    const infra = lista.filter((a) => a.activa && (a.tipo ?? "antena") === "antena").map((a) => (a.pasarela && o.gateway ? { ...a, lat: o.gateway.lat, lon: o.gateway.lon } : a));
+    const hayGateway = infra.some((a) => a.pasarela);
+    const pedidoDiseno: PedidoDiseno = {
+      area: o.area,
+      margenObjetivoDb: o.margenDb,
+      porcentajeObjetivo: o.porcentaje,
+      respaldo: o.respaldo,
+      existentes: infra,
+      gateway: hayGateway ? null : nuevaPieza("gateway", o.gateway?.lat ?? 0, o.gateway?.lon ?? 0, lista),
+      gatewayFijo: Boolean(o.gateway),
+      repetidor: nuevaPieza("repetidor", 0, 0, lista, o.alturaRepetidorM),
+      parametros: e.escenario.parametros,
+      maxRepetidores: o.maxRepetidores,
+    };
+    return m.disenar(pedidoDiseno, f).catch(() => null);
+  }, []);
+
+  /** Pone los nodos de un diseño (gateway, si es nuevo, y repetidores) con nombres libres. */
+  const aplicarDiseno = useCallback((d: Diseno, alturaRepetidorM: number): Antena[] => {
+    const lista = existentes();
+    const nuevas: Antena[] = [];
+    for (const q of d.nodos) nuevas.push(nuevaPieza(q.pieza, q.lat, q.lon, [...lista, ...nuevas], q.pieza === "repetidor" ? alturaRepetidorM : undefined));
+    if (!nuevas.length) return [];
+    recientes.current.push(...nuevas);
+    despachar({ tipo: "insertar-varias", antenas: nuevas });
+    setPunto(null);
+    return nuevas;
+  }, []);
+
+  /** Próximo resultado al día (simula si hace falta). */
+  const esperarResultado = useCallback(
+    () =>
+      new Promise<ResultadoSimulacion | null>((resolver) => {
+        let listo = false;
+        const terminar = (r: ResultadoSimulacion | null) => {
+          if (listo) return;
+          listo = true;
+          oyentes.current.delete(oir);
+          resolver(r);
+        };
+        // Se entrega cuando la pantalla ya tiene el resultado (la red y el estado de cada nodo al día)
+        const oir = (r: ResultadoSimulacion) => {
+          oyentes.current.delete(oir);
+          const inicio = performance.now();
+          const revisar = () => {
+            const u = ultimo.current;
+            if ((u.resultado === r && u.firma === u.firmaResultado) || performance.now() - inicio > 5000) terminar(r);
+            else window.setTimeout(revisar, 40);
+          };
+          revisar();
+        };
+        oyentes.current.add(oir);
+        pedirSimulacion();
+        window.setTimeout(() => terminar(null), 180000);
+      }),
+    [pedirSimulacion],
+  );
+
   /** Envía un mensaje de texto desde un nodo hasta el gateway por la ruta de la malla y lo anima en el mapa. */
   const enviarMensaje = useCallback(
     (desdeId: string): ViajeMensaje | null => {
@@ -526,7 +596,7 @@ export function Simulador() {
   // Lo que Melki puede hacer en el simulador
   const api = useMemo<Api>(
     () => ({
-      antenas: () => ultimo.current.estado.escenario.antenas,
+      antenas: () => existentes(),
       parametros: () => ultimo.current.estado.escenario.parametros,
       seleccion: () => ultimo.current.estado.seleccion,
       resultado: () => ultimo.current.resultado,
@@ -550,8 +620,9 @@ export function Simulador() {
       centrar,
       encuadrarCaja,
       marcar: (lat, lon, titulo) => setPunto({ lat, lon, titulo }),
-      medir: (m) => {
+      medir: (m, seleccionar = true) => {
         despachar({ tipo: "medicion-agregar", medicion: m });
+        if (!seleccionar) despachar({ tipo: "medicion-seleccionar", id: null });
         const lons = m.puntos.map((q) => q[0]);
         const lats = m.puntos.map((q) => q[1]);
         encuadrarCaja([Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)]);
@@ -622,8 +693,31 @@ export function Simulador() {
         encuadrar();
         pedirSimulacion();
       },
+      seleccionar: (id) => despachar({ tipo: "seleccionar", id }),
+      eliminarVarias: (ids) => {
+        despachar({ tipo: "eliminar-varias", ids });
+        pedirSimulacion();
+      },
+      restaurar: (e) => despachar({ tipo: "cargar", escenario: e }),
+      encuadrarTodo: encuadrar,
+      autoSimular: () => ultimo.current.estado.autoSimular,
+      fijarAutoSimular: (v) => despachar({ tipo: "auto", valor: v }),
+      centroMapa: () => {
+        const c = mapaRef.current?.getCenter();
+        return c ? { lat: c.lat, lon: c.lng } : null;
+      },
+      mediciones: () => ultimo.current.estado.escenario.mediciones,
+      disenarArea,
+      aplicarDiseno,
+      esperarResultado,
+      fijarRelieve: (v) => despachar({ tipo: "relieve", relieve: v }),
+      renombrarEscenario: (nombre) => despachar({ tipo: "renombrar-escenario", nombre }),
+      duplicar: (id) => {
+        despachar({ tipo: "duplicar", id });
+        pedirSimulacion();
+      },
     }),
-    [inscribirNodo, pedirSimulacion, simular, centrar, encuadrar, encuadrarCaja, abrirPerfil, inspeccionar, cambiarModo, sembrarHacia, aceptarSiembra, enviarMensaje],
+    [inscribirNodo, pedirSimulacion, simular, centrar, encuadrar, encuadrarCaja, abrirPerfil, inspeccionar, cambiarModo, sembrarHacia, aceptarSiembra, enviarMensaje, disenarArea, aplicarDiseno, esperarResultado],
   );
 
   const restaurar = useCallback((e: Escenario) => despachar({ tipo: "cargar", escenario: e }), []);
