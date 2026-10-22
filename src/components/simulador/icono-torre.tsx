@@ -29,3 +29,39 @@ export function IconoEquipo({ className = "h-5 w-5", baliza }: { className?: str
 export function IconoNodo({ tipo, className, baliza }: { tipo?: "antena" | "nodo"; className?: string; baliza?: string }) {
   return (tipo ?? "antena") === "nodo" ? <IconoEquipo className={className} baliza={baliza} /> : <IconoTorre className={className} baliza={baliza} />;
 }
+
+// Persona (modo «Sembrar la malla»): misma figura que su marcador.
+export function IconoPersona({ className = "h-5 w-5", relleno }: { className?: string; relleno?: string }) {
+  return (
+    <svg viewBox="-1 -1 34 41" className={className} aria-hidden="true">
+      <g fill={relleno ?? "none"} stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round">
+        <circle cx="16" cy="9.6" r="5.4" />
+        <path d="M6.6 37 V28.4 a9.4 9.4 0 0 1 18.8 0 V37 Z" />
+      </g>
+    </svg>
+  );
+}
+
+// Gateway + Internet: el router donde entra el internet, con la nube «IA» (el gateway lleva la inteligencia artificial).
+export function IconoGateway({ className = "h-5 w-5" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 34 30" className={className} aria-hidden="true">
+      <g fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M11.4 14.2 a5.2 5.2 0 0 1 7.2 0 M8.9 11.6 a8.8 8.8 0 0 1 12.2 0" />
+        <rect x="4" y="18" width="22" height="9" rx="2.2" />
+        <path d="M8.6 18 L7 14.6 M21.4 18 L23 14.6" />
+      </g>
+      <circle cx="9.2" cy="22.5" r="1.2" fill="currentColor" />
+      <circle cx="13.2" cy="22.5" r="1.2" fill="currentColor" />
+      <path d="M23.2 10.6 H31 a3 3 0 0 0 .4-6 A4.2 4.2 0 0 0 23.6 3.4 a3.6 3.6 0 0 0-.4 7.2 Z" fill="#3EE6C8" stroke="#0F1F1C" strokeWidth=".8" />
+      <text x="27" y="9" textAnchor="middle" fontSize="5.2" fontWeight="800" fill="#0F1F1C" fontFamily="sans-serif">IA</text>
+    </svg>
+  );
+}
+
+/** Ícono de cada pieza del modo «Sembrar la malla». */
+export function IconoPieza({ pieza, className }: { pieza: "gateway" | "repetidor" | "persona"; className?: string }) {
+  if (pieza === "gateway") return <IconoGateway className={className} />;
+  if (pieza === "persona") return <IconoPersona className={className} />;
+  return <IconoTorre className={className} />;
+}

@@ -6,8 +6,10 @@ import maplibregl, { type GeoJSONSource, type ImageSource, type Map as MapaML, t
 import { useEffect, useRef, useState, type Dispatch } from "react";
 
 import { CONFIG, urlsTeselas } from "@/lib/config";
+import type { EstadoRed } from "@/lib/radio/estado-red";
 import { metrosPorGrado } from "@/lib/radio/geo";
 import { anchosHaz, esDireccional } from "@/lib/radio/patron";
+import type { DestinoSiembra, PuntoSiembra } from "@/lib/radio/siembra";
 import type { Inspeccion } from "@/lib/radio/simulacion";
 import type { Antena, ResultadoSimulacion } from "@/lib/radio/tipos";
 
@@ -15,7 +17,9 @@ import { geojsonAlcance, geojsonAnillos, type EtiquetaAlcance } from "./capa-alc
 import { COLORES_ANTENA, esquinas, opcionesEscala, pintarCobertura } from "./capa-cobertura";
 import { colorearReferencia, crearCapasReferencia, EtiquetasReferencia, visibilidadReferencia } from "./capas-referencia";
 import type { Accion, Estado, FondoMapa } from "./estado";
-import { estadoNodo, htmlMarcador } from "./marcador";
+import { AnimadorMalla, COLOR_FLUJO, COLOR_MENSAJE, type RutaViva } from "./animacion-malla";
+import { estadoNodo, htmlMarcador, htmlPieza, htmlPiezaPropuesta, RADIO_PIEZA } from "./marcador";
+import { piezaDe } from "./piezas";
 
 export type SolicitudVista =
   | { n: number; tipo: "encuadrar" }
@@ -23,6 +27,27 @@ export type SolicitudVista =
   | { n: number; tipo: "caja"; caja: [number, number, number, number] };
 
 export type PuntoMapa = { lat: number; lon: number; x: number; y: number };
+
+/**
+ * Mensaje que se anima por la malla: ids y puntos de la ruta (lon, lat), duración de cada salto, dónde se pierde,
+ * quiénes escuchan cada transmisión (la inundación de Meshtastic) y si la IA del gateway responde de vuelta.
+ */
+export type AnimacionMensaje = {
+  n: number;
+  ids: string[];
+  puntos: [number, number][];
+  duracionesMs: number[];
+  corteEn: number | null;
+  vecinos: string[][];
+  respuesta: boolean;
+};
+
+/** Lo que el modo «Sembrar la malla» dibuja además de los nodos. */
+export type CapaSembrar = {
+  red: EstadoRed;
+  propuesta: { puntos: PuntoSiembra[]; destinos: DestinoSiembra[] } | null;
+  mensaje: AnimacionMensaje | null;
+};
 
 type Props = {
   estado: Estado;
@@ -35,7 +60,16 @@ type Props = {
   punto: { lat: number; lon: number } | null;
   onMenu: (p: PuntoMapa) => void;
   onListo: (m: MapaML) => void;
+  /** Modo «Sembrar la malla» (null en el modo avanzado). */
+  sembrar?: CapaSembrar | null;
+  /** Clic con la herramienta Agregar en el modo «Sembrar»: pone la pieza elegida. */
+  onPieza?: (lat: number, lon: number) => void;
+  /** Clic con la herramienta «destino»: punto hacia el que se siembra la malla. */
+  onDestino?: (lat: number, lon: number) => void;
 };
+
+const VACIO: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
+const SOBRE = `<svg viewBox="0 0 14 14" aria-hidden="true"><rect x="1.6" y="3.2" width="10.8" height="7.6" rx="1.2"/><path d="M1.9 3.8 L7 7.6 L12.1 3.8"/></svg>`;
 
 const FONDOS: Record<FondoMapa, string> = {
   satelite: "fondo-satelite",
@@ -155,7 +189,7 @@ function sincronizarEtiquetas(m: MapaML, vivas: Map<string, Marker>, lista: Etiq
   }
 }
 
-export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar, solicitud, punto, onMenu, onListo }: Props) {
+export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar, solicitud, punto, onMenu, onListo, sembrar, onPieza, onDestino }: Props) {
   const contenedor = useRef<HTMLDivElement>(null);
   const mapa = useRef<MapaML | null>(null);
   const marcadores = useRef(new Map<string, Marker>());
@@ -166,11 +200,13 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
   const pin = useRef<Marker | null>(null);
   const pinPunto = useRef<Marker | null>(null);
   const lienzo = useRef<HTMLCanvasElement | null>(null);
+  const propuestos = useRef<Marker[]>([]);
+  const animador = useRef<AnimadorMalla | null>(null);
   const [listo, setListo] = useState(false);
   // Valores actuales para los manejadores registrados una sola vez
-  const actual = useRef({ estado, onInspeccionar, despachar, onMenu, onListo });
+  const actual = useRef({ estado, onInspeccionar, despachar, onMenu, onListo, onPieza, onDestino });
   useEffect(() => {
-    actual.current = { estado, onInspeccionar, despachar, onMenu, onListo };
+    actual.current = { estado, onInspeccionar, despachar, onMenu, onListo, onPieza, onDestino };
   });
 
   // Crear el mapa una sola vez
@@ -194,7 +230,7 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
     m.on("load", () => {
       crearCapasReferencia(m);
       m.addLayer({ id: "capa-etiquetas", type: "raster", source: "etiquetas", layout: { visibility: "none" } });
-      for (const id of ["circulos", "anillos", "alcance", "enlaces", "haces"]) m.addSource(id, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      for (const id of ["circulos", "anillos", "alcance", "enlaces", "haces", "propuesta", "ruta-mensaje"]) m.addSource(id, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       m.addLayer({ id: "haces-relleno", type: "fill", source: "haces", filter: ["==", ["get", "parte"], "abanico"], paint: { "fill-color": "#FFFFFF", "fill-opacity": 0.16 } });
       m.addLayer({
         id: "haces-borde",
@@ -249,6 +285,23 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
           },
         });
       }
+      // Sembrado propuesto (cadena de repetidores) y ruta del mensaje
+      m.addLayer({ id: "propuesta-halo", type: "line", source: "propuesta", layout: { "line-cap": "round" }, paint: { "line-color": "#ffffff", "line-width": 5, "line-opacity": 0.8 } });
+      m.addLayer({ id: "propuesta", type: "line", source: "propuesta", paint: { "line-color": "#A94F1B", "line-width": 2.6, "line-dasharray": [2, 1.5] } });
+      m.addLayer({ id: "ruta-mensaje-halo", type: "line", source: "ruta-mensaje", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": 9, "line-opacity": 0.85 } });
+      m.addLayer({ id: "ruta-mensaje", type: "line", source: "ruta-mensaje", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#E07A3F", "line-width": 4.5 } });
+      // Flujo animado de la malla (modo «Sembrar»): por encima de los enlaces y de la ruta del mensaje
+      animador.current = new AnimadorMalla(
+        m,
+        (id) => marcadores.current.get(id)?.getElement().querySelector<HTMLElement>(".pieza") ?? null,
+        (rutas, vivo) => {
+          const raiz = contenedor.current?.parentElement;
+          if (raiz) {
+            raiz.dataset.rutasVivas = String(rutas);
+            raiz.dataset.animacion = vivo ? "si" : "no";
+          }
+        },
+      );
       referencias.current = new EtiquetasReferencia(m);
       // Créditos plegados en un botón «i» para que no tapen la leyenda (se pliegan la primera vez que aparecen)
       const plegarCreditos = () => {
@@ -266,8 +319,10 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
       actual.current.onListo(m);
     });
     m.on("click", (e) => {
-      const { estado: est, onInspeccionar: inspeccionar, despachar: d } = actual.current;
-      if (est.herramienta === "agregar") d({ tipo: "agregar", lat: e.lngLat.lat, lon: e.lngLat.lng });
+      const { estado: est, onInspeccionar: inspeccionar, despachar: d, onPieza: pieza, onDestino: destino } = actual.current;
+      if (est.herramienta === "agregar" && est.modo === "sembrar" && pieza) pieza(e.lngLat.lat, e.lngLat.lng);
+      else if (est.herramienta === "agregar") d({ tipo: "agregar", lat: e.lngLat.lat, lon: e.lngLat.lng });
+      else if (est.herramienta === "destino") destino?.(e.lngLat.lat, e.lngLat.lng);
       else if (est.herramienta === "inspeccionar") inspeccionar(e.lngLat.lat, e.lngLat.lng);
       else if (est.herramienta === "mover") d({ tipo: "seleccionar", id: null });
     });
@@ -278,6 +333,8 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
     mapa.current = m;
     const marcas = marcadores.current;
     return () => {
+      animador.current?.destruir();
+      animador.current = null;
       referencias.current?.destruir();
       marcas.clear();
       m.remove();
@@ -384,6 +441,8 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
     (m.getSource("haces") as GeoJSONSource | undefined)?.setData(estado.vista.mostrarHaces ? geojsonHaces(antenas, radioKm) : { type: "FeatureCollection", features: [] });
   }, [antenas, radioKm, estado.vista.mostrarHaces, listo]);
 
+  const redMapa = sembrar?.red ?? null;
+
   // Rango de alcance (contornos) y anillos de distancia
   const seleccionada = antenas.find((a) => a.id === estado.seleccion) ?? null;
   const unicaAntena = antenas.filter((a) => a.activa && (a.tipo ?? "antena") === "antena");
@@ -393,13 +452,47 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
     if (!m || !listo) return;
     const alcance =
       resultado && estado.vista.mostrarAlcance ? geojsonAlcance(resultado, antenas, estado.vista.soloSeleccionada ? estado.seleccion : null) : { datos: { type: "FeatureCollection" as const, features: [] }, etiquetas: [] };
+    // En «Sembrar la malla» el alcance con servicio se ve como el círculo de Trama, pero siguiendo el relieve:
+    // turquesa si el nodo está conectado al gateway y naranja si no alcanza la red
+    if (redMapa) {
+      alcance.datos.features = alcance.datos.features.filter((f) => f.properties?.clase === "servicio");
+      for (const f of alcance.datos.features) f.properties = { ...f.properties, estado: redMapa.porNodo.get(String(f.properties?.id))?.estado ?? "pendiente" };
+      alcance.etiquetas = alcance.etiquetas.filter((e) => e.clase === "alcance-servicio");
+    }
     (m.getSource("alcance") as GeoJSONSource | undefined)?.setData(alcance.datos);
     sincronizarEtiquetas(m, etiquetasAlcance.current, alcance.etiquetas);
     const anillos =
       estado.vista.mostrarAnillos && centroAnillos ? geojsonAnillos(centroAnillos, radioKm) : { datos: { type: "FeatureCollection" as const, features: [] }, etiquetas: [] };
     (m.getSource("anillos") as GeoJSONSource | undefined)?.setData(anillos.datos);
     sincronizarEtiquetas(m, etiquetasAnillos.current, anillos.etiquetas);
-  }, [resultado, antenas, estado.vista.mostrarAlcance, estado.vista.mostrarAnillos, estado.vista.soloSeleccionada, estado.seleccion, centroAnillos, radioKm, listo]);
+  }, [resultado, antenas, estado.vista.mostrarAlcance, estado.vista.mostrarAnillos, estado.vista.soloSeleccionada, estado.seleccion, centroAnillos, radioKm, listo, redMapa]);
+
+  // Estilo del alcance según el modo
+  const modoSembrar = Boolean(sembrar);
+  useEffect(() => {
+    const m = mapa.current;
+    if (!m || !listo || !m.getLayer("alcance")) return;
+    if (modoSembrar) {
+      m.setPaintProperty("alcance", "line-color", ["match", ["get", "estado"], "aislado", "#FF9F43", COLOR_FLUJO]);
+      m.setPaintProperty("alcance", "line-width", 2);
+      m.setPaintProperty("alcance-halo", "line-color", ["match", ["get", "estado"], "aislado", "#FF9F43", COLOR_FLUJO]);
+      m.setPaintProperty("alcance-halo", "line-width", 7);
+      m.setPaintProperty("alcance-halo", "line-opacity", 0.22);
+      m.setPaintProperty("alcance-halo", "line-blur", 4);
+      // Los enlaces quedan de fondo: resalta el flujo turquesa por donde viaja la información
+      for (const id of ["enlaces-solido", "enlaces-inestable", "enlaces-sin"]) m.setPaintProperty(id, "line-opacity", 0.5);
+      m.setPaintProperty("enlaces-halo", "line-opacity", 0.35);
+    } else {
+      for (const id of ["enlaces-solido", "enlaces-inestable", "enlaces-sin"]) m.setPaintProperty(id, "line-opacity", 1);
+      m.setPaintProperty("enlaces-halo", "line-opacity", 0.75);
+      m.setPaintProperty("alcance", "line-color", ["match", ["get", "clase"], "confiable", "#8BD17C", "#FFB25B"]);
+      m.setPaintProperty("alcance", "line-width", 2.2);
+      m.setPaintProperty("alcance-halo", "line-color", "#1E2120");
+      m.setPaintProperty("alcance-halo", "line-width", 4.5);
+      m.setPaintProperty("alcance-halo", "line-opacity", 0.45);
+      m.setPaintProperty("alcance-halo", "line-blur", 0);
+    }
+  }, [modoSembrar, listo]);
 
   // Enlaces entre nodos
   useEffect(() => {
@@ -436,6 +529,7 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
   }, [resultado, antenas, estado.vista.mostrarEnlaces, estado.vista.mostrarSinEnlace, listo]);
 
   // Marcadores de nodos
+  const red = redMapa;
   useEffect(() => {
     const m = mapa.current;
     if (!m) return;
@@ -452,7 +546,10 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
     antenas.forEach((a: Antena) => {
       const indice = indices.get(a.id);
       const color = estado.vista.modo === "servidor" && indice !== undefined ? COLORES_ANTENA[indice % COLORES_ANTENA.length] : undefined;
-      const html = htmlMarcador(a, estado.seleccion === a.id, estadoNodo(a, nodos.get(a.id)), color);
+      const info = red?.porNodo.get(a.id);
+      const marca = red ? { pieza: piezaDe(a), estado: info?.estado ?? (a.pasarela ? "gateway" : "pendiente"), saltos: info?.saltos ?? null } as const : undefined;
+      // En «Sembrar la malla», piezas redondas centradas en el punto; en el modo avanzado, la torre de siempre
+      const html = marca ? htmlPieza(a, estado.seleccion === a.id, marca, true) : htmlMarcador(a, estado.seleccion === a.id, estadoNodo(a, nodos.get(a.id)), color);
       let mk = vivos.get(a.id);
       if (!mk) {
         const el = document.createElement("div");
@@ -461,6 +558,11 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
         el.addEventListener("click", (ev) => {
           if (actual.current.estado.herramienta === "regla") return;
           ev.stopPropagation();
+          // «×» de la pieza seleccionada: la quita
+          if ((ev.target as HTMLElement).closest("[data-quitar]")) {
+            actual.current.despachar({ tipo: "eliminar", id: a.id });
+            return;
+          }
           actual.current.despachar({ tipo: "seleccionar", id: a.id });
         });
         mk = new maplibregl.Marker({ element: el, anchor: "bottom", draggable: true }).setLngLat([a.lon, a.lat]).addTo(m);
@@ -476,11 +578,194 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
         el.dataset.html = html;
       }
       el.style.zIndex = estado.seleccion === a.id ? "5" : "1";
-      el.setAttribute("aria-label", `${(a.tipo ?? "antena") === "nodo" ? "Nodo" : "Nodo antena"} ${a.nombre}`);
+      mk.setOffset(marca ? [0, RADIO_PIEZA] : [0, 0]);
+      el.setAttribute("aria-label", red ? `${{ gateway: "Gateway", repetidor: "Repetidor", persona: "Persona" }[piezaDe(a)]} ${a.nombre}` : `${(a.tipo ?? "antena") === "nodo" ? "Nodo" : "Nodo antena"} ${a.nombre}`);
       const p = mk.getLngLat();
       if (Math.abs(p.lat - a.lat) > 1e-7 || Math.abs(p.lng - a.lon) > 1e-7) mk.setLngLat([a.lon, a.lat]);
     });
-  }, [antenas, estado.seleccion, resultado, estado.vista.modo]);
+  }, [antenas, estado.seleccion, resultado, estado.vista.modo, red]);
+
+  // Repetidores propuestos por el sembrado automático: torres fantasma y la cadena hasta cada destino
+  const propuesta = sembrar?.propuesta ?? null;
+  useEffect(() => {
+    const m = mapa.current;
+    if (!m || !listo) return;
+    for (const mk of propuestos.current) mk.remove();
+    propuestos.current = [];
+    const fuente = m.getSource("propuesta") as GeoJSONSource | undefined;
+    if (!propuesta) {
+      fuente?.setData(VACIO);
+      return;
+    }
+    const posicion = new Map<string, [number, number]>(antenas.map((a) => [a.id, [a.lon, a.lat]]));
+    for (const q of propuesta.puntos) posicion.set(q.id, [q.lon, q.lat]);
+    const features: GeoJSON.Feature[] = [];
+    for (const q of propuesta.puntos) {
+      const desde = posicion.get(q.desdeId);
+      if (desde) features.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [desde, [q.lon, q.lat]] } });
+      const el = document.createElement("div");
+      el.className = "marcador-raiz";
+      el.innerHTML = htmlPiezaPropuesta(q.id.replace("propuesto-", "Propuesto "), q.margenDb);
+      propuestos.current.push(new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat([q.lon, q.lat]).addTo(m));
+    }
+    for (const d of propuesta.destinos) {
+      if (!d.antena) {
+        const el = document.createElement("div");
+        el.className = "destino-siembra";
+        el.title = d.nombre ?? "Destino";
+        propuestos.current.push(new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat([d.lon, d.lat]).addTo(m));
+      }
+    }
+    fuente?.setData({ type: "FeatureCollection", features });
+  }, [propuesta, antenas, listo]);
+
+  // Flujo vivo de la malla: rutas de la gente conectada hasta el gateway (y de los repetidores, para la troncal)
+  const animarRed = estado.vista.animarRed;
+  useEffect(() => {
+    const anim = animador.current;
+    if (!anim || !listo) return;
+    if (!redMapa || !redMapa.alDia || !resultado) {
+      anim.configurar({ tramos: [], rutas: [], gateways: [], animar: false, visible: false });
+      return;
+    }
+    const pos = new Map(antenas.map((a) => [a.id, [a.lon, a.lat] as [number, number]]));
+    const nodos = new Map(resultado.nodos.map((n) => [n.id, n]));
+    const conectado = (id: string) => redMapa.porNodo.get(id)?.estado === "conectado";
+    const rutaDe = (id: string): RutaViva | null => {
+      const ids = nodos.get(id)?.ruta ?? [];
+      const puntos = ids.map((x) => pos.get(x));
+      return ids.length > 1 && puntos.every(Boolean) ? { ids, puntos: puntos as [number, number][] } : null;
+    };
+    const personas = redMapa.personas.filter((a) => conectado(a.id)).map((a) => rutaDe(a.id)).filter((r): r is RutaViva => r !== null);
+    const repetidores = redMapa.repetidores.filter((a) => conectado(a.id)).map((a) => rutaDe(a.id)).filter((r): r is RutaViva => r !== null);
+    // Cada tramo una vez, del nodo hacia el gateway (las líneas avanzan en ese sentido)
+    const vistos = new Set<string>();
+    const tramos: [number, number][][] = [];
+    for (const r of [...personas, ...repetidores]) {
+      for (let i = 0; i + 1 < r.ids.length; i++) {
+        const clave = [r.ids[i], r.ids[i + 1]].sort().join("|");
+        if (vistos.has(clave)) continue;
+        vistos.add(clave);
+        tramos.push([r.puntos[i], r.puntos[i + 1]]);
+      }
+    }
+    anim.configurar({ tramos, rutas: personas.length ? personas : repetidores, gateways: redMapa.gateways.map((g) => g.id), animar: animarRed, visible: true });
+  }, [redMapa, resultado, antenas, animarRed, listo]);
+
+  const mensaje = sembrar?.mensaje ?? null;
+
+  // Mensaje de «Enviar un mensaje»: salta de nodo en nodo (cada salto dura su tiempo real, dentro de lo legible).
+  // En cada transmisión se abre una onda y destellan los vecinos que lo escuchan (Meshtastic inunda la red); el
+  // que sigue en la ruta lo retransmite. Al llegar, la IA del gateway «piensa» y la respuesta vuelve por la ruta.
+  useEffect(() => {
+    const m = mapa.current;
+    if (!m || !listo) return;
+    const fuente = m.getSource("ruta-mensaje") as GeoJSONSource | undefined;
+    if (!mensaje || mensaje.puntos.length < 2) {
+      fuente?.setData(VACIO);
+      return;
+    }
+    const anim = animador.current;
+    const { puntos, duracionesMs, corteEn, ids, vecinos } = mensaje;
+    const hasta = corteEn === null ? puntos.length - 1 : corteEn + 1;
+    fuente?.setData({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: puntos.slice(0, hasta + 1) } });
+    const el = document.createElement("div");
+    el.className = "paquete-mensaje";
+    el.innerHTML = SOBRE;
+    const paquete = new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat(puntos[0]).addTo(m);
+    const tiempos: number[] = [];
+    if (anim) anim.pausado = true;
+    const transmite = (k: number, color: string) => {
+      const [lon, lat] = puntos[k];
+      anim?.onda(lon, lat, color, 58, 1200);
+      if (k > 0) anim?.destello(ids[k], "transmite");
+      for (const v of vecinos[k] ?? []) if (v !== ids[k + 1]) anim?.destello(v, "oye", 700);
+    };
+    // Ida (hacia el gateway) y, si llega, la respuesta de la IA de vuelta
+    let tramo: { de: number; a: number; t0: number }[] = [];
+    let k = 0;
+    let vuelta = false;
+    let inicio = performance.now();
+    let cuadro = 0;
+    const suave = (t: number) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
+    tramo = [{ de: 0, a: 1, t0: inicio }];
+    transmite(0, COLOR_MENSAJE);
+    const avanzar = (ahora: number) => {
+      const actualTramo = tramo[0];
+      const salto = vuelta ? actualTramo.a : actualTramo.de; // índice del tramo en duracionesMs
+      const d = duracionesMs[Math.min(salto, duracionesMs.length - 1)] ?? 900;
+      const f = Math.min(1, (ahora - inicio) / d);
+      const [a, b] = [puntos[actualTramo.de], puntos[actualTramo.a]];
+      // Si este salto no tiene enlace, el paquete se pierde a mitad de camino
+      const tope = !vuelta && corteEn === k ? 0.55 : 1;
+      const t = suave(Math.min(f, tope));
+      paquete.setLngLat([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+      if (f >= tope && tope < 1) {
+        el.classList.add("perdido");
+        el.innerHTML = `<svg viewBox="0 0 14 14" aria-hidden="true"><path d="M3.5 3.5 L10.5 10.5 M10.5 3.5 L3.5 10.5"/></svg>`;
+        if (anim) anim.pausado = false;
+        return;
+      }
+      if (f >= 1) {
+        inicio = ahora;
+        if (!vuelta) {
+          k++;
+          if (k >= puntos.length - 1) {
+            // En el gateway: la IA lo recibe, «piensa» y responde por la misma ruta
+            const [lon, lat] = puntos[k];
+            anim?.onda(lon, lat, COLOR_FLUJO, 60, 1300);
+            if (!mensaje.respuesta) {
+              el.classList.add("entregado");
+              el.innerHTML = `<svg viewBox="0 0 14 14" aria-hidden="true"><path d="M3 7.4 L6 10.2 L11.2 4"/></svg>`;
+              if (anim) anim.pausado = false;
+              return;
+            }
+            anim?.destello(ids[k], "piensa", 1800);
+            el.style.opacity = "0";
+            tiempos.push(
+              window.setTimeout(() => {
+                vuelta = true;
+                el.style.opacity = "";
+                el.classList.add("respuesta");
+                el.innerHTML = "<b>IA</b>";
+                k = puntos.length - 1;
+                tramo = [{ de: k, a: k - 1, t0: performance.now() }];
+                inicio = performance.now();
+                transmite(k, COLOR_FLUJO);
+                cuadro = requestAnimationFrame(avanzar);
+              }, 1500),
+            );
+            return;
+          }
+          transmite(k, COLOR_MENSAJE);
+          tramo = [{ de: k, a: k + 1, t0: ahora }];
+        } else {
+          k--;
+          if (k <= 0) {
+            // La respuesta llegó a quien preguntó
+            anim?.onda(puntos[0][0], puntos[0][1], COLOR_FLUJO, 46, 1100);
+            anim?.destello(ids[0], "transmite", 900);
+            el.classList.add("entregado");
+            el.innerHTML = `<svg viewBox="0 0 14 14" aria-hidden="true"><path d="M3 7.4 L6 10.2 L11.2 4"/></svg>`;
+            if (anim) anim.pausado = false;
+            return;
+          }
+          const [lon, lat] = puntos[k];
+          anim?.onda(lon, lat, COLOR_FLUJO, 46, 1000);
+          anim?.destello(ids[k], "transmite");
+          tramo = [{ de: k, a: k - 1, t0: ahora }];
+        }
+      }
+      cuadro = requestAnimationFrame(avanzar);
+    };
+    cuadro = requestAnimationFrame(avanzar);
+    return () => {
+      cancelAnimationFrame(cuadro);
+      for (const t of tiempos) window.clearTimeout(t);
+      paquete.remove();
+      if (anim) anim.pausado = false;
+    };
+  }, [mensaje, listo]);
 
   // Punto inspeccionado y punto marcado (búsqueda / menú contextual)
   useEffect(() => {

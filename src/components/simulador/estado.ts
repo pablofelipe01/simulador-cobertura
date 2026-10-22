@@ -1,6 +1,7 @@
 // Estado de la aplicación: escenario (nodos + parámetros + mediciones), vista del mapa y preferencias.
 import { EQUIPOS, LIMITE_SALTOS_DEFECTO, PRESETS, type EquipoId } from "@/lib/radio/constantes";
 import { ENTORNOS } from "@/lib/radio/entorno";
+import type { Pieza } from "@/lib/radio/estado-red";
 import type { ClimaItm } from "@/lib/radio/itm";
 import { UNIDADES, type UnidadId } from "@/lib/radio/unidades";
 import { PATRONES } from "@/lib/radio/patron";
@@ -10,7 +11,10 @@ import type { Antena, Escenario, Medicion, Parametros, PatronId, Rol, SueloId, T
 export type ModoMapa = "senal" | "servidor" | "redundancia";
 /** Escala de colores del mapa de señal: clases fijas, arcoíris entre dos niveles o un solo umbral. */
 export type EscalaSenal = "clases" | "arcoiris" | "umbral";
-export type Herramienta = "mover" | "agregar" | "inspeccionar" | "regla";
+/** «destino»: el próximo clic en el mapa elige el punto hacia el que se siembra la malla. */
+export type Herramienta = "mover" | "agregar" | "inspeccionar" | "regla" | "destino";
+/** Modo de la pantalla: «Sembrar la malla» (sencillo, por piezas) o el modo avanzado con todos los paneles. */
+export type ModoApp = "sembrar" | "avanzado";
 export type FondoMapa = "satelite" | "topografico" | "opentopomap" | "calles";
 export type TipoRelieve = "teselas" | "hgt" | "plano";
 
@@ -44,6 +48,8 @@ export type Vista = {
   colorUmbral: string;
   /** Dirección de las antenas direccionales sobre el mapa. */
   mostrarHaces: boolean;
+  /** Modo «Sembrar la malla»: animar el flujo de la información hacia el gateway (pulsos, destellos y ondas). */
+  animarRed: boolean;
 };
 
 export type Estado = {
@@ -58,6 +64,9 @@ export type Estado = {
   medicionSel: string | null;
   relieve: TipoRelieve;
   autoSimular: boolean;
+  modo: ModoApp;
+  /** Pieza que se pone con un clic en el modo «Sembrar la malla». */
+  pieza: Pieza;
 };
 
 export const PARAMETROS_DEFECTO: Parametros = {
@@ -98,6 +107,7 @@ export const VISTA_DEFECTO: Vista = {
   umbralDbm: -111,
   colorUmbral: "#1E7B34",
   mostrarHaces: true,
+  animarRed: true,
 };
 
 export const NOMBRE_TIPO: Record<TipoNodo, string> = { antena: "Nodo antena", nodo: "Nodo" };
@@ -164,6 +174,13 @@ export type Accion =
   | { tipo: "mediciones-borrar" }
   | { tipo: "relieve"; relieve: TipoRelieve }
   | { tipo: "auto"; valor: boolean }
+  | { tipo: "modo"; modo: ModoApp }
+  /** Elige la pieza y arma la herramienta para ponerla con un clic en el mapa. */
+  | { tipo: "pieza"; pieza: Pieza }
+  /** Agrega varios nodos de una vez (repetidores propuestos por el sembrado automático). */
+  | { tipo: "insertar-varias"; antenas: Antena[] }
+  /** Quita varios nodos de una vez (deshacer un sembrado). */
+  | { tipo: "eliminar-varias"; ids: string[] }
   /** Reemplaza el escenario, la vista y las preferencias de cálculo (escenario de práctica de los tours y su restauración). */
   | { tipo: "restaurar"; escenario: Escenario; vista: Vista; relieve?: TipoRelieve; autoSimular: boolean };
 
@@ -184,6 +201,13 @@ export function reductor(e: Estado, a: Accion): Estado {
     }
     case "insertar":
       return { ...conAntenas(e, [...antenas, a.antena]), seleccion: a.antena.id };
+    case "insertar-varias":
+      return { ...conAntenas(e, [...antenas, ...a.antenas]), seleccion: null };
+    case "eliminar-varias": {
+      const quitar = new Set(a.ids);
+      const resto = antenas.filter((x) => !quitar.has(x.id));
+      return { ...conAntenas(e, resto), seleccion: e.seleccion && quitar.has(e.seleccion) ? null : e.seleccion };
+    }
     case "editar":
       return conAntenas(
         e,
@@ -242,6 +266,10 @@ export function reductor(e: Estado, a: Accion): Estado {
       return { ...e, relieve: a.relieve };
     case "auto":
       return { ...e, autoSimular: a.valor };
+    case "modo":
+      return { ...e, modo: a.modo, herramienta: e.herramienta === "destino" || e.herramienta === "agregar" ? "mover" : e.herramienta };
+    case "pieza":
+      return { ...e, pieza: a.pieza, herramienta: "agregar", tipoNuevo: a.pieza === "persona" ? "nodo" : "antena" };
     case "restaurar":
       return {
         ...e,
@@ -293,7 +321,30 @@ export function estadoInicial(): Estado {
     medicionSel: null,
     relieve: "teselas",
     autoSimular: true,
+    modo: leerModo(),
+    pieza: "repetidor",
   };
+}
+
+/* ───────────── Modo de la pantalla (preferencia aparte del escenario) ───────────── */
+
+export const CLAVE_MODO = "simulador-cobertura-modo";
+
+/** Al abrir, el modo «Sembrar la malla» salvo que el usuario haya elegido el avanzado. */
+export function leerModo(): ModoApp {
+  try {
+    return window.localStorage.getItem(CLAVE_MODO) === "avanzado" ? "avanzado" : "sembrar";
+  } catch {
+    return "sembrar";
+  }
+}
+
+export function guardarModo(m: ModoApp) {
+  try {
+    window.localStorage.setItem(CLAVE_MODO, m);
+  } catch {
+    // Sin almacenamiento: el modo vale solo para esta visita.
+  }
 }
 
 /** Lee lo guardado; null si no hay nada o el navegador no permite almacenamiento. */
