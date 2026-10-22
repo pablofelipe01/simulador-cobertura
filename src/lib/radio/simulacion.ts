@@ -1,5 +1,5 @@
 // Orquesta una simulación completa: relieve → cobertura → enlaces → malla → factibilidad.
-import { presetPorId, RADIO_EFECTIVO_M, ZOOM_RELIEVE } from "./constantes";
+import { presetPorId, RADIO_EFECTIVO_M, UMBRAL_CONFIABLE_DB, UMBRAL_SERVICIO_DB, ZOOM_RELIEVE } from "./constantes";
 import { calcularCobertura, cajaDeEstudio, crearMalla } from "./cobertura";
 import { perdidaEntorno } from "./entorno";
 import { distanciaM, metrosPorGrado, rumbo } from "./geo";
@@ -11,7 +11,9 @@ import { calculoRed, completarParametros, resumenRed } from "./red";
 import { relieveDesdeHgt, relieveDesdeTeselas, relievePlano, type CargarTesela, type ColeccionHgt, type Relieve } from "./relieve";
 import { cajaDiseno, disenar, type Diseno, type PedidoDiseno } from "./diseno";
 import { cajaSiembra, sembrar as proponerSiembra, type PedidoSiembra, type Siembra } from "./siembra";
-import type { Antena, Caja, FuenteRelieve, InformeEnlace, Parametros, Perfil, PerfilTerreno, PuntoPerfil, ResultadoSimulacion } from "./tipos";
+import { ajustar, cajaAjuste, type Ajuste, type PedidoAjuste } from "./ajuste";
+import { coberturaEnArea, porcentajeSobre } from "./area";
+import type { Antena, AreaObjetivo, Caja, CoberturaAreaObjetivo, FuenteRelieve, InformeEnlace, Parametros, Perfil, PerfilTerreno, PuntoPerfil, ResultadoSimulacion } from "./tipos";
 import { geometriaTrayecto, perdidasTrayecto } from "./trayecto";
 
 export type Contexto = {
@@ -43,7 +45,7 @@ export function olvidarRelieve() {
   ultimo = null;
 }
 
-export async function simular(id: number, todas: Antena[], parametros: Parametros, fuente: FuenteRelieve, ctx: Contexto): Promise<ResultadoSimulacion | null> {
+export async function simular(id: number, todas: Antena[], parametros: Parametros, fuente: FuenteRelieve, ctx: Contexto, area: AreaObjetivo | null = null): Promise<ResultadoSimulacion | null> {
   const inicio = performance.now();
   const p = completarParametros(parametros);
   const activas = todas.filter((a) => a.activa);
@@ -68,6 +70,9 @@ export async function simular(id: number, todas: Antena[], parametros: Parametro
   ctx.progreso?.("enlaces", 0);
   const enlaces = calcularEnlaces(activas, p, relieve);
   const analisis = analizarMalla(activas, enlaces, p.limiteSaltos);
+  const apc = cobertura.areaPorClase;
+  const porcentajeUtil = cobertura.areaEstudioKm2 > 0 ? (100 * (apc.buena + apc.estable + apc.media)) / cobertura.areaEstudioKm2 : 0;
+  const areaObjetivo = area && area.puntos.length >= 3 ? coberturaObjetivo({ malla, mejor: cobertura.mejor, segundo: cobertura.segundo }, area) : null;
   const factibilidad = evaluarFactibilidad({
     antenas: activas,
     parametros: p,
@@ -76,6 +81,8 @@ export async function simular(id: number, todas: Antena[], parametros: Parametro
     porcentajeServicio: cobertura.porcentajeServicio,
     porcentajeConfiable: cobertura.porcentajeConfiable,
     porcentajeRespaldo: cobertura.porcentajeRespaldo,
+    porcentajeUtil,
+    objetivo: areaObjetivo,
   });
   ctx.progreso?.("enlaces", 1);
   const presupuestos = antenas.map((a) => presupuestoCobertura(a, p));
@@ -92,7 +99,9 @@ export async function simular(id: number, todas: Antena[], parametros: Parametro
     areaPorClase: cobertura.areaPorClase,
     porcentajeServicio: cobertura.porcentajeServicio,
     porcentajeConfiable: cobertura.porcentajeConfiable,
+    porcentajeUtil,
     porcentajeRespaldo: cobertura.porcentajeRespaldo,
+    areaObjetivo,
     enlaces,
     nodos: analisis.nodos,
     factibilidad,
@@ -261,6 +270,30 @@ export async function sembrarMalla(pedido: PedidoSiembra, fuente: FuenteRelieve,
   const caja = cajaSiembra(pedido.origenes, pedido.destinos);
   const relieve = await obtenerRelieve(caja, fuente, ctx);
   return proponerSiembra(pedido, relieve, caja);
+}
+
+/** Cobertura dentro del área objetivo, celda por celda del mapa, frente a su meta. */
+function coberturaObjetivo(r: Pick<ResultadoSimulacion, "malla" | "mejor" | "segundo">, area: AreaObjetivo): CoberturaAreaObjetivo {
+  const c = coberturaEnArea(r as ResultadoSimulacion, area.puntos);
+  const util = area.respaldo ? porcentajeSobre(coberturaEnArea(r as ResultadoSimulacion, area.puntos, "segundo"), area.margenDb) : porcentajeSobre(c, area.margenDb);
+  return {
+    nombre: area.nombre,
+    metaPct: area.metaPct,
+    margenDb: area.margenDb,
+    respaldo: Boolean(area.respaldo),
+    areaKm2: c.areaKm2,
+    utilPct: util,
+    confiablePct: porcentajeSobre(c, UMBRAL_CONFIABLE_DB),
+    servicioPct: porcentajeSobre(c, UMBRAL_SERVICIO_DB),
+    porClase: c.porClase,
+    fueraKm2: c.fueraKm2,
+  };
+}
+
+/** Ajuste inteligente: la red factible con la mejor relación cobertura–costo (opciones y análisis). */
+export async function ajustarRed(pedido: PedidoAjuste, fuente: FuenteRelieve, ctx: Contexto): Promise<Ajuste> {
+  const relieve = await obtenerRelieve(cajaAjuste(pedido), fuente, ctx);
+  return ajustar(pedido, relieve);
 }
 
 /** Diseño de la malla por área: gateway y repetidores para cubrir el polígono con la señal pedida. */

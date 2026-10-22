@@ -79,13 +79,32 @@ export type Parametros = {
 
 export type TipoMedicion = "linea" | "trayecto" | "area";
 
-/** Medición de la regla: puntos [lon, lat] en WGS84. */
+/** Meta de un área objetivo: margen que debe tener cada punto (30 = señal media o mejor) y en qué % del área. */
+export type ObjetivoArea = { metaPct: number; margenDb: number; respaldo?: boolean };
+
+/** Medición de la regla: puntos [lon, lat] en WGS84. Un área puede ser el área objetivo de la red. */
 export type Medicion = {
   id: string;
   nombre: string;
   tipo: TipoMedicion;
   puntos: [number, number][];
   visible: boolean;
+  /** Área objetivo: la factibilidad mide la cobertura aquí y contra esta meta (una sola por escenario). */
+  objetivo?: ObjetivoArea;
+};
+
+/** Área objetivo tal como la recibe el motor. */
+export type AreaObjetivo = ObjetivoArea & { nombre: string; puntos: [number, number][] };
+
+/** Cobertura dentro del área objetivo, por clase (% del área) y frente a su meta. */
+export type CoberturaAreaObjetivo = ObjetivoArea & {
+  nombre: string;
+  areaKm2: number;
+  utilPct: number;
+  confiablePct: number;
+  servicioPct: number;
+  porClase: Record<ClaseId, number>;
+  fueraKm2: number;
 };
 
 export type Escenario = {
@@ -206,8 +225,12 @@ export type ResultadoSimulacion = {
   areaPorClase: AreaPorClase;
   porcentajeServicio: number;
   porcentajeConfiable: number;
+  /** % del área de estudio con señal media o mejor (≥ 30 dB): la cobertura útil. */
+  porcentajeUtil: number;
   /** % del área con al menos dos antenas confiables (respaldo). */
   porcentajeRespaldo: number;
+  /** Cobertura dentro del área objetivo (si el escenario tiene una). */
+  areaObjetivo?: CoberturaAreaObjetivo | null;
   enlaces: Enlace[];
   nodos: NodoMalla[];
   factibilidad: Factibilidad;

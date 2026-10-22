@@ -1,7 +1,7 @@
 // Motor de cálculo en segundo plano: descarga y decodifica el relieve, y simula sin bloquear la interfaz.
 import type { Entrada, Salida } from "./protocolo";
 import { ColeccionHgt, decodificarTerrarium, leerHgt } from "./relieve";
-import { disenarMallaArea, inspeccionar, olvidarRelieve, perfil, perfilTerreno, sembrarMalla, simular, type Contexto } from "./simulacion";
+import { ajustarRed, disenarMallaArea, inspeccionar, olvidarRelieve, perfil, perfilTerreno, sembrarMalla, simular, type Contexto } from "./simulacion";
 import type { FuenteRelieve } from "./tipos";
 
 const alcance = self as unknown as {
@@ -88,7 +88,7 @@ alcance.onmessage = async (e) => {
     switch (m.tipo) {
       case "simular": {
         simulacionActual = m.id;
-        const r = await simular(m.id, m.antenas, m.parametros, m.relieve, contexto(m.id, m.relieve, true));
+        const r = await simular(m.id, m.antenas, m.parametros, m.relieve, contexto(m.id, m.relieve, true), m.area ?? null);
         if (!r) {
           alcance.postMessage({ tipo: "cancelado", id: m.id });
           return;
@@ -114,6 +114,11 @@ alcance.onmessage = async (e) => {
       case "sembrar": {
         const r = await sembrarMalla(m.pedido, m.relieve, contexto(m.id, m.relieve, false));
         alcance.postMessage({ tipo: "siembra", id: m.id, siembra: r });
+        return;
+      }
+      case "ajustar": {
+        const r = await ajustarRed(m.pedido, m.relieve, contexto(m.id, m.relieve, false));
+        alcance.postMessage({ tipo: "ajuste", id: m.id, ajuste: r });
         return;
       }
       case "disenar": {

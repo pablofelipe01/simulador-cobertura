@@ -1,5 +1,5 @@
 // Enlaces entre nodos, comportamiento de la red mesh (saltos, puntos críticos) y factibilidad.
-import { BANDA_LIBRE_MHZ, DISTANCIA_MINIMA_M, ENLACES, presetPorId, UMBRAL_CONFIABLE_DB } from "./constantes";
+import { BANDA_LIBRE_MHZ, DISTANCIA_MINIMA_M, ENLACES, META_UTIL_ESTUDIO_PCT, presetPorId, UMBRAL_CONFIABLE_DB, UMBRAL_UTIL_DB } from "./constantes";
 import { perdidaEntorno } from "./entorno";
 import { distanciaM, rumbo } from "./geo";
 import { claseEnlace, longitudOnda, presupuestoEnlace } from "./modelo";
@@ -11,6 +11,7 @@ import { geometriaTrayecto, perdidasTrayecto } from "./trayecto";
 import type { Antena, Enlace, Factibilidad, NodoMalla, Parametros } from "./tipos";
 
 const fmt = (n: number, d = 1) => n.toFixed(d).replace(".", ",");
+const fmtMeta = (n: number) => (Number.isInteger(n) ? String(n) : n >= 99.95 && n < 100 ? "99,9" : n.toFixed(1).replace(".", ","));
 
 /** Enlace entre dos nodos con el relieve real: margen de cada sentido y el mínimo de ambos (dB). */
 export function enlaceEntre(a: Antena, b: Antena, p: Parametros, relieve: Relieve, red = calculoRed(p), lambda = longitudOnda(p.frecuenciaMhz)): Enlace {
@@ -177,6 +178,9 @@ export function analizarMalla(antenas: Antena[], enlaces: Enlace[], limiteSaltos
   return { nodos, troncales: [...usados.values()] };
 }
 
+/** Cobertura dentro del área objetivo (si la hay), con su meta. */
+export type CoberturaObjetivo = { nombre: string; metaPct: number; margenDb: number; utilPct: number; confiablePct: number; servicioPct: number };
+
 type DatosFactibilidad = {
   antenas: Antena[];
   parametros: Parametros;
@@ -185,10 +189,23 @@ type DatosFactibilidad = {
   porcentajeServicio: number;
   porcentajeConfiable: number;
   porcentajeRespaldo: number;
+  /** % del área de estudio con señal media o mejor (≥ 30 dB). */
+  porcentajeUtil: number;
+  /** Con un área objetivo, la cobertura se evalúa ahí y contra su meta. */
+  objetivo?: CoberturaObjetivo | null;
 };
 
+const nombreSenal = (margenDb: number) => (margenDb >= 45 ? "señal buena" : margenDb >= UMBRAL_CONFIABLE_DB ? "señal estable o mejor" : margenDb >= UMBRAL_UTIL_DB ? "señal media o mejor" : "servicio");
+
 export function evaluarFactibilidad(d: DatosFactibilidad): Factibilidad {
-  const { antenas, parametros: p, enlaces, analisis, porcentajeConfiable, porcentajeServicio } = d;
+  const { antenas, parametros: p, enlaces, analisis } = d;
+  // Cobertura útil (señal media o mejor) en el área objetivo, si la hay, o en el área de estudio
+  const obj = d.objetivo ?? null;
+  const util = obj ? obj.utilPct : d.porcentajeUtil;
+  const confiable = obj ? obj.confiablePct : d.porcentajeConfiable;
+  const servicio = obj ? obj.servicioPct : d.porcentajeServicio;
+  const meta = obj ? obj.metaPct : META_UTIL_ESTUDIO_PCT;
+  const margenUtil = obj ? obj.margenDb : UMBRAL_UTIL_DB;
   const nombre = new Map(antenas.map((a) => [a.id, a.nombre]));
   const nodo = new Map(analisis.nodos.map((n) => [n.id, n]));
   const pasarelas = antenas.filter((a) => a.pasarela);
@@ -240,9 +257,9 @@ export function evaluarFactibilidad(d: DatosFactibilidad): Factibilidad {
             : "No aplica (un solo nodo).",
     },
     {
-      nombre: "Cobertura confiable ≥ 60 % del área",
-      ok: porcentajeConfiable >= 60,
-      detalle: `${fmt(porcentajeConfiable)} % confiable (≥ ${UMBRAL_CONFIABLE_DB} dB) · ${fmt(porcentajeServicio)} % con servicio.`,
+      nombre: obj ? `Cobertura útil ≥ ${fmtMeta(meta)} % del área objetivo` : `Cobertura útil ≥ ${META_UTIL_ESTUDIO_PCT} % del área de estudio`,
+      ok: util >= meta - 1e-9,
+      detalle: `${fmt(util)} %${obj ? ` de «${obj.nombre}»` : ""} con ${nombreSenal(margenUtil)} (≥ ${margenUtil} dB) · ${fmt(confiable)} % confiable (≥ ${UMBRAL_CONFIABLE_DB} dB) · ${fmt(servicio)} % con servicio.`,
     },
     {
       nombre: "Sin puntos únicos de falla",
@@ -305,12 +322,12 @@ export function evaluarFactibilidad(d: DatosFactibilidad): Factibilidad {
   for (const a of criticos) {
     recomendaciones.push(`${a.nombre} es un punto único de falla: si se apaga, otros nodos pierden la pasarela. Agregue un enlace alterno que la rodee.`);
   }
-  if (porcentajeConfiable < 60) {
+  if (util < meta - 1e-9) {
     const sugerencia =
       preset.id === "LONG_FAST" || preset.id === "LONG_MODERATE" || preset.id === "LONG_SLOW"
-        ? "Agregue nodos antena en las zonas naranja y roja o eleve los existentes."
-        : `Agregue nodos antena o eleve los existentes; el preset Long Fast da ${fmt(presetPorId(p.preset).sensibilidadDbm - presetPorId("LONG_FAST").sensibilidadDbm)} dB más de margen que ${preset.nombre}.`;
-    recomendaciones.push(`La cobertura confiable es ${fmt(porcentajeConfiable)} % del área de estudio. ${sugerencia}`);
+        ? "Agregue nodos antena en las zonas naranja y roja o eleve los existentes"
+        : `Agregue nodos antena o eleve los existentes; el preset Long Fast da ${fmt(presetPorId(p.preset).sensibilidadDbm - presetPorId("LONG_FAST").sensibilidadDbm)} dB más de margen que ${preset.nombre}`;
+    recomendaciones.push(`La cobertura útil (${nombreSenal(margenUtil)}) es ${fmt(util)} % ${obj ? `de «${obj.nombre}»` : "del área de estudio"} y la meta es ${fmtMeta(meta)} %. ${sugerencia}, o use «Ajústamelo automáticamente».`);
   }
   if (pasarelas.length === 1 && antenas.length > 3) recomendaciones.push("Hay una sola pasarela: una segunda pasarela da respaldo si la primera falla.");
   if (p.frecuenciaMhz < BANDA_LIBRE_MHZ.min || p.frecuenciaMhz > BANDA_LIBRE_MHZ.max) {
@@ -321,11 +338,11 @@ export function evaluarFactibilidad(d: DatosFactibilidad): Factibilidad {
     (conectada ? 30 : desconectadas.length < antenas.length ? 10 : 0) +
       (criterios[2].ok ? 15 : 5) +
       (criterios[3].ok ? 20 : 10) +
-      Math.min(25, (porcentajeConfiable / 60) * 25) +
+      Math.min(25, (util / meta) * 25) +
       (criterios[5].ok ? 10 : 4),
   );
   let nivel: Factibilidad["nivel"];
-  if (!conectada || porcentajeServicio < 30) nivel = "no-factible";
+  if (!conectada || servicio < 30) nivel = "no-factible";
   else if (criterios.slice(0, 5).every((c) => c.ok)) nivel = "factible";
   else nivel = "ajustes";
   const titulo = { factible: "Factible", ajustes: "Factible con ajustes", "no-factible": "No factible todavía" }[nivel];
