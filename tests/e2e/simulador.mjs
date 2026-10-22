@@ -783,6 +783,41 @@ await flujo(
 );
 
 await flujo(
+  "melki-agente",
+  async (page, foto) => {
+    await esperarRed(page);
+    await page.getByRole("button", { name: /Abrir a Melki/ }).click();
+    const chat = page.getByRole("region", { name: "Conversación con Melki" });
+    const decir = async (t) => {
+      await chat.getByLabel("Pregunta para Melki").fill(t);
+      await page.keyboard.press("Enter");
+    };
+    // La orden de Giancarlo, tal cual: diseño de la malla para 11.226 ha al 99,9 % con señal media o mejor
+    await decir(
+      "Hola corazón puedes ayudarme con algo viene siendo algo muy sencillo necesito que me armes una red que cubra un área de 11.000 hectáreas bueno al hacer exactos 11.226 una malla completa que cubre esa área con repetidores queden para que el 99.9% de esa área que una señal entre buena estable y media",
+    );
+    await chat.getByText(/^Diseño la malla para 11\.226 ha/).waitFor({ timeout: 20000 });
+    await chat.getByText(/^(Listo: la malla cubre|Llegué al)/).waitFor({ timeout: 240000 });
+    const final = await chat.locator("[data-mensaje]").last().innerText();
+    afirmar(/^Listo: la malla cubre el (99,9|100) %/.test(final) && /Meta cumplida \(99,9 %\)/.test(final) && /Dentro del área: buena/.test(final), `Diseño: ${final.slice(0, 200)}`);
+    await foto("diseno");
+    // Varias órdenes en un mensaje, con posiciones relativas y referencias («la persona»)
+    await decir("pon una persona a 3 km al sur del gateway y envía un mensaje desde la persona");
+    await chat.getByText(/^Paso 1 de 2: Listo: puse la persona/).waitFor({ timeout: 30000 });
+    await chat.getByText(/^Paso 2 de 2: Envié un mensaje de texto de 40 caracteres desde «Persona 1»/).waitFor({ timeout: 120000 });
+    await chat.getByText(/^Listo, hice los 2 pasos/).waitFor({ timeout: 30000 });
+    await decir("muestra las vías y quita los ríos");
+    await chat.getByText(/^Paso 2 de 2: Listo: el mapa ya no muestra los ríos/).waitFor({ timeout: 30000 });
+    await decir("borra todas las personas");
+    await chat.getByText(/^Borré 1 nodo \(todas las personas\): Persona 1/).waitFor({ timeout: 30000 });
+    await decir("hazme el café por favor");
+    await chat.getByText(/no logré convertirlo en una orden/).waitFor({ timeout: 10000 });
+    await foto("chat");
+  },
+  { sembrar: true },
+);
+
+await flujo(
   "tour-sembrar",
   async (page, foto) => {
     await esperarRed(page);

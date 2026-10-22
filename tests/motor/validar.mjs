@@ -23,6 +23,10 @@ export { presetPorId } from "./src/lib/radio/constantes";
 export { sembrar, cajaSiembra } from "./src/lib/radio/siembra";
 export { estadoRed, piezaDe, consejoRed } from "./src/lib/radio/estado-red";
 export { alcancePlanoKm } from "./src/lib/radio/alcance-plano";
+export { Relieve } from "./src/lib/radio/relieve";
+export { evaluadorMargen, calcularCobertura, crearMalla } from "./src/lib/radio/cobertura";
+export { disenar, cajaDiseno } from "./src/lib/radio/diseno";
+export { poligonoCirculo, poligonoRectangulo, conArea, radioDeArea, areaM2, dentroPoligono, coberturaEnArea, porcentajeSobre, celdasEnPoligono } from "./src/lib/radio/area";
 `;
 const tmp = mkdtempSync(path.join(os.tmpdir(), "motor-"));
 const archivo = path.join(tmp, "motor.mjs");
@@ -229,6 +233,67 @@ caso("Sin D, todas conectadas", sinD.nodos.every((n) => n.saltos !== null));
   caso("Alcance en plano: repetidor de 15 m a la gente ≈ 15 km y crece con la torre", cerca(a15, 14.8, 0.6) && a6 < a15 && a15 < a30, `${a6} · ${a15} · ${a30} km`);
   caso("Alcance en plano entre repetidores (≥ 30 dB) mayor que a la gente", m.alcancePlanoKm(rep(15), rep(15), p, 30) > a15);
   caso("Guía: con todos conectados, felicita", consejo([gateway, { ...persona, id: "cerca", nombre: "Cercana", ...m.desplazar(4.2, -73.37, 2000, 90) }], simCerca, true).tono === "ok");
+}
+
+// Diseño de la malla por área (v10): polígonos, cobertura dentro del área y siembra de repetidores
+{
+  const base = { tipo: "antena", alturaM: 15, potenciaDbm: 22, gananciaDbi: 5.8, perdidaCableDb: 1, equipo: "nodo-solar-58", rol: "ROUTER", activa: true };
+  const gateway = { ...base, id: "g", nombre: "Gateway", lat: 4.2, lon: -73.37, alturaM: 8, pasarela: true };
+  const repetidor = { ...base, id: "r", nombre: "Repetidor", lat: 0, lon: 0, pasarela: false };
+  const pd = m.completarParametros({ preset: "LONG_FAST", frecuenciaMhz: 915, alturaRxM: 1.5, gananciaRxDbi: 2, perdidaExtraDb: 0, radioKm: 15, resolucion: "normal", limiteSaltos: 3 });
+  const objetivo = 11226e4;
+  const area = m.conArea(m.poligonoCirculo(4.2, -73.37, m.radioDeArea(objetivo)), objetivo);
+  caso("Área objetivo de 11.226 ha medida igual que la regla", cerca(m.areaM2(area), objetivo, 1), `${(m.areaM2(area) / 1e4).toFixed(1)} ha`);
+  caso("Punto dentro y fuera del área", m.dentroPoligono(-73.37, 4.2, area) && !m.dentroPoligono(-73.2, 4.2, area));
+  const rect = m.poligonoRectangulo(4.2, -73.37, 10000, 12000);
+  caso("Rectángulo de 10 × 12 km ≈ 120 km²", cerca(m.areaM2(rect) / 1e6, 120, 1.5), (m.areaM2(rect) / 1e6).toFixed(2));
+
+  // Relieve sintético con lomas y hondonadas (sin descargas)
+  const cajaL = m.cajaDiseno(area, []);
+  const z = 12;
+  const x0 = Math.floor(m.lonAPixel(cajaL.oeste, z)) - 4;
+  const y0 = Math.floor(m.latAPixel(cajaL.norte, z)) - 4;
+  const an = Math.ceil(m.lonAPixel(cajaL.este, z)) + 4 - x0;
+  const al = Math.ceil(m.latAPixel(cajaL.sur, z)) + 4 - y0;
+  const datos = new Float32Array(an * al);
+  for (let j = 0; j < al; j++) for (let i = 0; i < an; i++) datos[j * an + i] = 250 + 25 * Math.sin(i / 7) * Math.cos(j / 9) + 60 * Math.exp(-((i - an * 0.7) ** 2 + (j - al * 0.3) ** 2) / 300) - 40 * Math.exp(-((i - an * 0.3) ** 2 + (j - al * 0.6) ** 2) / 200);
+  const lomas = new m.Relieve(z, x0, y0, an, al, datos, { fuente: "teselas", solicitadas: 1, fallidas: 0, resolucionM: 38 });
+
+  // El evaluador por puntos coincide con la celda del mapa
+  const malla = m.crearMalla([gateway], pd);
+  const cob = await m.calcularCobertura([gateway], pd, lomas, malla);
+  const ev = m.evaluadorMargen(gateway, pd, lomas);
+  let maxDif = 0;
+  for (let k = 0; k < 400; k++) {
+    const j = Math.floor((k * 7919) % malla.alto);
+    const i = Math.floor((k * 104729) % malla.ancho);
+    const v = cob.porAntena[j * malla.ancho + i];
+    if (v === -128) continue;
+    maxDif = Math.max(maxDif, Math.abs(Math.round(ev(malla.lats[j], malla.lons[i])) - v));
+  }
+  caso("El margen por punto del diseño es el mismo de cada celda del mapa", maxDif <= 1, `máx. ${maxDif} dB`);
+
+  const pedido = { area, margenObjetivoDb: 30, porcentajeObjetivo: 99.9, existentes: [], gateway, repetidor, parametros: pd };
+  const plano = m.disenar(pedido, m.relievePlano(m.cajaDiseno(area, [])), m.cajaDiseno(area, []));
+  caso("Terreno plano: con el gateway solo se cubre el 99,9 % (sin repetidores)", plano.alcanzado && plano.nodos.length === 1 && plano.nodos[0].pieza === "gateway", `${plano.coberturaPct.toFixed(2)} %`);
+  const respaldo = m.disenar({ ...pedido, respaldo: true }, m.relievePlano(m.cajaDiseno(area, [])), m.cajaDiseno(area, []));
+  caso("Con respaldo hace falta al menos un repetidor (dos nodos por punto)", respaldo.alcanzado && respaldo.nodos.some((n) => n.pieza === "repetidor"), `${respaldo.nodos.length - 1} repetidor(es)`);
+
+  const t0 = performance.now();
+  const d = m.disenar(pedido, lomas, cajaL);
+  const segundos = (performance.now() - t0) / 1000;
+  const reps = d.nodos.filter((n) => n.pieza === "repetidor");
+  caso("Con lomas: siembra repetidores hasta la meta del 99,9 %", d.alcanzado && reps.length >= 3, `${reps.length} repetidores, ${d.coberturaPct.toFixed(2)} %, ${segundos.toFixed(1)} s`);
+  caso("Cada repetidor enlazado a la red (≥ 22 dB) y dentro del límite de saltos", reps.every((n) => n.enlaceDb >= 22 && n.saltos <= pd.limiteSaltos));
+  const ants = d.nodos.map((n) => ({ ...(n.pieza === "gateway" ? gateway : repetidor), id: n.id, nombre: n.id, lat: n.lat, lon: n.lon }));
+  const mallaD = m.crearMalla(ants, pd);
+  const cobD = await m.calcularCobertura(ants, pd, lomas, mallaD);
+  const real = m.porcentajeSobre(m.coberturaEnArea({ malla: mallaD, mejor: cobD.mejor, segundo: cobD.segundo }, area), 30);
+  caso("La simulación confirma la meta dentro del área (celda por celda)", real >= 99.9 && Math.abs(real - d.coberturaPct) < 0.05, `${real.toFixed(3)} % en el mapa, ${d.coberturaPct.toFixed(3)} % estimado`);
+  const corto = m.disenar({ ...pedido, maxRepetidores: 2 }, lomas, cajaL);
+  caso("Con un máximo de repetidores avisa que no alcanzó la meta", !corto.alcanzado && /máximo de 2/.test(corto.motivo ?? "") && corto.huecos.length > 0, `${corto.coberturaPct.toFixed(1)} %`);
+  const existentes = m.disenar({ ...pedido, existentes: [gateway], gateway: null }, lomas, cajaL);
+  caso("Usa el gateway que ya existe y no pone otro", existentes.nodos.every((n) => n.pieza === "repetidor") && existentes.alcanzado);
 }
 
 console.log(fallos ? `\n✗ ${fallos} caso(s) con fallo` : "\n✓ Motor verificado");

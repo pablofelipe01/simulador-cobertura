@@ -29,6 +29,14 @@ Ejemplo apuntando a Torre 2», «simula con vegetación densa», «muestra la se
     «Animar el flujo de la información» y respeta la opción del sistema de reducir el movimiento
   - «Cómo se juega» y alcance de referencia en terreno plano (gateway → gente, repetidor → gente según la torre,
     repetidor ↔ repetidor), como el «hasta 10 km» de Trama
+- **Melki agente** (cerebro local, sin servicios externos): diseña la malla para un área («ármame una malla que cubra
+  11.226 hectáreas con señal media o mejor en el 99,9 %», «cubre 5 km a la redonda de Cumaral», «cubre el área que
+  medí con respaldo», «con repetidores de 20 m», «máximo 15 repetidores»), entiende varias órdenes en un mensaje
+  («pon el gateway en 4.2, -73.37, luego un repetidor a 10 km al este y envía un mensaje desde la persona»),
+  posiciones relativas («a 8 km al norte del gateway»), municipios («en Villavicencio»), referencias («súbelo a
+  25 m», «la persona»), órdenes en lote («sube todos los repetidores a 20 m», «borra todas las personas»), rol y
+  equipo de un nodo, capas y fondo del mapa, modos de cobertura, «simular al cambiar», relieve plano o real, nombre del
+  escenario, duplicar y seleccionar nodos, y su propia voz. Si no entiende un pedido de acción, lo dice y da ejemplos
 - **Nodos** (modo avanzado): *nodo antena* (infraestructura en mástil; genera la cobertura) y *nodo* de campo
   (portátil, sensor; participa en la malla)
 - **Funciones de Radio Mobile**: parámetros de red (clima, polarización, suelo, refractividad, modo estadístico y
@@ -79,7 +87,8 @@ src/
   lib/geo/                  consultas locales: municipio de un punto, búsqueda de lugares
   lib/radio/                motor: modelo, relieve, perfil, cobertura, malla, factibilidad, worker;
                             estado-red (piezas y guía), siembra (repetidores automáticos), mensaje (viaje por la malla),
-                            alcance-plano (alcance de referencia); components/simulador/animacion-malla.ts (flujo animado)
+                            alcance-plano (alcance de referencia), area (áreas objetivo y cobertura dentro de ellas),
+                            diseno (diseño de la malla por área); components/simulador/animacion-malla.ts (flujo animado)
   lib/config.ts             fuentes de mapas y relieve (reemplazables con variables de entorno)
 scripts/                    versión HTML, paquetes de avance y compresor ZIP
 tests/                      pruebas del motor y de extremo a extremo
@@ -133,6 +142,21 @@ confiable (≥ 37 dB).
   un abanico de ±45° (hasta 14 km por paso) el punto con enlace ≥ 30 dB (o ≥ 22 dB si no hay) que más avanza; entre
   los que avanzan al menos el 80 % de lo máximo, elige el de suelo más alto. Para cuando una persona en el destino
   queda con ≥ 20 dB; máximo 10 repetidores. Usa el mismo cálculo de enlaces y el mismo relieve que la simulación.
+
+### Diseño de la malla por área
+
+- **Área** (`src/lib/radio/area.ts`): círculo, cuadrado o rectángulo alrededor de un punto, del gateway o del centro
+  del mapa, escalado para medir exactamente lo pedido (igual que la regla), o el área dibujada con la regla. La
+  cobertura dentro del área se cuenta celda por celda del mapa (ponderada por su área), por clase de señal.
+- **Diseño** (`src/lib/radio/diseno.ts`, en el Web Worker): si no hay gateway, lo pone donde más área cubre cerca del
+  centro. Luego siembra repetidores uno a uno: entre ~300 sitios candidatos (una cuadrícula sobre el área y sus
+  alrededores) elige el que más área nueva deja con el margen pedido (30 dB = señal media o mejor), siempre que
+  enlace a la red con ≥ 30 dB (o ≥ 22 dB si no hay otro) dentro del límite de saltos; si un sitio útil no alcanza la
+  red, pone un relevo hacia él; si nada cubre lo que falta, prueba sitios en los huecos. Trabaja primero con ~3.000
+  puntos del área y después con las mismas celdas que pintará la simulación (hasta 40.000), con el mismo cálculo
+  del mapa, así que la meta estimada coincide con la simulada. «Respaldo» exige dos nodos con ese margen en cada
+  punto. Al terminar Melki pone los nodos, simula y cuenta la cobertura real por clase; si no llega, ofrece más
+  repetidores, torres más altas o ver un punto sin cobertura.
 
 Es una herramienta de planeación: confirme en campo con la prueba de alcance de Meshtastic antes de instalar.
 

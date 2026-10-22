@@ -96,6 +96,24 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
       - "Llévame a Villavicencio"   - "Activa la regla"   - "Deshaz"
     Cuando inscribe un nodo, simula y le cuenta el alcance. Cada cambio
     trae su botón "Deshacer".
+    Melki también diseña la red completa y entiende varias órdenes:
+      - "Ármame una malla que cubra 11.226 hectáreas con señal media o
+        mejor en el 99,9 %": dibuja el área, pone el gateway (si falta)
+        y siembra repetidores con el relieve real donde más área nueva
+        cubren, simula y dice cuánto quedó cubierto por clase de señal.
+        También: "cubre 5 km a la redonda de Cumaral", "un área cuadrada
+        de 2.000 ha", "cubre el área que medí", "con repetidores de
+        20 m", "máximo 15 repetidores", "con respaldo".
+      - Varias cosas en un mensaje: "pon el gateway en 4.2, -73.37,
+        luego un repetidor a 10 km al este y envía un mensaje desde la
+        persona". Al final ofrece "Deshacer todo".
+      - Posiciones y lugares: "a 8 km al norte del gateway", "en
+        Villavicencio"; "súbelo a 25 m" va al último nodo que tocó.
+      - En lote: "sube todos los repetidores a 20 m", "borra todas las
+        personas"; y "pon a Repetidor 2 como cliente".
+      - Mapa: "muestra las vías", "quita los ríos", "pon el mapa
+        topográfico", "muestra el respaldo", "muéstrame toda la red",
+        "apaga simular al cambiar", "activa tu voz".
  f) Regla (arriba del mapa): Línea (distancia y rumbo), Trayecto (varios
     puntos) o Área (área y perímetro). Clic en el mapa; doble clic o
     Enter para terminar. Cada medición se puede renombrar, ocultar,

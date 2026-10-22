@@ -1,7 +1,7 @@
 // Motor de cálculo en segundo plano: descarga y decodifica el relieve, y simula sin bloquear la interfaz.
 import type { Entrada, Salida } from "./protocolo";
 import { ColeccionHgt, decodificarTerrarium, leerHgt } from "./relieve";
-import { inspeccionar, olvidarRelieve, perfil, perfilTerreno, sembrarMalla, simular, type Contexto } from "./simulacion";
+import { disenarMallaArea, inspeccionar, olvidarRelieve, perfil, perfilTerreno, sembrarMalla, simular, type Contexto } from "./simulacion";
 import type { FuenteRelieve } from "./tipos";
 
 const alcance = self as unknown as {
@@ -114,6 +114,11 @@ alcance.onmessage = async (e) => {
       case "sembrar": {
         const r = await sembrarMalla(m.pedido, m.relieve, contexto(m.id, m.relieve, false));
         alcance.postMessage({ tipo: "siembra", id: m.id, siembra: r });
+        return;
+      }
+      case "disenar": {
+        const r = await disenarMallaArea(m.pedido, m.relieve, contexto(m.id, m.relieve, false));
+        alcance.postMessage({ tipo: "diseno", id: m.id, diseno: r });
         return;
       }
       case "cargar-hgt": {

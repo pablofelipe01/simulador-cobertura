@@ -619,7 +619,7 @@ export const TOURS: Tour[] = [
   {
     id: "melki",
     nombre: "Hablar con Melki",
-    detalle: "Pedirme cosas con sus palabras, dictarme por voz y deshacer.",
+    detalle: "Pedirme cosas con sus palabras (hasta una red completa), dictarme por voz y deshacer.",
     minutos: 2,
     practica: { escenario: () => renombrado(escenarioEjemplo(), "Práctica: hablar con Melki"), autoSimular: true },
     pasos: [
@@ -670,8 +670,15 @@ export const TOURS: Tour[] = [
         texto: "Por ejemplo: «¿es factible la red?», «¿qué significa el amarillo?», «llévame a Villavicencio», «mide la distancia entre Ejemplo y Antena 2» o «pon la confiabilidad alta».",
         asegurar: () => avisarMelki("abrir"),
       },
+      {
+        objetivo: "melki-chat",
+        lado: "izquierda",
+        titulo: "Pídame una red completa",
+        texto: "Dígame el área y la meta, y la diseño yo con el relieve real: «ármame una malla que cubra 1.000 hectáreas con señal media o mejor en el 99 %». También entiendo varias órdenes en un mensaje («pon un repetidor a 5 km al norte de Ejemplo y simula»), lugares («en Cumaral») y órdenes en lote («sube todos los repetidores a 20 m»).",
+        asegurar: () => avisarMelki("abrir"),
+      },
     ],
-    final: "Ya sabe pedirme cosas por escrito o por voz y deshacerlas. Aquí sigo cuando me necesite.",
+    final: "Ya sabe pedirme cosas por escrito o por voz, hasta una red completa, y deshacerlas. Aquí sigo cuando me necesite.",
   },
 ];
 

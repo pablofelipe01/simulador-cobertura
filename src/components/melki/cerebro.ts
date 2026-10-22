@@ -114,9 +114,29 @@ const TEMAS: Tema[] = [
     id: "capacidades",
     claves: ["que puedes hacer", "que sabes hacer", "que haces", "comandos", "ordenes", "en que me ayudas", "como me ayudas", "que me puedes ayudar"],
     responder: () => ({
-      texto:
-        "Puedo hacer cosas en el simulador si me lo pide con sus palabras. Para sembrar la malla: «pon el gateway en 4.2, -73.37», «agrega un repetidor en 4.25, -73.30 a 20 m», «pon una persona en 4.31, -73.22», «conecta a los que faltan», «lleva la red a Paratebueno», «envía un mensaje desde Persona 1», «¿qué hago ahora?» o «modo avanzado». En el modo avanzado: «inscribe un nodo antena en 4°30'44\" N 73°07'24\" O a 20 m», «mueve Ejemplo a 4.25, -73.40», «sube Ejemplo a 25 m», «marca Torre 2 como pasarela», «elimina Nodo 1», «usa Long Moderate», «radio de 12 km», «distancia entre Ejemplo y Torre 2», «perfil de Ejemplo a Torre 2», «señal en 4.21, -73.35», «llévame a Villavicencio», «¿en qué municipio está Ejemplo?», «activa la regla», «simula» o «exporta a Google Earth». También manejo las funciones de Radio Mobile: «confiabilidad del 90 %», «clima continental templado», «polarización horizontal», «suelo húmedo», «usa Longley-Rice», «ponle una Yagi a Ejemplo apuntando a Torre 2», «inclina Ejemplo 3° hacia abajo», «simula con vegetación densa», «muestra la señal en dBm» o «en µV», «colores arcoíris de -120 a -70 dBm» e «informe del enlace Ejemplo y Torre 2». Si prefiere hablar, toque el micrófono y revise el texto antes de enviarlo. Todo lo que hago se puede deshacer. Y si quiere aprender paso a paso, pídame un tour guiado.",
+      texto: [
+        "Manejo el simulador con sus palabras; puede pedirme varias cosas en un mismo mensaje y todo se puede deshacer. Por ejemplo:",
+        "• Diseñar una red: «ármame una malla que cubra 11.226 hectáreas con señal media o mejor en el 99,9 %», «cubre 500 ha alrededor de Cumaral con repetidores de 20 m», «cubre el área que medí con respaldo».",
+        "• Sembrar la malla: «pon el gateway en Cumaral», «agrega un repetidor a 8 km al norte del gateway», «pon una persona en 4.31, -73.22», «conecta a los que faltan», «envía un mensaje desde Persona 1», «¿qué hago ahora?».",
+        "• Varias órdenes seguidas: «pon el gateway en 4.2, -73.37, luego un repetidor a 10 km al este y simula».",
+        "• Nodos: «inscribe un nodo antena en 4°30'44\" N 73°07'24\" O a 20 m», «mueve Ejemplo 2 km al sur», «súbelo a 25 m» (el último que toqué), «sube todos los repetidores a 20 m», «borra todas las personas», «pon a Repetidor 2 como cliente», «marca Torre 2 como pasarela».",
+        "• Mapa: «muestra las vías», «quita los ríos», «pon el mapa topográfico», «muestra el respaldo», «muéstrame toda la red», «llévame a Villavicencio», «apaga simular al cambiar».",
+        "• Radio Mobile: «confiabilidad del 90 %», «usa Longley-Rice», «clima continental templado», «simula con vegetación densa», «ponle una Yagi a Ejemplo apuntando a Torre 2», «muestra la señal en dBm», «informe del enlace Ejemplo y Torre 2».",
+        "• Medir y exportar: «distancia entre Ejemplo y Torre 2», «perfil de Ejemplo a Torre 2», «señal en 4.21, -73.35», «¿cuánto cubre el área?», «exporta a Google Earth».",
+        "Si prefiere hablar, toque el micrófono y revise el texto antes de enviarlo. Y si quiere aprender paso a paso, pídame un tour guiado.",
+      ].join("\n"),
       acciones: [{ texto: "Ver los tours guiados", accion: "tours" }],
+    }),
+  },
+  {
+    id: "diseno",
+    claves: ["disenar la red", "disena la red", "cubrir un area", "cubrir el area", "hectareas", "cuantos repetidores necesito", "cuantos repetidores", "planificar la red", "diseno por area", "red para un area"],
+    responder: () => ({
+      texto: [
+        "Puedo diseñar la malla para un área: elijo dónde va el gateway (si aún no hay) y siembro repetidores, uno a uno, donde más área nueva cubren, siempre enlazados a la red (≥ 30 dB) y dentro del límite de saltos, con el relieve real. Al final simulo y le digo cuánto quedó cubierto por clase de señal.",
+        "Dígame el tamaño, la señal y la meta: «ármame una malla que cubra 11.226 hectáreas con señal media o mejor en el 99,9 %». También entiendo «cubre 5 km a la redonda de Cumaral», «un área cuadrada de 2.000 ha», «10 por 12 km», «cubre el área que medí», «con repetidores de 20 m», «máximo 15 repetidores» y «con respaldo» (cada punto con dos nodos).",
+        "Señal: buena ≥ 45 dB, estable ≥ 37 dB, media ≥ 30 dB, baja ≥ 20 dB; «entre buena, estable y media» es media o mejor. Si no dice dónde, uso el gateway o el centro del mapa que está viendo.",
+      ].join("\n"),
     }),
   },
   {
@@ -656,6 +676,11 @@ export function responder(pregunta: string, c: ContextoMelki): Respuesta {
     if (puntos > (mejor?.puntos ?? 0)) mejor = { tema, puntos };
   }
   if (especifica && (!mejor || ["saludo", "gracias", "malla", "altura"].includes(mejor.tema.id) || /alcance|ruta|llega|cubre|salto|area|como esta/.test(t))) return especifica;
+  // Un pedido de acción que no se entendió no se responde con un tema tomado al azar
+  if (!especifica && (!mejor || mejor.puntos < 4)) {
+    const ne = noEntendiOrden(pregunta);
+    if (ne) return ne;
+  }
   if (mejor && mejor.puntos >= 2) return mejor.tema.responder(c);
   if (/\b(hola|buenas|buenos dias|saludos)\b/.test(t)) {
     const r = TEMAS.find((x) => x.id === "capacidades")!.responder(c);
@@ -665,6 +690,27 @@ export function responder(pregunta: string, c: ContextoMelki): Respuesta {
     texto:
       "No estoy seguro de haber entendido. Puedo inscribir, mover o editar nodos con coordenadas, medir distancias, llevarlo a un municipio, explicar los colores, los enlaces y los saltos, o decirle por qué un nodo no llega a la pasarela. Pruebe: «¿qué puedes hacer?».",
     acciones: [{ texto: "Hacer el recorrido", accion: "recorrido" }],
+  };
+}
+
+/** ¿El mensaje pide hacer algo (aunque no se haya podido convertir en una orden)? */
+const PIDE_ACCION =
+  /\b(armame|arma|armar|disename|disena|disenar|creame|crea|crear|hazme|haz|ponme|pon|poner|cubreme|cubre|cubrir|agrega\w*|anade|mueve|borra|elimina|quita|sube|baja|cambia|configura|instala|necesito que|quiero que|me ayudas a|ayudame a)\b/;
+
+/** Respuesta cuando el mensaje parece una orden que no se pudo interpretar: en vez de un tema al azar, ejemplos útiles. */
+export function noEntendiOrden(pregunta: string): Respuesta | null {
+  const t = ` ${normalizar(pregunta)} `;
+  if (!PIDE_ACCION.test(t)) return null;
+  return {
+    texto: [
+      "Entendí que quiere que haga algo en el simulador, pero no logré convertirlo en una orden. Estas sí las hago de una:",
+      "• «ármame una malla que cubra 11.226 hectáreas con señal media o mejor en el 99,9 %»",
+      "• «pon el gateway en Cumaral» o «agrega un repetidor a 8 km al norte del gateway»",
+      "• «sube todos los repetidores a 20 m», «borra todas las personas»",
+      "• «muestra las vías», «llévame a Villavicencio», «simula»",
+      "Dígamelo con una de esas formas, o pregúnteme «¿qué puedes hacer?».",
+    ].join("\n"),
+    acciones: [{ texto: "Ver los tours guiados", accion: "tours" }],
   };
 }
 
