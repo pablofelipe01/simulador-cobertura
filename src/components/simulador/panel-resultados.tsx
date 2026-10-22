@@ -2,10 +2,10 @@
 
 // Resultado de la simulación: factibilidad, cobertura por clase, nodos antena (rango de alcance), nodos de campo,
 // enlaces, recomendaciones y cómo se calculó.
-import { Check, ChevronDown, Route, TriangleAlert, X } from "lucide-react";
+import { Check, ChevronDown, Route, Target, TriangleAlert, X } from "lucide-react";
 import { useState } from "react";
 
-import { CLASES, ENLACES, ERROR_MODELO_DB, presetPorId, UMBRAL_CONFIABLE_DB, UMBRAL_SERVICIO_DB } from "@/lib/radio/constantes";
+import { CLASES, ENLACES, ERROR_MODELO_DB, META_UTIL_ESTUDIO_PCT, presetPorId, UMBRAL_CONFIABLE_DB, UMBRAL_SERVICIO_DB, UMBRAL_UTIL_DB } from "@/lib/radio/constantes";
 import { entornoPorId, perdidaEntorno } from "@/lib/radio/entorno";
 import { esDireccional } from "@/lib/radio/patron";
 import { CLIMAS, esReferencia } from "@/lib/radio/red";
@@ -13,6 +13,7 @@ import { alcanceSinObstaculosKm, espacioLibre } from "@/lib/radio/modelo";
 import type { Antena, Parametros, ResultadoSimulacion } from "@/lib/radio/tipos";
 
 import { COLORES_ANTENA } from "./capa-cobertura";
+import { AjusteAutomatico, type FaseAjuste } from "./panel-ajuste";
 import { IconoEquipo, IconoTorre } from "./icono-torre";
 import { fmt, Titulo } from "./ui";
 
@@ -23,7 +24,20 @@ type Props = {
   desactualizado: boolean;
   calculando: boolean;
   onPerfil: (tx: Antena, destino: Antena) => void;
+  /** Ajuste automático («Ajústamelo automáticamente» / «Optimizar la red»). */
+  ajuste: FaseAjuste;
+  onAjustar: () => void;
+  onElegirAjuste: (i: number) => void;
+  onAplicarAjuste: () => void;
+  onDescartarAjuste: () => void;
+  onDeshacerAjuste: () => void;
+  /** Quitar el área objetivo (volver a medir en el área de estudio). */
+  onQuitarObjetivo: () => void;
 };
+
+/** Porcentaje como lo lee la gente: 99,9 sin redondear a 100 y sin decimales cuando sobran. */
+const fmtPct = (v: number) => (v >= 99.95 && v < 100 ? "99,9" : v >= 99.5 ? fmt(Math.floor(v * 10) / 10, 1) : fmt(v, 0));
+const fmtMeta = (v: number) => (Number.isInteger(v) ? String(v) : v >= 99.95 && v < 100 ? "99,9" : fmt(v, 1));
 
 const NIVELES = [
   { id: "no-factible", texto: "No factible", color: "#D93A2E" },
@@ -31,7 +45,7 @@ const NIVELES = [
   { id: "factible", texto: "Factible", color: "#1E7B34" },
 ] as const;
 
-export function PanelResultados({ resultado: r, antenas, parametros, desactualizado, calculando, onPerfil }: Props) {
+export function PanelResultados({ resultado: r, antenas, parametros, desactualizado, calculando, onPerfil, ajuste, onAjustar, onElegirAjuste, onAplicarAjuste, onDescartarAjuste, onDeshacerAjuste, onQuitarObjetivo }: Props) {
   const [verTodos, setVerTodos] = useState(false);
   if (!r) {
     return (
@@ -46,6 +60,8 @@ export function PanelResultados({ resultado: r, antenas, parametros, desactualiz
   const f = r.factibilidad;
   const nivel = NIVELES.find((n) => n.id === f.nivel)!;
   const enlacesVisibles = verTodos ? r.enlaces : r.enlaces.filter((e) => e.clase !== "sin").slice(0, 12);
+  const obj = r.areaObjetivo ?? null;
+  const porClase = (id: (typeof CLASES)[number]["id"]) => (obj ? obj.porClase[id] : r.areaEstudioKm2 > 0 ? (100 * r.areaPorClase[id]) / r.areaEstudioKm2 : 0);
 
   return (
     <div className={`space-y-5 transition-opacity ${desactualizado ? "opacity-60" : ""}`}>
@@ -83,33 +99,60 @@ export function PanelResultados({ resultado: r, antenas, parametros, desactualiz
             </li>
           ))}
         </ul>
+        <AjusteAutomatico nivel={f.nivel} ajuste={ajuste} onAjustar={onAjustar} onElegir={onElegirAjuste} onAplicar={onAplicarAjuste} onDescartar={onDescartarAjuste} onDeshacer={onDeshacerAjuste} />
       </section>
 
       <section data-tour="cobertura">
-        <Titulo>Cobertura del área de estudio</Titulo>
-        <dl className="grid grid-cols-3 gap-2">
-          {[
-            { t: "Con servicio", v: r.porcentajeServicio, d: "≥ 20 dB" },
-            { t: "Confiable", v: r.porcentajeConfiable, d: "≥ 37 dB" },
-            { t: "Con respaldo", v: r.porcentajeRespaldo, d: "2 nodos antena ≥ 37 dB" },
-          ].map((k) => (
-            <div key={k.t} className="rounded-lg bg-white px-2.5 py-2 ring-1 ring-linea">
+        {obj ? (
+          <>
+            <Titulo>Cobertura del área objetivo</Titulo>
+            <p className="-mt-1 mb-2 flex items-start gap-1.5 text-[12.5px] leading-snug text-carbon-2">
+              <Target size={14} className="mt-0.5 shrink-0 text-melki" aria-hidden="true" />
+              <span className="min-w-0 flex-1">
+                «{obj.nombre}» · {fmt(obj.areaKm2, obj.areaKm2 < 10 ? 2 : 1)} km² · meta {fmtMeta(obj.metaPct)} % con {obj.margenDb >= 45 ? "señal buena" : obj.margenDb >= UMBRAL_CONFIABLE_DB ? "señal estable o mejor" : "señal media o mejor"}
+                {obj.respaldo ? " desde dos nodos" : ""}
+              </span>
+              <button type="button" onClick={onQuitarObjetivo} className="shrink-0 rounded px-1.5 py-0.5 text-[12px] font-medium text-tenue ring-1 ring-linea hover:bg-white hover:text-carbon" title="Medir la factibilidad en el área de estudio">
+                Quitar
+              </button>
+            </p>
+          </>
+        ) : (
+          <Titulo>Cobertura del área de estudio</Titulo>
+        )}
+        <dl className="grid grid-cols-2 gap-2">
+          {(obj
+            ? [
+                { t: "Útil", v: obj.utilPct, d: `≥ ${obj.margenDb} dB${obj.respaldo ? " · 2 nodos" : ""} · meta ${fmtMeta(obj.metaPct)} %`, destacado: true },
+                { t: "Confiable", v: obj.confiablePct, d: `≥ ${UMBRAL_CONFIABLE_DB} dB` },
+                { t: "Con servicio", v: obj.servicioPct, d: `≥ ${UMBRAL_SERVICIO_DB} dB` },
+                { t: "Área de estudio", v: r.porcentajeUtil, d: `útil en los ${fmt(r.areaEstudioKm2, 0)} km² alrededor de los nodos` },
+              ]
+            : [
+                { t: "Útil", v: r.porcentajeUtil, d: `≥ ${UMBRAL_UTIL_DB} dB (media o mejor) · meta ${META_UTIL_ESTUDIO_PCT} %`, destacado: true },
+                { t: "Confiable", v: r.porcentajeConfiable, d: `≥ ${UMBRAL_CONFIABLE_DB} dB` },
+                { t: "Con servicio", v: r.porcentajeServicio, d: `≥ ${UMBRAL_SERVICIO_DB} dB` },
+                { t: "Con respaldo", v: r.porcentajeRespaldo, d: "2 nodos antena ≥ 37 dB" },
+              ]
+          ).map((k) => (
+            <div key={k.t} className={`rounded-lg bg-white px-2.5 py-2 ring-1 ${"destacado" in k && k.destacado ? "ring-salvia" : "ring-linea"}`}>
               <dt className="text-[12px] text-carbon-2">{k.t}</dt>
-              <dd className="font-cond text-[24px] leading-tight font-semibold tabular-nums">{fmt(k.v, 0)} %</dd>
-              <dd className="text-[11px] text-tenue">{k.d}</dd>
+              <dd className="font-cond text-[24px] leading-tight font-semibold tabular-nums">{fmtPct(k.v)} %</dd>
+              <dd className="text-[11px] leading-snug text-tenue">{k.d}</dd>
             </div>
           ))}
         </dl>
         <div className="mt-3 flex h-3 overflow-hidden rounded-full ring-1 ring-black/5" role="img" aria-label="Distribución del área por nivel de señal">
           {CLASES.map((c) => {
-            const pct = r.areaEstudioKm2 > 0 ? (100 * r.areaPorClase[c.id]) / r.areaEstudioKm2 : 0;
+            const pct = porClase(c.id);
             return pct > 0 ? <div key={c.id} style={{ width: `${pct}%`, background: c.color }} title={`${c.nombre}: ${fmt(pct)} %`} /> : null;
           })}
         </div>
         <table className="mt-2 w-full text-[13px]">
           <tbody>
             {CLASES.map((c) => {
-              const area = r.areaPorClase[c.id];
+              const pct = porClase(c.id);
+              const area = obj ? (pct / 100) * obj.areaKm2 : r.areaPorClase[c.id];
               return (
                 <tr key={c.id}>
                   <td className="py-0.5">
@@ -117,14 +160,14 @@ export function PanelResultados({ resultado: r, antenas, parametros, desactualiz
                     {c.nombre}
                   </td>
                   <td className="text-right text-tenue tabular-nums">{fmt(area)} km²</td>
-                  <td className="w-14 text-right tabular-nums">{fmt(r.areaEstudioKm2 > 0 ? (100 * area) / r.areaEstudioKm2 : 0)} %</td>
+                  <td className="w-14 text-right tabular-nums">{fmt(pct)} %</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
         <p className="mt-1.5 text-[12px] text-tenue">
-          Área de estudio {fmt(r.areaEstudioKm2, 0)} km² · celdas de {fmt(r.malla.celdaM, 0)} m · {fmt(r.duracionMs / 1000, 1)} s de cálculo.
+          {obj ? `Área objetivo ${fmt(obj.areaKm2, 1)} km² · área de estudio ${fmt(r.areaEstudioKm2, 0)} km²` : `Área de estudio ${fmt(r.areaEstudioKm2, 0)} km²`} · celdas de {fmt(r.malla.celdaM, 0)} m · {fmt(r.duracionMs / 1000, 1)} s de cálculo.
         </p>
       </section>
 

@@ -6,7 +6,7 @@ import type { ClimaItm } from "@/lib/radio/itm";
 import { UNIDADES, type UnidadId } from "@/lib/radio/unidades";
 import { PATRONES } from "@/lib/radio/patron";
 import { RED_REFERENCIA, SUELOS, VARIABILIDADES } from "@/lib/radio/red";
-import type { Antena, Escenario, Medicion, Parametros, PatronId, Rol, SueloId, TipoMedicion, TipoNodo } from "@/lib/radio/tipos";
+import type { Antena, Escenario, Medicion, ObjetivoArea, Parametros, PatronId, Rol, SueloId, TipoMedicion, TipoNodo } from "@/lib/radio/tipos";
 
 export type ModoMapa = "senal" | "servidor" | "redundancia";
 /** Escala de colores del mapa de señal: clases fijas, arcoíris entre dos niveles o un solo umbral. */
@@ -181,6 +181,10 @@ export type Accion =
   | { tipo: "insertar-varias"; antenas: Antena[] }
   /** Quita varios nodos de una vez (deshacer un sembrado). */
   | { tipo: "eliminar-varias"; ids: string[] }
+  /** Reemplaza los nodos de una vez (el ajuste automático), sin tocar lo demás. */
+  | { tipo: "antenas"; antenas: Antena[] }
+  /** Marca un área de la regla como área objetivo (o la quita con id null): solo puede haber una. */
+  | { tipo: "area-objetivo"; id: string | null; objetivo?: ObjetivoArea }
   /** Reemplaza el escenario, la vista y las preferencias de cálculo (escenario de práctica de los tours y su restauración). */
   | { tipo: "restaurar"; escenario: Escenario; vista: Vista; relieve?: TipoRelieve; autoSimular: boolean };
 
@@ -193,6 +197,13 @@ export function reductor(e: Estado, a: Accion): Estado {
   switch (a.tipo) {
     case "cargar":
       return { ...e, escenario: { ...a.escenario, mediciones: a.escenario.mediciones ?? [] }, seleccion: null, medicionSel: null };
+    case "antenas":
+      return { ...conAntenas(e, a.antenas), seleccion: a.antenas.some((x) => x.id === e.seleccion) ? e.seleccion : null };
+    case "area-objetivo":
+      return conMediciones(
+        e,
+        mediciones.map((m) => (m.id === a.id && m.tipo === "area" && a.objetivo ? { ...m, objetivo: a.objetivo } : m.objetivo ? { ...m, objetivo: undefined } : m)),
+      );
     case "renombrar-escenario":
       return { ...e, escenario: { ...e.escenario, nombre: a.nombre } };
     case "agregar": {
@@ -466,7 +477,19 @@ export function validarEscenario(x: unknown): Escenario | null {
       tipo,
       puntos: puntos.slice(0, 500),
       visible: raw.visible !== false,
+      ...(tipo === "area" && objetivoValido(raw.objetivo) ? { objetivo: objetivoValido(raw.objetivo)! } : {}),
     });
   }
+  // Una sola área objetivo: la última que venga marcada
+  const conObjetivo = mediciones.filter((m) => m.objetivo);
+  for (const m of conObjetivo.slice(0, -1)) delete m.objetivo;
   return { version: 1, nombre: typeof o.nombre === "string" && o.nombre.trim() ? o.nombre.trim().slice(0, 80) : "Escenario importado", antenas, parametros, mediciones };
+}
+
+/** Meta de un área objetivo leída de un archivo (o null si no es válida). */
+function objetivoValido(x: unknown): ObjetivoArea | null {
+  if (!x || typeof x !== "object") return null;
+  const o = x as Partial<ObjetivoArea>;
+  if (typeof o.metaPct !== "number" || typeof o.margenDb !== "number" || !Number.isFinite(o.metaPct) || !Number.isFinite(o.margenDb)) return null;
+  return { metaPct: Math.min(100, Math.max(1, o.metaPct)), margenDb: Math.min(60, Math.max(10, o.margenDb)), ...(o.respaldo ? { respaldo: true } : {}) };
 }

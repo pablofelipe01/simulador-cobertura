@@ -8,11 +8,12 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { Melki } from "@/components/melki/melki";
 import { Recorrido } from "@/components/melki/recorrido";
 import type { AccionMelki } from "@/components/melki/cerebro";
-import type { Api, OpcionesDiseno } from "@/components/melki/ordenes";
+import type { Api, OpcionesAjuste, OpcionesDiseno } from "@/components/melki/ordenes";
 import { avisarMelki, tourPorId, type ApiTour, type IdTour, type Preparacion } from "@/components/melki/tours";
 import { CONFIG } from "@/lib/config";
 import { buscarLugares, cargarReferencia, textoUbicacion } from "@/lib/geo/referencia";
-import { EQUIPOS } from "@/lib/radio/constantes";
+import { PERMISOS_AJUSTE, type Ajuste, type PedidoAjuste } from "@/lib/radio/ajuste";
+import { EQUIPOS, META_UTIL_ESTUDIO_PCT } from "@/lib/radio/constantes";
 import { metrosPorGrado } from "@/lib/radio/geo";
 import { MotorCobertura } from "@/lib/radio/cliente";
 import { estadoRed, type EstadoRed } from "@/lib/radio/estado-red";
@@ -21,7 +22,7 @@ import type { Diseno, PedidoDiseno } from "@/lib/radio/diseno";
 import type { DestinoSiembra, Siembra } from "@/lib/radio/siembra";
 import type { Fase } from "@/lib/radio/protocolo";
 import type { Inspeccion } from "@/lib/radio/simulacion";
-import type { Antena, Escenario, FuenteRelieve, Medicion, Perfil, PerfilTerreno, ResultadoSimulacion, TipoNodo } from "@/lib/radio/tipos";
+import type { Antena, AreaObjetivo, Escenario, FuenteRelieve, Medicion, Perfil, PerfilTerreno, ResultadoSimulacion, TipoNodo } from "@/lib/radio/tipos";
 
 import { BarraSuperior } from "./barra-superior";
 import { Buscador, type Destino } from "./buscador";
@@ -45,11 +46,12 @@ import {
 } from "./estado";
 import { exportarCsv, exportarJson, exportarKmz } from "./exportar";
 import { Mapa, type AnimacionMensaje, type CapaSembrar, type PuntoMapa, type SolicitudVista } from "./mapa";
+import type { FaseAjuste } from "./panel-ajuste";
 import { PanelAntenas } from "./panel-antenas";
 import { PanelParametros } from "./panel-parametros";
 import { PanelResultados } from "./panel-resultados";
 import { PanelSembrar, type FaseSiembra, type ViajeVisible } from "./panel-sembrar";
-import { ALTURA_REPETIDOR_DEFECTO, escenarioMalla, nuevaPieza, piezaDe } from "./piezas";
+import { ALTURA_REPETIDOR_DEFECTO, escenarioMalla, nombreLibre, nuevaPieza, piezaDe } from "./piezas";
 import { PerfilEnlace } from "./perfil-enlace";
 import { PerfilTerrenoPanel } from "./perfil-terreno";
 import { CoordenadasCursor, MenuContextual, TarjetaNodo, TarjetaPunto, type AccionPunto } from "./puntos-mapa";
@@ -76,6 +78,12 @@ function cajaRadio(lat: number, lon: number, radioM: number): [number, number, n
 }
 
 type PuntoMarcado = { lat: number; lon: number; titulo: string };
+
+/** Área objetivo del escenario (un área de la regla marcada con su meta), como la recibe el motor. */
+function areaObjetivoDe(e: Escenario): AreaObjetivo | null {
+  const m = (e.mediciones ?? []).find((x) => x.objetivo && x.tipo === "area" && x.puntos.length >= 3);
+  return m?.objetivo ? { nombre: m.nombre, puntos: m.puntos, ...m.objetivo } : null;
+}
 
 type ViajeGuardado = ViajeVisible & { firma: string; animacion: AnimacionMensaje };
 
@@ -109,6 +117,9 @@ export function Simulador() {
   const [alturaRepetidor, setAlturaRepetidor] = useState<number>(ALTURA_REPETIDOR_DEFECTO);
   const [siembra, setSiembra] = useState<FaseSiembra>({ fase: "nada" });
   const [viaje, setViaje] = useState<ViajeGuardado | null>(null);
+  const [ajuste, setAjuste] = useState<FaseAjuste>({ fase: "nada" });
+  /** Escenario antes de aplicar el último ajuste (para deshacerlo desde el panel). */
+  const ajusteAntes = useRef<Escenario | null>(null);
 
   const motor = useRef<MotorCobertura | null>(null);
   const idSimulacion = useRef(0);
@@ -133,8 +144,10 @@ export function Simulador() {
         p: escenario.parametros,
         f: fuente,
         h: hgt,
+        o: areaObjetivoDe(escenario),
       }),
-    [escenario.antenas, escenario.parametros, fuente, hgt],
+    // El área objetivo sale de las mediciones
+    [escenario.antenas, escenario.parametros, escenario.mediciones, fuente, hgt], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const activas = escenario.antenas.filter((a) => a.activa).length;
   const seleccionada = escenario.antenas.find((a) => a.id === estado.seleccion) ?? null;
@@ -152,13 +165,16 @@ export function Simulador() {
         ? { fase: "nada" }
         : siembra;
   const viajeVisible = viaje && viaje.firma === firma ? viaje : null;
+  // La propuesta de ajuste vale para la red con la que se calculó; el aviso de «aplicado», hasta el siguiente cambio
+  const ajusteVisible: FaseAjuste =
+    (ajuste.fase === "buscando" || ajuste.fase === "propuesta") && ajuste.firma !== firma ? { fase: "nada" } : ajuste.fase === "aplicada" && ajuste.antenas !== escenario.antenas ? { fase: "nada" } : ajuste;
 
   // Valores actuales para las funciones estables
-  const ultimo = useRef({ estado, fuente, firma, resultado, firmaResultado, inspeccion, perfil, perfilTerreno, red, siembra: siembraVisible, alturaRepetidor, viaje: viajeVisible });
+  const ultimo = useRef({ estado, fuente, firma, resultado, firmaResultado, inspeccion, perfil, perfilTerreno, red, siembra: siembraVisible, alturaRepetidor, viaje: viajeVisible, ajuste: ajusteVisible });
   /** Nodos insertados desde el último render (dos pedidos seguidos no repiten nombre). */
   const recientes = useRef<Antena[]>([]);
   useEffect(() => {
-    ultimo.current = { estado, fuente, firma, resultado, firmaResultado, inspeccion, perfil, perfilTerreno, red, siembra: siembraVisible, alturaRepetidor, viaje: viajeVisible };
+    ultimo.current = { estado, fuente, firma, resultado, firmaResultado, inspeccion, perfil, perfilTerreno, red, siembra: siembraVisible, alturaRepetidor, viaje: viajeVisible, ajuste: ajusteVisible };
     recientes.current = [];
   });
   const existentes = () => {
@@ -198,9 +214,15 @@ export function Simulador() {
     }
     setError(null);
     setProgreso({ fase: "relieve", avance: 0 });
-    m.simular(e.escenario.antenas, e.escenario.parametros, f, (fase, avance) => {
-      if (id === idSimulacion.current) setProgreso({ fase, avance });
-    })
+    m.simular(
+      e.escenario.antenas,
+      e.escenario.parametros,
+      f,
+      (fase, avance) => {
+        if (id === idSimulacion.current) setProgreso({ fase, avance });
+      },
+      areaObjetivoDe(e.escenario),
+    )
       .then((r) => {
         if (r && id === idSimulacion.current) {
           setResultado(r);
@@ -449,6 +471,87 @@ export function Simulador() {
     setPunto(null);
     return nuevas;
   }, []);
+
+  /** Ajuste inteligente: opciones para dejar la red factible (u optimizarla) con la mejor relación cobertura–costo. */
+  const pedirAjuste = useCallback((o: OpcionesAjuste = {}): Promise<Ajuste | null> => {
+    const m = motor.current;
+    if (!m) return Promise.resolve(null);
+    const { estado: e, fuente: f, firma: fi } = ultimo.current;
+    const lista = existentes();
+    const area = areaObjetivoDe(e.escenario);
+    const pedidoAjuste: PedidoAjuste = {
+      antenas: lista.filter((a) => a.activa),
+      parametros: e.escenario.parametros,
+      area,
+      metaPct: META_UTIL_ESTUDIO_PCT,
+      permisos: { ...PERMISOS_AJUSTE, ...o.permisos },
+      alturaMaxM: Math.min(30, o.alturaMaxM ?? 30),
+      maxApoyos: o.maxApoyos ?? (area ? 30 : 10),
+      sitios: o.sitios?.length ? o.sitios : undefined,
+      fijos: o.fijos,
+      plantillaApoyo: nuevaPieza("repetidor", 0, 0, lista, ALTURA_REPETIDOR_DEFECTO),
+    };
+    setAjuste({ fase: "buscando", firma: fi });
+    return m
+      .ajustar(pedidoAjuste, f)
+      .then((a) => {
+        setAjuste({ fase: "propuesta", firma: fi, ajuste: a, elegida: a.recomendada });
+        return a;
+      })
+      .catch((err: Error) => {
+        setAjuste({ fase: "error", texto: err.message || "No pude calcular el ajuste." });
+        return null;
+      });
+  }, []);
+
+  /** Aplica una opción del ajuste: cambia los nodos, pone las antenas de apoyo y deja la zona como área objetivo. */
+  const aplicarAjuste = useCallback((a: Ajuste, i: number, base?: Escenario): Antena[] | null => {
+    const o = a.opciones[i];
+    if (!o) return null;
+    // Con base (otra opción después de aplicar una): se parte de la red de antes del ajuste
+    const antes = base ?? ultimo.current.estado.escenario;
+    if (base) despachar({ tipo: "cargar", escenario: base });
+    const lista = base ? base.antenas : existentes();
+    const porId = new Map(o.antenas.map((x) => [x.id, x]));
+    const nuevas: Antena[] = [];
+    for (const orig of lista) {
+      if (!orig.activa) {
+        nuevas.push(orig);
+        continue;
+      }
+      const x = porId.get(orig.id);
+      if (!x) continue;
+      nuevas.push({ ...orig, lat: x.lat, lon: x.lon, alturaM: x.alturaM, patron: x.patron, azimutDeg: x.azimutDeg, elevacionDeg: x.elevacionDeg, gananciaDbi: x.gananciaDbi });
+    }
+    const apoyos: Antena[] = [];
+    for (const x of o.antenas.filter((y) => y.id.startsWith("nuevo-apoyo-"))) {
+      const todas = [...nuevas, ...apoyos];
+      const base = nuevaPieza("repetidor", x.lat, x.lon, todas, x.alturaM);
+      const nombre = todas.some((y) => y.nombre === x.nombre) ? nombreLibre("Apoyo", todas) : x.nombre;
+      apoyos.push({ ...base, nombre, ...(x.patron ? { patron: x.patron, azimutDeg: x.azimutDeg, elevacionDeg: x.elevacionDeg, gananciaDbi: x.gananciaDbi } : {}) });
+    }
+    ajusteAntes.current = antes;
+    const red = [...nuevas, ...apoyos];
+    despachar({ tipo: "antenas", antenas: red });
+    // Sin área pedida, la zona evaluada queda como área objetivo: la factibilidad se mide siempre ahí
+    if (a.area.tipo === "zona" && a.area.poligono.length >= 3 && !areaObjetivoDe(antes)) {
+      const id = `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+      despachar({ tipo: "medicion-agregar", medicion: { id, nombre: "Zona de la red", tipo: "area", puntos: a.area.poligono, visible: true } });
+      despachar({ tipo: "medicion-seleccionar", id: null });
+      despachar({ tipo: "area-objetivo", id, objetivo: { metaPct: a.metaPct, margenDb: a.margenDb } });
+    }
+    setAjuste({ fase: "aplicada", titulo: o.titulo, antenas: red });
+    setPunto(null);
+    pedirSimulacion();
+    return apoyos;
+  }, [pedirSimulacion]);
+
+  const deshacerAjuste = useCallback(() => {
+    if (ajusteAntes.current) despachar({ tipo: "cargar", escenario: ajusteAntes.current });
+    ajusteAntes.current = null;
+    setAjuste({ fase: "nada" });
+    pedirSimulacion();
+  }, [pedirSimulacion]);
 
   /** Próximo resultado al día (simula si hace falta). */
   const esperarResultado = useCallback(
@@ -710,6 +813,15 @@ export function Simulador() {
       disenarArea,
       aplicarDiseno,
       esperarResultado,
+      ajustarRed: pedirAjuste,
+      aplicarAjuste,
+      mostrarAjuste: (a, i) => setAjuste({ fase: "propuesta", firma: ultimo.current.firma, ajuste: a, elegida: i ?? a.recomendada }),
+      descartarAjuste: () => setAjuste({ fase: "nada" }),
+      areaObjetivo: () => areaObjetivoDe(ultimo.current.estado.escenario),
+      fijarAreaObjetivo: (id, objetivo) => {
+        despachar({ tipo: "area-objetivo", id, objetivo });
+        pedirSimulacion();
+      },
       fijarRelieve: (v) => despachar({ tipo: "relieve", relieve: v }),
       renombrarEscenario: (nombre) => despachar({ tipo: "renombrar-escenario", nombre }),
       duplicar: (id) => {
@@ -717,7 +829,7 @@ export function Simulador() {
         pedirSimulacion();
       },
     }),
-    [inscribirNodo, pedirSimulacion, simular, centrar, encuadrar, encuadrarCaja, abrirPerfil, inspeccionar, cambiarModo, sembrarHacia, aceptarSiembra, enviarMensaje, disenarArea, aplicarDiseno, esperarResultado],
+    [inscribirNodo, pedirSimulacion, simular, centrar, encuadrar, encuadrarCaja, abrirPerfil, inspeccionar, cambiarModo, sembrarHacia, aceptarSiembra, enviarMensaje, disenarArea, aplicarDiseno, esperarResultado, pedirAjuste, aplicarAjuste],
   );
 
   const restaurar = useCallback((e: Escenario) => despachar({ tipo: "cargar", escenario: e }), []);
@@ -1032,7 +1144,26 @@ export function Simulador() {
     />
   );
 
-  const resultados = <PanelResultados resultado={resultado} antenas={escenario.antenas} parametros={escenario.parametros} desactualizado={desactualizado} calculando={calculando} onPerfil={perfilEntreAntenas} />;
+  const resultados = (
+    <PanelResultados
+      resultado={resultado}
+      antenas={escenario.antenas}
+      parametros={escenario.parametros}
+      desactualizado={desactualizado}
+      calculando={calculando}
+      onPerfil={perfilEntreAntenas}
+      ajuste={ajusteVisible}
+      onAjustar={() => void pedirAjuste()}
+      onElegirAjuste={(i) => setAjuste((a) => (a.fase === "propuesta" ? { ...a, elegida: i } : a))}
+      onAplicarAjuste={() => {
+        const a = ultimo.current.ajuste;
+        if (a.fase === "propuesta") aplicarAjuste(a.ajuste, a.elegida);
+      }}
+      onDescartarAjuste={() => setAjuste({ fase: "nada" })}
+      onDeshacerAjuste={deshacerAjuste}
+      onQuitarObjetivo={() => despachar({ tipo: "area-objetivo", id: null })}
+    />
+  );
 
   return (
     <div className="flex h-dvh flex-col">
@@ -1100,6 +1231,7 @@ export function Simulador() {
             }}
             onListo={setMapa}
             sembrar={capaSembrar}
+            ajuste={ajusteVisible.fase === "propuesta" ? (ajusteVisible.ajuste.opciones[ajusteVisible.elegida]?.cambios ?? null) : null}
             onPieza={ponerPieza}
             onDestino={(lat, lon) => {
               despachar({ tipo: "herramienta", herramienta: "mover" });
