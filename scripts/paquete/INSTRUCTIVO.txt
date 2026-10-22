@@ -4,6 +4,8 @@ SIMULADOR DE COBERTURA · Red mesh LoRa 915 MHz · avance del {{FECHA}}
 Herramienta para simular nodos Meshtastic ubicados en coordenadas
 específicas: cobertura con la paleta de Radio Mobile, rango de alcance,
 enlaces de la malla, saltos hasta la pasarela y factibilidad de la red.
+Abre en el modo "Sembrar la malla", como en Trama: el Gateway +
+Internet, los repetidores y la gente, con guía paso a paso.
 Incluye las funciones de Radio Mobile (parámetros de red, confiabilidad,
 Longley-Rice, antenas direccionales, pérdidas por vegetación y
 edificios, dBm/µV e informe de radioenlace), una regla para medir
@@ -23,16 +25,48 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
 - Necesita internet para el mapa satelital y el relieve en línea. Sin
   internet funciona con relieve "Plano" o con archivos SRTM .hgt propios.
 - Si ya había usado una versión anterior, el navegador recuerda el
-  escenario guardado; para ver la demostración nueva use
-  "Archivo > Cargar el ejemplo".
+  escenario guardado; para ver el ejemplo nuevo use "Ejemplo de malla"
+  (al final del panel izquierdo) o "Archivo > Cargar el ejemplo".
 
 
 2. QUÉ PROBAR (unos 20 minutos)
 -------------------------------
- a) Tours guiados: toque "Tours" (arriba a la derecha) o pídale a
+ a) Sembrar la malla (el modo con que abre; arriba del panel izquierdo
+    se cambia a "Modo avanzado"):
+      - Toque una pieza y luego el mapa: "Gateway + Internet" (donde
+        entra el internet, la casa o la finca con Starlink), "Repetidor"
+        (torre o loma; arriba elige la altura de la torre) y "Persona"
+        (la gente, con su radio y el celular). El gateway es uno solo:
+        ponerlo otra vez lo mueve. Las piezas se arrastran en el mapa.
+      - El recuadro de arriba dice qué hacer en cada paso. "Estado de la
+        red" muestra cuántas personas quedan conectadas (verde), cuántas
+        sin cobertura (rojo), los km² cubiertos y los saltos. En el mapa
+        el número sobre cada pieza son los saltos hasta el gateway; un
+        repetidor que no alcanza la red queda naranja con un aro.
+      - "Conectar a los que faltan" o "Llevar la red a un punto": el
+        simulador busca con el relieve real las lomas donde poner
+        repetidores y los propone como torres naranjas punteadas;
+        "Poner" los agrega y "Deshacer" los quita.
+      - "Enviar un mensaje": el mensaje sale de una persona y salta de
+        nodo en nodo hasta el gateway, como en Meshtastic. Dice los
+        saltos, el tiempo y la probabilidad de que llegue.
+      - "Ejemplo de malla" carga un gateway, un repetidor y tres
+        personas; la más lejana queda sin cobertura para practicar.
+      - La malla está animada, como en Trama: las líneas turquesa
+        avanzan hacia el gateway (por ahí viaja la información), los
+        pulsos saltan de nodo en nodo y cada pieza destella al
+        retransmitir; la nube "IA" del gateway se enciende al recibir.
+        En rojo parpadean las personas sin cobertura. Al enviar un
+        mensaje se ven las ondas de cada transmisión y la respuesta
+        de la IA que vuelve. "Animar el flujo de la información" la
+        apaga. "Cómo se juega" explica el juego y, bajo las piezas,
+        está el alcance de referencia según la altura de la torre.
+ b) Tours guiados: toque "Tours" (arriba a la derecha) o pídale a
     Melki "hazme un tour". Melki pregunta cuál quiere:
       - Tutorial básico (3 min, recomendado para empezar): su primera
         simulación en 7 pasos, haciéndola usted mismo.
+      - Sembrar la malla (4 min): gateway, repetidores, gente,
+        conectar a los que faltan y un mensaje de prueba.
       - Conocer la pantalla: para qué sirve cada parte.
       - Red mesh completa, Como Radio Mobile, Medir y exportar y
         Hablar con Melki.
@@ -40,15 +74,21 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
     quedó hecho y trae "Hágalo por mí" y "Omitir paso"; "Salir" termina
     cuando quiera. Se practica en un escenario aparte: al terminar, el
     suyo vuelve tal cual.
- b) La demostración trae un solo nodo antena, "Ejemplo", con su
-    cobertura, su rango de alcance (línea naranja: con servicio; verde:
-    confiable) y anillos de distancia. En el panel derecho, "Cómo se
-    calculó" explica los números paso a paso.
- c) Dos tipos de nodo: "Nodo antena" (infraestructura en mástil o torre,
-    genera cobertura) y "Nodo" (equipo de campo: portátil, sensor; se
-    revisa si se conecta a la malla). Se eligen en el panel "Nodos" o
-    arriba del mapa al pulsar "Agregar".
- d) Melki (robot abajo a la derecha) hace las cosas por usted. Pruebe:
+ c) La demostración trae un nodo antena, "Ejemplo", con su cobertura,
+    su rango de alcance (línea naranja: con servicio; verde: confiable)
+    y anillos de distancia. En el panel derecho, "Cómo se calculó"
+    explica los números paso a paso.
+ d) Modo avanzado: dos tipos de nodo, "Nodo antena" (infraestructura en
+    mástil o torre, genera cobertura) y "Nodo" (equipo de campo:
+    portátil, sensor; se revisa si se conecta a la malla). Se eligen en
+    el panel "Nodos" o arriba del mapa al pulsar "Agregar".
+ e) Melki (robot abajo a la derecha) hace las cosas por usted. Pruebe:
+      - "Pon el gateway en 4.2, -73.37", "agrega un repetidor en
+        4.25, -73.30 a 20 m", "pon una persona en 4.31, -73.22"
+      - "Conecta a los que faltan", "lleva la red a Paratebueno" y
+        "envía un mensaje desde Persona 1"
+      - "¿Cómo viaja un mensaje?", "¿qué hago ahora?", "¿por qué
+        Persona 3 está en rojo?", "modo avanzado"
       - "Inscribe una antena en esta coordenada" y luego la coordenada,
         por ejemplo 4°13'30" N 73°21'00" O o 4.225, -73.35
       - "Inscribe un nodo antena llamado Torre 2 en 4.25, -73.30 a 20 m"
@@ -56,24 +96,24 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
       - "Llévame a Villavicencio"   - "Activa la regla"   - "Deshaz"
     Cuando inscribe un nodo, simula y le cuenta el alcance. Cada cambio
     trae su botón "Deshacer".
- e) Regla (arriba del mapa): Línea (distancia y rumbo), Trayecto (varios
+ f) Regla (arriba del mapa): Línea (distancia y rumbo), Trayecto (varios
     puntos) o Área (área y perímetro). Clic en el mapa; doble clic o
     Enter para terminar. Cada medición se puede renombrar, ocultar,
     borrar y editar arrastrando sus puntos; el ícono de montaña muestra
     el perfil del terreno.
- f) Buscador (arriba): municipio, departamento, nombre de un nodo o
+ g) Buscador (arriba): municipio, departamento, nombre de un nodo o
     coordenadas en decimal o en grados, minutos y segundos.
- g) Clic derecho en el mapa: agregar un nodo ahí, ver la señal, medir
+ h) Clic derecho en el mapa: agregar un nodo ahí, ver la señal, medir
     desde ese punto, marcarlo o copiar sus coordenadas. Abajo del mapa
     se ven las coordenadas y el municipio bajo el cursor.
- h) Capas: mapa base (Satélite, Topográfico, OpenTopoMap con quebradas y
+ i) Capas: mapa base (Satélite, Topográfico, OpenTopoMap con quebradas y
     ríos pequeños con nombre, Calles), límites y nombres de departamentos
     y municipios, ríos y lagos principales, países, poblados y vías, y
     las capas de la simulación.
- i) Archivo: guardar el escenario (.json, con las mediciones), nodos a
+ j) Archivo: guardar el escenario (.json, con las mediciones), nodos a
     Excel (.csv) y cobertura para Google Earth (.kmz) con el rango de
     alcance y las mediciones.
- j) Dictado por voz: en la conversación con Melki, toque el micrófono
+ k) Dictado por voz: en la conversación con Melki, toque el micrófono
     (junto al botón de enviar) y hable. El texto aparece en la caja:
     revíselo, corríjalo si hace falta y envíelo (nunca se envía solo).
     Toque el micrófono otra vez para terminar. La primera vez pregunta
@@ -84,7 +124,7 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
         vez puede descargar el reconocedor (unos 100 MB) y luego funciona
         sin conexión.
     El navegador pide permiso para usar el micrófono.
- k) Funciones de Radio Mobile:
+ l) Funciones de Radio Mobile:
       - Parámetros > Propagación: modelo (Calibrado o Longley-Rice),
         confiabilidad (Normal, Alta, Muy alta) y, en "Parámetros como
         en Radio Mobile", clima, polarización, suelo, refractividad y
