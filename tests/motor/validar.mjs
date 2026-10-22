@@ -27,6 +27,8 @@ export { Relieve } from "./src/lib/radio/relieve";
 export { evaluadorMargen, calcularCobertura, crearMalla } from "./src/lib/radio/cobertura";
 export { disenar, cajaDiseno } from "./src/lib/radio/diseno";
 export { poligonoCirculo, poligonoRectangulo, conArea, radioDeArea, areaM2, dentroPoligono, coberturaEnArea, porcentajeSobre, celdasEnPoligono } from "./src/lib/radio/area";
+export { ajustar, cajaAjuste, textoCambio, analisisAjuste, PERMISOS_AJUSTE, contornoCirculos } from "./src/lib/radio/ajuste";
+export { costoTorre, costoNodo, ALTURA_MAXIMA_M } from "./src/lib/radio/costos";
 `;
 const tmp = mkdtempSync(path.join(os.tmpdir(), "motor-"));
 const archivo = path.join(tmp, "motor.mjs");
@@ -294,6 +296,63 @@ caso("Sin D, todas conectadas", sinD.nodos.every((n) => n.saltos !== null));
   caso("Con un máximo de repetidores avisa que no alcanzó la meta", !corto.alcanzado && /máximo de 2/.test(corto.motivo ?? "") && corto.huecos.length > 0, `${corto.coberturaPct.toFixed(1)} %`);
   const existentes = m.disenar({ ...pedido, existentes: [gateway], gateway: null }, lomas, cajaL);
   caso("Usa el gateway que ya existe y no pone otro", existentes.nodos.every((n) => n.pieza === "repetidor") && existentes.alcanzado);
+}
+
+// Ajuste inteligente (v11): red factible con la mejor relación cobertura–costo, sin torres de más de 30 m
+{
+  const relieveDe = (caja) => {
+    const z = 12;
+    const x0 = Math.floor(m.lonAPixel(caja.oeste, z)) - 4;
+    const y0 = Math.floor(m.latAPixel(caja.norte, z)) - 4;
+    const an = Math.ceil(m.lonAPixel(caja.este, z)) + 4 - x0;
+    const al = Math.ceil(m.latAPixel(caja.sur, z)) + 4 - y0;
+    const d = new Float32Array(an * al);
+    for (let j = 0; j < al; j++) for (let i = 0; i < an; i++) d[j * an + i] = 250 + 30 * Math.sin(i / 9) * Math.cos(j / 11) + 90 * Math.exp(-((i - an * 0.62) ** 2 + (j - al * 0.45) ** 2) / 900) - 50 * Math.exp(-((i - an * 0.35) ** 2 + (j - al * 0.6) ** 2) / 500);
+    return new m.Relieve(z, x0, y0, an, al, d, { fuente: "teselas", solicitadas: 1, fallidas: 0, resolucionM: 38 });
+  };
+  const base = { tipo: "antena", alturaM: 15, potenciaDbm: 22, gananciaDbi: 5.8, perdidaCableDb: 1, equipo: "nodo-solar-58", rol: "ROUTER", activa: true, pasarela: false };
+  const p = m.completarParametros({ preset: "LONG_FAST", frecuenciaMhz: 915, alturaRxM: 1.5, gananciaRxDbi: 2, perdidaExtraDb: 0, radioKm: 10, resolucion: "normal", limiteSaltos: 3 });
+  const gw = { ...base, id: "g", nombre: "Gateway", lat: 4.2, lon: -73.37, alturaM: 8, pasarela: true };
+  const q = (dist, rumbo) => m.desplazar(4.2, -73.37, dist, rumbo);
+  const persona = (id, dist, rumbo) => ({ ...base, id, nombre: id, tipo: "nodo", alturaM: 1.5, gananciaDbi: 2, perdidaCableDb: 0, equipo: "portatil-2dbi", rol: "CLIENT", ...q(dist, rumbo) });
+  const plantilla = { ...base, id: "x", nombre: "Apoyo", lat: 0, lon: 0 };
+  const pedido = (antenas, extra = {}) => ({ antenas, parametros: p, area: null, metaPct: 60, permisos: m.PERMISOS_AJUSTE, alturaMaxM: 30, maxApoyos: 12, plantillaApoyo: plantilla, ...extra });
+
+  caso("Costos: más de 30 m exige torre autosoportada (mucho más cara)", m.costoTorre(31) > 5 * m.costoTorre(30) && m.costoTorre(12) < m.costoTorre(15) / 2 && m.ALTURA_MAXIMA_M === 30);
+  caso("Costos: las personas y nodos de campo no cuentan", m.costoNodo(persona("p", 1000, 0)) === 0 && m.costoNodo(gw) > m.costoNodo({ ...gw, pasarela: false }));
+  const zona = m.contornoCirculos([{ lat: 4.2, lon: -73.37 }, { lat: 4.2, lon: -73.28 }], 6000);
+  caso("La zona de la red une los círculos de estudio", zona.length >= 8 && m.areaM2(zona) > Math.PI * 36e6 && m.areaM2(zona) < 2 * Math.PI * 36e6, `${(m.areaM2(zona) / 1e6).toFixed(0)} km²`);
+
+  // Red que no cumple: un repetidor bajo y una persona lejana
+  const ants = [gw, { ...base, id: "r2", nombre: "Repetidor 2", ...q(7000, 120), alturaM: 9 }, persona("p1", 4000, 200), persona("p2", 9000, 130)];
+  const pe = pedido(ants);
+  const rel = relieveDe(m.cajaAjuste(pe));
+  const t0 = performance.now();
+  const a = m.ajustar(pe, rel);
+  const seg = (performance.now() - t0) / 1000;
+  const rec = a.opciones[a.recomendada];
+  caso("Ajuste: de no factible a factible con la recomendada", a.modo === "ajustar" && !a.inicial.factible && rec?.resumen.factible, `${a.inicial.utilPct.toFixed(1)} % → ${rec?.resumen.utilPct.toFixed(1)} %, ${seg.toFixed(1)} s`);
+  caso("Ajuste: ninguna torre pasa de 30 m", a.opciones.every((o) => o.antenas.every((x) => x.alturaM <= 30)));
+  const costos = a.opciones.map((o) => o.costoRelativo);
+  const utiles = a.opciones.map((o) => o.resumen.utilPct);
+  caso("Ajuste: más cobertura cuesta más (económica → máxima)", costos.every((c, i) => i === 0 || c >= costos[i - 1]) && utiles.every((u, i) => i === 0 || u >= utiles[i - 1] - 0.5), costos.map((c) => c.toFixed(2)).join(" / "));
+  caso("Ajuste: la zona de la red queda fija y el análisis no habla de precios", a.area.tipo === "zona" && a.area.poligono.length >= 3 && a.analisis.length > 0 && !a.analisis.some((t) => /\$|millones|pesos/.test(t)));
+  caso("Ajuste: cada cambio se explica en español", rec.cambios.every((c) => m.textoCambio(c).length > 8));
+
+  const solo = m.ajustar(pedido(ants, { permisos: { apoyos: false, mover: false, antenas: false, alturas: true, quitar: false } }), rel);
+  caso("Ajuste: «solo alturas» solo cambia alturas", solo.opciones.every((o) => o.cambios.every((c) => c.tipo === "altura")));
+  const sitios = [q(5000, 30), q(6000, 300), q(8000, 210)].map((s, i) => ({ ...s, nombre: `Finca ${i + 1}` }));
+  const conSitios = m.ajustar(pedido(ants, { sitios }), rel);
+  const apoyos = conSitios.opciones.flatMap((o) => o.cambios.filter((c) => c.tipo === "apoyo"));
+  caso("Ajuste: con sitios dados, las antenas de apoyo van solo ahí", apoyos.every((c) => sitios.some((s) => m.distanciaM(s.lat, s.lon, c.lat, c.lon) < 400)), `${apoyos.length} apoyo(s)`);
+
+  // Red factible pero sobredimensionada: el ajuste la optimiza sin perder la meta
+  if (rec) {
+    const gorda = rec.antenas.map((x) => ((x.tipo ?? "antena") === "antena" && !x.pasarela ? { ...x, alturaM: 27 } : x));
+    const opt = m.ajustar(pedido(gorda), rel);
+    const o = opt.opciones[opt.recomendada];
+    caso("Optimizar: misma meta con menos costo", opt.modo === "optimizar" && o && o.resumen.factible && o.costoRelativo < 1, o ? `costo relativo ${o.costoRelativo.toFixed(2)}` : "sin opciones");
+  }
 }
 
 console.log(fallos ? `\n✗ ${fallos} caso(s) con fallo` : "\n✓ Motor verificado");
