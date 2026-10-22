@@ -3,6 +3,9 @@
 // medir distancias, ver perfiles y la señal en un punto. Todo se procesa aquí mismo, sin servicios externos.
 import { PRESETS, presetPorId, type PresetId } from "@/lib/radio/constantes";
 import { entornoPorId, perdidaEntorno } from "@/lib/radio/entorno";
+import { consejoRed, type EstadoRed, type Pieza } from "@/lib/radio/estado-red";
+import type { ViajeMensaje } from "@/lib/radio/mensaje";
+import type { DestinoSiembra, Siembra } from "@/lib/radio/siembra";
 import { aDecimal, aGMS, distanciaM, formatoDistancia, leerCoordenada, puntoCardinal, rumbo, rumboTexto } from "@/lib/radio/geo";
 import type { ClimaItm } from "@/lib/radio/itm";
 import { anchosHaz, esDireccional, patronPorId } from "@/lib/radio/patron";
@@ -11,11 +14,11 @@ import type { Antena, EntornoId, Escenario, Medicion, Parametros, PatronId, Resu
 import { textoNivel, uvADbm, type UnidadId } from "@/lib/radio/unidades";
 import type { Lugar } from "@/lib/geo/referencia";
 
-import type { EscalaSenal, Vista } from "../simulador/estado";
+import type { EscalaSenal, ModoApp, Vista } from "../simulador/estado";
 import type { Respuesta } from "./cerebro";
 
 /** Cambios de la vista que Melki puede pedir (unidad y escala de colores del mapa de señal). */
-export type CambiosVista = Partial<Pick<Vista, "unidad" | "escala" | "escalaMinDbm" | "escalaMaxDbm" | "umbralDbm" | "modo">>;
+export type CambiosVista = Partial<Pick<Vista, "unidad" | "escala" | "escalaMinDbm" | "escalaMaxDbm" | "umbralDbm" | "modo" | "animarRed">>;
 
 export type Coordenada = { lat: number; lon: number; corregido?: boolean };
 
@@ -43,11 +46,20 @@ export type Orden =
   | { tipo: "nuevo"; confirmado?: boolean }
   | { tipo: "exportar"; formato: "kmz" | "json" | "csv" }
   | { tipo: "borrar-mediciones" }
-  | { tipo: "coordenada-sola"; coord: Coordenada };
+  | { tipo: "coordenada-sola"; coord: Coordenada }
+  /* Modo «Sembrar la malla» */
+  | { tipo: "pieza"; pieza: Pieza; coord?: Coordenada; datos: DatosNodo; mover?: boolean }
+  | { tipo: "sembrar"; destino: "faltantes" | { coord: Coordenada; nombre: string } | { id: string } }
+  | { tipo: "aceptar-siembra" }
+  | { tipo: "descartar-siembra" }
+  | { tipo: "mensaje"; id?: string }
+  | { tipo: "modo"; modo: ModoApp }
+  | { tipo: "ejemplo-malla" }
+  | { tipo: "que-hago" };
 
 export type Referencia = { tipo: "nodo"; id: string } | { tipo: "coord"; coord: Coordenada };
 
-export type Pendiente = { tipo: "agregar"; datos: DatosNodo } | { tipo: "mover"; id: string } | null;
+export type Pendiente = { tipo: "agregar"; datos: DatosNodo } | { tipo: "mover"; id: string } | { tipo: "pieza"; pieza: Pieza; datos: DatosNodo } | null;
 
 export type Api = {
   antenas(): Antena[];
@@ -74,6 +86,24 @@ export type Api = {
   borrarMediciones(): void;
   ubicacion(lat: number, lon: number): string | null;
   buscarLugar(texto: string): Lugar[];
+  /* Modo «Sembrar la malla» */
+  modo(): ModoApp;
+  cambiarModo(m: ModoApp): void;
+  /** Pone una pieza (gateway, repetidor o persona) con sus valores de Trama. */
+  ponerPieza(pieza: Pieza, lat: number, lon: number, datos?: DatosNodo): Antena;
+  /** Arma la herramienta para poner la pieza con un clic en el mapa. */
+  armarPieza(pieza: Pieza): void;
+  /** Estado de la red frente al gateway (con la última simulación). */
+  red(): EstadoRed;
+  /** Propone repetidores hacia los destinos (sembrado automático). */
+  sembrar(destinos: DestinoSiembra[]): Promise<Siembra | null>;
+  propuesta(): Siembra | null;
+  /** Pone los repetidores propuestos; devuelve cuántos nodos puso. */
+  aceptarSiembra(): number;
+  descartarSiembra(): void;
+  /** Envía un mensaje desde ese nodo hasta el gateway y lo anima en el mapa (null si falta simular). */
+  enviarMensaje(desdeId: string): ViajeMensaje | null;
+  ejemploMalla(): void;
 };
 
 const n = (t: string) =>
@@ -322,6 +352,7 @@ export function interpretarOrden(texto: string, api: Api, pendiente: Pendiente):
   if (pendiente && coord && !OBJETO.test(tn.replace(/\b(en|a)\b/g, ""))) {
     if (pendiente.tipo === "agregar") return { tipo: "agregar", datos: pendiente.datos, coord };
     if (pendiente.tipo === "mover") return { tipo: "mover", id: pendiente.id, coord };
+    if (pendiente.tipo === "pieza") return { tipo: "pieza", pieza: pendiente.pieza, datos: pendiente.datos, coord };
   }
   if (pendiente && coord) {
     if (pendiente.tipo === "agregar" && !VERBO_AGREGAR.test(tn)) return { tipo: "agregar", datos: { ...pendiente.datos, ...datosNodo(texto, tn) }, coord };
@@ -329,7 +360,10 @@ export function interpretarOrden(texto: string, api: Api, pendiente: Pendiente):
 
   if (/\b(borra|borrar|elimina|eliminar|quita|quitar)\b.*\b(medicion|mediciones|regla|medidas)\b/.test(tn)) return { tipo: "borrar-mediciones" };
   if (/\b(nuevo escenario|escenario nuevo|empezar de cero|borra todo|borrar todo|limpia todo|limpiar todo)\b/.test(tn)) return { tipo: "nuevo" };
-  if (/\b(carga\w*|muestra\w*|abre|abrir|ver|pon)\b.*\b(ejemplo|demostracion|demo)\b/.test(tn)) return { tipo: "ejemplo" };
+  if (/\b(carga\w*|muestra\w*|abre|abrir|ver|pon)\b.*\b(ejemplo|demostracion|demo)\b/.test(tn)) return /\b(malla|sembr\w*|siembra|trama|gateway|repetidor\w*|personas?|gente)\b/.test(tn) ? { tipo: "ejemplo-malla" } : { tipo: "ejemplo" };
+
+  const malla = interpretarMalla(texto, tn, api, coord);
+  if (malla) return malla;
 
   // Órdenes sobre un nodo existente. «Inscribe una antena…» pide un nodo nuevo aunque ya exista uno solo,
   // salvo que se nombre uno existente o se diga «la antena», «este nodo»…
@@ -466,6 +500,114 @@ export function interpretarOrden(texto: string, api: Api, pendiente: Pendiente):
   return null;
 }
 
+/* ───────────── Modo «Sembrar la malla» (como en Trama) ───────────── */
+
+const PALABRA_PIEZA: [Pieza, RegExp][] = [
+  ["gateway", /\b(gateway|gateways|getway|geteway|internet|starlink)\b/],
+  ["repetidor", /\b(repetidor|repetidores|repetidora|repetidoras)\b/],
+  ["persona", /\b(persona|personas|gente|familia|familias|casa|casas|vivienda|viviendas|usuario|usuarios|vecino|vecinos|habitante|habitantes|finca)\b/],
+];
+
+/** Gateway, repetidor o persona mencionados como pieza nueva (no «Repetidor 2», que es el nombre de un nodo). */
+function piezaEnTexto(tn: string, antenas: Antena[]): Pieza | null {
+  const otroEquipo = /\b(antena|antenas|nodo|nodos|torre|sensor|equipo|router|pasarela)\b/.test(tn);
+  for (const [pieza, re] of PALABRA_PIEZA) {
+    const m = tn.match(re);
+    if (!m) continue;
+    // «Inscribe un nodo antena en mi casa» o «antena con internet» siguen siendo nodos del modo avanzado
+    if (otroEquipo && (pieza === "persona" || m[0] === "internet")) continue;
+    // «Repetidor 2» o «Persona 3» seguidos de su número son nodos que ya existen
+    const resto = tn.slice((m.index ?? 0) + m[0].length);
+    if (/^\s*\d/.test(resto) && antenas.some((a) => n(a.nombre) === `${m[0]} ${resto.trim().split(" ")[0]}`)) continue;
+    return pieza;
+  }
+  return null;
+}
+
+function interpretarMalla(texto: string, tn: string, api: Api, coord: Coordenada | null): Orden | null {
+  if (PREGUNTA.test(tn) && !/\b(puedes|podrias|me ayudas)\b/.test(tn)) return null;
+  const antenas = api.antenas();
+  // Modo de la pantalla
+  if (/\bmodo (avanzado|completo|experto)\b/.test(tn) && !/\bque es\b/.test(tn)) return { tipo: "modo", modo: "avanzado" };
+  if (/\b(modo (sembrar|siembra|sencillo|facil|simple|trama)|sembrar la malla|vuelve a sembrar|volver a sembrar)\b/.test(tn) && !/\b(repetidor\w*|hacia|conecta\w*)\b/.test(tn)) return { tipo: "modo", modo: "sembrar" };
+  // Animación del flujo de la información
+  if (/\b(quita\w*|apaga\w*|desactiva\w*|deten\w*|para|pausa\w*|sin|no quiero)\b.*\b(animacion|animaciones|flujo|parpadeo|destellos)\b/.test(tn)) return { tipo: "vista", cambios: { animarRed: false }, descripcion: "quieta, sin la animación del flujo" };
+  if (/\b(anima\w*|activa\w*|enciende|prende|muestra\w*|pon\w*)\b.*\b(animacion|animaciones|flujo|destellos)\b/.test(tn) || /\banima la (red|malla)\b/.test(tn)) return { tipo: "vista", cambios: { animarRed: true }, descripcion: "con el flujo animado hacia el gateway" };
+  // Aceptar o descartar la propuesta del sembrado
+  if (api.propuesta()) {
+    if (/\b(descart\w*|no los pongas|no la quiero|cancela\w*|olvidalo)\b/.test(tn)) return { tipo: "descartar-siembra" };
+    if (/\b(acept\w*|ponlos|ponla|ponlo|ponerlos|instalalos|pon los propuestos|confirm\w*|dale|hazlo|si,? pon\w*)\b/.test(tn) || (/\bpropuest\w*/.test(tn) && /\b(pon\w*|instal\w*|deja\w*|usa\w*)\b/.test(tn))) return { tipo: "aceptar-siembra" };
+  }
+  // Enviar un mensaje por la malla
+  if (/\b(envi\w*|mand\w*|prueb\w*|simul\w*)\b.*\b(mensaje|mensajes|sms|texto|sos|alerta|chat)\b/.test(tn)) {
+    const desde = nodosMencionados(tn, antenas)[0];
+    return { tipo: "mensaje", id: desde?.id };
+  }
+  // Sembrado automático: «conecta a los que faltan», «siembra repetidores hacia…», «lleva la red a…»
+  const sembrar = /\b(siembra|siembrame|siembre|sembrar|conecta|conectame|conectalos|conectalas|conectala|conectalo|conectar|conecte|conectelos|conectelas|conectela|conectelo|lleva\w* la (red|malla|senal|cobertura)|llevar la (red|malla|senal|cobertura)|extiend\w* la (red|malla)|ampli\w* la (red|malla))\b/.test(tn);
+  if (sembrar && !/\b(internet|starlink|pc|computador|celular)\b.*\bconecta/.test(tn)) {
+    if (/\b(faltan|falta|sin cobertura|sin senal|rojas?|rojos?|desconectad\w*|aislad\w*|todas? las personas|todos|toda la gente)\b/.test(tn)) return { tipo: "sembrar", destino: "faltantes" };
+    if (coord) return { tipo: "sembrar", destino: { coord, nombre: "El punto pedido" } };
+    const persona = nodosMencionados(tn, antenas).find((a) => !a.pasarela);
+    if (persona) return { tipo: "sembrar", destino: { id: persona.id } };
+    const consulta = tn.replace(/.*\b(hacia|hasta|a)\b\s+/, "").replace(/\b(el|la|los|las|municipio de|por favor|porfa)\b/g, " ").replace(/\s+/g, " ").trim();
+    if (consulta.length >= 3) {
+      const lugar = api.buscarLugar(consulta)[0];
+      if (lugar) return { tipo: "sembrar", destino: { coord: { lat: lugar.lat, lon: lugar.lon }, nombre: lugar.nombre } };
+    }
+    if (/\b(siembra|siembrame|siembre|sembrar)\b/.test(tn)) return { tipo: "sembrar", destino: "faltantes" };
+  }
+  // Poner una pieza: «pon el gateway en…», «agrega un repetidor en… a 20 m», «pon una persona en…»
+  const pieza = piezaEnTexto(tn, antenas);
+  const moverGateway = pieza === "gateway" && /\b(mueve|mover|muevelo|traslad\w*|cambia\w* .*(sitio|lugar|ubicacion))\b/.test(tn);
+  if (pieza && (VERBO_AGREGAR.test(tn) || moverGateway) && !/\b(mide|medir|distancia|perfil|senal en)\b/.test(tn)) {
+    const datos: DatosNodo = {};
+    const nombre = nombreNuevo(texto);
+    if (nombre) datos.nombre = nombre;
+    const altura = texto.match(/(\d{1,3}(?:[.,]\d+)?)\s*(?:m|mts?|metros?)\b(?!\s*s\.?\s*n)/i);
+    if (altura) datos.alturaM = Math.min(300, Math.max(0.5, num(altura[1])));
+    return { tipo: "pieza", pieza, coord: coord ?? undefined, datos, mover: moverGateway };
+  }
+  // «¿Qué hago ahora?» con la red sembrada
+  if (/\b(que hago ahora|que sigue|siguiente paso|que me falta|que falta)\b/.test(tn)) return { tipo: "que-hago" };
+  return null;
+}
+
+/** Texto de la propuesta del sembrado automático, con los botones para ponerla o descartarla. */
+function textoSiembra(s: Siembra, destinos: DestinoSiembra[]): Respuesta {
+  const n = s.puntos.length;
+  const resultado = s.destinos
+    .map((d, i) => `${destinos[i]?.nombre ?? "El punto"} ${d.llega ? `quedaría con ${f1(d.margenDb, 0)} dB desde ${d.desde}` : `no se alcanza: ${d.motivo}`}`)
+    .join("; ");
+  if (!n) {
+    const algun = s.destinos.some((d) => d.llega);
+    return {
+      texto: algun ? `No hace falta ningún repetidor: ${resultado}.` : `No encontré cómo llegar: ${resultado}`,
+      acciones: algun && destinos.some((d) => !d.antena) ? [{ texto: "Poner una persona ahí", accion: "orden", orden: { tipo: "aceptar-siembra" } }] : undefined,
+    };
+  }
+  const lista = s.puntos.map((q, k) => `Propuesto ${k + 1} a ${f1(q.distanciaKm)} km de ${q.desde} (${f1(q.margenDb, 0)} dB, suelo a ${Math.round(q.sueloM)} m)`).join("; ");
+  return {
+    texto: `Propongo ${n === 1 ? "un repetidor" : `${n} repetidores`}: ${lista}. ${resultado}. Los ve en el mapa como torres naranjas punteadas; busqué las lomas con enlace sólido (≥ 30 dB). Revise el sitio y el acceso en campo antes de instalar.`,
+    acciones: [
+      { texto: `Poner ${n === 1 ? "el repetidor" : `los ${n} repetidores`}`, accion: "orden", orden: { tipo: "aceptar-siembra" } },
+      { texto: "Descartar", accion: "orden", orden: { tipo: "descartar-siembra" } },
+    ],
+  };
+}
+
+/** Resumen corto de la red sembrada: personas conectadas, sin cobertura y territorio cubierto. */
+export function textoRed(r: EstadoRed, limiteSaltos: number): string {
+  if (!r.gateways.length) return "Aún no hay gateway: es el primer paso, el sitio donde entra el internet.";
+  if (!r.alDia) return "La red se está calculando.";
+  const partes = [`${r.conectadas.length} de ${r.personas.length} ${r.personas.length === 1 ? "persona conectada" : "personas conectadas"}`];
+  if (r.sinCobertura.length) partes.push(`${r.sinCobertura.length} sin cobertura (${r.sinCobertura.map((a) => a.nombre).join(", ")})`);
+  if (r.lejos.length) partes.push(`${r.lejos.length} con más de ${limiteSaltos} saltos`);
+  if (r.aislados.length) partes.push(`${r.aislados.length === 1 ? "un repetidor" : `${r.aislados.length} repetidores`} sin red (${r.aislados.map((a) => a.nombre).join(", ")})`);
+  partes.push(`${f1(r.areaKm2, r.areaKm2 < 10 ? 1 : 0)} km² cubiertos`);
+  return `La red: ${partes.join(", ")}.`;
+}
+
 /** Parámetros de red (como en Radio Mobile), entorno, modelo y vista del mapa de señal. */
 function interpretarRed(texto: string, tn: string, api: Api): Orden | null {
   if (PREGUNTA.test(tn)) return null;
@@ -581,7 +723,7 @@ function interpretarRed(texto: string, tn: string, api: Api): Orden | null {
 
 /* ───────────── Ejecución ───────────── */
 
-export type ResultadoOrden = Respuesta & { deshacer?: Escenario; esperar?: string; pendiente?: Pendiente };
+export type ResultadoOrden = Respuesta & { deshacer?: Escenario; esperar?: string; pendiente?: Pendiente; luego?: Promise<Respuesta> };
 
 function textoCoord(c: { lat: number; lon: number }) {
   return `${aGMS(c.lat, "lat")}, ${aGMS(c.lon, "lon")} (${aDecimal(c.lat)}, ${aDecimal(c.lon)})`;
@@ -657,6 +799,12 @@ export function ejecutarOrden(o: Orden, api: Api): ResultadoOrden {
     }
     case "vista":
       api.vista(o.cambios);
+      if (o.cambios.animarRed !== undefined)
+        return {
+          texto: o.cambios.animarRed
+            ? "Listo: la malla se ve con el flujo animado. Las líneas turquesa avanzan hacia el gateway, los pulsos saltan de nodo en nodo, cada pieza destella al retransmitir y la nube «IA» del gateway se enciende cuando le llega algo."
+            : "Listo: la malla queda quieta, sin la animación del flujo. Para volver a verla, dígame «anima la red» o use el interruptor del panel.",
+        };
       return { texto: `Listo: el mapa de señal se ve ${o.descripcion}. Lo puede ajustar en Capas → Escala de la señal.` };
     case "informe": {
       const a = porId.get(o.a);
@@ -782,6 +930,126 @@ export function ejecutarOrden(o: Orden, api: Api): ResultadoOrden {
     case "borrar-mediciones":
       api.borrarMediciones();
       return { texto: "Borré todas las mediciones de la regla.", acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }], deshacer: antes };
+    case "pieza": {
+      const nombrePieza = { gateway: "el gateway", repetidor: "el repetidor", persona: "la persona" }[o.pieza];
+      if (!o.coord) {
+        api.armarPieza(o.pieza);
+        return {
+          texto: `Con gusto. Toque el mapa donde va ${nombrePieza}, o escríbame la coordenada, por ejemplo ${EJEMPLO_COORD}.${o.pieza === "repetidor" ? " Busque una loma o una torre que alcance al gateway o a otro repetidor conectado." : ""}`,
+          pendiente: { tipo: "pieza", pieza: o.pieza, datos: o.datos },
+        };
+      }
+      const { lat, lon } = o.coord;
+      const lugar = api.ubicacion(lat, lon);
+      const gw = antenas.find((a) => a.pasarela);
+      if (o.pieza === "gateway" && gw && (o.mover || api.modo() === "sembrar")) {
+        api.editar(gw.id, { lat: Number(lat.toFixed(6)), lon: Number(lon.toFixed(6)), activa: true });
+        api.centrar(lat, lon);
+        return {
+          texto: `Moví el gateway «${gw.nombre}» a ${textoCoord(o.coord)}${lugar ? `, en ${lugar}` : ""}: ahí entra el internet. Calculo de nuevo quién queda conectado.`,
+          acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }],
+          deshacer: antes,
+          esperar: gw.id,
+        };
+      }
+      const nueva = api.ponerPieza(o.pieza, lat, lon, o.datos);
+      const que = { gateway: "el gateway (Gateway + Internet)", repetidor: "el repetidor", persona: "la persona" }[o.pieza];
+      return {
+        texto: `Listo: puse ${que} «${nueva.nombre}» en ${textoCoord({ lat, lon })}${lugar ? `, en ${lugar}` : ""}, a ${fn(nueva.alturaM)} m.${o.coord.corregido ? " Tomé la longitud como oeste (negativa), como corresponde en Colombia." : ""} Ya calculo con el relieve real si queda conectad${o.pieza === "persona" ? "a" : "o"} al gateway.`,
+        acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }],
+        deshacer: antes,
+        esperar: nueva.id,
+      };
+    }
+    case "sembrar": {
+      const r = api.red();
+      if (!r.gateways.length) return { texto: "Primero hace falta el Gateway + Internet: es el punto de partida de la malla. Dígame dónde va, por ejemplo «pon el gateway en 4.2, -73.37».", acciones: [] };
+      if (!r.alDia) {
+        api.simular();
+        return { texto: "Primero termino de calcular la red con el relieve real; pídamelo de nuevo en un momento.", esperar: "*" };
+      }
+      let destinos: DestinoSiembra[];
+      if (o.destino === "faltantes") {
+        if (!r.sinCobertura.length) return { texto: r.personas.length ? "Todas las personas ya están conectadas al gateway. 🙂 Si quiere llevar la red más lejos, dígame «lleva la red a» y una coordenada o un municipio." : "Todavía no hay personas en el mapa. Póngalas primero, por ejemplo «pon una persona en 4.25, -73.30»." };
+        destinos = r.sinCobertura.map((a) => ({ lat: a.lat, lon: a.lon, nombre: a.nombre, antena: a }));
+      } else if ("id" in o.destino) {
+        const a = porId.get(o.destino.id);
+        if (!a) return { texto: "No encontré ese nodo." };
+        destinos = [{ lat: a.lat, lon: a.lon, nombre: a.nombre, antena: a }];
+      } else destinos = [{ lat: o.destino.coord.lat, lon: o.destino.coord.lon, nombre: o.destino.nombre }];
+      api.cambiarModo("sembrar");
+      const luego = api.sembrar(destinos).then((s) => (s ? textoSiembra(s, destinos) : { texto: "No pude calcular la propuesta. Revise que el gateway esté puesto y la red calculada." }));
+      return {
+        texto: `Busco lomas con buen enlace desde la red conectada hacia ${destinos.length === 1 ? (destinos[0].nombre ?? "ese punto") : `${destinos.length} personas`}. En un momento le muestro la propuesta en el mapa.`,
+        luego,
+      };
+    }
+    case "aceptar-siembra": {
+      const puestos = api.aceptarSiembra();
+      if (!puestos) return { texto: "No tengo una propuesta pendiente. Pídame, por ejemplo, «conecta a los que faltan»." };
+      return {
+        texto: `Listo: puse ${puestos === 1 ? "1 nodo" : `${puestos} nodos`}. Calculo la red de nuevo y le cuento quién queda conectado.`,
+        acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }],
+        deshacer: antes,
+        esperar: "*",
+      };
+    }
+    case "descartar-siembra":
+      api.descartarSiembra();
+      return { texto: "Descarté la propuesta. Puede poner los repetidores a mano con la pieza «Repetidor»." };
+    case "mensaje": {
+      const r = api.red();
+      if (!r.alDia) {
+        api.simular();
+        return { texto: "Primero calculo la red; pídame el mensaje otra vez en un momento.", esperar: "*" };
+      }
+      const desde =
+        (o.id ? porId.get(o.id) : undefined) ??
+        [...r.conectadas, ...r.lejos].sort((a, b) => (r.porNodo.get(b.id)?.saltos ?? 0) - (r.porNodo.get(a.id)?.saltos ?? 0))[0] ??
+        r.personas[0] ??
+        r.repetidores[0];
+      if (!desde) return { texto: "Ponga al menos una persona para enviar un mensaje al gateway." };
+      if (desde.pasarela) return { texto: `«${desde.nombre}» es el gateway: el mensaje ya está en internet. Elija una persona o un repetidor.` };
+      api.cambiarModo("sembrar");
+      const v = api.enviarMensaje(desde.id);
+      if (!v) return { texto: "Primero calculo la red; pídame el mensaje otra vez en un momento." };
+      const nombres = new Map(antenas.map((a) => [a.id, a.nombre]));
+      const ruta = v.ruta.map((id) => nombres.get(id) ?? id).join(" → ");
+      const tiempoTxt = (ms: number) => (ms < 1000 ? `${Math.round(ms)} ms` : `${f1(ms / 1000)} s`);
+      if (!v.llega)
+        return {
+          texto: `Envié un mensaje desde «${desde.nombre}» y no llega: ${v.motivo ?? "no tiene ruta"}${v.ruta.length > 1 ? ` (ruta: ${ruta})` : ""}.${r.porNodo.get(desde.id)?.estado === "sin-cobertura" ? " ¿Quiere que siembre un repetidor hacia esa persona?" : ""}`,
+          acciones: r.porNodo.get(desde.id)?.estado === "sin-cobertura" ? [{ texto: `Conectar a ${desde.nombre}`, accion: "orden", orden: { tipo: "sembrar", destino: { id: desde.id } } }] : undefined,
+        };
+      const pct = (p: number) => (p >= 0.999 ? "más de 99,9 %" : `${f1(p * 100, 0)} %`);
+      return {
+        texto: `Envié un mensaje de texto de 40 caracteres desde «${desde.nombre}»: llega al gateway en ${v.saltos} ${v.saltos === 1 ? "salto" : "saltos"} (${ruta}), en ≈ ${tiempoTxt(v.totalMs.tipica)}${v.totalMs.max - v.totalMs.min >= 1 ? ` (entre ${tiempoTxt(v.totalMs.min)} y ${tiempoTxt(v.totalMs.max)})` : ""}. Llega al primer intento ${pct(v.probabilidad)} de las veces y ${pct(v.probabilidadReintentos)} con 3 intentos. Con ${v.preset} cada salto ocupa ${tiempoTxt(v.aireMs)} en el aire (${v.bytes} bytes). Cada nodo lo retransmite una sola vez y los repetidores (ROUTER) salen primero; si el paquete pasara de ${v.limiteSaltos} saltos, se descartaría. La IA del gateway le contesta por la misma ruta: ≈ ${tiempoTxt(v.totalMs.tipica)} de vuelta por radio, más lo que tarde en pensar. Lo puede ver en el mapa: el sobre va, la nube «IA» se enciende y la respuesta regresa.`,
+      };
+    }
+    case "modo":
+      api.cambiarModo(o.modo);
+      return {
+        texto:
+          o.modo === "sembrar"
+            ? "Listo, modo «Sembrar la malla»: primero el Gateway + Internet, luego los repetidores y al final la gente. Le voy guiando paso a paso en el panel de la izquierda."
+            : "Listo, modo avanzado: tiene la lista de nodos, todos los parámetros y las herramientas del simulador. Para volver, toque «Sembrar la malla» arriba del panel.",
+      };
+    case "ejemplo-malla":
+      api.ejemploMalla();
+      return {
+        texto: "Cargué el ejemplo de malla: el gateway donde entra el internet, un repetidor en torre hacia el oriente y tres personas; la más lejana queda sin cobertura para que practique «Conectar a los que faltan». En un momento le cuento cómo quedó.",
+        acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }],
+        deshacer: antes,
+        esperar: "*",
+      };
+    case "que-hago": {
+      const r = api.red();
+      const c = consejoRed(r, api.parametros().limiteSaltos);
+      const acciones: Respuesta["acciones"] = [];
+      if (r.alDia && r.sinCobertura.length) acciones.push({ texto: "Conectar a los que faltan", accion: "orden", orden: { tipo: "sembrar", destino: "faltantes" } });
+      if (r.alDia && r.conectadas.length) acciones.push({ texto: "Enviar un mensaje de prueba", accion: "orden", orden: { tipo: "mensaje" } });
+      return { texto: `${c.paso ? `Paso ${c.paso}: ` : ""}${c.titulo}. ${c.texto}`, acciones: acciones.length ? acciones : undefined };
+    }
     case "coordenada-sola": {
       const lugar = api.ubicacion(o.coord.lat, o.coord.lon);
       return {

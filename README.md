@@ -2,19 +2,41 @@
 
 Herramienta web para planear redes Meshtastic: se ubican nodos por coordenadas (o en el mapa) y el simulador calcula la
 cobertura y el rango de alcance sobre el relieve, los enlaces de la malla, los saltos hasta la pasarela y la
-factibilidad de la red, con la paleta de colores de Radio Mobile. Incluye a **Melki**, un asistente local que ejecuta
-pedidos en español («inscribe un nodo antena en 4.5, -73.1», «distancia entre Ejemplo y Torre 2»), responde preguntas
-y da tours guiados. También maneja las funciones de Radio Mobile («confiabilidad del 90 %», «ponle una Yagi a
+factibilidad de la red, con la paleta de colores de Radio Mobile. Abre en el modo **«Sembrar la malla»**, como en Trama:
+primero el Gateway + Internet, luego los repetidores según la distancia y al final la gente, con guía paso a paso,
+sembrado automático de repetidores y mensajes de prueba que viajan por la malla. Incluye a **Melki**, un asistente local que ejecuta
+pedidos en español («pon el gateway en 4.2, -73.37», «conecta a los que faltan», «envía un mensaje desde Persona 1»,
+«inscribe un nodo antena en 4.5, -73.1», «distancia entre Ejemplo y Torre 2»), responde preguntas (cómo viaja un
+mensaje, por qué una persona está en rojo, qué hacer ahora) y da tours guiados. También maneja las funciones de Radio Mobile («confiabilidad del 90 %», «ponle una Yagi a
 Ejemplo apuntando a Torre 2», «simula con vegetación densa», «muestra la señal en dBm», «informe del enlace…»).
 
-- **Nodos**: *nodo antena* (infraestructura en mástil; genera la cobertura) y *nodo* de campo (portátil, sensor;
-  participa en la malla)
+- **Sembrar la malla** (modo con que abre; «Modo avanzado» muestra todos los paneles):
+  - Tres piezas: *Gateway + Internet* (donde entra el internet; nodo pasarela a 8 m), *Repetidor* (torre o loma, ROUTER,
+    altura elegible de 6 a 30 m) y *Persona* (radio de mano con el celular, 1,5 m y 2 dBi). Se ponen con un clic en el
+    mapa y se arrastran; el gateway es uno solo (ponerlo otra vez lo mueve)
+  - Guía paso a paso y estado de la red: personas conectadas, sin cobertura o con más saltos que el límite,
+    repetidores sin red, km² cubiertos por la red conectada y saltos máximos. En el mapa cada pieza se pinta verde,
+    roja o naranja, con los saltos hasta el gateway
+  - Sembrado automático: «Conectar a los que faltan» o «Llevar la red a un punto» propone, con el relieve real, una
+    cadena de repetidores en las lomas con enlace sólido (≥ 30 dB); se revisa en el mapa y se pone o se descarta
+  - Enviar un mensaje: el paquete se anima salto a salto hasta el gateway, con el tiempo en el aire de LoRa, la espera
+    de retransmisión de Meshtastic, el límite de saltos y la probabilidad de entrega (con y sin reintentos); en cada
+    transmisión se abre una onda y destellan los vecinos que lo escuchan (inundación), y la IA del gateway responde
+    por la misma ruta
+  - Malla animada, como en Trama: piezas redondas (el gateway es el router con la nube «IA») que laten si están
+    conectadas, parpadean en rojo sin cobertura y destellan al retransmitir; líneas turquesa que avanzan hacia el
+    gateway con pulsos que saltan de nodo en nodo; alcance de cada nodo en turquesa siguiendo el relieve. Se apaga con
+    «Animar el flujo de la información» y respeta la opción del sistema de reducir el movimiento
+  - «Cómo se juega» y alcance de referencia en terreno plano (gateway → gente, repetidor → gente según la torre,
+    repetidor ↔ repetidor), como el «hasta 10 km» de Trama
+- **Nodos** (modo avanzado): *nodo antena* (infraestructura en mástil; genera la cobertura) y *nodo* de campo
+  (portátil, sensor; participa en la malla)
 - **Funciones de Radio Mobile**: parámetros de red (clima, polarización, suelo, refractividad, modo estadístico y
   confiabilidad), modelo Longley-Rice (ITM 1.2.2) opcional, antenas direccionales (Yagi, panel, sectorial,
   parabólica) con azimut y elevación, pérdidas por entorno (vegetación y edificios), señal en margen, dBm, µV o
   dBµV/m con colores por clases, arcoíris o umbral, e informe de radioenlace como «Radio Link»
-- **Tours guiados** de Melki (botón «Tours» o «hazme un tour»): tutorial básico práctico de 7 pasos, «Conocer la
-  pantalla», «Red mesh completa», «Como Radio Mobile», «Medir y exportar» y «Hablar con Melki». En los pasos prácticos
+- **Tours guiados** de Melki (botón «Tours» o «hazme un tour»): tutorial básico práctico de 7 pasos, «Sembrar la
+  malla», «Conocer la pantalla», «Red mesh completa», «Como Radio Mobile», «Medir y exportar» y «Hablar con Melki». En los pasos prácticos
   Melki detecta cuando quedó hecho y ofrece «Hágalo por mí» y «Omitir paso»; todo ocurre en un escenario de práctica y
   al salir el del usuario vuelve tal cual (también si se cierra la página a mitad del tour)
 - **Dictado por voz** para Melki: micrófono junto al botón de enviar; el texto aparece en la caja para revisarlo y
@@ -55,7 +77,9 @@ src/
   components/melki/         asistente: avatar, cerebro local, órdenes, tours guiados (tours.ts + recorrido.tsx), voz y dictado
   datos/geo/                límites, nombres y ríos de referencia (ver LEEME.md: fuentes y licencias)
   lib/geo/                  consultas locales: municipio de un punto, búsqueda de lugares
-  lib/radio/                motor: modelo, relieve, perfil, cobertura, malla, factibilidad, worker
+  lib/radio/                motor: modelo, relieve, perfil, cobertura, malla, factibilidad, worker;
+                            estado-red (piezas y guía), siembra (repetidores automáticos), mensaje (viaje por la malla),
+                            alcance-plano (alcance de referencia); components/simulador/animacion-malla.ts (flujo animado)
   lib/config.ts             fuentes de mapas y relieve (reemplazables con variables de entorno)
 scripts/                    versión HTML, paquetes de avance y compresor ZIP
 tests/                      pruebas del motor y de extremo a extremo
@@ -92,6 +116,23 @@ confiable (≥ 37 dB).
   E (dBµV/m) = dBm − G + 20·log10 f(MHz) + 77,2.
 - **Informe de radioenlace** (`src/lib/radio/informe.ts`): distancia, azimuts, ángulos de elevación, peor despeje de
   Fresnel, PIRE, pérdidas desglosadas, Longley-Rice de referencia y nivel recibido; se copia o descarga en texto.
+
+### Mensajes y sembrado de la malla
+
+- **Mensaje** (`src/lib/radio/mensaje.ts`): tiempo en el aire LoRa según Semtech (preámbulo de 16 símbolos, cabecera
+  explícita, CRC, optimización para tasas bajas cuando el símbolo pasa de 16 ms; tasa de código 4/5, o 4/8 en Long
+  Moderate y Long Slow), paquete de 16 + 6 bytes más el texto. Antes de retransmitir, cada nodo espera según la
+  ventana de contención de Meshtastic (CW de 3 a 8 según la SNR, ranura = 2,5 símbolos + 7,6 ms): los ROUTER salen
+  primero y los demás esperan además 2·CWmáx ranuras. La SNR de cada salto es margen + SNR mínima del SF
+  (−2,5·(SF − 4)). Probabilidad por salto = logística del margen (20 dB ≈ 70 %, 30 dB ≈ 98 %); la del mensaje es el
+  producto, y con 3 intentos, 1 − (1 − P)³. Si la ruta pasa del límite de saltos o un salto queda por debajo de 20 dB,
+  el mensaje no llega.
+- **Alcance de referencia** (`src/lib/radio/alcance-plano.ts`): distancia máxima con margen ≥ 20 dB (o ≥ 30 dB entre
+  repetidores) sobre terreno plano, por búsqueda binaria con el mismo cálculo de enlaces.
+- **Sembrado** (`src/lib/radio/siembra.ts`): desde la red conectada al gateway, avanza hacia cada destino buscando en
+  un abanico de ±45° (hasta 14 km por paso) el punto con enlace ≥ 30 dB (o ≥ 22 dB si no hay) que más avanza; entre
+  los que avanzan al menos el 80 % de lo máximo, elige el de suelo más alto. Para cuando una persona en el destino
+  queda con ≥ 20 dB; máximo 10 repetidores. Usa el mismo cálculo de enlaces y el mismo relieve que la simulación.
 
 Es una herramienta de planeación: confirme en campo con la prueba de alcance de Meshtastic antes de instalar.
 

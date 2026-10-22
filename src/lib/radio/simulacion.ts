@@ -9,6 +9,7 @@ import { anguloElevacion, atenuacionPatron } from "./patron";
 import { calcularPerfil, pasoPerfil, type ExtremoPerfil } from "./perfil";
 import { calculoRed, completarParametros, resumenRed } from "./red";
 import { relieveDesdeHgt, relieveDesdeTeselas, relievePlano, type CargarTesela, type ColeccionHgt, type Relieve } from "./relieve";
+import { cajaSiembra, sembrar as proponerSiembra, type PedidoSiembra, type Siembra } from "./siembra";
 import type { Antena, Caja, FuenteRelieve, InformeEnlace, Parametros, Perfil, PerfilTerreno, PuntoPerfil, ResultadoSimulacion } from "./tipos";
 import { geometriaTrayecto, perdidasTrayecto } from "./trayecto";
 
@@ -251,6 +252,14 @@ function peorPunto(pf: Perfil, lambda: number): number {
     }
   }
   return peor;
+}
+
+/** Sembrado automático: propone repetidores desde la red conectada hacia los destinos, con el relieve real. */
+export async function sembrarMalla(pedido: PedidoSiembra, fuente: FuenteRelieve, ctx: Contexto): Promise<Siembra> {
+  if (!pedido.destinos.length) return { puntos: [], destinos: [], margenObjetivoDb: pedido.margenObjetivoDb ?? 30 };
+  const caja = cajaSiembra(pedido.origenes, pedido.destinos);
+  const relieve = await obtenerRelieve(caja, fuente, ctx);
+  return proponerSiembra(pedido, relieve, caja);
 }
 
 /** Perfil del terreno a lo largo de una ruta de puntos [lon, lat] (para la regla de medición). */

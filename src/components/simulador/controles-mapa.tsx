@@ -1,7 +1,7 @@
 "use client";
 
 // Controles sobre el mapa: herramienta (incluida la regla), tipo de nodo, modo de color, capas, leyenda e inspector de puntos.
-import { Crosshair, Hand, Layers, MapPin, Ruler, Smartphone, X } from "lucide-react";
+import { Crosshair, Flag, Hand, Layers, MapPin, Ruler, Smartphone, X } from "lucide-react";
 import { useEffect, useRef, useState, type Dispatch } from "react";
 
 import { CLASES, ENLACES, presetPorId } from "@/lib/radio/constantes";
@@ -12,7 +12,8 @@ import { aDbm, decimalesUnidad, desdeDbm, textoNivel, UNIDADES, type Receptor, t
 
 import { ARCOIRIS, COLOR_BAJO_ESCALA, COLORES_ANTENA, COLORES_REDUNDANCIA, COLORES_UMBRAL } from "./capa-cobertura";
 import type { Accion, EscalaSenal, Estado, FondoMapa, Herramienta, ModoMapa } from "./estado";
-import { IconoTorre } from "./icono-torre";
+import { IconoPieza, IconoTorre } from "./icono-torre";
+import { NOMBRE_PIEZA, PIEZAS, type Pieza } from "./piezas";
 import { CampoNumero, fmt, Interruptor, Segmentado } from "./ui";
 
 const SUBTITULO_UNIDAD: Record<UnidadId, string> = {
@@ -112,6 +113,7 @@ function EscalaSenalCampos({ estado, despachar }: { estado: Estado; despachar: D
 const corto = "sr-only sm:not-sr-only";
 
 export function BarraMapa({ estado, despachar }: { estado: Estado; despachar: Dispatch<Accion> }) {
+  const sembrar = estado.modo === "sembrar";
   return (
     <div className="pointer-events-none absolute top-3 left-3 z-[25] flex max-w-[calc(100%-70px)] flex-wrap gap-2">
       <div className="pointer-events-auto" data-tour="herramientas">
@@ -122,13 +124,34 @@ export function BarraMapa({ estado, despachar }: { estado: Estado; despachar: Di
           onCambio={(v) => despachar({ tipo: "herramienta", herramienta: v })}
           opciones={[
             { valor: "mover", texto: <><Hand size={15} /> <span className={corto}>Mover</span></>, titulo: "Mover el mapa y arrastrar los nodos" },
-            { valor: "agregar", texto: <><Crosshair size={15} /> <span className={corto}>Agregar</span></>, titulo: "Clic en el mapa para agregar un nodo" },
+            sembrar
+              ? { valor: "agregar", texto: <><Crosshair size={15} /> <span className={corto}>Poner</span></>, titulo: "Clic en el mapa para poner un gateway, un repetidor o una persona" }
+              : { valor: "agregar", texto: <><Crosshair size={15} /> <span className={corto}>Agregar</span></>, titulo: "Clic en el mapa para agregar un nodo" },
             { valor: "inspeccionar", texto: <><MapPin size={15} /> <span className={corto}>Medir señal</span></>, titulo: "Clic en el mapa para ver la señal de cada nodo antena en ese punto" },
             { valor: "regla", texto: <><Ruler size={15} /> <span className={corto}>Regla</span></>, titulo: "Medir distancias, trayectos y áreas, como en Google Earth" },
           ]}
         />
       </div>
-      {estado.herramienta === "agregar" && (
+      {estado.herramienta === "agregar" && sembrar && (
+        <div className="pointer-events-auto" data-tour="pieza-mapa">
+          <Segmentado<Pieza>
+            claro
+            etiqueta="Pieza que se pone"
+            valor={estado.pieza}
+            onCambio={(v) => despachar({ tipo: "pieza", pieza: v })}
+            opciones={PIEZAS.map((p) => ({ valor: p, texto: <><IconoPieza pieza={p} className="h-4 w-4" /> <span className={corto}>{NOMBRE_PIEZA[p]}</span></>, titulo: NOMBRE_PIEZA[p] }))}
+          />
+        </div>
+      )}
+      {estado.herramienta === "destino" && (
+        <div className="pointer-events-auto flex items-center gap-2 rounded-lg bg-melki px-3 py-1.5 text-[13px] font-medium text-white shadow-sm" role="status">
+          <Flag size={15} /> Toque el punto al que quiere llevar la red
+          <button type="button" onClick={() => despachar({ tipo: "herramienta", herramienta: "mover" })} className="-mr-1 rounded p-0.5 hover:bg-white/20" aria-label="Cancelar">
+            <X size={15} />
+          </button>
+        </div>
+      )}
+      {estado.herramienta === "agregar" && !sembrar && (
         <div className="pointer-events-auto" data-tour="tipo-nuevo">
           <Segmentado<TipoNodo>
             claro
@@ -142,7 +165,7 @@ export function BarraMapa({ estado, despachar }: { estado: Estado; despachar: Di
           />
         </div>
       )}
-      <div className="pointer-events-auto" data-tour="modos">
+      <div className={`pointer-events-auto ${sembrar ? "hidden" : ""}`} data-tour="modos">
         <Segmentado<ModoMapa>
           claro
           etiqueta="Color de la cobertura"
@@ -275,6 +298,7 @@ export function Leyenda({ estado, resultado, antenas }: { estado: Estado; result
         ? resultado.antenas.map((a, i) => ({ color: COLORES_ANTENA[i % COLORES_ANTENA.length], texto: antenas.find((x) => x.id === a.id)?.nombre ?? a.nombre, rango: "" }))
         : COLORES_REDUNDANCIA.map((c) => ({ color: c.color, texto: c.nombre, rango: "" }));
   const titulo = modo === "senal" ? "Nivel de señal" : modo === "servidor" ? "Nodo antena con mejor señal" : "Nodos antena con servicio";
+  if (estado.modo === "sembrar") return <LeyendaSembrar abierta={abierta} onAbrir={setAbierta} filas={escala === "clases" ? filas : CLASES.map((c) => ({ color: c.color, texto: c.nombre, rango: "" }))} />;
   if (!abierta) {
     return (
       <button
@@ -357,6 +381,63 @@ export function Leyenda({ estado, resultado, antenas }: { estado: Estado; result
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+/** Leyenda corta del modo «Sembrar la malla»: qué significa cada color de las piezas y del mapa. */
+function LeyendaSembrar({ abierta, onAbrir, filas }: { abierta: boolean; onAbrir: (v: boolean) => void; filas: { color: string; texto: string }[] }) {
+  const punto = (color: string) => <span className="h-3.5 w-3.5 shrink-0 rounded-full border-2 bg-[#10201d]" style={{ borderColor: color, boxShadow: `0 0 6px ${color}` }} />;
+  if (!abierta)
+    return (
+      <button
+        type="button"
+        onClick={() => onAbrir(true)}
+        className="pointer-events-auto absolute bottom-10 left-3 z-10 flex items-center gap-2 rounded-lg bg-white/95 px-2.5 py-1.5 text-[13px] font-medium text-carbon shadow-md ring-1 ring-black/10"
+        data-tour="leyenda"
+        aria-expanded={false}
+      >
+        {punto("#3FD68B")}
+        {punto("#FF5A4E")}
+        {punto("#FF9F43")} Leyenda
+      </button>
+    );
+  return (
+    <div className="pointer-events-auto absolute bottom-10 left-3 z-10 w-48 rounded-lg bg-white/95 p-2.5 text-carbon shadow-md ring-1 ring-black/10" data-tour="leyenda">
+      <div className="flex items-start justify-between gap-2">
+        <p className="font-cond text-[14.5px] leading-tight font-semibold">Cómo leer el mapa</p>
+        <button type="button" onClick={() => onAbrir(false)} className="-mt-1 -mr-1 rounded p-1 text-tenue hover:bg-black/5" aria-label="Plegar la leyenda" aria-expanded={true}>
+          <X size={14} />
+        </button>
+      </div>
+      <ul className="mt-1.5 space-y-1 text-[12.5px] leading-tight">
+        <li className="flex items-center gap-2">{punto("#3EE6C8")} Gateway + Internet con IA</li>
+        <li className="flex items-center gap-2">{punto("#3FD68B")} Conectado al gateway</li>
+        <li className="flex items-center gap-2">{punto("#FF5A4E")} Sin cobertura (parpadea)</li>
+        <li className="flex items-center gap-2">{punto("#FF9F43")} No alcanza la red</li>
+        <li className="flex items-center gap-2">
+          <svg width="14" height="8" className="shrink-0" aria-hidden="true">
+            <line x1="0" y1="4" x2="14" y2="4" stroke="#3EE6C8" strokeWidth="5" strokeOpacity=".35" />
+            <line x1="0" y1="4" x2="14" y2="4" stroke="#0F1F1C" strokeWidth="2.2" strokeDasharray="3 2" />
+          </svg>
+          Flujo hacia el gateway
+        </li>
+        <li className="flex items-center gap-2">
+          <span className="grid h-4 min-w-4 shrink-0 place-items-center rounded-full bg-carbon px-1 font-cond text-[10.5px] font-bold text-white">2</span> Saltos hasta el gateway
+        </li>
+      </ul>
+      <div className="mt-2 border-t border-linea pt-1.5">
+        <p className="text-[11.5px] text-tenue">Señal en el terreno</p>
+        <div className="mt-1 flex h-2.5 overflow-hidden rounded-[3px] ring-1 ring-black/10" aria-hidden="true">
+          {filas.map((f) => (
+            <span key={f.texto} className="flex-1" style={{ background: f.color }} />
+          ))}
+        </div>
+        <div className="mt-0.5 flex justify-between text-[11px] text-tenue">
+          <span>Buena</span>
+          <span>Sin servicio</span>
+        </div>
+      </div>
     </div>
   );
 }

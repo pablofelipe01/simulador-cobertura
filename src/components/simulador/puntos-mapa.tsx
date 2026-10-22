@@ -128,7 +128,9 @@ export function TarjetaNodo({
   soloSeleccionada,
   onSolo,
   onCerrar,
+  sembrar,
 }: {
+  sembrar?: boolean;
   antena: Antena;
   resumen: ResumenAntena | undefined;
   nodo: NodoMalla | undefined;
@@ -139,6 +141,9 @@ export function TarjetaNodo({
 }) {
   const campo = (antena.tipo ?? "antena") === "nodo";
   const lugar = textoUbicacion(antena.lat, antena.lon);
+  // En el modo «Sembrar la malla» se habla de gateway, repetidores y personas
+  const clase = sembrar ? (antena.pasarela ? "Gateway + Internet" : campo ? "Persona" : "Repetidor") : `${campo ? "Nodo de campo" : "Nodo antena"}${antena.pasarela ? " · pasarela" : ""}`;
+  const destino = sembrar ? "del gateway" : "de la pasarela";
   return (
     <div className="pointer-events-auto absolute right-3 bottom-28 z-10 hidden w-72 rounded-xl bg-white/95 p-3 text-carbon shadow-lg ring-1 ring-black/10 xl:block" aria-label={`Información de ${antena.nombre}`} data-tour="tarjeta-nodo">
       <div className="flex items-start gap-2">
@@ -148,8 +153,7 @@ export function TarjetaNodo({
         <div className="min-w-0 flex-1">
           <p className="truncate font-cond text-[16px] leading-tight font-semibold">{antena.nombre}</p>
           <p className="text-[12px] text-tenue">
-            {campo ? "Nodo de campo" : "Nodo antena"}
-            {antena.pasarela ? " · pasarela" : ""} · {fmt(antena.alturaM, antena.alturaM % 1 ? 1 : 0)} m · {fmt(antena.gananciaDbi)} dBi
+            {clase} · {fmt(antena.alturaM, antena.alturaM % 1 ? 1 : 0)} m · {fmt(antena.gananciaDbi)} dBi
           </p>
         </div>
         <button type="button" onClick={onCerrar} className="rounded p-1 text-tenue hover:bg-black/5" aria-label="Cerrar la información">
@@ -177,7 +181,7 @@ export function TarjetaNodo({
       )}
       {nodo && !antena.pasarela && (
         <p className="mt-1.5 text-[12px] leading-snug text-carbon-2">
-          {nodo.saltos === null ? "Sin ruta a la pasarela." : `A ${nodo.saltos} ${nodo.saltos === 1 ? "salto" : "saltos"} de la pasarela: ${nodo.ruta.map((id) => nombres.get(id) ?? id).join(" → ")}.`}
+          {nodo.saltos === null ? `Sin ruta ${sembrar ? "al gateway" : "a la pasarela"}.` : `A ${nodo.saltos} ${nodo.saltos === 1 ? "salto" : "saltos"} ${destino}: ${nodo.ruta.map((id) => nombres.get(id) ?? id).join(" → ")}.`}
         </p>
       )}
       {resumen && (

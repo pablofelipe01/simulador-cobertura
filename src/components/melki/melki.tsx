@@ -6,6 +6,7 @@
 import { Compass, Globe, LoaderCircle, Mic, Send, Settings2, ShieldCheck, Square, Trash2, Volume2, VolumeX, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
+import { consejoRed, estadoRed, piezaDe } from "@/lib/radio/estado-red";
 import type { Escenario, ResultadoSimulacion } from "@/lib/radio/tipos";
 
 import { MelkiAvatar } from "./avatar";
@@ -23,7 +24,7 @@ import {
   type EstadoDictado,
   type ModoDictado,
 } from "./dictado";
-import { ejecutarOrden, interpretarOrden, type Api, type Pendiente } from "./ordenes";
+import { ejecutarOrden, interpretarOrden, textoRed, type Api, type Pendiente } from "./ordenes";
 import type { IdTour } from "./tours";
 import { callar, hablar, vozDisponible } from "./voz";
 
@@ -52,8 +53,41 @@ function guardarPreferencias(cambios: Partial<Preferencias>) {
   }
 }
 
+/** En el modo «Sembrar la malla»: quién quedó conectado al gateway y qué sigue. */
+function resumenMalla(r: ResultadoSimulacion, api: Api, id: string): Respuesta {
+  const limite = api.parametros().limiteSaltos;
+  const antenas = api.antenas();
+  const red = estadoRed(antenas, r, limite, true);
+  const general = textoRed(red, limite);
+  const acciones: AccionRespuesta[] = [];
+  if (red.sinCobertura.length) acciones.push({ texto: "Conectar a los que faltan", accion: "orden", orden: { tipo: "sembrar", destino: "faltantes" } });
+  else if (red.conectadas.length) acciones.push({ texto: "Enviar un mensaje de prueba", accion: "orden", orden: { tipo: "mensaje" } });
+  const a = id !== "*" ? antenas.find((x) => x.id === id) : undefined;
+  const info = a ? red.porNodo.get(a.id) : undefined;
+  if (a && info) {
+    const nombres = new Map(antenas.map((x) => [x.id, x.nombre]));
+    const persona = piezaDe(a) === "persona";
+    let t = "";
+    if (info.estado === "gateway") t = `El gateway «${a.nombre}» está listo: ahí entra el internet y de ahí sale la malla.`;
+    else if (info.estado === "conectado") {
+      const n = r.nodos.find((x) => x.id === a.id);
+      t = `«${a.nombre}» quedó conectad${persona ? "a" : "o"} al gateway en ${info.saltos} ${info.saltos === 1 ? "salto" : "saltos"}${n && n.ruta.length > 1 ? ` (${n.ruta.map((x) => nombres.get(x) ?? x).join(" → ")})` : ""}${n?.cuelloDb != null ? `, con ${f1(n.cuelloDb)} dB en su enlace más débil` : ""}.`;
+    } else if (info.estado === "lejos") t = `«${a.nombre}» llega al gateway, pero con ${info.saltos} saltos, más que el límite de ${limite}: el mensaje se perdería en el camino.`;
+    else {
+      const mejor = r.enlaces.filter((e) => e.a === a.id || e.b === a.id).sort((x, y) => y.margen - x.margen)[0];
+      const otro = mejor ? nombres.get(mejor.a === a.id ? mejor.b : mejor.a) : null;
+      t = `«${a.nombre}» no alcanza la red${mejor && otro ? `: su mejor enlace es con ${otro} (${f1(mejor.margen)} dB; se necesitan 20 dB)` : ""}. ${info.estado === "aislado" ? "Acérquelo a un repetidor conectado, súbalo a una loma o ponga otro repetidor en medio." : "Póngale un repetidor cerca, en una loma, o pídame que lo siembre."}`;
+      if (info.estado === "sin-cobertura") acciones.splice(0, acciones.length, { texto: `Conectar a ${a.nombre}`, accion: "orden", orden: { tipo: "sembrar", destino: { id: a.id } } });
+    }
+    return { texto: `${t} ${general}`, acciones };
+  }
+  const c = consejoRed(red, limite);
+  return { texto: `Red calculada. ${general}${c.tono === "ok" ? " ¡Toda la gente está conectada!" : ` Siguiente: ${c.texto}`}`, acciones };
+}
+
 /** Resumen que Melki da cuando termina la simulación que él mismo pidió. */
 function resumenResultado(r: ResultadoSimulacion, api: Api, id: string): Respuesta {
+  if (api.modo() === "sembrar") return resumenMalla(r, api, id);
   const nombres = new Map(api.antenas().map((a) => [a.id, a]));
   const red = `La red queda: ${r.factibilidad.titulo.toLowerCase()} (${r.factibilidad.puntaje}/100).`;
   if (id !== "*") {
@@ -294,6 +328,8 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     if (res.deshacer) ultimoDeshacer.current = res.deshacer;
     if (res.esperar) esperando.current = res.esperar;
     agregarMelki(res);
+    // Órdenes que tardan (el sembrado automático): la respuesta llega cuando el motor termina
+    if (res.luego) void res.luego.then((r) => agregarMelki(r)).catch(() => agregarMelki({ texto: "No pude terminar ese cálculo. Intente de nuevo." }));
   };
 
   const preguntar = (q: string) => {

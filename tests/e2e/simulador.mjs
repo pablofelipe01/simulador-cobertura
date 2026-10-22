@@ -19,7 +19,7 @@ const afirmar = (condicion, mensaje) => {
   if (!condicion) throw new Error(mensaje);
 };
 
-async function flujo(nombre, fn, { tamano = { width: 1440, height: 900 }, conMelki = false, preparar } = {}) {
+async function flujo(nombre, fn, { tamano = { width: 1440, height: 900 }, conMelki = false, sembrar = false, preparar } = {}) {
   // SOLO=flujo1,flujo2 corre solo esos flujos
   if (process.env.SOLO && !process.env.SOLO.split(",").includes(nombre)) return;
   const context = await navegador.newContext({ viewport: tamano, locale: "es-CO", acceptDownloads: true });
@@ -31,15 +31,20 @@ async function flujo(nombre, fn, { tamano = { width: 1440, height: 900 }, conMel
     if (m.type() === "error" && !/GL Driver|WebGL|Failed to load resource|AJAXError/.test(m.text())) avisos.push(m.text());
   });
   page.on("pageerror", (e) => avisos.push(`pageerror: ${e.message}`));
-  // Estado limpio; sin la bienvenida de Melki salvo en su propia prueba
-  await page.addInitScript((melki) => {
-    // Solo en la primera carga de la pestaña (window.name sobrevive a las recargas también en file://)
-    if (sessionStorage.getItem("e2e") || window.name === "e2e") return;
-    sessionStorage.setItem("e2e", "1");
-    window.name = "e2e";
-    localStorage.clear();
-    if (!melki) localStorage.setItem("simulador-cobertura-melki-v1", JSON.stringify({ visto: true, voz: false }));
-  }, conMelki);
+  // Estado limpio; sin la bienvenida de Melki salvo en su propia prueba. Las pruebas de siempre usan el modo
+  // avanzado; las de «Sembrar la malla», el modo con que abre el simulador.
+  await page.addInitScript(
+    ({ melki, sembrar: modoSembrar }) => {
+      // Solo en la primera carga de la pestaña (window.name sobrevive a las recargas también en file://)
+      if (sessionStorage.getItem("e2e") || window.name === "e2e") return;
+      sessionStorage.setItem("e2e", "1");
+      window.name = "e2e";
+      localStorage.clear();
+      if (!melki) localStorage.setItem("simulador-cobertura-melki-v1", JSON.stringify({ visto: true, voz: false }));
+      if (!modoSembrar) localStorage.setItem("simulador-cobertura-modo", "avanzado");
+    },
+    { melki: conMelki, sembrar },
+  );
   let ok = true;
   let error = "";
   try {
@@ -404,10 +409,15 @@ async function recorrerTour(page, nombre, foto) {
     const hagalo = tour.getByRole("button", { name: "Hágalo por mí" });
     const siguiente = tour.getByRole("button", { name: /^(Empezar|Siguiente|Terminar)$/ });
     if (await hagalo.isVisible()) {
-      await hagalo.click();
-      await tour.getByText(/Listo, lo hice por usted\.|¡Bien hecho!|Listo: /).waitFor({ timeout: 60000 }).catch(() => {
-        throw new Error(`«${nombre}»: el paso «${t}» no se detectó después de «Hágalo por mí»`);
-      });
+      // Si el paso se cumple solo justo antes (el cálculo automático), el botón desaparece: se sigue sin esperarlo
+      const pulsado = await hagalo.click({ timeout: 3000 }).then(
+        () => true,
+        () => false,
+      );
+      if (pulsado)
+        await tour.getByText(/Listo, lo hice por usted\.|¡Bien hecho!|Listo: /).waitFor({ timeout: 60000 }).catch(() => {
+          throw new Error(`«${nombre}»: el paso «${t}» no se detectó después de «Hágalo por mí»`);
+        });
     } else if (await siguiente.isVisible()) await siguiente.click();
     // Paso hecho solo (por ejemplo, el cálculo automático): se pasa solo al siguiente
     await page.waitForFunction((x) => document.querySelector('[role=dialog][aria-label^="Tour:"] p.font-cond')?.textContent !== x, t, { timeout: 15000 });
@@ -436,7 +446,7 @@ await flujo(
     await page.getByRole("button", { name: "Sí, muéstreme" }).click();
     const menu = page.getByRole("region", { name: "Conversación con Melki" }).getByRole("group", { name: "Tours guiados" });
     await menu.waitFor();
-    afirmar((await menu.getByRole("button").count()) === 6, "El menú debería tener 6 tours");
+    afirmar((await menu.getByRole("button").count()) === 7, "El menú debería tener 7 tours");
     afirmar(/^Tutorial básico \(recomendado\)/.test(await menu.getByRole("button").first().innerText()), "El tutorial básico debería ir primero");
     await foto("menu");
     await menu.getByRole("button", { name: /^Conocer la pantalla/ }).click();
@@ -557,6 +567,261 @@ await flujo("guardado", async (page) => {
   await page.getByLabel("Nombre del escenario").waitFor();
   afirmar((await page.getByLabel("Nombre del escenario").inputValue()) === "Escenario guardado", "El escenario no se conservó al recargar");
 });
+
+/* ───────────── Modo «Sembrar la malla» ───────────── */
+
+/** Espera a que la red sembrada quede calculada (sin «Calculando» en la guía ni en el estado). */
+const esperarRed = async (page) => {
+  await page.waitForFunction(() => !document.querySelector("[role=progressbar]"), null, { timeout: 90000 });
+  await page.waitForFunction(
+    () => {
+      const g = document.querySelector("[data-tour=guia-sembrar]")?.textContent ?? "";
+      const e = document.querySelector("[data-tour=estado-red]")?.textContent ?? "";
+      return g !== "" && !/Calculando/.test(g + e);
+    },
+    null,
+    { timeout: 90000 },
+  );
+};
+const cargarMalla = async (page) => {
+  await page.getByRole("button", { name: "Ejemplo de malla" }).click();
+  await page.waitForTimeout(400);
+  await esperarRed(page);
+};
+/** Número de una cifra del «Estado de la red». */
+const cifra = async (page, etiqueta) => (await page.locator("[data-tour=estado-red] > div > div").filter({ hasText: etiqueta }).locator("p").first().innerText()).trim();
+const guia = (page) => page.locator("[data-tour=guia-sembrar]").innerText();
+const piezasEnLista = (page) => page.locator("[data-tour=lista-piezas] li").count();
+
+await flujo(
+  "sembrar-inicio",
+  async (page, foto) => {
+    await page.getByRole("complementary", { name: "Sembrar la malla" }).waitFor();
+    await esperarRed(page);
+    afirmar(/Ponga los repetidores/.test(await guia(page)), `Con solo el gateway, la guía debería pedir repetidores: ${await guia(page)}`);
+    afirmar(!(await page.getByRole("tab", { name: /^Nodos/ }).isVisible()), "En el modo «Sembrar» no van las pestañas del modo avanzado");
+    await cargarMalla(page);
+    afirmar((await cifra(page, "conectados de 3")) === "2", `Deberían quedar 2 personas conectadas (${await cifra(page, "conectados de 3")})`);
+    afirmar((await cifra(page, "sin cobertura")) === "1", "Debería quedar 1 persona sin cobertura");
+    afirmar(/Una persona sin cobertura/.test(await guia(page)), "La guía debería señalar a la persona sin cobertura");
+    afirmar((await page.locator(".pieza.red-sin-cobertura").count()) === 1, "Falta la persona en rojo en el mapa");
+    afirmar((await page.locator(".pieza .saltos").count()) >= 3, "Faltan los saltos sobre las piezas conectadas");
+    afirmar((await page.locator(".pieza-gateway .pieza-ia").count()) === 1, "Falta la nube «IA» sobre el gateway");
+    // Flujo animado: rutas vivas hacia el gateway y piezas que destellan al retransmitir
+    await page.waitForFunction(() => Number(document.querySelector("[data-rutas-vivas]")?.dataset.rutasVivas) >= 2 && document.querySelector("[data-animacion]")?.dataset.animacion === "si", null, { timeout: 15000 });
+    await page.waitForSelector(".pieza.transmite, .pieza-ia.piensa", { state: "attached", timeout: 15000 });
+    await page.locator("[data-tour=alcance-referencia]").getByText(/Repetidor de 15 m → gente/).waitFor();
+    await page.getByRole("button", { name: "Cómo se juega" }).waitFor();
+    await page.locator('[aria-label="Persona Persona 3"]').waitFor();
+    await page.getByText("Cómo leer el mapa").waitFor();
+    await foto("malla");
+  },
+  { sembrar: true },
+);
+
+await flujo(
+  "sembrar-manual",
+  async (page, foto) => {
+    await esperarRed(page);
+    await page.getByRole("button", { name: "Vaciar" }).click();
+    await page.getByRole("button", { name: "¿Seguro? Vaciar todo" }).click();
+    afirmar(/Ponga el Gateway \+ Internet/.test(await guia(page)), "Sin nada, el primer paso es el gateway");
+    afirmar((await page.locator("[data-tour=piezas]").getByRole("button", { name: /Gateway \+ Internet/ }).getAttribute("aria-pressed")) === "true", "Después de vaciar queda armado el gateway");
+    const c = await mapaCentro(page);
+    await page.mouse.click(c.x - 150, c.y + 60);
+    await page.waitForTimeout(250);
+    // Después del gateway queda armado el repetidor
+    afirmar((await page.locator("[data-tour=piezas]").getByRole("button", { name: /Repetidor/ }).getAttribute("aria-pressed")) === "true", "Tras el gateway debería quedar armado el repetidor");
+    await page.mouse.click(c.x + 60, c.y - 20);
+    await page.locator("[data-tour=piezas]").getByRole("button", { name: /Persona/ }).click();
+    await page.mouse.click(c.x + 200, c.y + 40);
+    await page.mouse.click(c.x - 60, c.y + 160);
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(900);
+    await esperarRed(page);
+    afirmar((await piezasEnLista(page)) === 4, `Deberían quedar 4 piezas (${await piezasEnLista(page)})`);
+    await page.locator('[aria-label="Gateway Gateway"]').waitFor();
+    await page.locator('[aria-label="Repetidor Repetidor 1"]').waitFor();
+    // El gateway es uno: ponerlo otra vez lo mueve
+    await page.locator("[data-tour=piezas]").getByRole("button", { name: /Gateway \+ Internet/ }).click();
+    await page.mouse.click(c.x - 200, c.y - 120);
+    await page.keyboard.press("Escape");
+    afirmar((await piezasEnLista(page)) === 4, "Poner el gateway otra vez debería moverlo, no duplicarlo");
+    // Al seleccionar una pieza en el mapa aparece su «×» para quitarla; también se quitan desde la lista
+    await page.locator('[aria-label="Persona Persona 2"] .pieza-disco').click();
+    await page.locator('[aria-label="Persona Persona 2"] .pieza-quitar').click();
+    afirmar((await piezasEnLista(page)) === 3, "La «×» del mapa no quitó la pieza");
+    await page.locator("[data-tour=lista-piezas]").getByRole("button", { name: "Quitar Persona 1" }).click();
+    afirmar((await piezasEnLista(page)) === 2, "No se quitó la persona desde la lista");
+    await esperarRed(page);
+    await foto("manual");
+  },
+  { sembrar: true },
+);
+
+await flujo(
+  "sembrar-automatico",
+  async (page, foto) => {
+    await esperarRed(page);
+    await cargarMalla(page);
+    await page.getByRole("button", { name: "Conectar a los que faltan (1)" }).click();
+    const propuesta = page.locator("[data-tour=propuesta]");
+    await propuesta.waitFor({ timeout: 60000 });
+    afirmar(/Propuesta: \d repetidor/.test(await propuesta.innerText()) && /✓ Persona 3/.test(await propuesta.innerText()), `Propuesta inesperada: ${await propuesta.innerText()}`);
+    afirmar((await page.locator(".pieza.propuesto").count()) >= 1, "Faltan los repetidores propuestos en el mapa");
+    await foto("propuesta");
+    await propuesta.getByRole("button", { name: /^Poner/ }).click();
+    await page.waitForTimeout(900);
+    await esperarRed(page);
+    afirmar(/Toda la gente está conectada/.test(await guia(page)), `Después de sembrar deberían quedar todos conectados: ${await guia(page)}`);
+    afirmar((await cifra(page, "sin cobertura")) === "0", "Aún hay personas sin cobertura");
+    await page.locator("[data-tour=sembrar-auto]").getByRole("button", { name: "Deshacer" }).click();
+    await page.waitForTimeout(900);
+    await esperarRed(page);
+    afirmar((await cifra(page, "sin cobertura")) === "1", "Deshacer debería quitar los repetidores sembrados");
+    // Llevar la red a un punto del mapa
+    const antes = await piezasEnLista(page);
+    await page.getByRole("button", { name: "Llevar la red a un punto" }).click();
+    await page.getByText("Toque el punto al que quiere llevar la red").waitFor();
+    const c = await mapaCentro(page);
+    await page.mouse.click(c.x - 220, c.y - 180);
+    await propuesta.waitFor({ timeout: 60000 });
+    await propuesta.getByRole("button", { name: /^Poner/ }).click();
+    await page.waitForTimeout(600);
+    afirmar((await piezasEnLista(page)) > antes, "No se pusieron las piezas hacia el punto");
+    await esperarRed(page);
+    await foto("punto");
+  },
+  { sembrar: true },
+);
+
+await flujo(
+  "sembrar-mensaje",
+  async (page, foto) => {
+    await esperarRed(page);
+    await cargarMalla(page);
+    const envio = page.locator("[data-tour=enviar-mensaje]");
+    await envio.getByRole("button", { name: "Enviar" }).click();
+    const viaje = page.locator("[data-tour=viaje-mensaje]");
+    await viaje.getByText("El mensaje llega al gateway").waitFor();
+    afirmar(/de 3 permitidos/.test(await viaje.innerText()) && /Con 3 intentos/.test(await viaje.innerText()), `Faltan datos del viaje: ${await viaje.innerText()}`);
+    await page.locator(".paquete-mensaje").waitFor({ state: "attached" });
+    await foto("viajando");
+    // Llega al gateway, la IA «piensa» y la respuesta vuelve por la misma ruta
+    await page.waitForSelector(".pieza-ia.piensa", { state: "attached", timeout: 20000 });
+    await page.waitForSelector(".paquete-mensaje.respuesta", { state: "attached", timeout: 20000 });
+    await page.waitForSelector(".paquete-mensaje.entregado", { state: "attached", timeout: 25000 });
+    afirmar(/Respuesta de la IA/.test(await viaje.innerText()), "Falta la respuesta de la IA en el viaje");
+    // Desde la persona sin cobertura no llega
+    await envio.getByLabel("Desde").selectOption({ label: "Persona 3" });
+    await envio.getByRole("button", { name: "Enviar" }).click();
+    await viaje.getByText("El mensaje no llega").waitFor();
+    afirmar(/No tiene ruta/.test(await viaje.innerText()), "Debería decir que no tiene ruta");
+    await foto("no-llega");
+  },
+  { sembrar: true },
+);
+
+await flujo(
+  "modo",
+  async (page, foto) => {
+    await esperarRed(page);
+    await page.getByRole("radio", { name: /Modo avanzado/ }).click();
+    await page.getByRole("tab", { name: "Nodos (1)" }).waitFor();
+    await page.reload();
+    await page.getByRole("tab", { name: "Nodos (1)" }).waitFor({ timeout: 30000 });
+    await page.getByRole("radio", { name: /Sembrar la malla/ }).click();
+    await page.locator("[data-tour=guia-sembrar]").waitFor();
+    // El flujo animado se apaga y se enciende con su interruptor
+    await page.waitForFunction(() => document.querySelector("[data-animacion]")?.dataset.animacion === "si", null, { timeout: 30000 });
+    await page.getByText("Animar el flujo de la información").click();
+    await page.waitForFunction(() => document.querySelector("[data-animacion]")?.dataset.animacion === "no", null, { timeout: 5000 });
+    await page.getByText("Animar el flujo de la información").click();
+    await page.waitForFunction(() => document.querySelector("[data-animacion]")?.dataset.animacion === "si", null, { timeout: 5000 });
+    // Un tour del modo avanzado lo usa mientras dura y luego vuelve a «Sembrar la malla»
+    await page.getByRole("button", { name: "Tours guiados" }).click();
+    await page.getByRole("group", { name: "Tours guiados" }).last().getByRole("button", { name: /^Tutorial básico/ }).click();
+    await page.getByRole("dialog", { name: "Tour: Tutorial básico" }).waitFor();
+    await page.getByRole("tab", { name: /^Nodos/ }).waitFor();
+    await foto("tour-avanzado");
+    await page.getByRole("dialog", { name: "Tour: Tutorial básico" }).getByRole("button", { name: "Salir" }).click();
+    await page.locator("[data-tour=guia-sembrar]").waitFor();
+    await escenarioIntacto(page, "Tour desde «Sembrar la malla»");
+  },
+  { sembrar: true },
+);
+
+await flujo(
+  "melki-sembrar",
+  async (page, foto) => {
+    await esperarRed(page);
+    await page.getByRole("button", { name: /Abrir a Melki/ }).click();
+    const chat = page.getByRole("region", { name: "Conversación con Melki" });
+    const decir = async (t) => {
+      await chat.getByLabel("Pregunta para Melki").fill(t);
+      await page.keyboard.press("Enter");
+    };
+    await decir("carga el ejemplo de malla");
+    await chat.getByText(/Cargué el ejemplo de malla/).waitFor();
+    await chat.getByText(/Red calculada\. La red: 2 de 3 personas conectadas/).waitFor({ timeout: 90000 });
+    await decir("conecta a los que faltan");
+    await chat.getByText(/Busco lomas/).waitFor();
+    await chat.getByText(/^Propongo/).waitFor({ timeout: 60000 });
+    await chat.getByRole("button", { name: /^Poner (el repetidor|los \d repetidores)/ }).click();
+    await chat.getByText(/Listo: puse/).waitFor();
+    await chat.getByText(/3 de 3 personas conectadas/).waitFor({ timeout: 90000 });
+    await decir("envía un mensaje desde Persona 3");
+    await chat.getByText(/Envié un mensaje de texto de 40 caracteres desde «Persona 3»: llega al gateway/).waitFor();
+    await decir("¿cómo viaja un mensaje?");
+    await chat.getByText(/viaja por inundación/).waitFor();
+    await decir("pon una persona en 4.35, -72.9");
+    await chat.getByText(/puse la persona/).waitFor();
+    await chat.getByText(/no alcanza la red/).waitFor({ timeout: 90000 });
+    await foto("chat");
+  },
+  { sembrar: true },
+);
+
+await flujo(
+  "tour-sembrar",
+  async (page, foto) => {
+    await esperarRed(page);
+    await page.getByRole("button", { name: "Tours guiados" }).click();
+    await page.getByRole("group", { name: "Tours guiados" }).last().getByRole("button", { name: /^Sembrar la malla/ }).click();
+    await recorrerTour(page, "Sembrar la malla", async (etiqueta) => {
+      // Las piezas puestas seguidas («Hágalo por mí» pone dos personas) no repiten nombre
+      const nombres = await page.locator("[data-tour=lista-piezas] li .font-cond").allInnerTexts();
+      afirmar(nombres.length >= 5 && new Set(nombres).size === nombres.length, `Nombres repetidos en la práctica: ${nombres.join(", ")}`);
+      await foto(etiqueta);
+    });
+    await escenarioIntacto(page, "Sembrar la malla");
+    await page.locator("[data-tour=guia-sembrar]").waitFor();
+  },
+  { sembrar: true },
+);
+
+await flujo(
+  "sembrar-movil",
+  async (page, foto) => {
+    // En el celular el panel va en una hoja que sube desde abajo
+    const hoja = page.getByRole("region", { name: "Panel" });
+    await page.getByRole("navigation", { name: "Paneles" }).getByRole("button", { name: "Sembrar" }).click();
+    await hoja.locator("[data-tour=guia-sembrar]").waitFor();
+    await esperarRed(page);
+    await hoja.locator("[data-tour=piezas]").getByRole("button", { name: /Persona/ }).click();
+    // Al elegir la pieza se cierra la hoja para tocar el mapa
+    await hoja.waitFor({ state: "detached" });
+    const c = await mapaCentro(page);
+    await page.mouse.click(c.x + 40, c.y + 60);
+    await page.waitForTimeout(300);
+    await page.locator('[aria-label="Persona Persona 1"]').waitFor();
+    await page.getByRole("navigation", { name: "Paneles" }).getByRole("button", { name: "Sembrar" }).click();
+    await esperarRed(page);
+    afirmar((await hoja.locator("[data-tour=lista-piezas] li").count()) === 2, "En el celular no se puso la persona");
+    await foto("movil");
+  },
+  { sembrar: true, tamano: { width: 390, height: 844 } },
+);
 
 await flujo(
   "movil",

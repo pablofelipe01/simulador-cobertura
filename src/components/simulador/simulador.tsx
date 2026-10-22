@@ -2,7 +2,7 @@
 
 // Pantalla principal del simulador: estado, motor de cálculo, mapa, paneles, regla, buscador y Melki.
 import type { Map as MapaML } from "maplibre-gl";
-import { Play, RadioTower, SlidersHorizontal, Square, Waypoints } from "lucide-react";
+import { Play, RadioTower, Settings2, SlidersHorizontal, Sprout, Square, Waypoints } from "lucide-react";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
 import { Melki } from "@/components/melki/melki";
@@ -15,6 +15,9 @@ import { buscarLugares, cargarReferencia, textoUbicacion } from "@/lib/geo/refer
 import { EQUIPOS } from "@/lib/radio/constantes";
 import { metrosPorGrado } from "@/lib/radio/geo";
 import { MotorCobertura } from "@/lib/radio/cliente";
+import { estadoRed, type EstadoRed } from "@/lib/radio/estado-red";
+import { simularMensaje, type ViajeMensaje } from "@/lib/radio/mensaje";
+import type { DestinoSiembra, Siembra } from "@/lib/radio/siembra";
 import type { Fase } from "@/lib/radio/protocolo";
 import type { Inspeccion } from "@/lib/radio/simulacion";
 import type { Antena, Escenario, FuenteRelieve, Medicion, Perfil, PerfilTerreno, ResultadoSimulacion, TipoNodo } from "@/lib/radio/tipos";
@@ -27,6 +30,7 @@ import {
   escenarioVacio,
   estadoInicial,
   guardar,
+  guardarModo,
   guardarRespaldo,
   leerGuardado,
   nuevaAntena,
@@ -35,21 +39,24 @@ import {
   validarEscenario,
   VISTA_DEFECTO,
   type Guardado,
+  type ModoApp,
   type TipoRelieve,
 } from "./estado";
 import { exportarCsv, exportarJson, exportarKmz } from "./exportar";
-import { Mapa, type PuntoMapa, type SolicitudVista } from "./mapa";
+import { Mapa, type AnimacionMensaje, type CapaSembrar, type PuntoMapa, type SolicitudVista } from "./mapa";
 import { PanelAntenas } from "./panel-antenas";
 import { PanelParametros } from "./panel-parametros";
 import { PanelResultados } from "./panel-resultados";
+import { PanelSembrar, type FaseSiembra, type ViajeVisible } from "./panel-sembrar";
+import { ALTURA_REPETIDOR_DEFECTO, escenarioMalla, nuevaPieza, piezaDe } from "./piezas";
 import { PerfilEnlace } from "./perfil-enlace";
 import { PerfilTerrenoPanel } from "./perfil-terreno";
 import { CoordenadasCursor, MenuContextual, TarjetaNodo, TarjetaPunto, type AccionPunto } from "./puntos-mapa";
 import { Regla } from "./regla";
-import { Interruptor } from "./ui";
+import { Interruptor, Segmentado } from "./ui";
 
 type Pestana = "antenas" | "parametros";
-type Hoja = Pestana | "resultado" | null;
+type Hoja = Pestana | "resultado" | "sembrar" | null;
 
 const TEXTO_FASE: Record<Fase, string> = { relieve: "Obteniendo el relieve", cobertura: "Calculando la cobertura", enlaces: "Analizando la malla" };
 
@@ -68,6 +75,8 @@ function cajaRadio(lat: number, lon: number, radioM: number): [number, number, n
 }
 
 type PuntoMarcado = { lat: number; lon: number; titulo: string };
+
+type ViajeGuardado = ViajeVisible & { firma: string; animacion: AnimacionMensaje };
 
 export function Simulador() {
   const [estado, despachar] = useReducer(reductor, undefined, () => ({ ...estadoInicial(), ...(leerGuardado() ?? {}) }));
@@ -92,6 +101,9 @@ export function Simulador() {
   const [perfilTerreno, setPerfilTerreno] = useState<{ titulo: string; perfil: PerfilTerreno | null } | null>(null);
   const [semillaRegla, setSemillaRegla] = useState<{ n: number; punto: [number, number] } | null>(null);
   const [nPedido, setNPedido] = useState(0);
+  const [alturaRepetidor, setAlturaRepetidor] = useState<number>(ALTURA_REPETIDOR_DEFECTO);
+  const [siembra, setSiembra] = useState<FaseSiembra>({ fase: "nada" });
+  const [viaje, setViaje] = useState<ViajeGuardado | null>(null);
 
   const motor = useRef<MotorCobertura | null>(null);
   const idSimulacion = useRef(0);
@@ -102,6 +114,9 @@ export function Simulador() {
   const pedido = useRef(false);
   /** Escenario del usuario guardado mientras hace un tour en el escenario de práctica. */
   const practica = useRef<{ guardado: Guardado; resultado: ResultadoSimulacion | null; firmaResultado: string | null } | null>(null);
+  /** Modo de la pantalla antes de un tour (los tours de las pestañas usan el modo avanzado). */
+  const modoAntesDelTour = useRef<ModoApp | null>(null);
+  const nMensaje = useRef(0);
 
   const { escenario } = estado;
   const fuente = useMemo(() => fuenteDe(estado.relieve, hgt), [estado.relieve, hgt]);
@@ -120,12 +135,35 @@ export function Simulador() {
   const seleccionada = escenario.antenas.find((a) => a.id === estado.seleccion) ?? null;
   const desactualizado = resultado !== null && firma !== firmaResultado;
   const calculando = progreso !== null;
+  const alDia = resultado !== null && !desactualizado;
+  const limiteSaltos = escenario.parametros.limiteSaltos;
+  // Estado de la red para el modo «Sembrar la malla»: quién llega al gateway y cuánto territorio cubre
+  const red = useMemo<EstadoRed>(() => estadoRed(escenario.antenas, resultado, limiteSaltos, alDia), [escenario.antenas, resultado, limiteSaltos, alDia]);
+  // La propuesta y el mensaje valen para la red con la que se calcularon
+  const siembraVisible: FaseSiembra =
+    (siembra.fase === "buscando" || siembra.fase === "propuesta") && siembra.firma !== firma
+      ? { fase: "nada" }
+      : siembra.fase === "puesta" && !siembra.ids.some((id) => escenario.antenas.some((a) => a.id === id))
+        ? { fase: "nada" }
+        : siembra;
+  const viajeVisible = viaje && viaje.firma === firma ? viaje : null;
 
   // Valores actuales para las funciones estables
-  const ultimo = useRef({ estado, fuente, firma, resultado, firmaResultado, inspeccion, perfil, perfilTerreno });
+  const ultimo = useRef({ estado, fuente, firma, resultado, firmaResultado, inspeccion, perfil, perfilTerreno, red, siembra: siembraVisible, alturaRepetidor, viaje: viajeVisible });
+  /** Nodos insertados desde el último render (dos pedidos seguidos no repiten nombre). */
+  const recientes = useRef<Antena[]>([]);
   useEffect(() => {
-    ultimo.current = { estado, fuente, firma, resultado, firmaResultado, inspeccion, perfil, perfilTerreno };
+    ultimo.current = { estado, fuente, firma, resultado, firmaResultado, inspeccion, perfil, perfilTerreno, red, siembra: siembraVisible, alturaRepetidor, viaje: viajeVisible };
+    recientes.current = [];
   });
+  const existentes = () => {
+    const actuales = ultimo.current.estado.escenario.antenas;
+    return [...actuales, ...recientes.current.filter((a) => !actuales.some((x) => x.id === a.id))];
+  };
+  const insertarNodo = (a: Antena) => {
+    recientes.current.push(a);
+    despachar({ tipo: "insertar", antena: a });
+  };
 
   // Los datos de referencia (municipios) sirven al buscador, a Melki y a las tarjetas
   useEffect(() => {
@@ -269,10 +307,10 @@ export function Simulador() {
     (lat: number, lon: number, datos: Partial<Antena> & { tipo: TipoNodo }) => {
       const { estado: e } = ultimo.current;
       const limpio = Object.fromEntries(Object.entries(datos).filter(([, v]) => v !== undefined)) as Partial<Antena>;
-      const a = nuevaAntena(Number(lat.toFixed(6)), Number(lon.toFixed(6)), e.escenario.antenas, limpio);
+      const a = nuevaAntena(Number(lat.toFixed(6)), Number(lon.toFixed(6)), existentes(), limpio);
       const eq = EQUIPOS.find((q) => q.id === a.equipo);
       if (eq && (eq.gananciaDbi !== a.gananciaDbi || eq.potenciaDbm !== a.potenciaDbm)) a.equipo = "personalizado";
-      despachar({ tipo: "insertar", antena: a });
+      insertarNodo(a);
       despachar({ tipo: "herramienta", herramienta: "mover" });
       encuadrarCaja(cajaRadio(a.lat, a.lon, e.escenario.parametros.radioKm * 1000 * (a.tipo === "nodo" ? 0.4 : 0.85)));
       setPunto(null);
@@ -280,6 +318,176 @@ export function Simulador() {
       return a;
     },
     [encuadrarCaja],
+  );
+
+  /* ───────────── Modo «Sembrar la malla» ───────────── */
+
+  /** Cambio de modo pedido por el usuario (se recuerda para la próxima visita). */
+  const cambiarModo = useCallback((m: ModoApp) => {
+    despachar({ tipo: "modo", modo: m });
+    guardarModo(m);
+  }, []);
+
+  /** Pone la pieza elegida donde se tocó el mapa. El gateway es uno solo: si ya está, se mueve. */
+  const ponerPieza = useCallback(
+    (lat: number, lon: number) => {
+      const { estado: e, alturaRepetidor: altura } = ultimo.current;
+      const pieza = e.pieza;
+      const gateway = e.escenario.antenas.find((a) => a.pasarela);
+      if (pieza === "gateway" && gateway) {
+        despachar({ tipo: "editar", id: gateway.id, cambios: { lat: Number(lat.toFixed(6)), lon: Number(lon.toFixed(6)), activa: true } });
+        despachar({ tipo: "seleccionar", id: gateway.id });
+      } else insertarNodo(nuevaPieza(pieza, lat, lon, existentes(), altura));
+      setPunto(null);
+      // Después del gateway vienen los repetidores (la herramienta sigue armada para poner varios)
+      if (pieza === "gateway") despachar({ tipo: "pieza", pieza: "repetidor" });
+    },
+    [],
+  );
+
+  /** Pide al motor una cadena de repetidores desde la red conectada hacia los destinos. */
+  const sembrarHacia = useCallback((destinos: DestinoSiembra[]): Promise<Siembra | null> => {
+    const m = motor.current;
+    const { estado: e, red: r, fuente: f, firma: fi, alturaRepetidor: altura } = ultimo.current;
+    if (!m || !destinos.length) return Promise.resolve(null);
+    const origenes = e.escenario.antenas.filter((a) => a.activa && piezaDe(a) !== "persona" && ["gateway", "conectado"].includes(r.porNodo.get(a.id)?.estado ?? ""));
+    if (!origenes.length) {
+      setSiembra({ fase: "error", texto: r.gateways.length ? "Espere a que termine el cálculo de la red y vuelva a intentarlo." : "Primero ponga el Gateway + Internet." });
+      return Promise.resolve(null);
+    }
+    const pedidoSiembra = {
+      origenes,
+      destinos,
+      repetidor: nuevaPieza("repetidor", 0, 0, e.escenario.antenas, altura),
+      persona: nuevaPieza("persona", 0, 0, e.escenario.antenas),
+      parametros: e.escenario.parametros,
+    };
+    setSiembra({ fase: "buscando", destinos, firma: fi });
+    return m
+      .sembrar(pedidoSiembra, f)
+      .then((s) => {
+        setSiembra({ fase: "propuesta", destinos, siembra: s, alturaM: altura, firma: fi });
+        return s;
+      })
+      .catch((err: Error) => {
+        setSiembra({ fase: "error", texto: err.message });
+        return null;
+      });
+  }, []);
+
+  const conectarFaltantes = useCallback(() => {
+    const r = ultimo.current.red;
+    return sembrarHacia(r.sinCobertura.map((a) => ({ lat: a.lat, lon: a.lon, nombre: a.nombre, antena: a })));
+  }, [sembrarHacia]);
+
+  /** Pone los repetidores propuestos (y una persona en el punto elegido, si llega). Devuelve cuántos puso. */
+  const aceptarSiembra = useCallback(() => {
+    const s = ultimo.current.siembra;
+    if (s.fase !== "propuesta") return 0;
+    const existentes = ultimo.current.estado.escenario.antenas;
+    const nuevas: Antena[] = [];
+    for (const q of s.siembra.puntos) nuevas.push(nuevaPieza("repetidor", q.lat, q.lon, [...existentes, ...nuevas], s.alturaM));
+    let persona = false;
+    s.destinos.forEach((d, i) => {
+      if (!d.antena && s.siembra.destinos[i]?.llega) {
+        nuevas.push(nuevaPieza("persona", d.lat, d.lon, [...existentes, ...nuevas]));
+        persona = true;
+      }
+    });
+    if (!nuevas.length) {
+      setSiembra({ fase: "nada" });
+      return 0;
+    }
+    despachar({ tipo: "insertar-varias", antenas: nuevas });
+    setSiembra({ fase: "puesta", ids: nuevas.map((a) => a.id), repetidores: s.siembra.puntos.length, persona });
+    return nuevas.length;
+  }, []);
+
+  const deshacerSiembra = useCallback(() => {
+    const s = ultimo.current.siembra;
+    if (s.fase === "puesta") despachar({ tipo: "eliminar-varias", ids: s.ids });
+    setSiembra({ fase: "nada" });
+  }, []);
+
+  /** Envía un mensaje de texto desde un nodo hasta el gateway por la ruta de la malla y lo anima en el mapa. */
+  const enviarMensaje = useCallback(
+    (desdeId: string): ViajeMensaje | null => {
+      const { resultado: r, firma: fi, firmaResultado: fr, estado: e } = ultimo.current;
+      if (!r || fi !== fr) return null;
+      const esc = e.escenario;
+      const nodo = r.nodos.find((n) => n.id === desdeId);
+      const ruta = nodo?.ruta.length ? nodo.ruta : [desdeId];
+      const v = simularMensaje(ruta, esc.antenas, r.enlaces, esc.parametros, 40);
+      const porId = new Map(esc.antenas.map((a) => [a.id, a]));
+      const puntos = v.ruta.flatMap((id) => {
+        const a = porId.get(id);
+        return a ? [[a.lon, a.lat] as [number, number]] : [];
+      });
+      let corteEn: number | null = null;
+      if (!v.llega && v.saltos > esc.parametros.limiteSaltos) corteEn = esc.parametros.limiteSaltos;
+      else if (!v.llega) {
+        const k = v.tramos.findIndex((t) => t.margenDb < 20);
+        corteEn = k >= 0 ? k : null;
+      }
+      // La animación sigue el tiempo de cada salto (paquete en el aire + espera), a un ritmo que se alcance a ver
+      const duracionesMs = v.tramos.map((t) => Math.min(3000, Math.max(1100, t.aireMs + t.espera.tipica)));
+      // Quiénes escuchan cada transmisión: los nodos con enlace (≥ 20 dB) con el que transmite
+      const ids = v.ruta.filter((id) => porId.has(id));
+      const vecinos = ids.map((id) => r.enlaces.filter((e) => e.margen >= 20 && (e.a === id || e.b === id)).map((e) => (e.a === id ? e.b : e.a)));
+      // El gateway tiene la IA: si el mensaje llega, la respuesta vuelve por la misma ruta
+      setViaje({ desde: desdeId, viaje: v, firma: fi, animacion: { n: ++nMensaje.current, ids, puntos, duracionesMs, corteEn, vecinos, respuesta: v.llega } });
+      if (puntos.length > 1) {
+        const lons = puntos.map((q) => q[0]);
+        const lats = puntos.map((q) => q[1]);
+        encuadrarCaja([Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)]);
+      }
+      return v;
+    },
+    [encuadrarCaja],
+  );
+
+  const ejemploMalla = () => {
+    fueraDelTour();
+    despachar({ tipo: "cargar", escenario: escenarioMalla() });
+    setSiembra({ fase: "nada" });
+    setViaje(null);
+    encuadrar();
+  };
+
+  const vaciar = () => {
+    fueraDelTour();
+    despachar({ tipo: "cargar", escenario: escenarioVacio() });
+    setSiembra({ fase: "nada" });
+    setViaje(null);
+    setInspeccion(null);
+    setPerfil(null);
+    setPerfilTerreno(null);
+    despachar({ tipo: "pieza", pieza: "gateway" });
+  };
+
+  // Escape suelta la herramienta de poner piezas o de elegir el destino
+  useEffect(() => {
+    const soltar = (ev: KeyboardEvent) => {
+      if (ev.key !== "Escape") return;
+      const h = ultimo.current.estado.herramienta;
+      const t = ev.target as HTMLElement | null;
+      if ((h === "agregar" || h === "destino") && !t?.closest("input, textarea, select, [role=dialog]")) despachar({ tipo: "herramienta", herramienta: "mover" });
+    };
+    window.addEventListener("keydown", soltar);
+    return () => window.removeEventListener("keydown", soltar);
+  }, []);
+
+  const capaSembrar = useMemo<CapaSembrar | null>(
+    () =>
+      estado.modo !== "sembrar"
+        ? null
+        : {
+            red,
+            propuesta: siembraVisible.fase === "propuesta" ? { puntos: siembraVisible.siembra.puntos, destinos: siembraVisible.destinos } : null,
+            mensaje: viajeVisible?.animacion ?? null,
+          },
+    // siembraVisible y viajeVisible se derivan de siembra, viaje y la firma
+    [estado.modo, red, siembra, viaje, firma], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const cargarHgt = (archivos: File[]) => {
@@ -382,8 +590,40 @@ export function Simulador() {
       borrarMediciones: () => despachar({ tipo: "mediciones-borrar" }),
       ubicacion: textoUbicacion,
       buscarLugar: (t) => buscarLugares(t, 5),
+      modo: () => ultimo.current.estado.modo,
+      cambiarModo,
+      ponerPieza: (pieza, lat, lon, datos) => {
+        const altura = ultimo.current.alturaRepetidor;
+        const limpio = Object.fromEntries(Object.entries(datos ?? {}).filter(([, v]) => v !== undefined)) as Partial<Antena>;
+        const a = { ...nuevaPieza(pieza, lat, lon, existentes(), altura), ...limpio };
+        insertarNodo(a);
+        despachar({ tipo: "herramienta", herramienta: "mover" });
+        encuadrarCaja(cajaRadio(a.lat, a.lon, pieza === "persona" ? 4000 : 9000));
+        setPunto(null);
+        pedirSimulacion();
+        return a;
+      },
+      armarPieza: (pieza) => {
+        cambiarModo("sembrar");
+        despachar({ tipo: "pieza", pieza });
+        setHoja(null);
+      },
+      red: () => ultimo.current.red,
+      sembrar: sembrarHacia,
+      propuesta: () => (ultimo.current.siembra.fase === "propuesta" ? ultimo.current.siembra.siembra : null),
+      aceptarSiembra,
+      descartarSiembra: () => setSiembra({ fase: "nada" }),
+      enviarMensaje,
+      ejemploMalla: () => {
+        despachar({ tipo: "cargar", escenario: escenarioMalla() });
+        cambiarModo("sembrar");
+        setSiembra({ fase: "nada" });
+        setViaje(null);
+        encuadrar();
+        pedirSimulacion();
+      },
     }),
-    [inscribirNodo, pedirSimulacion, simular, centrar, encuadrar, encuadrarCaja, abrirPerfil, inspeccionar],
+    [inscribirNodo, pedirSimulacion, simular, centrar, encuadrar, encuadrarCaja, abrirPerfil, inspeccionar, cambiarModo, sembrarHacia, aceptarSiembra, enviarMensaje],
   );
 
   const restaurar = useCallback((e: Escenario) => despachar({ tipo: "cargar", escenario: e }), []);
@@ -394,7 +634,14 @@ export function Simulador() {
     () => ({
       foto: () => {
         const u = ultimo.current;
-        return { estado: u.estado, inspeccion: u.inspeccion, perfil: u.perfil ? { informe: Boolean(u.perfil.informe) } : null, perfilTerreno: u.perfilTerreno !== null };
+        return {
+          estado: u.estado,
+          inspeccion: u.inspeccion,
+          perfil: u.perfil ? { informe: Boolean(u.perfil.informe) } : null,
+          perfilTerreno: u.perfilTerreno !== null,
+          siembra: u.siembra.fase,
+          mensaje: u.viaje?.animacion.n ?? 0,
+        };
       },
       alDia: () => ultimo.current.resultado !== null && ultimo.current.firma === ultimo.current.firmaResultado,
       despachar,
@@ -441,6 +688,9 @@ export function Simulador() {
     const def = tourPorId(id);
     devolverEscenario();
     limpiarPantalla();
+    // Los tours de las pestañas se hacen en el modo avanzado; al terminar se vuelve al modo de antes
+    modoAntesDelTour.current ??= ultimo.current.estado.modo;
+    despachar({ tipo: "modo", modo: def.modo ?? "avanzado" });
     if (def.practica) {
       const { estado: e, resultado: r, firmaResultado: fr } = ultimo.current;
       const guardado: Guardado = { escenario: e.escenario, vista: e.vista, relieve: e.relieve, autoSimular: e.autoSimular };
@@ -462,6 +712,8 @@ export function Simulador() {
     setTour(null);
     setHoja(null);
     devolverEscenario();
+    if (modoAntesDelTour.current) despachar({ tipo: "modo", modo: modoAntesDelTour.current });
+    modoAntesDelTour.current = null;
     if (otro) avisarMelki("tours");
   };
 
@@ -516,6 +768,10 @@ export function Simulador() {
 
   const prepararTour = useCallback((p: Preparacion) => {
     if (!p) return;
+    if (p === "sembrar") {
+      if (!esEscritorio()) setHoja("sembrar");
+      return;
+    }
     if (p === "mapa") {
       if (!esEscritorio()) setHoja(null);
       return;
@@ -636,6 +892,52 @@ export function Simulador() {
     </div>
   );
 
+  const selectorModo = (
+    <div className="border-b border-linea px-3 py-2" data-tour="modo">
+      <Segmentado<ModoApp>
+        etiqueta="Modo de la pantalla"
+        valor={estado.modo}
+        onCambio={cambiarModo}
+        opciones={[
+          { valor: "sembrar", texto: <><Sprout size={15} /> Sembrar la malla</>, titulo: "Paso a paso: gateway, repetidores y personas, como en Trama" },
+          { valor: "avanzado", texto: <><Settings2 size={15} /> Modo avanzado</>, titulo: "Todos los nodos, parámetros y herramientas del simulador" },
+        ]}
+      />
+    </div>
+  );
+
+  const panelSembrar = (
+    <PanelSembrar
+      estado={estado}
+      despachar={despachar}
+      red={red}
+      calculando={calculando}
+      avance={progreso?.avance ?? null}
+      alturaRepetidor={alturaRepetidor}
+      onAlturaRepetidor={setAlturaRepetidor}
+      siembra={siembraVisible}
+      onConectarFaltantes={() => void conectarFaltantes()}
+      onLlevarAPunto={() => {
+        despachar({ tipo: "herramienta", herramienta: estado.herramienta === "destino" ? "mover" : "destino" });
+        if (!esEscritorio()) setHoja(null);
+      }}
+      onAceptar={aceptarSiembra}
+      onDescartar={() => setSiembra({ fase: "nada" })}
+      onDeshacer={deshacerSiembra}
+      viaje={viajeVisible}
+      onEnviar={(id) => {
+        enviarMensaje(id);
+        if (!esEscritorio()) setHoja(null);
+      }}
+      onEjemplo={ejemploMalla}
+      onVaciar={vaciar}
+      onCentrar={centrar}
+      onPiezaElegida={() => {
+        if (!esEscritorio()) setHoja(null);
+      }}
+    />
+  );
+
   const resultados = <PanelResultados resultado={resultado} antenas={escenario.antenas} parametros={escenario.parametros} desactualizado={desactualizado} calculando={calculando} onPerfil={perfilEntreAntenas} />;
 
   return (
@@ -674,9 +976,16 @@ export function Simulador() {
       />
 
       <div className="relative flex min-h-0 flex-1">
-        <aside className="hidden w-[340px] shrink-0 flex-col border-r border-linea bg-papel lg:flex" aria-label="Nodos y parámetros">
-          {pestanas}
-          <div className="desplazable min-h-0 flex-1 overflow-y-auto p-3">{contenidoPestana(pestana)}</div>
+        <aside className="hidden w-[340px] shrink-0 flex-col border-r border-linea bg-papel lg:flex" aria-label={estado.modo === "sembrar" ? "Sembrar la malla" : "Nodos y parámetros"}>
+          {selectorModo}
+          {estado.modo === "sembrar" ? (
+            <div className="desplazable min-h-0 flex-1 overflow-y-auto p-3">{panelSembrar}</div>
+          ) : (
+            <>
+              {pestanas}
+              <div className="desplazable min-h-0 flex-1 overflow-y-auto p-3">{contenidoPestana(pestana)}</div>
+            </>
+          )}
           {pieSimular}
         </aside>
 
@@ -696,6 +1005,13 @@ export function Simulador() {
               setMenu({ ...p, x, y });
             }}
             onListo={setMapa}
+            sembrar={capaSembrar}
+            onPieza={ponerPieza}
+            onDestino={(lat, lon) => {
+              despachar({ tipo: "herramienta", herramienta: "mover" });
+              void sembrarHacia([{ lat, lon, nombre: "El punto elegido" }]);
+              if (!esEscritorio()) setHoja("sembrar");
+            }}
           />
           <BarraMapa estado={estado} despachar={despachar} />
           <Regla mapa={mapa} estado={estado} despachar={despachar} onPerfil={abrirPerfilTerreno} onCentrar={encuadrarCaja} semilla={semillaRegla} />
@@ -707,6 +1023,7 @@ export function Simulador() {
               nodo={desactualizado ? undefined : resultado?.nodos.find((x) => x.id === seleccionada.id)}
               nombres={nombres}
               soloSeleccionada={estado.vista.soloSeleccionada}
+              sembrar={estado.modo === "sembrar"}
               onSolo={(v) => despachar({ tipo: "vista", cambios: { soloSeleccionada: v } })}
               onCerrar={() => despachar({ tipo: "seleccionar", id: null })}
             />
@@ -745,7 +1062,7 @@ export function Simulador() {
           )}
           {perfilTerreno && <PerfilTerrenoPanel perfil={perfilTerreno.perfil} titulo={perfilTerreno.titulo} onCerrar={() => setPerfilTerreno(null)} />}
           <Melki
-            contexto={{ antenas: escenario.antenas, parametros: escenario.parametros, resultado, desactualizado, relieve: estado.relieve }}
+            contexto={{ antenas: escenario.antenas, parametros: escenario.parametros, resultado, desactualizado, relieve: estado.relieve, modo: estado.modo, red }}
             api={api}
             suscribir={suscribir}
             restaurar={restaurar}
@@ -758,12 +1075,12 @@ export function Simulador() {
           {hoja && (
             <section className="absolute inset-x-0 bottom-0 z-40 flex max-h-[72%] flex-col rounded-t-2xl bg-papel shadow-2xl ring-1 ring-black/10 lg:hidden" aria-label="Panel">
               <div className="flex items-center justify-between px-4 pt-3 pb-1">
-                <p className="font-cond text-[17px] font-semibold">{hoja === "antenas" ? "Nodos" : hoja === "parametros" ? "Parámetros" : "Resultado"}</p>
+                <p className="font-cond text-[17px] font-semibold">{hoja === "sembrar" ? "Sembrar la malla" : hoja === "antenas" ? "Nodos" : hoja === "parametros" ? "Parámetros" : "Resultado"}</p>
                 <button type="button" onClick={() => setHoja(null)} className="rounded-md px-2 py-1 text-[14px] text-carbon-2 hover:bg-black/5">
                   Cerrar
                 </button>
               </div>
-              <div className="desplazable min-h-0 flex-1 overflow-y-auto px-3 pb-3">{hoja === "resultado" ? resultados : contenidoPestana(hoja)}</div>
+              <div className="desplazable min-h-0 flex-1 overflow-y-auto px-3 pb-3">{hoja === "resultado" ? resultados : hoja === "sembrar" ? panelSembrar : contenidoPestana(hoja)}</div>
               {hoja !== "resultado" && pieSimular}
             </section>
           )}
@@ -783,6 +1100,7 @@ export function Simulador() {
       <nav className="flex shrink-0 border-t border-linea bg-papel lg:hidden" aria-label="Paneles">
         {(
           [
+            ["sembrar", "Sembrar", <Sprout key="i" size={18} />],
             ["antenas", "Nodos", <RadioTower key="i" size={18} />],
             ["parametros", "Parámetros", <SlidersHorizontal key="i" size={18} />],
             ["resultado", "Resultado", <Waypoints key="i" size={18} />],
@@ -791,7 +1109,12 @@ export function Simulador() {
           <button
             key={id}
             type="button"
-            onClick={() => setHoja((h) => (h === id ? null : id))}
+            onClick={() => {
+              // En el celular, el panel que se usa decide el modo: «Sembrar» o los paneles del modo avanzado
+              if (id === "sembrar" && estado.modo !== "sembrar") cambiarModo("sembrar");
+              else if ((id === "antenas" || id === "parametros") && estado.modo !== "avanzado" && !tour) cambiarModo("avanzado");
+              setHoja((h) => (h === id ? null : id));
+            }}
             aria-pressed={hoja === id}
             data-tour={id === "parametros" ? "tab-parametros" : undefined}
             className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[12px] font-medium ${hoja === id ? "text-carbon" : "text-tenue"}`}

@@ -12,46 +12,45 @@ import type { Antena, Enlace, Factibilidad, NodoMalla, Parametros } from "./tipo
 
 const fmt = (n: number, d = 1) => n.toFixed(d).replace(".", ",");
 
+/** Enlace entre dos nodos con el relieve real: margen de cada sentido y el mínimo de ambos (dB). */
+export function enlaceEntre(a: Antena, b: Antena, p: Parametros, relieve: Relieve, red = calculoRed(p), lambda = longitudOnda(p.frecuenciaMhz)): Enlace {
+  const d = Math.max(distanciaM(a.lat, a.lon, b.lat, b.lon), DISTANCIA_MINIMA_M);
+  const [ax, ay] = relieve.pixel(a.lat, a.lon);
+  const [bx, by] = relieve.pixel(b.lat, b.lon);
+  const ea = { px: ax, py: ay, suelo: relieve.muestra(ax, ay), alturaM: a.alturaM };
+  const eb = { px: bx, py: by, suelo: relieve.muestra(bx, by), alturaM: b.alturaM };
+  // La geometría es simétrica: el obstáculo principal es el mismo en ambos sentidos.
+  const g = geometriaTrayecto(relieve, red, ea, eb, d, lambda, pasoPerfil(relieve, a.lat));
+  const v = g.vMax;
+  // Pérdidas comunes a ambos sentidos: entorno de cada extremo y patrón de cada antena hacia la otra
+  const za = ea.suelo + a.alturaM;
+  const zb = eb.suelo + b.alturaM;
+  const comunes =
+    perdidaEntorno(p.entorno, a.alturaM, p.frecuenciaMhz) +
+    perdidaEntorno(p.entorno, b.alturaM, p.frecuenciaMhz) +
+    atenuacionPatron(a, rumbo(a.lat, a.lon, b.lat, b.lon), anguloElevacion(za, zb, d)) +
+    atenuacionPatron(b, rumbo(b.lat, b.lon, a.lat, a.lon), anguloElevacion(zb, za, d));
+  const margenAB = presupuestoEnlace(a, b, p) - perdidasTrayecto(g, red, p.frecuenciaMhz, a.alturaM).totalDb - comunes;
+  const margenBA = presupuestoEnlace(b, a, p) - perdidasTrayecto(g, red, p.frecuenciaMhz, b.alturaM).totalDb - comunes;
+  const m = Math.min(margenAB, margenBA);
+  return {
+    a: a.id,
+    b: b.id,
+    distanciaKm: d / 1000,
+    margenAB,
+    margenBA,
+    margen: m,
+    clase: claseEnlace(m),
+    vMax: v,
+    lineaVista: v <= -0.6 * Math.SQRT2,
+  };
+}
+
 export function calcularEnlaces(antenas: Antena[], p: Parametros, relieve: Relieve): Enlace[] {
   const lambda = longitudOnda(p.frecuenciaMhz);
   const red = calculoRed(p);
   const enlaces: Enlace[] = [];
-  for (let i = 0; i < antenas.length; i++) {
-    for (let k = i + 1; k < antenas.length; k++) {
-      const a = antenas[i];
-      const b = antenas[k];
-      const d = Math.max(distanciaM(a.lat, a.lon, b.lat, b.lon), DISTANCIA_MINIMA_M);
-      const [ax, ay] = relieve.pixel(a.lat, a.lon);
-      const [bx, by] = relieve.pixel(b.lat, b.lon);
-      const ea = { px: ax, py: ay, suelo: relieve.muestra(ax, ay), alturaM: a.alturaM };
-      const eb = { px: bx, py: by, suelo: relieve.muestra(bx, by), alturaM: b.alturaM };
-      // La geometría es simétrica: el obstáculo principal es el mismo en ambos sentidos.
-      const g = geometriaTrayecto(relieve, red, ea, eb, d, lambda, pasoPerfil(relieve, a.lat));
-      const v = g.vMax;
-      // Pérdidas comunes a ambos sentidos: entorno de cada extremo y patrón de cada antena hacia la otra
-      const za = ea.suelo + a.alturaM;
-      const zb = eb.suelo + b.alturaM;
-      const comunes =
-        perdidaEntorno(p.entorno, a.alturaM, p.frecuenciaMhz) +
-        perdidaEntorno(p.entorno, b.alturaM, p.frecuenciaMhz) +
-        atenuacionPatron(a, rumbo(a.lat, a.lon, b.lat, b.lon), anguloElevacion(za, zb, d)) +
-        atenuacionPatron(b, rumbo(b.lat, b.lon, a.lat, a.lon), anguloElevacion(zb, za, d));
-      const margenAB = presupuestoEnlace(a, b, p) - perdidasTrayecto(g, red, p.frecuenciaMhz, a.alturaM).totalDb - comunes;
-      const margenBA = presupuestoEnlace(b, a, p) - perdidasTrayecto(g, red, p.frecuenciaMhz, b.alturaM).totalDb - comunes;
-      const m = Math.min(margenAB, margenBA);
-      enlaces.push({
-        a: a.id,
-        b: b.id,
-        distanciaKm: d / 1000,
-        margenAB,
-        margenBA,
-        margen: m,
-        clase: claseEnlace(m),
-        vMax: v,
-        lineaVista: v <= -0.6 * Math.SQRT2,
-      });
-    }
-  }
+  for (let i = 0; i < antenas.length; i++) for (let k = i + 1; k < antenas.length; k++) enlaces.push(enlaceEntre(antenas[i], antenas[k], p, relieve, red, lambda));
   return enlaces.sort((x, y) => y.margen - x.margen);
 }
 

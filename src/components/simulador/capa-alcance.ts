@@ -26,13 +26,13 @@ export function geojsonAlcance(r: ResultadoSimulacion, antenas: Antena[], soloId
     const a = porId.get(s.id);
     if (!a || (soloId && s.id !== soloId) || !s.alcancePorRumbo?.length) continue;
     if (s.alcanceKm > 0) {
-      features.push({ type: "Feature", properties: { clase: "servicio" }, geometry: { type: "LineString", coordinates: contorno(a, s.alcancePorRumbo) } });
+      features.push({ type: "Feature", properties: { clase: "servicio", id: s.id }, geometry: { type: "LineString", coordinates: contorno(a, s.alcancePorRumbo) } });
       const k = s.alcancePorRumbo.indexOf(Math.max(...s.alcancePorRumbo));
       const p = desplazar(a.lat, a.lon, s.alcancePorRumbo[k] * 1000, (k + 0.5) * SECTOR);
       etiquetas.push({ clave: `${s.id}:s`, lon: p.lon, lat: p.lat, texto: `${s.alcanceLimitado ? "≥ " : ""}${s.alcanceKm.toFixed(1).replace(".", ",")} km con servicio`, clase: "alcance-servicio" });
     }
     if (s.alcanceConfiableKm > 0) {
-      features.push({ type: "Feature", properties: { clase: "confiable" }, geometry: { type: "LineString", coordinates: contorno(a, s.alcanceConfiablePorRumbo) } });
+      features.push({ type: "Feature", properties: { clase: "confiable", id: s.id }, geometry: { type: "LineString", coordinates: contorno(a, s.alcanceConfiablePorRumbo) } });
       const k = s.alcanceConfiablePorRumbo.indexOf(Math.max(...s.alcanceConfiablePorRumbo));
       const p = desplazar(a.lat, a.lon, s.alcanceConfiablePorRumbo[k] * 1000, (k + 0.5) * SECTOR);
       etiquetas.push({ clave: `${s.id}:c`, lon: p.lon, lat: p.lat, texto: `${s.alcanceConfiableKm.toFixed(1).replace(".", ",")} km confiable`, clase: "alcance-confiable" });

@@ -18,6 +18,11 @@ export { atenuacionPatron, anchosHaz } from "./src/lib/radio/patron";
 export { perdidaEntorno } from "./src/lib/radio/entorno";
 export { dbmAUv, dbmADbuvm, desdeDbm, aDbm } from "./src/lib/radio/unidades";
 export { textoInforme } from "./src/lib/radio/informe";
+export { tiempoEnAireMs, simularMensaje, probabilidadEnlace, esperaRetransmision, ventanaContencion, snrLimite } from "./src/lib/radio/mensaje";
+export { presetPorId } from "./src/lib/radio/constantes";
+export { sembrar, cajaSiembra } from "./src/lib/radio/siembra";
+export { estadoRed, piezaDe, consejoRed } from "./src/lib/radio/estado-red";
+export { alcancePlanoKm } from "./src/lib/radio/alcance-plano";
 `;
 const tmp = mkdtempSync(path.join(os.tmpdir(), "motor-"));
 const archivo = path.join(tmp, "motor.mjs");
@@ -161,6 +166,69 @@ caso("Sin D, todas conectadas", sinD.nodos.every((n) => n.saltos !== null));
   caso("El informe da el mismo margen que el enlace de la malla", i && cerca(i.margenDb, sim.enlaces[0].margenAB, 1e-6), `${i?.margenDb.toFixed(3)} frente a ${sim.enlaces[0].margenAB.toFixed(3)} dB`);
   caso("Nivel = PIRE − pérdidas + ganancia de recepción", i && cerca(i.nivelDbm, i.pireDbm - i.perdidaTotalDb + i.gananciaRxDbi - i.patronRxDb - i.perdidaCableRxDb - i.perdidaExtraRxDb, 1e-9));
   caso("Informe en texto", /INFORME DE RADIOENLACE/.test(m.textoInforme(i)) && /Longley-Rice de referencia/.test(m.textoInforme(i)));
+}
+
+// Mensajes por la malla (Meshtastic): tiempo en el aire, espera de retransmisión, saltos y entrega
+{
+  const lf = m.presetPorId("LONG_FAST");
+  const ls = m.presetPorId("LONG_SLOW");
+  // SF11, 250 kHz, 4/5, preámbulo 16, 62 bytes: 20,25·8,192 + 68·8,192 = 722,9 ms
+  caso("Tiempo en el aire Long Fast, 62 bytes ≈ 722,9 ms", cerca(m.tiempoEnAireMs(62, lf), 722.944, 0.01), m.tiempoEnAireMs(62, lf).toFixed(3));
+  // SF12, 125 kHz, 4/8, optimización de tasa baja: 20,25·32,768 + 112·32,768 = 4333,6 ms
+  caso("Tiempo en el aire Long Slow, 62 bytes ≈ 4333,6 ms", cerca(m.tiempoEnAireMs(62, ls), 4333.568, 0.01), m.tiempoEnAireMs(62, ls).toFixed(3));
+  caso("SNR límite: SF7 −7,5 dB y SF12 −20 dB", m.snrLimite(7) === -7.5 && m.snrLimite(12) === -20);
+  caso("Más SNR = ventana más grande (el más lejano retransmite primero)", m.ventanaContencion(-20) === 3 && m.ventanaContencion(10) === 8 && m.ventanaContencion(-5) > m.ventanaContencion(-15));
+  caso("Un ROUTER retransmite antes que un CLIENT", m.esperaRetransmision(0, "ROUTER", lf).max < m.esperaRetransmision(0, "CLIENT", lf).min + 1);
+  caso("Probabilidad por enlace: 20 dB ≈ 70 %, 30 dB ≈ 98 %", cerca(m.probabilidadEnlace(20), 0.7, 0.01) && m.probabilidadEnlace(30) > 0.97);
+  const n = (id, rol, pasarela = false) => ({ id, nombre: id, tipo: "antena", lat: 4.2, lon: -73.3, alturaM: 15, potenciaDbm: 22, gananciaDbi: 5.8, perdidaCableDb: 1, equipo: "personalizado", rol, pasarela, activa: true });
+  const red = [n("P", "CLIENT"), n("R2", "ROUTER"), n("R1", "ROUTER"), n("G", "ROUTER", true)];
+  const e = (a, b, margen) => ({ a, b, distanciaKm: 5, margenAB: margen, margenBA: margen + 1, margen, clase: "solido", vMax: -1, lineaVista: true });
+  const enl = [e("P", "R2", 32), e("R2", "R1", 40), e("R1", "G", 45)];
+  const pr = { preset: "LONG_FAST", limiteSaltos: 3 };
+  const v = m.simularMensaje(["P", "R2", "R1", "G"], red, enl, pr, 40);
+  caso("Mensaje de 3 saltos llega dentro del límite", v.llega && v.saltos === 3 && v.tramos.length === 3);
+  caso("Tiempo total = 3 paquetes en el aire + esperas de los 2 repetidores", cerca(v.totalMs.min, 3 * v.aireMs, 1e-6) && v.totalMs.max > v.totalMs.tipica && v.totalMs.tipica > v.totalMs.min);
+  caso("Entrega: producto de los enlaces y mejor con reintentos", cerca(v.probabilidad, enl.reduce((s, x) => s * m.probabilidadEnlace(x.margen), 1), 1e-9) && v.probabilidadReintentos > v.probabilidad);
+  const corto = m.simularMensaje(["P", "R2", "R1", "G"], red, enl, { ...pr, limiteSaltos: 2 }, 40);
+  caso("Con límite de 2 saltos el mensaje se descarta", !corto.llega && /límite es 2/.test(corto.motivo));
+  const roto = m.simularMensaje(["P", "R2", "R1", "G"], red, [e("P", "R2", 12), enl[1], enl[2]], pr, 40);
+  caso("Un tramo sin enlace corta el mensaje", !roto.llega && /no tiene enlace/.test(roto.motivo));
+}
+
+// Sembrado automático: cadena de repetidores sobre terreno plano hacia un punto a 30 km
+{
+  const base = { tipo: "antena", alturaM: 15, potenciaDbm: 22, gananciaDbi: 5.8, perdidaCableDb: 1, equipo: "nodo-solar-58", rol: "ROUTER", activa: true };
+  const gateway = { ...base, id: "g", nombre: "Gateway", lat: 4.2, lon: -73.37, alturaM: 8, pasarela: true };
+  const repetidor = { ...base, id: "r", nombre: "Repetidor", lat: 0, lon: 0, pasarela: false };
+  const persona = { ...base, id: "p", nombre: "Persona", tipo: "nodo", lat: 0, lon: 0, alturaM: 1.5, gananciaDbi: 2, perdidaCableDb: 0, equipo: "portatil-2dbi", rol: "CLIENT", pasarela: false };
+  const destino = m.desplazar(4.2, -73.37, 30000, 90);
+  const pedido = { origenes: [gateway], destinos: [destino], repetidor, persona, parametros: p };
+  const caja = m.cajaSiembra([gateway], [destino]);
+  const s = m.sembrar(pedido, m.relievePlano(caja), caja);
+  caso("La cadena llega a la persona a 30 km", s.destinos[0].llega && s.puntos.length >= 1 && s.puntos.length <= 6, `${s.puntos.length} repetidores, ${s.destinos[0].margenDb.toFixed(1)} dB en el destino`);
+  caso("Cada repetidor propuesto con enlace sólido (≥ 30 dB)", s.puntos.every((q) => q.margenDb >= 30), s.puntos.map((q) => q.margenDb.toFixed(1)).join(", "));
+  const sim = await m.simular(40, [gateway, ...s.puntos.map((q, k) => ({ ...repetidor, id: `r${k}`, nombre: `R${k}`, lat: q.lat, lon: q.lon })), { ...persona, lat: destino.lat, lon: destino.lon }], p, { tipo: "plano" }, ctx);
+  const est = m.estadoRed(sim ? [gateway, ...s.puntos.map((q, k) => ({ ...repetidor, id: `r${k}`, nombre: `R${k}`, lat: q.lat, lon: q.lon })), { ...persona, lat: destino.lat, lon: destino.lon }] : [], sim, p.limiteSaltos + 5, true);
+  caso("La simulación confirma la persona conectada con la red sembrada", est.conectadas.length === 1 && est.sinCobertura.length === 0 && est.areaKm2 > 0, `${est.conectadas.length} conectada(s), ${est.areaKm2.toFixed(0)} km² cubiertos`);
+  const ya = m.sembrar({ ...pedido, destinos: [m.desplazar(4.2, -73.37, 1500, 0)] }, m.relievePlano(caja), caja);
+  caso("Si el gateway ya llega, no propone repetidores", ya.destinos[0].llega && ya.puntos.length === 0);
+  caso("Piezas: gateway, repetidor y persona", m.piezaDe(gateway) === "gateway" && m.piezaDe(repetidor) === "repetidor" && m.piezaDe(persona) === "persona");
+
+  // Guía paso a paso: gateway → repetidores → gente → conectar a los que faltan
+  const consejo = (lista, r = null, alDia = false) => m.consejoRed(m.estadoRed(lista, r, 3, alDia), 3);
+  const lejos = { ...persona, id: "lejos", nombre: "Lejana", ...m.desplazar(4.2, -73.37, 60000, 90) };
+  caso("Guía: sin gateway, el paso 1 es el gateway", consejo([]).paso === 1 && consejo([repetidor]).paso === 1);
+  caso("Guía: con el gateway solo, el paso 2 son los repetidores", consejo([gateway]).paso === 2);
+  const simLejos = await m.simular(41, [gateway, lejos], p, { tipo: "plano" }, ctx);
+  const c4 = consejo([gateway, lejos], simLejos, true);
+  caso("Guía: una persona a 60 km queda sin cobertura (paso 4)", c4.paso === 4 && /Lejana/.test(c4.texto), c4.titulo);
+  const simCerca = await m.simular(42, [gateway, { ...persona, id: "cerca", nombre: "Cercana", ...m.desplazar(4.2, -73.37, 2000, 90) }], p, { tipo: "plano" }, ctx);
+  // Alcance de referencia en terreno plano (como el «hasta 10 km» de Trama)
+  const rep = (h) => ({ ...repetidor, alturaM: h });
+  const [a6, a15, a30] = [6, 15, 30].map((h) => m.alcancePlanoKm(rep(h), persona, p, 20));
+  caso("Alcance en plano: repetidor de 15 m a la gente ≈ 15 km y crece con la torre", cerca(a15, 14.8, 0.6) && a6 < a15 && a15 < a30, `${a6} · ${a15} · ${a30} km`);
+  caso("Alcance en plano entre repetidores (≥ 30 dB) mayor que a la gente", m.alcancePlanoKm(rep(15), rep(15), p, 30) > a15);
+  caso("Guía: con todos conectados, felicita", consejo([gateway, { ...persona, id: "cerca", nombre: "Cercana", ...m.desplazar(4.2, -73.37, 2000, 90) }], simCerca, true).tono === "ok");
 }
 
 console.log(fallos ? `\n✗ ${fallos} caso(s) con fallo` : "\n✓ Motor verificado");
