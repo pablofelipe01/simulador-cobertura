@@ -319,6 +319,20 @@ body {
     opacity: 0.55;
   }
 }
+.ajuste-etiqueta {
+  pointer-events: none;
+  white-space: nowrap;
+  border-radius: 999px;
+  background: var(--color-melki);
+  color: #fff;
+  padding: 1px 7px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 18px;
+  box-shadow:
+    0 0 0 1.5px #fff,
+    0 1px 4px rgb(0 0 0 / 0.35);
+}
 .destino-siembra {
   width: 24px;
   height: 24px;
