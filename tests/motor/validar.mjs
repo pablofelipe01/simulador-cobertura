@@ -18,7 +18,13 @@ export { atenuacionPatron, anchosHaz } from "./src/lib/radio/patron";
 export { perdidaEntorno } from "./src/lib/radio/entorno";
 export { dbmAUv, dbmADbuvm, desdeDbm, aDbm } from "./src/lib/radio/unidades";
 export { textoInforme } from "./src/lib/radio/informe";
-export { tiempoEnAireMs, simularMensaje, probabilidadEnlace, esperaRetransmision, ventanaContencion, snrLimite } from "./src/lib/radio/mensaje";
+export { tiempoEnAireMs, simularMensaje, probabilidadEnlace, esperaRetransmision, esperaAcuseMs, snrLimite, preambuloSimbolos, airePagoMs, bytesDatos, INTENTOS } from "./src/lib/radio/mensaje";
+export { simularCarga, curvaCarga, PEDIDO_CARGA_DEFECTO } from "./src/lib/radio/carga";
+export { estresMalla, PEDIDO_ESTRES_DEFECTO, PAGOS_PERSONA_DIA_TRAMA } from "./src/lib/radio/estres";
+export { analizarMalla } from "./src/lib/radio/malla";
+export { puntosAlAzar, personasPorDensidad, generador } from "./src/lib/radio/poblar";
+export { dimensionarTrama, dimensionarDepartamento, DEPARTAMENTOS_TRAMA, PRECIOS, pesosTrama } from "./src/lib/radio/trama";
+export { calcularEnlaces, retransmite } from "./src/lib/radio/malla";
 export { presetPorId } from "./src/lib/radio/constantes";
 export { sembrar, cajaSiembra } from "./src/lib/radio/siembra";
 export { estadoRed, piezaDe, consejoRed } from "./src/lib/radio/estado-red";
@@ -93,7 +99,7 @@ caso("Terrarium: (128, 0, 0) = 0 m", m.decodificarTerrarium(new Uint8Array([128,
 }
 
 // Simulación completa en terreno plano (sin descargas)
-const base = { potenciaDbm: 22, gananciaDbi: 5.8, perdidaCableDb: 1, equipo: "nodo-solar-58", rol: "ROUTER", activa: true };
+const base = { potenciaDbm: 22, gananciaDbi: 5.8, perdidaCableDb: 1, equipo: "personalizado", rol: "REPETIDOR", activa: true };
 const antenas = [
   { ...base, id: "a", nombre: "A", lat: 4.0, lon: -73.0, alturaM: 15, pasarela: true },
   { ...base, id: "b", nombre: "B", lat: 4.03, lon: -73.0, alturaM: 15, pasarela: false },
@@ -174,45 +180,182 @@ caso("Sin D, todas conectadas", sinD.nodos.every((n) => n.saltos !== null));
   caso("Informe en texto", /INFORME DE RADIOENLACE/.test(m.textoInforme(i)) && /Longley-Rice de referencia/.test(m.textoInforme(i)));
 }
 
-// Mensajes por la malla (Meshtastic): tiempo en el aire, espera de retransmisión, saltos y entrega
+// Paquetes por la malla MeshCore: tiempo en el aire, preámbulo, espera de los repetidores, rutas y entrega
 {
-  const lf = m.presetPorId("LONG_FAST");
-  const ls = m.presetPorId("LONG_SLOW");
+  const sf11 = m.presetPorId("SF11_250");
+  const sf7n = m.presetPorId("SF7_62");
+  const sf10n = m.presetPorId("SF10_62");
   // SF11, 250 kHz, 4/5, preámbulo 16, 62 bytes: 20,25·8,192 + 68·8,192 = 722,9 ms
-  caso("Tiempo en el aire Long Fast, 62 bytes ≈ 722,9 ms", cerca(m.tiempoEnAireMs(62, lf), 722.944, 0.01), m.tiempoEnAireMs(62, lf).toFixed(3));
-  // SF12, 125 kHz, 4/8, optimización de tasa baja: 20,25·32,768 + 112·32,768 = 4333,6 ms
-  caso("Tiempo en el aire Long Slow, 62 bytes ≈ 4333,6 ms", cerca(m.tiempoEnAireMs(62, ls), 4333.568, 0.01), m.tiempoEnAireMs(62, ls).toFixed(3));
+  caso("Tiempo en el aire SF11 / 250 kHz, 62 bytes ≈ 722,9 ms", cerca(m.tiempoEnAireMs(62, sf11), 722.944, 0.01), m.tiempoEnAireMs(62, sf11).toFixed(3));
+  // SF7, 62,5 kHz, preámbulo de 32 símbolos (MeshCore con SF ≤ 8): 36,25·2,048 + 103·2,048 = 285,2 ms
+  caso("Tiempo en el aire SF7 / 62,5 kHz (preámbulo 32), 62 bytes ≈ 285,2 ms", cerca(m.tiempoEnAireMs(62, sf7n), 285.184, 0.01), m.tiempoEnAireMs(62, sf7n).toFixed(3));
+  // SF10, 62,5 kHz, optimización de tasa baja (símbolo de 16,4 ms): 20,25·16,384 + 88·16,384 = 1773,6 ms
+  caso("Tiempo en el aire SF10 / 62,5 kHz (tasa baja), 62 bytes ≈ 1773,6 ms", cerca(m.tiempoEnAireMs(62, sf10n), 1773.568, 0.01), m.tiempoEnAireMs(62, sf10n).toFixed(3));
+  caso("Preámbulo de MeshCore: 32 símbolos con SF ≤ 8 y 16 con SF ≥ 9", m.preambuloSimbolos(8) === 32 && m.preambuloSimbolos(9) === 16);
+  // El pago de Trama: orden 118 B, comprobante 126 B y aviso 126 B con sus acuses, a 2 saltos (documento: 9,5 / 5 / 3 s)
+  const pago = (id) => m.airePagoMs(m.presetPorId(id)) / 1000;
+  caso("Un pago a 2 saltos como en el documento: SF11 ≈ 9,5 s, SF10 ≈ 5 s, SF9 ≈ 3 s", Math.abs(pago("SF11_250") - 9.5) < 0.35 && Math.abs(pago("SF10_250") - 5) < 0.35 && Math.abs(pago("SF9_250") - 3) < 0.35, `${pago("SF11_250").toFixed(2)} · ${pago("SF10_250").toFixed(2)} · ${pago("SF9_250").toFixed(2)} s`);
+  caso("Bytes de datos: cabecera 2 + ruta + 9 + carga", m.bytesDatos(118, 2) === 131 && m.bytesDatos(118) === 129);
   caso("SNR límite: SF7 −7,5 dB y SF12 −20 dB", m.snrLimite(7) === -7.5 && m.snrLimite(12) === -20);
-  caso("Más SNR = ventana más grande (el más lejano retransmite primero)", m.ventanaContencion(-20) === 3 && m.ventanaContencion(10) === 8 && m.ventanaContencion(-5) > m.ventanaContencion(-15));
-  caso("Un ROUTER retransmite antes que un CLIENT", m.esperaRetransmision(0, "ROUTER", lf).max < m.esperaRetransmision(0, "CLIENT", lf).min + 1);
+  caso("Espera del repetidor: hasta 5 × 0,3 × aire con ruta y 5 × 0,5 × aire inundado", m.esperaRetransmision(1000, "directa").max === 1500 && m.esperaRetransmision(1000, "inundacion").max === 2500);
+  caso("Espera del acuse como la app MeshCore", m.esperaAcuseMs(1000, 2, "directa") === 500 + 6250 * 3 && m.esperaAcuseMs(1000, 2, "inundacion") === 16500 && m.INTENTOS === 4);
   caso("Probabilidad por enlace: 20 dB ≈ 70 %, 30 dB ≈ 98 %", cerca(m.probabilidadEnlace(20), 0.7, 0.01) && m.probabilidadEnlace(30) > 0.97);
-  const n = (id, rol, pasarela = false) => ({ id, nombre: id, tipo: "antena", lat: 4.2, lon: -73.3, alturaM: 15, potenciaDbm: 22, gananciaDbi: 5.8, perdidaCableDb: 1, equipo: "personalizado", rol, pasarela, activa: true });
-  const red = [n("P", "CLIENT"), n("R2", "ROUTER"), n("R1", "ROUTER"), n("G", "ROUTER", true)];
+  const n = (id, rol, pasarela = false) => ({ id, nombre: id, tipo: rol === "COMPANION" && !pasarela ? "nodo" : "antena", lat: 4.2, lon: -73.3, alturaM: 6, potenciaDbm: 22, gananciaDbi: 8, perdidaCableDb: 1.2, equipo: "personalizado", rol, pasarela, activa: true });
+  const red = [n("P", "COMPANION"), n("R2", "REPETIDOR"), n("R1", "REPETIDOR"), n("G", "COMPANION", true)];
   const e = (a, b, margen) => ({ a, b, distanciaKm: 5, margenAB: margen, margenBA: margen + 1, margen, clase: "solido", vMax: -1, lineaVista: true });
   const enl = [e("P", "R2", 32), e("R2", "R1", 40), e("R1", "G", 45)];
-  const pr = { preset: "LONG_FAST", limiteSaltos: 3 };
-  const v = m.simularMensaje(["P", "R2", "R1", "G"], red, enl, pr, 40);
-  caso("Mensaje de 3 saltos llega dentro del límite", v.llega && v.saltos === 3 && v.tramos.length === 3);
-  caso("Tiempo total = 3 paquetes en el aire + esperas de los 2 repetidores", cerca(v.totalMs.min, 3 * v.aireMs, 1e-6) && v.totalMs.max > v.totalMs.tipica && v.totalMs.tipica > v.totalMs.min);
-  caso("Entrega: producto de los enlaces y mejor con reintentos", cerca(v.probabilidad, enl.reduce((s, x) => s * m.probabilidadEnlace(x.margen), 1), 1e-9) && v.probabilidadReintentos > v.probabilidad);
-  const corto = m.simularMensaje(["P", "R2", "R1", "G"], red, enl, { ...pr, limiteSaltos: 2 }, 40);
-  caso("Con límite de 2 saltos el mensaje se descarta", !corto.llega && /límite es 2/.test(corto.motivo));
-  const roto = m.simularMensaje(["P", "R2", "R1", "G"], red, [e("P", "R2", 12), enl[1], enl[2]], pr, 40);
-  caso("Un tramo sin enlace corta el mensaje", !roto.llega && /no tiene enlace/.test(roto.motivo));
+  const pr = { preset: "SF11_250", limiteSaltos: 3 };
+  const v = m.simularMensaje(["P", "R2", "R1", "G"], red, enl, pr, 118);
+  caso("Pago de 3 saltos llega por la ruta aprendida", v.llega && v.saltos === 3 && v.tramos.length === 3 && v.modo === "directa");
+  caso("Con ruta directa cada repetidor quita su byte de ruta", v.tramos[0].aireMs >= v.tramos[1].aireMs && v.tramos[1].aireMs >= v.tramos[2].aireMs && v.bytes === m.bytesDatos(118, 2));
+  caso("Tiempo total = paquetes en el aire + esperas de los 2 repetidores", cerca(v.totalMs.min, v.tramos.reduce((x, t) => x + t.aireMs, 0), 1e-6) && v.totalMs.max > v.totalMs.tipica && v.totalMs.tipica > v.totalMs.min);
+  caso("Entrega: producto de los enlaces y mejor con los 4 intentos", cerca(v.probabilidad, enl.reduce((x, q) => x * m.probabilidadEnlace(q.margen), 1), 1e-9) && cerca(v.probabilidadReintentos, 1 - (1 - v.probabilidad) ** 4, 1e-9));
+  const corto = m.simularMensaje(["P", "R2", "R1", "G"], red, enl, { ...pr, limiteSaltos: 2 }, 118);
+  caso("Pasar el límite de saltos del diseño se marca", !corto.llega && /el diseño permite 2/.test(corto.motivo));
+  const mudo = m.simularMensaje(["P", "R2", "R1", "G"], [red[0], { ...red[1], rol: "COMPANION" }, red[2], red[3]], enl, pr, 118);
+  caso("En MeshCore un companion no pasa los paquetes de otros", !mudo.llega && /no es repetidor/.test(mudo.motivo));
+  const roto = m.simularMensaje(["P", "R2", "R1", "G"], red, [e("P", "R2", 12), enl[1], enl[2]], pr, 118);
+  caso("Un tramo sin enlace corta el pago", !roto.llega && /no tiene enlace/.test(roto.motivo));
+  const inund = m.simularMensaje(["P", "R2", "R1", "G"], red, enl, pr, 118, "inundacion");
+  caso("Inundado: lo retransmiten todos los repetidores", inund.modo === "inundacion" && inund.transmisiones === 3 && inund.bytes === m.bytesDatos(118, 0));
+  caso("Solo los repetidores retransmiten", m.retransmite(red[1]) && !m.retransmite(red[0]) && !m.retransmite(red[3]));
+}
+
+// Poblar personas: reparto al azar, uniforme, dentro del área y repetible
+{
+  const cuadro = m.poligonoRectangulo(4.2, -73.37, 6000, 6000);
+  const pts = m.puntosAlAzar(cuadro, { n: 250, semilla: 9 });
+  caso("Poblar: 250 personas dentro del área", pts.length === 250 && pts.every((q) => m.dentroPoligono(q.lon, q.lat, cuadro)));
+  const otra = m.puntosAlAzar(cuadro, { n: 250, semilla: 9 });
+  caso("Poblar: la misma semilla da el mismo reparto", JSON.stringify(otra) === JSON.stringify(pts));
+  const minSep = Math.min(...pts.slice(0, 60).flatMap((a, i) => pts.slice(i + 1, 60).map((b) => m.distanciaM(a.lat, a.lon, b.lat, b.lon))));
+  caso("Poblar: no quedan encimadas", minSep > 20, `${minSep.toFixed(0)} m entre las más cercanas`);
+  const norte = pts.filter((q) => q.lat > 4.2).length;
+  caso("Poblar: reparto parejo (mitad al norte)", norte > 95 && norte < 155, `${norte} de 250 al norte`);
+  const filtro = m.puntosAlAzar(cuadro, { n: 100, semilla: 3, acepta: (lat) => lat > 4.2 });
+  caso("Poblar: «solo donde hay señal» respeta la condición", filtro.length === 100 && filtro.every((q) => q.lat > 4.2));
+  caso("Poblar: densidad de Trama (1 por km² en 36 km² = 36)", m.personasPorDensidad(cuadro, 1) === 36 && m.personasPorDensidad(cuadro, 0.2) === 7);
+}
+
+// Trama: dimensionamiento del documento del Inge (equipos, precios y capacidad por frecuencia)
+{
+  const fmt = (v) => Math.round(v).toLocaleString("es-CO");
+  caso("Precios de Trama: repetidor ≈ $1.035.000, billetera XIAO ≈ $92.000, T1000-E ≈ $190.000", cerca(m.PRECIOS.repetidor, 1035129, 2000) && cerca(m.PRECIOS.nodo.xiao, 92460, 300) && cerca(m.PRECIOS.nodo.t1000, 190300, 300), `${fmt(m.PRECIOS.repetidor)} · ${fmt(m.PRECIOS.nodo.xiao)} · ${fmt(m.PRECIOS.nodo.t1000)}`);
+  caso("Sitio gateway con 4 radios ≈ $9,4 M y Starlink con solar ≈ $6,1 M", cerca(m.PRECIOS.sitioBase + 4 * m.PRECIOS.radio, 9.44e6, 0.05e6) && cerca(m.PRECIOS.starlink, 6.099e6, 1e3));
+  const dep = (id) => m.dimensionarDepartamento(m.DEPARTAMENTOS_TRAMA.find((d) => d.id === id));
+  const choco = dep("choco");
+  caso("Chocó (30 % de adopción): 35.880 usuarios, 240 repetidores, 60 sitios, $6,4 mil M", choco.usuarios === 35880 && choco.repetidores === 240 && choco.sitios === 60 && m.pesosTrama(choco.costo.total) === "$6,4 mil M", `${choco.usuarios} · ${choco.repetidores} · ${choco.sitios} · ${m.pesosTrama(choco.costo.total)}`);
+  caso("Chocó: ≈ $178.000 por usuario", cerca(choco.porUsuario, 178057, 200), fmt(choco.porUsuario));
+  const vichada = dep("vichada");
+  caso("Vichada: 13.875 usuarios, 179 repetidores, 24 sitios, 93 radios, 6 Starlink", vichada.usuarios === 13875 && vichada.repetidores === 179 && vichada.sitios === 24 && vichada.radios === 93 && vichada.starlinks === 6 && vichada.enlaces === 18);
+  const total = m.DEPARTAMENTOS_TRAMA.map((d) => m.dimensionarDepartamento(d));
+  const suma = (k) => total.reduce((x, d) => x + k(d), 0);
+  caso("Colombia: 950.655 usuarios, 7.017 repetidores, 1.602 sitios, 734 Starlink", suma((d) => d.usuarios) === 950655 && suma((d) => d.repetidores) === 7017 && suma((d) => d.sitios) === 1602 && suma((d) => d.starlinks) === 734, `${suma((d) => d.usuarios)} · ${suma((d) => d.repetidores)} · ${suma((d) => d.sitios)} · ${suma((d) => d.starlinks)}`);
+  caso("Colombia: inversión ≈ $154,5 mil M", m.pesosTrama(suma((d) => d.costo.total)) === "$154,5 mil M", m.pesosTrama(suma((d) => d.costo.total)));
+  const cap = m.dimensionarTrama({ usuarios: 3000, areaKm2: 100, terreno: "sabana", sf: 11, nodo: "xiao", logistica: 1, solar: 1 });
+  caso("Mucha gente en poca área: manda la capacidad (una radio cada 150 usuarios)", cap.manda === "capacidad" && cap.radios === 20 && cap.sitios === 5);
+}
+
+// Prueba de carga: pagos al tiempo, paquete por paquete como MeshCore, hasta que la frecuencia se revienta
+{
+  const nodo = (id, rol, extra = {}) => ({ id, nombre: id, tipo: rol === "REPETIDOR" ? "antena" : "nodo", lat: 4.2, lon: -73.3, alturaM: 6, potenciaDbm: 22, gananciaDbi: 8, perdidaCableDb: 1.2, equipo: "personalizado", rol, pasarela: false, activa: true, ...extra });
+  const antenas = [nodo("G", "COMPANION", { tipo: "antena", pasarela: true, alturaM: 12 }), nodo("R", "REPETIDOR")];
+  const enlaces = [{ a: "R", b: "G", distanciaKm: 8, margenAB: 45, margenBA: 45, margen: 45, clase: "solido", vMax: -1, lineaVista: true }];
+  const nodos = [{ id: "G", saltos: 0, vecinos: 1, componente: 0, critico: false, cuelloDb: null, ruta: ["G"] }, { id: "R", saltos: 1, vecinos: 1, componente: 0, critico: false, cuelloDb: 45, ruta: ["R", "G"] }];
+  for (let k = 0; k < 40; k++) {
+    const cerca = k % 2 === 0;
+    antenas.push(nodo(`P${k}`, "COMPANION"));
+    enlaces.push({ a: `P${k}`, b: cerca ? "G" : "R", distanciaKm: 3, margenAB: 34, margenBA: 34, margen: 34, clase: "solido", vMax: -1, lineaVista: true });
+    nodos.push({ id: `P${k}`, saltos: cerca ? 1 : 2, vecinos: 1, componente: 0, critico: false, cuelloDb: 34, ruta: cerca ? [`P${k}`, "G"] : [`P${k}`, "R", "G"] });
+  }
+  const base = { ...m.PEDIDO_CARGA_DEFECTO, antenas, enlaces, nodos, parametros: { preset: "SF11_250", limiteSaltos: 3 } };
+  const uno = m.simularCarga({ ...base, mensajes: 1 });
+  caso("Carga: un pago solo llega y vuelve el comprobante", uno.completos === 1 && uno.remitentes === 40 && uno.latenciaS.p50 > 4 && uno.latenciaS.p50 < 30, `${uno.latenciaS.p50.toFixed(1)} s`);
+  const r5 = m.simularCarga({ ...base, mensajes: 5 });
+  const r25 = m.simularCarga({ ...base, mensajes: 25 });
+  caso("Carga: 5 pagos al tiempo aguantan (aunque el último espera) y 25 se revientan", !r5.saturada && r5.completosPct >= 90 && r25.saturada && r25.completosPct < r5.completosPct, `5 → ${r5.completosPct.toFixed(0)} %, p95 ${r5.latenciaS.p95.toFixed(0)} s · 25 → ${r25.completosPct.toFixed(0)} %, p95 ${r25.latenciaS.p95.toFixed(0)} s`);
+  caso("Carga: la misma semilla da el mismo resultado", JSON.stringify(m.simularCarga({ ...base, mensajes: 15 })) === JSON.stringify(m.simularCarga({ ...base, mensajes: 15 })));
+  // Promedio de tres sorteos: con 55 pagos, uno solo varía ±3 puntos
+  const horas = [7, 8, 9].map((semilla) => m.simularCarga({ ...base, modo: "continua", mensajes: 55, duracionMin: 60, semilla }));
+  const hora = { completosPct: horas.reduce((s, x) => s + x.completosPct, 0) / 3, canalGatewayPct: horas.reduce((s, x) => s + x.canalGatewayPct, 0) / 3, mensajes: horas[0].mensajes };
+  caso("Carga: 55 pagos por hora (el diseño de Trama) caben con el canal cerca del 15 %", hora.mensajes === 55 && hora.completosPct >= 93 && hora.canalGatewayPct > 7 && hora.canalGatewayPct < 25, `${hora.completosPct.toFixed(0)} %, canal ${hora.canalGatewayPct.toFixed(1)} %`);
+  const sf9 = m.simularCarga({ ...base, mensajes: 15, parametros: { preset: "SF9_250", limiteSaltos: 3 } });
+  const sf11 = m.simularCarga({ ...base, mensajes: 15 });
+  caso("Carga: SF9 aguanta más que SF11", sf9.completosPct >= sf11.completosPct && sf9.latenciaS.p95 <= sf11.latenciaS.p95, `SF9 ${sf9.completosPct.toFixed(0)} % · SF11 ${sf11.completosPct.toFixed(0)} %`);
+  const curva = m.curvaCarga({ ...base, mensajes: 5 }, [5, 10, 25, 50, 80]);
+  caso("Carga: la curva encuentra dónde se revienta", curva.quiebre !== null && (curva.seguro === null || curva.seguro < curva.quiebre) && (curva.lento === null || curva.lento < curva.quiebre) && curva.puntos.length >= 2, `seguro ${curva.seguro} · lento ${curva.lento} · quiebre ${curva.quiebre}`);
+  const vacio = m.simularCarga({ ...base, antenas: antenas.slice(0, 2), nodos: nodos.slice(0, 2), enlaces: enlaces.slice(0, 1) });
+  caso("Carga: sin personas conectadas lo dice", Boolean(vacio.motivo) && /Poblar personas/.test(vacio.motivo));
+}
+
+// Prueba de estrés de la hora pico por zona (zonas de popularidad alrededor de cada nodo), sobre terreno plano
+{
+  const equipo = { potenciaDbm: 22, gananciaDbi: 8, perdidaCableDb: 1.2, activa: true };
+  const lista = [{ ...equipo, id: "G", nombre: "Gateway", tipo: "antena", lat: 4.2, lon: -73.37, alturaM: 12, equipo: "t114-8dbi", rol: "COMPANION", pasarela: true }];
+  for (let k = 0; k < 3; k++) {
+    const q = m.desplazar(4.2, -73.37, 5000, 120 * k);
+    lista.push({ ...equipo, id: `R${k + 1}`, nombre: `Repetidor ${k + 1}`, tipo: "antena", lat: q.lat, lon: q.lon, alturaM: 6, equipo: "p1-8dbi", rol: "REPETIDOR", pasarela: false });
+  }
+  const zonas = (porZona) => {
+    const antenas = [...lista];
+    for (const c of lista)
+      m.puntosAlAzar(m.poligonoCirculo(c.lat, c.lon, 2000, 48), { n: porZona, semilla: 5 + antenas.length }).forEach((q, k) =>
+        antenas.push({ id: `${c.id}-p${k}`, nombre: `Persona ${c.id}-${k}`, tipo: "nodo", lat: q.lat, lon: q.lon, alturaM: 1.5, potenciaDbm: 22, gananciaDbi: 2, perdidaCableDb: 0, equipo: "xiao", rol: "COMPANION", pasarela: false, activa: true, poblada: true, zona: c.id }),
+      );
+    return antenas;
+  };
+  const pT = { ...p, preset: "SF11_250", frecuenciaMhz: 920, alturaRxM: 1.5, radioKm: 9, resolucion: "rapida", limiteSaltos: 3 };
+  const pocas = zonas(40);
+  const t0 = performance.now();
+  const rPocas = await m.simular(20, pocas, pT, { tipo: "plano" }, ctx);
+  const tSim = performance.now() - t0;
+  const pedido = (antenas, r, extra = {}) => ({ ...m.PEDIDO_ESTRES_DEFECTO, antenas, enlaces: r.enlaces, nodos: r.nodos, parametros: pT, ...extra });
+  const e1 = m.estresMalla(pedido(pocas, rPocas, { rampa: true }));
+  const sumaZonas = e1.zonas.reduce((s, z) => s + z.usuarios, 0);
+  caso("Estrés: 2,4 pagos por persona al día (55 ÷ (150 × 15 %))", Math.abs(m.PAGOS_PERSONA_DIA_TRAMA - 2.444) < 0.01, m.PAGOS_PERSONA_DIA_TRAMA.toFixed(3));
+  caso("Estrés: 160 personas en 4 zonas aguantan la hora pico", e1.estado === "aguanta" && e1.usuarios === 160 && e1.zonas.length === 4 && sumaZonas === 160, `${e1.completosPct.toFixed(0)} %, p95 ${e1.p95S.toFixed(0)} s, canal ${e1.canalGatewayPct.toFixed(0)} %`);
+  caso("Estrés: lo pedido por hora es personas × pagos al día × 15 %", Math.abs(e1.pedidosHora - 160 * m.PEDIDO_ESTRES_DEFECTO.pagosPersonaDia * 0.15) < 1e-6 && e1.entregadosHora > 0.85 * e1.pedidosHora, `${e1.pedidosHora.toFixed(0)} pedidos, ${e1.entregadosHora.toFixed(0)} entregados por hora`);
+  caso("Estrés: cada zona mide canal, transmisión, alcance y energía", e1.zonas.every((z) => z.canalPct > 0 && z.txPct > 0 && z.txPct < 50 && z.alcanceKm > 1 && z.alcanceKm <= 2.2) && e1.zonas.filter((z) => z.energia).length === 3 && e1.zonas.every((z) => !z.energia || (z.energia.alcanza && z.energia.consumoWhDia < z.energia.generaWhDia)));
+  caso("Estrés: la rampa encuentra hasta cuántas personas aguanta", e1.rampa && e1.rampa.factorQuiebre !== null && e1.rampa.factorQuiebre > 1 && e1.rampa.usuariosMax >= 160 && e1.rampa.maxEntregadosHora >= e1.entregadosHora && e1.zonas.every((z) => z.usuariosMax === null || z.usuariosMax >= z.usuarios), `seguro ×${e1.rampa?.factorSeguro} · quiebre ×${e1.rampa?.factorQuiebre} · ${e1.rampa?.usuariosMax} personas · máx ${e1.rampa?.maxEntregadosHora.toFixed(0)} pagos/h`);
+  const mercado = m.estresMalla(pedido(pocas, rPocas, { horaPicoPct: 25 }));
+  caso("Estrés: el día de mercado pide más y ocupa más el canal", mercado.pedidosHora > e1.pedidosHora && mercado.canalGatewayPct > e1.canalGatewayPct, `${e1.canalGatewayPct.toFixed(0)} % → ${mercado.canalGatewayPct.toFixed(0)} %`);
+
+  const muchas = zonas(250);
+  const t1 = performance.now();
+  const rMuchas = await m.simular(21, muchas, pT, { tipo: "plano" }, ctx);
+  const tSimMuchas = performance.now() - t1;
+  caso("Con 1.000 personas la simulación de la malla sigue ágil (rutas sin vueltas inútiles)", tSimMuchas < 4000, `${tSim.toFixed(0)} ms con 160 · ${tSimMuchas.toFixed(0)} ms con 1.000`);
+  const t2 = performance.now();
+  const e2 = m.estresMalla(pedido(muchas, rMuchas, { rampa: true, comparar: true }));
+  const tEstres = performance.now() - t2;
+  caso("Estrés: 250 personas por nodo en una sola frecuencia SF11 se revientan", e2.estado === "revienta" && e2.usuarios === 1000 && e2.zonas.some((z) => z.estado === "revienta") && e2.canalGatewayPct > 60, `${e2.completosPct.toFixed(0)} %, canal ${e2.canalGatewayPct.toFixed(0)} %, ${tEstres.toFixed(0)} ms`);
+  caso("Estrés: con la carga, el alcance útil y lo entregado bajan", e2.entregadosHora < e2.pedidosHora * 0.9 && e2.zonas.some((z) => z.alcanceCargaKm !== null && z.alcanceCargaKm < z.alcanceKm));
+  caso("Estrés: la rampa dice cuánto aguanta (menos de las 1.000)", e2.rampa && e2.rampa.usuariosMax !== null && e2.rampa.usuariosMax < 1000 && e2.rampa.factorQuiebre <= 1 && e2.rampa.primera !== null, `~${e2.rampa?.usuariosMax} personas; primera ${e2.rampa?.primera}`);
+  const sf9 = e2.ajustes?.find((a) => a.preset === "SF9_250");
+  const sf11 = e2.ajustes?.find((a) => a.actual);
+  caso("Estrés: con SF9 caben más pagos que con SF11", sf9 && sf11 && sf9.completosPct > sf11.completosPct && e2.ajustes.length === 7, `SF9 ${sf9?.completosPct.toFixed(0)} % · SF11 ${sf11?.completosPct.toFixed(0)} %`);
+  caso("Estrés: sin personas lo dice", Boolean(m.estresMalla(pedido(lista, await m.simular(22, lista, pT, { tipo: "plano" }, ctx))).motivo));
 }
 
 // Sembrado automático: cadena de repetidores sobre terreno plano hacia un punto a 30 km
 {
-  const base = { tipo: "antena", alturaM: 15, potenciaDbm: 22, gananciaDbi: 5.8, perdidaCableDb: 1, equipo: "nodo-solar-58", rol: "ROUTER", activa: true };
+  const base = { tipo: "antena", alturaM: 15, potenciaDbm: 22, gananciaDbi: 5.8, perdidaCableDb: 1, equipo: "personalizado", rol: "REPETIDOR", activa: true };
   const gateway = { ...base, id: "g", nombre: "Gateway", lat: 4.2, lon: -73.37, alturaM: 8, pasarela: true };
   const repetidor = { ...base, id: "r", nombre: "Repetidor", lat: 0, lon: 0, pasarela: false };
-  const persona = { ...base, id: "p", nombre: "Persona", tipo: "nodo", lat: 0, lon: 0, alturaM: 1.5, gananciaDbi: 2, perdidaCableDb: 0, equipo: "portatil-2dbi", rol: "CLIENT", pasarela: false };
+  const persona = { ...base, id: "p", nombre: "Persona", tipo: "nodo", lat: 0, lon: 0, alturaM: 1.5, gananciaDbi: 2, perdidaCableDb: 0, equipo: "xiao", rol: "COMPANION", pasarela: false };
   const destino = m.desplazar(4.2, -73.37, 30000, 90);
   const pedido = { origenes: [gateway], destinos: [destino], repetidor, persona, parametros: p };
   const caja = m.cajaSiembra([gateway], [destino]);
   const s = m.sembrar(pedido, m.relievePlano(caja), caja);
   caso("La cadena llega a la persona a 30 km", s.destinos[0].llega && s.puntos.length >= 1 && s.puntos.length <= 6, `${s.puntos.length} repetidores, ${s.destinos[0].margenDb.toFixed(1)} dB en el destino`);
   caso("Cada repetidor propuesto con enlace sólido (≥ 30 dB)", s.puntos.every((q) => q.margenDb >= 30), s.puntos.map((q) => q.margenDb.toFixed(1)).join(", "));
+  caso("La cadena dice a cuántos saltos queda cada destino", s.saltos?.[0] === s.puntos.length + 1, `${s.saltos?.[0]} saltos`);
+  const conLimite = m.sembrar({ ...pedido, saltosOrigen: { g: 0 }, limiteSaltos: 3 }, m.relievePlano(caja), caja);
+  caso("Con límite de 3 saltos la cadena no lo pasa", conLimite.destinos[0].llega && conLimite.saltos[0] <= 3, `${conLimite.puntos.length} repetidores, ${conLimite.saltos[0]} saltos`);
+  // Desde un repetidor que ya está a 2 saltos, con límite 3, el último repetidor debe dar servicio a la persona
+  const rep2 = { ...repetidor, id: "r2", nombre: "R2", ...m.desplazar(4.2, -73.37, 9000, 90) };
+  const lejos2 = m.sembrar({ ...pedido, origenes: [gateway, rep2], saltosOrigen: { g: 0, r2: 2 }, limiteSaltos: 3 }, m.relievePlano(caja), caja);
+  caso("Si el repetidor cercano ya está a 2 saltos, siembra desde donde cabe", !lejos2.destinos[0].llega || lejos2.saltos[0] <= 3, `${lejos2.puntos.map((q) => q.desde).join(" · ")} → ${lejos2.saltos[0]} saltos`);
   const sim = await m.simular(40, [gateway, ...s.puntos.map((q, k) => ({ ...repetidor, id: `r${k}`, nombre: `R${k}`, lat: q.lat, lon: q.lon })), { ...persona, lat: destino.lat, lon: destino.lon }], p, { tipo: "plano" }, ctx);
   const est = m.estadoRed(sim ? [gateway, ...s.puntos.map((q, k) => ({ ...repetidor, id: `r${k}`, nombre: `R${k}`, lat: q.lat, lon: q.lon })), { ...persona, lat: destino.lat, lon: destino.lon }] : [], sim, p.limiteSaltos + 5, true);
   caso("La simulación confirma la persona conectada con la red sembrada", est.conectadas.length === 1 && est.sinCobertura.length === 0 && est.areaKm2 > 0, `${est.conectadas.length} conectada(s), ${est.areaKm2.toFixed(0)} km² cubiertos`);
@@ -239,7 +382,7 @@ caso("Sin D, todas conectadas", sinD.nodos.every((n) => n.saltos !== null));
 
 // Diseño de la malla por área (v10): polígonos, cobertura dentro del área y siembra de repetidores
 {
-  const base = { tipo: "antena", alturaM: 15, potenciaDbm: 22, gananciaDbi: 5.8, perdidaCableDb: 1, equipo: "nodo-solar-58", rol: "ROUTER", activa: true };
+  const base = { tipo: "antena", alturaM: 15, potenciaDbm: 22, gananciaDbi: 5.8, perdidaCableDb: 1, equipo: "personalizado", rol: "REPETIDOR", activa: true };
   const gateway = { ...base, id: "g", nombre: "Gateway", lat: 4.2, lon: -73.37, alturaM: 8, pasarela: true };
   const repetidor = { ...base, id: "r", nombre: "Repetidor", lat: 0, lon: 0, pasarela: false };
   const pd = m.completarParametros({ preset: "LONG_FAST", frecuenciaMhz: 915, alturaRxM: 1.5, gananciaRxDbi: 2, perdidaExtraDb: 0, radioKm: 15, resolucion: "normal", limiteSaltos: 3 });
@@ -310,15 +453,16 @@ caso("Sin D, todas conectadas", sinD.nodos.every((n) => n.saltos !== null));
     for (let j = 0; j < al; j++) for (let i = 0; i < an; i++) d[j * an + i] = 250 + 30 * Math.sin(i / 9) * Math.cos(j / 11) + 90 * Math.exp(-((i - an * 0.62) ** 2 + (j - al * 0.45) ** 2) / 900) - 50 * Math.exp(-((i - an * 0.35) ** 2 + (j - al * 0.6) ** 2) / 500);
     return new m.Relieve(z, x0, y0, an, al, d, { fuente: "teselas", solicitadas: 1, fallidas: 0, resolucionM: 38 });
   };
-  const base = { tipo: "antena", alturaM: 15, potenciaDbm: 22, gananciaDbi: 5.8, perdidaCableDb: 1, equipo: "nodo-solar-58", rol: "ROUTER", activa: true, pasarela: false };
+  const base = { tipo: "antena", alturaM: 15, potenciaDbm: 22, gananciaDbi: 5.8, perdidaCableDb: 1, equipo: "personalizado", rol: "REPETIDOR", activa: true, pasarela: false };
   const p = m.completarParametros({ preset: "LONG_FAST", frecuenciaMhz: 915, alturaRxM: 1.5, gananciaRxDbi: 2, perdidaExtraDb: 0, radioKm: 10, resolucion: "normal", limiteSaltos: 3 });
   const gw = { ...base, id: "g", nombre: "Gateway", lat: 4.2, lon: -73.37, alturaM: 8, pasarela: true };
   const q = (dist, rumbo) => m.desplazar(4.2, -73.37, dist, rumbo);
-  const persona = (id, dist, rumbo) => ({ ...base, id, nombre: id, tipo: "nodo", alturaM: 1.5, gananciaDbi: 2, perdidaCableDb: 0, equipo: "portatil-2dbi", rol: "CLIENT", ...q(dist, rumbo) });
+  const persona = (id, dist, rumbo) => ({ ...base, id, nombre: id, tipo: "nodo", alturaM: 1.5, gananciaDbi: 2, perdidaCableDb: 0, equipo: "xiao", rol: "COMPANION", ...q(dist, rumbo) });
   const plantilla = { ...base, id: "x", nombre: "Apoyo", lat: 0, lon: 0 };
   const pedido = (antenas, extra = {}) => ({ antenas, parametros: p, area: null, metaPct: 60, permisos: m.PERMISOS_AJUSTE, alturaMaxM: 30, maxApoyos: 12, plantillaApoyo: plantilla, ...extra });
 
-  caso("Costos: más de 30 m exige torre autosoportada (mucho más cara)", m.costoTorre(31) > 5 * m.costoTorre(30) && m.costoTorre(12) < m.costoTorre(15) / 2 && m.ALTURA_MAXIMA_M === 30);
+  caso("Costos: más de 30 m exige torre autosoportada (mucho más cara)", m.costoTorre(31) > 5 * m.costoTorre(30) && m.ALTURA_MAXIMA_M === 30);
+  caso("Costos de Trama: tubo de 6 m $390.000 y torre arriostrada de 12 m $3,2 M", m.costoTorre(6) === 390000 && m.costoTorre(12) === 3200000 && m.costoTorre(9) > m.costoTorre(6) && m.costoTorre(15) > m.costoTorre(12));
   caso("Costos: las personas y nodos de campo no cuentan", m.costoNodo(persona("p", 1000, 0)) === 0 && m.costoNodo(gw) > m.costoNodo({ ...gw, pasarela: false }));
   const zona = m.contornoCirculos([{ lat: 4.2, lon: -73.37 }, { lat: 4.2, lon: -73.28 }], 6000);
   caso("La zona de la red une los círculos de estudio", zona.length >= 8 && m.areaM2(zona) > Math.PI * 36e6 && m.areaM2(zona) < 2 * Math.PI * 36e6, `${(m.areaM2(zona) / 1e6).toFixed(0)} km²`);
@@ -349,9 +493,10 @@ caso("Sin D, todas conectadas", sinD.nodos.every((n) => n.saltos !== null));
   // Red factible pero sobredimensionada: el ajuste la optimiza sin perder la meta
   if (rec) {
     const gorda = rec.antenas.map((x) => ((x.tipo ?? "antena") === "antena" && !x.pasarela ? { ...x, alturaM: 27 } : x));
-    const opt = m.ajustar(pedido(gorda), rel);
+    // Misma zona que el ajuste anterior (con los apoyos la zona de la red crecería)
+    const opt = m.ajustar(pedido(gorda, { area: { nombre: "Zona de la red", puntos: a.area.poligono, metaPct: 60, margenDb: 30 } }), rel);
     const o = opt.opciones[opt.recomendada];
-    caso("Optimizar: misma meta con menos costo", opt.modo === "optimizar" && o && o.resumen.factible && o.costoRelativo < 1, o ? `costo relativo ${o.costoRelativo.toFixed(2)}` : "sin opciones");
+    caso("Optimizar: misma meta con menos costo", opt.modo === "optimizar" && o && o.resumen.factible && o.costoRelativo < 1, o ? `costo relativo ${o.costoRelativo.toFixed(2)} · ${opt.opciones.map((x) => `${x.id} ${x.costoRelativo.toFixed(2)} ${x.resumen.utilPct.toFixed(1)}%`).join(" | ")} · inicial ${opt.inicial.utilPct.toFixed(1)}%` : "sin opciones");
   }
 }
 
