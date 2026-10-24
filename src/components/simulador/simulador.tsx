@@ -18,7 +18,7 @@ import { avisarMelki, tourPorId, type ApiTour, type IdTour, type Preparacion } f
 import { CONFIG } from "@/lib/config";
 import { buscarLugares, cargarReferencia, textoUbicacion } from "@/lib/geo/referencia";
 import { PERMISOS_AJUSTE, zonaDeRed, type Ajuste, type PedidoAjuste } from "@/lib/radio/ajuste";
-import { areaM2, margenEnPunto, poligonoCirculo } from "@/lib/radio/area";
+import { areaM2, margenEnPunto, poligonoCirculo, sirveAlArea } from "@/lib/radio/area";
 import { BYTES_PAGO, PEDIDO_CARGA_DEFECTO } from "@/lib/radio/carga";
 import { PEDIDO_ESTRES_DEFECTO, type EstadoZona, type LimitePunto, type ResultadoEstres } from "@/lib/radio/estres";
 import { puntosAlAzar } from "@/lib/radio/poblar";
@@ -575,8 +575,11 @@ export function Simulador() {
     if (!m) return Promise.resolve(null);
     const { estado: e, fuente: f } = ultimo.current;
     const lista = existentes();
-    // Si ya hay gateway y se pidió otro sitio, se diseña con el gateway movido (Melki lo mueve también)
-    const infra = lista.filter((a) => a.activa && (a.tipo ?? "antena") === "antena").map((a) => (a.pasarela && o.gateway ? { ...a, lat: o.gateway.lat, lon: o.gateway.lon } : a));
+    // Solo la red que alcanza el área (una malla en otro municipio lleva su propio gateway). Si ya hay gateway y se
+    // pidió otro sitio, se diseña con el gateway movido (Melki lo mueve también)
+    const infra = lista
+      .filter((a) => a.activa && (a.tipo ?? "antena") === "antena" && sirveAlArea(o.area, a.lat, a.lon))
+      .map((a) => (a.pasarela && o.gateway ? { ...a, lat: o.gateway.lat, lon: o.gateway.lon } : a));
     const hayGateway = infra.some((a) => a.pasarela);
     const pedidoDiseno: PedidoDiseno = {
       area: o.area,
