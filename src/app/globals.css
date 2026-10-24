@@ -265,6 +265,14 @@ body {
   stroke: var(--color-carbon);
   stroke-width: 1.6;
 }
+.torre-marcador.poblada {
+  transform: scale(0.55);
+  transform-origin: 50% 100%;
+}
+.torre-marcador.poblada:not(.sel) .nombre,
+.torre-marcador.poblada:not(.sel) .saltos {
+  display: none;
+}
 .torre-marcador.es-persona.sel .trazo circle {
   stroke: var(--color-salvia-oscura);
   stroke-width: 2.1;
@@ -506,6 +514,27 @@ body {
 .pieza.sel .nombre {
   background: #fff;
   color: var(--color-carbon);
+}
+/* Personas pobladas al azar: puntos pequeños (cientos en el mapa) que muestran su nombre al elegirlas */
+.pieza.poblada .pieza-disco {
+  inset: 10px;
+  border-width: 2px;
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.45),
+    0 0 6px 0 color-mix(in srgb, var(--anillo) 55%, transparent);
+}
+.pieza.poblada .pieza-disco svg,
+.pieza.poblada:not(.sel) .nombre,
+.pieza.poblada:not(.sel) .saltos,
+.pieza.poblada .pieza-onda {
+  display: none;
+}
+.pieza.poblada.red-sin-cobertura .pieza-disco,
+.pieza.poblada.red-aislado .pieza-disco {
+  animation: none;
+}
+.pieza.poblada.sel .pieza-disco {
+  inset: 6px;
 }
 /* La nube «IA» del gateway: brilla suave y «piensa» cuando le llega un mensaje */
 .pieza-ia {
@@ -801,6 +830,19 @@ body {
 }
 .etiqueta-enlace.enlace-sin {
   border-left-color: var(--color-sin);
+}
+
+/* Etiqueta de una zona en la prueba de estrés (debajo del círculo de la zona) */
+.etiqueta-estres {
+  font: 600 11.5px/1.15 var(--font-cond);
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgb(255 255 255 / 0.92);
+  color: var(--color-carbon);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+  border: 1.5px solid;
+  white-space: nowrap;
+  pointer-events: auto;
 }
 
 .pin-inspeccion {
