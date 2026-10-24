@@ -22,6 +22,12 @@ distancias y áreas, un mapa con departamentos, municipios y ríos, y a
 Melki, el asistente que ejecuta pedidos escritos con sus palabras.
 No hay que instalar nada.
 
+© 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero.
+Todos los derechos reservados. Creado por Giancarlo González Guerrero
+para el Ingeniero Pablo Felipe Acevedo y la empresa Melki, con ayuda de
+inteligencia artificial. Prohibido su uso sin licencia (ver la sección 4
+y LICENCIA.txt).
+
 
 1. ABRIRLO
 ----------
@@ -158,9 +164,9 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
       - Conocer la pantalla: para qué sirve cada parte.
       - Red mesh completa, Como Radio Mobile, Medir y exportar y
         Hablar con Melki.
-      - Melki por voz (3 min): activar manos libres, llamarlo por su
-        nombre, conversar, dejar la pantalla limpia y pedirle la mayor
-        cobertura posible.
+      - Asistente Melki por voz (3 min): activarlo, llamarlo por su
+        nombre, conversar, trabajar con el mapa libre y sus sugerencias
+        y pedirle la mayor cobertura posible.
     En los pasos prácticos Melki le dice qué hacer, detecta solo cuando
     quedó hecho y trae "Hágalo por mí" y "Omitir paso"; "Salir" termina
     cuando quiera. Se practica en un escenario aparte: al terminar, el
@@ -273,9 +279,12 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
     "Con el navegador" (Edge o Chrome por internet) o "Privado, sin
     internet" (el audio no sale del equipo). Los números dichos en
     palabras quedan en cifras.
- o) Melki manos libres (tipo Jarvis): toque "Manos libres" en la barra
-    de arriba (o el ícono de ondas en la conversación) y permita el
-    micrófono. Melki escucha todo el tiempo y se activa con su nombre:
+ o) Asistente Melki por voz (tipo Jarvis): toque "Asistente Melki" en
+    la barra de arriba (o el ícono de ondas en la conversación) y
+    permita el micrófono. Saluda "Hola, señor. Bienvenido", deja el
+    mapa libre (oculta el panel de herramientas y el de resultados) y
+    escucha todo el tiempo; se activa con su nombre (también si el
+    micrófono entiende "Melky" o "Melqui"):
         "Hola Melki, pon el gateway en Cumaral"
         "Oye Melki, puebla la zona con doscientas cincuenta personas"
         "Hey Melki, ¿cuántas personas aguanta el Repetidor 1?"
@@ -285,11 +294,22 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
     escrito en la conversación) y se queda atento unos segundos: siga
     hablando sin repetir su nombre. También entiende "para", "repite",
     "más detalle", "sí, hazlo" o "la segunda" (los botones de su
-    respuesta), "deshaz" y "deja de escuchar". Sin su nombre no hace
-    nada. La barra oscura sobre el mapa muestra lo que entiende y lo
-    que dice; con la X se apaga. En Ajustes de voz (la tuerca de la
-    conversación): seguir la conversación, leer las respuestas
-    completas y el sonido al activarse.
+    respuesta), "deshaz" y "deja de escuchar". Si solo dice "Hola
+    Melki", contesta "Hola, mi señor. Le escucho; estoy atento y presto
+    a seguir sus órdenes". Sin su nombre no hace nada. Cuando un
+    resultado se ve mejor en un panel, pregunta si se lo muestra ("sí"
+    lo abre); la barra sobre el mapa muestra lo que entiende, lo que
+    dice y los botones "Mostrar resultados", "Mostrar herramientas",
+    "¿Qué hago ahora?" y "¿Qué puedo decir?"; con la X se apaga y los
+    paneles vuelven. En Ajustes de voz (la tuerca de la conversación):
+    cómo le habla (señor, señora o sin tratamiento), la voz (elige la
+    más natural; en Edge hay voces neuronales como Salomé de Colombia,
+    con "Probar" para oírla), dejar el mapa libre, "Activarme al abrir
+    el simulador" (con el micrófono permitido, saluda solo al entrar;
+    si el navegador pide un toque antes de hablar, aparece "Toque aquí
+    para oír mi voz"), seguir la conversación, leer las respuestas
+    completas, el sonido al activarse y "Dar acceso" al micrófono para
+    que el navegador no vuelva a preguntar.
     Consejos: Edge o Chrome actualizados, el micrófono cerca o
     audífonos (con parlantes a todo volumen Melki se puede oír a sí
     mismo), y hablar de corrido justo después de "Melki".
@@ -346,9 +366,34 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
 - La demostración es genérica: no contiene datos de ningún cliente.
 
 
+4. AUTORÍA Y LICENCIA
+---------------------
+Autor: Giancarlo González Guerrero, para el Ingeniero Pablo Felipe
+Acevedo y la empresa Melki, con ayuda de herramientas de inteligencia
+artificial bajo su dirección y revisión. Titulares de los derechos
+patrimoniales: el Ingeniero Pablo Felipe Acevedo, Melki y Giancarlo
+González Guerrero, según el contrato entre las partes. El autor conserva
+sus derechos morales.
+
+Prohibido usar, copiar, reproducir, modificar, adaptar, traducir,
+distribuir, comunicar públicamente, vender, arrendar, sublicenciar o
+descompilar este programa, en todo o en parte, sin licencia o
+autorización previa, expresa y escrita de sus titulares.
+
+Fundamento: Constitución Política, art. 61; Decisión Andina 351 de 1993
+(los programas de ordenador se protegen como obras literarias); Ley 23
+de 1982 y sus modificaciones (Ley 1450 de 2011, Ley 1915 de 2018);
+Decreto 1360 de 1989 (compilado en el Decreto 1066 de 2015); Ley 44 de
+1993; Código Penal, arts. 270 a 272 (Ley 1032 de 2006). El aviso completo
+está en LICENCIA.txt y en el simulador: "Archivo" > "Acerca del
+simulador y licencia". Las bibliotecas de código abierto, tipografías,
+mapas y datos geográficos conservan sus propias licencias.
+
+
 Contenido
   INSTRUCTIVO.txt          este instructivo
   {{ZIP_HTML}}
     SIMULADOR.html         abre el simulador (doble clic)
+    LICENCIA.txt           autoría, titulares y licencia de uso
     archivos\              la aplicación, estilos y tipografías
 {{CONTENIDO_SERVIDOR}}  Versión {{COMMIT}}
