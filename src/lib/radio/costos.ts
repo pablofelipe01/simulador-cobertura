@@ -1,3 +1,8 @@
+// © 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero. Todos los derechos reservados.
+// Autor: Giancarlo González Guerrero, para el Ingeniero Pablo Felipe Acevedo y Melki, con ayuda de inteligencia
+// artificial. Prohibido su uso, copia, modificación o distribución sin licencia escrita de los titulares (Ley 23 de
+// 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
+
 // Costo interno de la infraestructura, solo para que el ajuste automático compare opciones (cobertura frente a
 // costo). No se muestra como cotización. Parte de los precios del documento de Trama (catálogo del cotizador, TRM
 // 3.158 con envío, arancel e IVA): el repetidor es el SenseCAP Solar Node P1 con antena de 8 dBi en un tubo de 6 m y

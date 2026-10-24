@@ -1,3 +1,8 @@
+// © 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero. Todos los derechos reservados.
+// Autor: Giancarlo González Guerrero, para el Ingeniero Pablo Felipe Acevedo y Melki, con ayuda de inteligencia
+// artificial. Prohibido su uso, copia, modificación o distribución sin licencia escrita de los titulares (Ley 23 de
+// 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
+
 // Parámetros de red como en Radio Mobile: clima, polarización, suelo, refractividad y confiabilidad estadística.
 // El modelo calibrado se ajustó con los valores de referencia de las pruebas de Radio Mobile; cuando el usuario
 // cambia alguno, la diferencia que predice Longley-Rice (ITM) entre sus valores y los de referencia se suma

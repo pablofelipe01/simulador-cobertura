@@ -1,3 +1,8 @@
+// © 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero. Todos los derechos reservados.
+// Autor: Giancarlo González Guerrero, para el Ingeniero Pablo Felipe Acevedo y Melki, con ayuda de inteligencia
+// artificial. Prohibido su uso, copia, modificación o distribución sin licencia escrita de los titulares (Ley 23 de
+// 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
+
 // Diseño de la malla por área: dado un polígono y una meta («señal media o mejor en el 99,9 % del área»),
 // elige dónde va el gateway (si aún no hay) y siembra repetidores, uno a uno, donde más área nueva cubren,
 // siempre enlazados a la red (≥ 30 dB) y dentro del límite de saltos. Todo con el relieve real y con el
