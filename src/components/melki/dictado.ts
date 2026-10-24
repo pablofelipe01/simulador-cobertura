@@ -23,6 +23,10 @@ export type EventosDictado = {
   onError: (mensaje: string) => void;
   /** Empezó a oírse una frase nueva (lo usa manos libres para no confundir la voz de Melki con la del usuario). */
   onInicioFrase?: () => void;
+  /** Elige entre las versiones que propone el reconocimiento para cada frase (el Asistente Melki lo usa). */
+  elegir?: (alternativas: string[]) => string;
+  /** Palabras que conviene entender bien (si el reconocimiento en el equipo admite sugerencias). */
+  frases?: string[];
 };
 
 export type Dictado = {
@@ -36,7 +40,8 @@ export type Dictado = {
 
 /* ───────────── Tipos mínimos del reconocimiento de voz del navegador ───────────── */
 
-type Resultado = { isFinal: boolean; 0: { transcript: string } };
+type Alternativa = { transcript: string; confidence?: number };
+type Resultado = { isFinal: boolean; length?: number; [i: number]: Alternativa };
 type EventoResultado = { resultIndex: number; results: ArrayLike<Resultado> };
 type Reconocedor = {
   lang: string;
@@ -44,6 +49,7 @@ type Reconocedor = {
   interimResults: boolean;
   maxAlternatives: number;
   processLocally?: boolean;
+  phrases?: unknown[];
   onresult: ((e: EventoResultado) => void) | null;
   onerror: ((e: { error: string }) => void) | null;
   onend: (() => void) | null;
@@ -71,10 +77,27 @@ export const hayMicrofono = () => typeof navigator !== "undefined" && Boolean(na
 /* ───────────── Texto dictado → texto que Melki entiende ───────────── */
 
 /**
+ * Lo que el reconocimiento suele escribir mal en el simulador: «red mes» → «red mesh», «geitwey» → «gateway»,
+ * «hectarias» → «hectáreas», «ese efe 11» → «SF11», «estar link» → «Starlink», «guasap» → «WhatsApp».
+ */
+export function corregirPalabras(texto: string): string {
+  return texto
+    .replace(/\b(red|redes|malla|mallas)\s+(mes|mech|mesch|mesc)\b/gi, "$1 mesh")
+    .replace(/\b(mes|mesh|mech)\s*(core|cor|kor|cord)\b/gi, "MeshCore")
+    .replace(/\b(gate\s+way|geit\s*wey|geit\s*wei|gueit\s*wey|gueit\s*wei|getwey|getway|geiwey|geitway|gate\s*guey|gay\s*way)\b/gi, "gateway")
+    .replace(/\b(e?ctarias|e?ctareas|hectarias|ectaria)\b/gi, "hectáreas")
+    .replace(/\bhectaria\b/gi, "hectárea")
+    .replace(/\b(?:ese\s+efe|s\s+f)\s*(\d{1,2})\b/gi, "SF$1")
+    .replace(/\b(estar\s*link|star\s+link|starling|estarlin)\b/gi, "Starlink")
+    .replace(/\b(guasap|wasap|whats\s+app|guatsap)\b/gi, "WhatsApp")
+    .replace(/\blo\s+ra\b/gi, "LoRa");
+}
+
+/**
  * Ajusta lo dictado para las órdenes: «4 punto 25» → «4.25», «menos 73» → «-73», «4 grados 30 minutos» → «4°30'».
  */
 export function normalizarDictado(texto: string): string {
-  let t = texto.replace(/\s+/g, " ").trim();
+  let t = corregirPalabras(texto.replace(/\s+/g, " ").trim());
   t = t.replace(/(\d)\s+(?:punto|coma)\s+(\d)/gi, "$1.$2");
   t = t.replace(/\bmenos\s+(\d)/gi, "-$1");
   t = t.replace(/(\d)\s*grados?\b/gi, "$1°");
@@ -124,8 +147,23 @@ function conReconocedor(Clase: ClaseReconocedor, idioma: string, local: boolean,
   r.lang = idioma;
   r.continuous = true;
   r.interimResults = true;
-  r.maxAlternatives = 1;
+  r.maxAlternatives = eventos.elegir ? 4 : 1;
   if (local) r.processLocally = true;
+  // Sugerencias de palabras («Melki», «gateway»…): solo en el equipo, donde el navegador las admite
+  const Frase = (window as unknown as { SpeechRecognitionPhrase?: new (frase: string, peso: number) => unknown }).SpeechRecognitionPhrase;
+  if (local && Frase && eventos.frases?.length && "phrases" in r) {
+    try {
+      r.phrases = eventos.frases.map((f) => new Frase(f, 3));
+    } catch {
+      // Sin sugerencias: sigue igual
+    }
+  }
+  /** La frase dicha: la primera versión o la que mejor se entiende en el simulador. */
+  const texto = (x: Resultado) => {
+    const n = eventos.elegir ? Math.max(1, x.length ?? 1) : 1;
+    const opciones = Array.from({ length: n }, (_, k) => x[k]?.transcript?.trim() ?? "").filter(Boolean);
+    return opciones.length > 1 && eventos.elegir ? eventos.elegir(opciones) : (opciones[0] ?? "");
+  };
   let final = "";
   let terminado = false;
   let vistos = 0;
@@ -138,7 +176,7 @@ function conReconocedor(Clase: ClaseReconocedor, idioma: string, local: boolean,
     let parcial = "";
     for (let i = 0; i < e.results.length; i++) {
       const x = e.results[i];
-      if (x.isFinal) confirmado = unir(confirmado, x[0].transcript.trim());
+      if (x.isFinal) confirmado = unir(confirmado, texto(x));
       else parcial = unir(parcial, x[0].transcript.trim());
     }
     final = confirmado;

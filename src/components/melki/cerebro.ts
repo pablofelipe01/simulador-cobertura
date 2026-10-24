@@ -38,7 +38,40 @@ export type ContextoMelki = {
   /** Modo de la pantalla y estado de la red frente al gateway (modo «Sembrar la malla»). */
   modo?: ModoApp;
   red?: EstadoRed;
+  /** Cómo trata Melki a la persona (lo elige en Ajustes del Asistente Melki): «señor», «señora» o sin tratamiento. */
+  trato?: "senor" | "senora" | "ninguno";
 };
+
+/** «señor», «señora» o nada, según el trato elegido (por defecto, señor). */
+const tratoDe = (c: ContextoMelki) => (c.trato === "ninguno" ? "" : c.trato === "senora" ? "señora" : "señor");
+
+/** Ejemplos de lo que sí hace, para retomar el trabajo cuando le piden algo fuera del simulador. */
+const EJEMPLOS_RETOMAR = "«hazme una red sostenible en Barranca de Upía de 11.226 hectáreas», «¿cómo está la red?», «¿cuánto cuesta la red?» o «puebla la zona con 250 personas»";
+
+/**
+ * Lo que se sale del simulador (el clima, el fútbol, un chiste, la hora, noticias, recetas…): Melki lo dice con
+ * cortesía y retoma el trabajo.
+ */
+const FUERA_DE_TEMA =
+  /\b(chistes?|cuentame algo|cancion\w*|cantame|musica|pelicula\w*|netflix|recetas?|cocinar|cocina\w*|noticias|politic\w*|presidente|elecciones|horoscopo|signo zodiacal|futbol|partido de futbol|el partido|goles?|mundial|seleccion colombia|deportes?|como esta el clima|el clima (de|en|hoy|para)|que tiempo hace|va a llover|pronostico del tiempo|que hora es|la hora actual|que dia es hoy|la fecha de hoy|capital de|traduce\w*|traducir|poema|poesia|novia|novio|amor|enamorad\w*|bitcoin|criptomoneda\w*|dolar hoy|bolsa de valores|tarea de|matematicas|chatgpt|gemini|alexa|siri|youtube|tiktok|instagram|facebook)\b/;
+
+/** Palabras del simulador: si aparecen, el pedido es de aquí aunque no se haya entendido. */
+const DEL_SIMULADOR =
+  /\b(red|redes|malla|nodos?|antenas?|gateway|repetidor\w*|personas?|gente|cobertura|senal|simul\w*|mapa|enlaces?|saltos?|pagos?|whatsapp|mensajes?|trama|meshcore|mesh|lora|frecuencia\w*|sf\d*|altura|torres?|area|hectareas?|km|kilometros?|municipio|departamento|relieve|terreno|potencia|ganancia|factib\w*|viab\w*|sostenib\w*|costos?|precios?|cuesta|starlink|bateria\w*|solar|paneles?|resultados?|tours?|recorrido|zonas?|estres|carga|capacidad|usuarios?|billeteras?|regla|medir|exporta\w*|kmz|google earth|radio mobile|melki)\b/;
+
+/** Charla corta («¿cómo estás?», «¿qué tal?»): responde con cortesía y vuelve al trabajo. */
+const CHARLA = /^(?:(?:hola|oye|hey|buenas|buenos dias|buenas tardes|buenas noches)\s+)?(?:melki\s+)?(?:como (?:estas|te va|te encuentras|amaneciste|has estado|vas)|que tal(?: estas| vas| te va)?|todo bien|como andas)(?:\s+melki)?$/;
+
+export function respuestaFueraDeTema(c: ContextoMelki): Respuesta {
+  const s = tratoDe(c);
+  return {
+    texto: `${s ? `Mi ${s}, f` : "F"}ui diseñado y creado para cumplir órdenes y procesos dentro de este simulador: diseñar y simular la red MeshCore de Trama, sus nodos, su cobertura, su capacidad y su costo. Eso se sale de lo que puedo hacer, pero con gusto seguimos con la red. Por ejemplo: ${EJEMPLOS_RETOMAR}.`,
+    acciones: [
+      { texto: "¿Qué hago ahora?", accion: "orden", orden: { tipo: "que-hago" } },
+      { texto: "Ver los tours guiados", accion: "tours" },
+    ],
+  };
+}
 
 const f = (n: number, d = 1) => n.toFixed(d).replace(".", ",");
 /** Pesos redondeados a la manera del documento: «$1.035.000», «$9,4 M». */
@@ -534,6 +567,9 @@ const TEMAS: Tema[] = [
       "asistente melki",
       "asistente por voz",
       "asistente inteligente",
+      "en reposo",
+      "escucha pasiva",
+      "como siri",
       "manos libres",
       "modo manos libres",
       "jarvis",
@@ -560,7 +596,10 @@ const TEMAS: Tema[] = [
         "• Entiendo lo mismo que por escrito: varias órdenes seguidas, números dichos en palabras («doscientas cincuenta personas») y coordenadas («cuatro punto dos, menos setenta y tres punto tres siete»).",
         "• Para conversar: «para» (o «Melki, para» mientras hablo), «repite», «más detalle», «sí, hazlo» o «la segunda» para usar mis botones, «deshaz», «pantalla limpia» y «deja de escuchar».",
         "• Se activa con el botón «Asistente Melki» de la barra de arriba, con el ícono de ondas de esta conversación o diciéndome por escrito «activa el asistente». Al activarme oculto el panel de herramientas y el de resultados para dejarle el mapa libre; cuando un resultado se vea mejor en un panel, le pregunto si se lo muestro, y vuelven al apagarme. Arriba del mapa ve lo que le entiendo, lo que le digo y mis sugerencias.",
-        "• En Ajustes de voz elige cómo le hablo (señor, señora o sin tratamiento), la voz (la más natural que tenga su equipo; en Edge hay voces neuronales como Salomé de Colombia) y si me activo solo al abrir el simulador, con el micrófono permitido.",
+        "• En reposo, como Siri o el Asistente de Google: con el micrófono permitido me quedo escuchando solo mi nombre aunque la barra esté cerrada; diga «Hey Melki», «Hola Melki» o «Hello Melki» y me activo sin tocar ningún botón. «Deja de escuchar» me devuelve al reposo y «apaga el micrófono» me apaga del todo.",
+        "• Mi barra se arrastra a cualquier parte del mapa (doble clic la devuelve a su sitio), se achica sola mientras espero mi nombre y crece cuando me hablan; también puede dejarla siempre pequeña.",
+        "• En Ajustes de voz elige cómo le hablo (señor, señora o sin tratamiento), la voz (la más natural que tenga su equipo; en Edge hay voces neuronales como Salomé de Colombia), si le escucho siempre en reposo y si me activo solo al abrir el simulador, con el micrófono permitido.",
+        "• Si me pide algo que se sale del simulador, se lo digo con respeto y retomamos la red; y si me pide «una red sostenible y viable en Barranca de Upía de 11.226 hectáreas», la diseño y le cuento su viabilidad técnica y su costo con los precios de Trama.",
         "• Sin mi nombre no hago nada, por si alguien habla cerca. Funciona mejor en Edge o Chrome, con un micrófono cerca o audífonos; en Ajustes de voz elige si el audio lo procesa el navegador o se queda en su equipo.",
       ].join("\n"),
       acciones: [
@@ -921,6 +960,13 @@ export function responder(pregunta: string, c: ContextoMelki): Respuesta {
   if (!t.trim()) return { texto: "Escríbame su pregunta." };
   const tour = pedidoDeTour(pregunta);
   if (tour) return tour;
+  const limpio = t.trim().replace(/[.!?]+$/g, "").trim();
+  if (CHARLA.test(limpio)) {
+    const s = tratoDe(c);
+    return { texto: `Muy bien${s ? `, ${s}` : ""}, gracias por preguntar. Estoy listo y a sus órdenes: ¿qué construimos hoy en el simulador? Por ejemplo, ${EJEMPLOS_RETOMAR}.` };
+  }
+  // Fuera del simulador (aunque alguna palabra coincida con un tema, como «¿cómo está el clima?»)
+  if (FUERA_DE_TEMA.test(t) && !/\b(red|malla|nodo|antena|gateway|repetidor\w*|cobertura|senal|simul\w*|trama|meshcore|lora|pagos?|radio mobile|itm|longley|propagacion|enlace)\b/.test(t)) return respuestaFueraDeTema(c);
   const especifica = sobreAntena(t, c);
   const palabras = new Set(t.trim().split(" "));
   let mejor: { tema: Tema; puntos: number } | null = null;
@@ -941,6 +987,8 @@ export function responder(pregunta: string, c: ContextoMelki): Respuesta {
   if (especifica && (!mejor || ["saludo", "gracias", "malla", "altura"].includes(mejor.tema.id) || /alcance|ruta|llega|cubre|salto|area|como esta/.test(t))) return especifica;
   // Un pedido de acción que no se entendió no se responde con un tema tomado al azar
   if (!especifica && (!mejor || mejor.puntos < 4)) {
+    // Un pedido que no es del simulador («hazme el café»): con respeto, y retoma el trabajo
+    if (PIDE_ACCION.test(t) && !DEL_SIMULADOR.test(t)) return respuestaFueraDeTema(c);
     const ne = noEntendiOrden(pregunta);
     if (ne) return ne;
   }
@@ -949,6 +997,8 @@ export function responder(pregunta: string, c: ContextoMelki): Respuesta {
     const r = TEMAS.find((x) => x.id === "capacidades")!.responder(c);
     return { ...r, texto: `¡Hola! ${r.texto}` };
   }
+  // Nada del simulador en lo que pidió: se lo dice con cortesía y retoma el trabajo
+  if (!DEL_SIMULADOR.test(t)) return respuestaFueraDeTema(c);
   return {
     texto:
       "No estoy seguro de haber entendido. Puedo sembrar la red (gateway, repetidores y gente), poblar la zona y probar cuántos pagos, WhatsApp y consultas a la IA aguanta, dimensionar la red de un departamento, medir distancias, llevarlo a un municipio, explicar los colores, los enlaces y los saltos, o decirle por qué un nodo no llega al gateway. Pruebe: «¿qué puedes hacer?».",

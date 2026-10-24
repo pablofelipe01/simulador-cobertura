@@ -13,7 +13,8 @@ import { normalizarDictado } from "./dictado";
 import { numerosEnPalabras } from "./numeros";
 import { paraHablar } from "./voz";
 
-export type EstadoManosLibres = "apagado" | "preparando" | "esperando" | "atento" | "pensando" | "hablando";
+/** «dormido»: en reposo, solo atento a su nombre (como Siri o el Asistente de Google), sin barra ni paneles ocultos. */
+export type EstadoManosLibres = "apagado" | "dormido" | "preparando" | "esperando" | "atento" | "pensando" | "hablando";
 
 const normal = (t: string) =>
   t
@@ -95,6 +96,8 @@ export type ControlVoz =
   | { tipo: "repetir" }
   | { tipo: "detalle" }
   | { tipo: "apagar" }
+  /** Apagar del todo el micrófono (también la escucha en reposo). */
+  | { tipo: "microfono" }
   | { tipo: "gracias" }
   | { tipo: "no" }
   | { tipo: "accion"; indice: number | "ultima" }
@@ -107,6 +110,8 @@ export function controlDeVoz(frase: string): ControlVoz | null {
   if (/^(para|pare|parale|detente|detengase|silencio|callate|callese|calla|basta|stop|ya basta|suficiente|ya esta bien|ok para|espera)$/.test(t)) return { tipo: "callar" };
   if (/^(repite|repitelo|repitemelo|repiteme|otra vez|de nuevo|que dijiste|no te (entendi|escuche|oi)|no escuche|como dijiste|perdon que dijiste)$/.test(t)) return { tipo: "repetir" };
   if (/^(mas detalles?|dame (mas )?detalles?|con detalle|explicame( mas| mejor)?|explica( mas| mejor)?|leelo todo|leeme todo|lee todo|dime todo|completo|la respuesta completa|amplia|amplialo|cuentame mas|y que mas|sigue)$/.test(t)) return { tipo: "detalle" };
+  if (/^(apaga|desactiva|cierra|quita|deten)\w* (el |la )?(microfono|escucha( pasiva| en reposo)?)( del todo)?$|^no me escuches( mas)?$|^ya no me escuches( mas)?$|^deja de escuchar(me)? del todo$|^no escuches mas$/.test(t))
+    return { tipo: "microfono" };
   if (
     /^(apaga|desactiva|termina|cierra|sal de|quita|deten)\w* (el )?(modo )?(manos libres|escucha|microfono|jarvis|asistente( melki| de voz)?)$|^deja de escuchar(me)?$|^ya no (me )?escuches$|^no me escuches$|^(adios|chao|hasta luego|hasta pronto|nos vemos|bye|goodbye)( melki)?$/.test(
       t,
@@ -192,7 +197,7 @@ export function frases(trato: Trato) {
   return {
     bienvenida: (primera: boolean) =>
       primera
-        ? `${coma("Hola")}. ${bienvenido}. Soy Melki, su asistente: estoy atento y presto a seguir sus órdenes. Cuando me necesite, diga «Hola Melki».`
+        ? `${coma("Hola")}. ${bienvenido}. Soy Melki, su asistente: estoy atento y presto a seguir sus órdenes. Cuando me necesite, diga «Hola Melki», aunque esta barra esté cerrada.`
         : `${coma("A su servicio")}. Diga «Hola Melki» cuando me necesite.`,
     llamado: (vez: number, ingles: boolean) =>
       ingles
@@ -201,6 +206,9 @@ export function frases(trato: Trato) {
           ? `${s ? `Hola, mi ${s}` : "Hola"}. Le escucho; estoy atento y presto a seguir sus órdenes.`
           : llamados[(vez - 1) % llamados.length],
     despedida: `Con su permiso${s ? `, ${s}` : ""}, dejo de escuchar. Aquí estaré cuando me necesite.`,
+    /** Al apagarlo con la escucha en reposo: sigue atento a su nombre. */
+    reposo: `Con su permiso${s ? `, ${s}` : ""}. Quedo en reposo: cuando me necesite, diga «Hola Melki».`,
+    microfono: `Como usted diga${s ? `, ${s}` : ""}. Apago el micrófono; para volver a llamarme, toque «Asistente Melki».`,
     gracias: `Es un placer${s ? `, ${s}` : ""}. Aquí sigo; llámeme cuando quiera.`,
     nada: `Como usted diga${s ? `, ${s}` : ""}. No hago nada.`,
     sinPendiente: `No tengo nada pendiente${s ? `, ${s}` : ""}. Dígame qué necesita.`,
@@ -220,4 +228,35 @@ export function frases(trato: Trato) {
 export const SALUDO_MANOS_LIBRES = frases("senor").bienvenida(true);
 
 export const AYUDA_VOZ =
-  "Soy el Asistente Melki: por voz entiendo lo mismo que por escrito. Dígame «Hola Melki», «Oye Melki» o «Hey Melki» y su pedido; por ejemplo: «pon el gateway en Cumaral», «conecta a los que faltan», «puebla la zona con doscientas cincuenta personas», «¿cuántas personas aguanta el Repetidor 1?», «¿cómo dejo la mayor cobertura posible?», «muestra el panel de resultados» o «pantalla limpia». Después de responder me quedo atento unos segundos: siga hablando sin repetir mi nombre. Para usar mis botones diga «sí, hazlo» o «la segunda»; también entiendo «para», «repite», «más detalle», «deshaz» y «deja de escuchar».";
+  "Soy el Asistente Melki: por voz entiendo lo mismo que por escrito. Dígame «Hola Melki», «Oye Melki» o «Hey Melki» y su pedido; por ejemplo: «pon el gateway en Cumaral», «conecta a los que faltan», «puebla la zona con doscientas cincuenta personas», «¿cuántas personas aguanta el Repetidor 1?», «¿cómo dejo la mayor cobertura posible?», «muestra el panel de resultados» o «pantalla limpia». Después de responder me quedo atento unos segundos: siga hablando sin repetir mi nombre. Para usar mis botones diga «sí, hazlo» o «la segunda»; también entiendo «para», «repite», «más detalle», «deshaz», «deja de escuchar» (quedo en reposo, atento a «Hola Melki») y «apaga el micrófono». Mi barra se arrastra a cualquier parte del mapa y se achica sola mientras espero.";
+
+/** Palabras del simulador que ayudan a elegir entre lo que el reconocimiento cree haber oído. */
+const TERMINOS =
+  /\b(red|redes|malla|mesh|meshcore|gateway|repetidor\w*|nodos?|antenas?|personas?|gente|cobertura|senal|simul\w*|hectareas?|kilometros?|km|metros?|municipio|zona|pagos?|whatsapp|mensajes?|trama|sostenible|viable|construye|hazme|arma|disena|pon|agrega|mueve|sube|baja|borra|muestra|resultados|herramientas|paneles?|starlink|solar|costo|cuesta|lleva\w*)\b/g;
+
+/**
+ * Elige, entre las versiones que propone el reconocimiento para una frase, la que mejor se entiende en el simulador:
+ * la que trae el nombre de Melki y más palabras del simulador, sin olvidar el orden del reconocedor (la primera suele
+ * ser la más probable).
+ */
+export function elegirAlternativa(alternativas: string[]): string {
+  let mejor = alternativas[0] ?? "";
+  let puntos = -Infinity;
+  alternativas.forEach((t, i) => {
+    if (!t.trim()) return;
+    const n = normal(t);
+    let p = -i * 0.75;
+    if (detectarActivacion(t).activado) p += 4;
+    p += (n.match(TERMINOS)?.length ?? 0) * 1;
+    if (/\d/.test(n)) p += 0.5;
+    if (p > puntos) {
+      puntos = p;
+      mejor = t;
+    }
+  });
+  return mejor;
+}
+
+/** Frases que se le sugieren al reconocimiento en el equipo (si el navegador lo permite) para que las entienda mejor. */
+export const FRASES_RECONOCIMIENTO = ["Melki", "Hola Melki", "Hey Melki", "Hello Melki", "Oye Melki", "gateway", "repetidor", "MeshCore", "red mesh", "hectáreas", "Trama", "Starlink", "WhatsApp", "Barranca de Upía", "Cumaral", "Villavicencio"];
+
