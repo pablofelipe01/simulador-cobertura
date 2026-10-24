@@ -47,7 +47,7 @@ const MESES = 36;
 const REPETIDOR_SIN_MASTIL = PRECIOS.repetidor - MASTIL_6;
 /** Repetidor: instalación y operación (pila y visita cada 3 años). */
 const OPERACION_REPETIDOR = OPERACION_TRAMA.instalacionRepetidor + MESES * ((OPERACION_TRAMA.bateriaRepetidor + OPERACION_TRAMA.visitaRepetidor) / OPERACION_TRAMA.vidaBateriaMeses);
-/** Sitio gateway sin la torre: mini PC, hub, UPS, caja, tierra, kit solar, una radio de pagos y el Starlink con su kit solar. */
+/** Sitio gateway sin la torre: mini PC, hub, UPS, caja, tierra, kit solar, una radio y el Starlink con su kit solar. */
 const GATEWAY_SIN_TORRE = PRECIOS.sitioBase - TORRE_12 + PRECIOS.radio + PRECIOS.starlink;
 /** Gateway: instalación del sitio, mantenimiento y Starlink comercial. */
 const OPERACION_GATEWAY = OPERACION_TRAMA.instalacionSitio + MESES * (OPERACION_TRAMA.mantenimientoSitioMes + OPERACION_TRAMA.starlinkMesComercial);

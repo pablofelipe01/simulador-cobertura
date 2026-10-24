@@ -1,10 +1,12 @@
 // Prueba de estrés de la malla en la hora pico, repetidor por repetidor («zonas de popularidad»). Cada persona hace
-// sus pagos del día y una parte cae en la hora pico (Trama: 15 % un día normal, 25 % un día de mercado). Se simula el
+// sus mensajes del día (pagos, WhatsApp y consultas a la IA) y una parte cae en la hora pico (Trama: 15 % un día normal, 25 % un día de mercado). Se simula el
 // canal paquete por paquete (la prueba de carga de MeshCore) y se mide en cada gateway y repetidor: cuántas personas
 // entran a la malla por él, cuántos pagos completan, cuánto esperan, qué tanto del canal oye ocupado, cuánto
 // transmite frente al tope del ciclo de trabajo, cuántos paquetes pierde, hasta dónde llega con esa carga frente a su
 // alcance sin carga y cuánta energía gasta el repetidor solar. La rampa multiplica la carga hasta encontrar dónde se
-// revienta cada zona y cuántas personas aguanta. Son estimaciones para planear; se validan midiendo una red piloto.
+// revienta cada zona y cuántas personas aguanta. Con `foco`, busca el límite de un solo punto: sube la gente de ese
+// gateway o repetidor (con el resto de la red como está) hasta que el punto o la red dejan de aguantar sin demora.
+// Son estimaciones para planear; se validan midiendo una red piloto.
 import { ESPERA_MAXIMA_S, simularCargaDetalle, UMBRAL_COMPLETOS_PCT, BYTES_PAGO, type DetalleCarga, type PedidoCarga } from "./carga";
 import { PRESETS, presetPorId, type PresetId } from "./constantes";
 import { distanciaM } from "./geo";
@@ -35,7 +37,7 @@ export type PedidoEstres = {
   enlaces: Enlace[];
   nodos: NodoMalla[];
   parametros: Parametros;
-  /** Pagos que hace cada persona al día (Trama ≈ 2,4). */
+  /** Mensajes que manda cada persona al día: pagos, WhatsApp y consultas a la IA (ritmo de Trama ≈ 2,4). */
   pagosPersonaDia: number;
   /** Parte de los pagos del día que cae en la hora pico (%): 15 normal, 25 día de mercado. */
   horaPicoPct: number;
@@ -50,7 +52,12 @@ export type PedidoEstres = {
   rampa: boolean;
   /** Probar la misma hora pico con los otros ajustes de radio. */
   comparar: boolean;
+  /** Buscar el límite de este punto (id de un gateway o repetidor): cuántas personas aguanta con el resto como está. */
+  foco?: string | null;
 };
+
+/** Tope de personas en un punto (zona de popularidad) y en la búsqueda de su límite. */
+export const TOPE_PERSONAS_PUNTO = 2000;
 
 export const PEDIDO_ESTRES_DEFECTO: Omit<PedidoEstres, "antenas" | "enlaces" | "nodos" | "parametros"> = {
   pagosPersonaDia: Math.round(PAGOS_PERSONA_DIA_TRAMA * 10) / 10,
@@ -135,6 +142,52 @@ export type PuntoRampa = {
   zonasRotas: number;
 };
 
+export type PuntoLimite = {
+  /** Multiplicador de la gente del punto y las personas equivalentes en el punto. */
+  factor: number;
+  personas: number;
+  /** Mensajes por hora que piden las personas del punto en la hora pico. */
+  mensajesHora: number;
+  /** Lo del punto: sus mensajes completos, su espera y el canal que oye su nodo. */
+  completosPct: number;
+  p95S: number;
+  canalPct: number;
+  estadoPunto: EstadoZona;
+  /** Toda la red con esa carga. */
+  redCompletosPct: number;
+  estadoRed: EstadoZona;
+  /** Zonas que no aguantan sin demora con esa carga. */
+  fallan: string[];
+};
+
+export type LimitePunto = {
+  id: string;
+  nombre: string;
+  pieza: "gateway" | "repetidor";
+  /** Personas con ruta del punto: su zona de popularidad o, si no tiene, las que entran a la malla por él. */
+  personas: number;
+  deZona: boolean;
+  puntos: PuntoLimite[];
+  /** Hasta cuántas personas aguantan sin demora el punto y la red; desde cuántas va lento y desde cuántas se revienta. */
+  personasSeguro: number | null;
+  /** Lo que dieron las tres búsquedas (cerca del límite cambia con el sorteo); sin valor si coinciden. */
+  rango: [number, number] | null;
+  personasLento: number | null;
+  personasQuiebre: number | null;
+  /** Llegó al tope sin dejar de aguantar. */
+  aguantaTodo: boolean;
+  tope: number;
+  /** Mensajes por hora del punto con `personasSeguro`. */
+  mensajesHoraMax: number | null;
+  /** Lo primero que falla al pasar el límite: el propio punto (con lo que lo limita) u otras zonas de la red. */
+  falla: { quien: "punto" | "red"; nombres: string[]; limites: LimiteZona[]; estado: EstadoZona } | null;
+  /** Aun con muy poca gente en el punto la red no aguanta: la llenan las otras zonas. */
+  redYaFalla: boolean;
+  /** Lo pone la pantalla al llenar el punto hasta el límite: con cuántas personas y cómo quedó. */
+  llenado?: { personas: number; estadoPunto: EstadoZona; estadoRed: EstadoZona; intentos: number } | null;
+  motivo: string | null;
+};
+
 export type AjusteEstres = {
   preset: PresetId;
   nombre: string;
@@ -183,6 +236,8 @@ export type ResultadoEstres = {
     primera: string | null;
   };
   ajustes: AjusteEstres[] | null;
+  /** Límite de un punto (con `foco`). */
+  limite: LimitePunto | null;
   motivo: string | null;
 };
 
@@ -229,22 +284,23 @@ function correr(q: PedidoEstres, factor: number, repeticiones: number, parametro
   const sonda = simularCargaDetalle(pedidoCarga(q, 1, q.semilla, parametros, enlaces, nodos));
   if (sonda.resultado.motivo) return [{ detalle: sonda.detalle, completosPct: 0, p50S: 0, p95S: 0, canalGatewayPct: 0, pagos: 0, completos: 0, airePorPagoS: 0, remitentes: 0, motivo: sonda.resultado.motivo }];
   const { n } = pagosSimulados(q, sonda.resultado.remitentes, factor);
-  for (let k = 0; k < repeticiones; k++) {
-    const x = simularCargaDetalle(pedidoCarga(q, Math.max(1, n), q.semilla + 977 * k + Math.round(factor * 1000), parametros, enlaces, nodos));
-    salida.push({
-      detalle: x.detalle,
-      completosPct: x.resultado.completosPct,
-      p50S: x.resultado.latenciaS.p50,
-      p95S: x.resultado.latenciaS.p95,
-      canalGatewayPct: x.resultado.canalGatewayPct,
-      pagos: x.resultado.mensajes,
-      completos: x.resultado.completos,
-      airePorPagoS: x.resultado.airePorPagoS,
-      remitentes: x.resultado.remitentes,
-      motivo: x.resultado.motivo,
-    });
-  }
+  for (let k = 0; k < repeticiones; k++) salida.push(corridaDe(simularCargaDetalle(pedidoCarga(q, Math.max(1, n), q.semilla + 977 * k + Math.round(factor * 1000), parametros, enlaces, nodos))));
   return salida;
+}
+
+function corridaDe(x: ReturnType<typeof simularCargaDetalle>): Corrida {
+  return {
+    detalle: x.detalle,
+    completosPct: x.resultado.completosPct,
+    p50S: x.resultado.latenciaS.p50,
+    p95S: x.resultado.latenciaS.p95,
+    canalGatewayPct: x.resultado.canalGatewayPct,
+    pagos: x.resultado.mensajes,
+    completos: x.resultado.completos,
+    airePorPagoS: x.resultado.airePorPagoS,
+    remitentes: x.resultado.remitentes,
+    motivo: x.resultado.motivo,
+  };
 }
 
 /** Métricas por zona (gateway o repetidor) de una o varias corridas con la misma carga. */
@@ -435,6 +491,7 @@ export function estresMalla(q: PedidoEstres, progreso?: (avance: number) => void
     zonas: [],
     rampa: null,
     ajustes: null,
+    limite: null,
     motivo: null,
   };
   if (c0.motivo) return { ...vacio, motivo: c0.motivo };
@@ -460,8 +517,15 @@ export function estresMalla(q: PedidoEstres, progreso?: (avance: number) => void
   };
   const pasosComparar = q.comparar ? PRESETS.length : 0;
   let hechos = 1;
-  const total = 1 + (q.rampa ? 10 : 0) + pasosComparar;
+  const pasosFoco = q.foco ? 36 : 0;
+  const total = 1 + (q.rampa ? 10 : 0) + pasosComparar + pasosFoco;
   progreso?.(hechos / total);
+
+  if (q.foco) {
+    const antes = hechos;
+    res.limite = limiteDePunto(q, q.foco, base, res.zonas, (k) => progreso?.(Math.min(0.99, (antes + Math.min(k, pasosFoco)) / total)));
+    hechos += pasosFoco;
+  }
 
   if (q.rampa) {
     const puntos = new Map<number, { punto: PuntoRampa; zonas: ZonaEstres[] }>();
@@ -578,4 +642,188 @@ export function estresMalla(q: PedidoEstres, progreso?: (avance: number) => void
   }
   progreso?.(1);
   return res;
+}
+
+const peorEstado = (xs: EstadoZona[]): EstadoZona => (xs.includes("revienta") ? "revienta" : xs.includes("lento") ? "lento" : "aguanta");
+
+/** Redondea hacia abajo a un número cómodo de personas (de 5 en 5 o de 10 en 10). */
+const personasRedondas = (x: number) => (x < 20 ? Math.floor(x) : x < 200 ? Math.floor(x / 5) * 5 : Math.floor(x / 10) * 10);
+
+/**
+ * Límite de un punto: multiplica el ritmo de las personas de ese gateway o repetidor (las de su zona de popularidad o,
+ * si no tiene, las que entran a la malla por él) con el resto de la red igual, hasta que el punto o la red dejan de
+ * aguantar sin demora; afina entre lo que aguanta y lo que no, y sigue hasta ver dónde se revienta. Cerca del límite la
+ * espera cambia mucho de un sorteo a otro, así que se hacen tres búsquedas independientes (una hora pico de 60 minutos,
+ * tres sorteos por paso) y se da la del medio con el rango de las tres.
+ */
+function limiteDePunto(q: PedidoEstres, foco: string, base: Corrida[], zonasBase: ZonaEstres[], progreso?: (evaluados: number) => void): LimitePunto {
+  const a = q.antenas.find((x) => x.id === foco);
+  const d0 = base[0].detalle;
+  const i0 = d0.ids.indexOf(foco);
+  const vacio: LimitePunto = {
+    id: foco,
+    nombre: a?.nombre ?? foco,
+    pieza: a?.pasarela ? "gateway" : "repetidor",
+    personas: 0,
+    deZona: false,
+    puntos: [],
+    personasSeguro: null,
+    rango: null,
+    personasLento: null,
+    personasQuiebre: null,
+    aguantaTodo: false,
+    tope: TOPE_PERSONAS_PUNTO,
+    mensajesHoraMax: null,
+    falla: null,
+    redYaFalla: false,
+    motivo: null,
+  };
+  if (!a || i0 < 0 || !(a.rol === "REPETIDOR" || a.pasarela)) return { ...vacio, motivo: "Ese nodo no es un gateway ni un repetidor activo." };
+  const porId = new Map(q.antenas.map((x) => [x.id, x]));
+  const remitentes = [...d0.zonaDe.keys()];
+  let grupo = remitentes.filter((r) => porId.get(d0.ids[r])?.zona === foco);
+  const deZona = grupo.length > 0;
+  if (!deZona) grupo = remitentes.filter((r) => d0.zonaDe.get(r) === i0);
+  if (!grupo.length) return { ...vacio, motivo: `${a.nombre} no tiene personas con ruta al gateway: póngale una zona de popularidad donde haya señal.` };
+  const g = grupo.length;
+  const otros = remitentes.length - g;
+  const enGrupo = new Set(grupo);
+  const ritmo = q.pagosPersonaDia * (q.horaPicoPct / 100) * q.factor;
+  const qLargo: PedidoEstres = { ...q, duracionMin: Math.max(q.duracionMin, 60) };
+  const repeticiones = 3;
+  type Evaluado = PuntoLimite & { zonas: ZonaEstres[] };
+  let hechos = 0;
+
+  const buscar = (vuelta: number) => {
+    const evaluados = new Map<number, Evaluado>();
+    const evaluar = (f: number): Evaluado => {
+      const ya = evaluados.get(f);
+      if (ya) return ya;
+      const pesos: Record<string, number> = {};
+      for (const r of grupo) pesos[d0.ids[r]] = f;
+      const n = Math.max(1, Math.round((ritmo * (otros + g * f) * qLargo.duracionMin) / 60));
+      const cs: Corrida[] = [];
+      for (let k = 0; k < repeticiones; k++) cs.push(corridaDe(simularCargaDetalle({ ...pedidoCarga(qLargo, n, q.semilla + 7919 * vuelta + 977 * k + Math.round(f * 1000) + 31), pesos })));
+      let msgs = 0;
+      const lat: number[] = [];
+      for (const c of cs)
+        for (const m of c.detalle.mensajes) {
+          if (!enGrupo.has(m.remitente)) continue;
+          msgs++;
+          if (m.latS !== null) lat.push(m.latS);
+        }
+      const completosPct = msgs ? (100 * lat.length) / msgs : 0;
+      const p95S = percentil(lat, 95);
+      const zs = zonas(qLargo, cs, q.factor);
+      const r = resumen(cs);
+      const conDatos = zs.filter((z) => z.pagos >= 4);
+      const p: Evaluado = {
+        factor: f,
+        personas: g * f,
+        mensajesHora: g * f * ritmo,
+        completosPct,
+        p95S,
+        canalPct: zs.find((z) => z.id === foco)?.canalPct ?? 0,
+        estadoPunto: estadoDe(msgs, completosPct, p95S),
+        redCompletosPct: r.completosPct,
+        estadoRed: peorEstado([estadoDe(Math.round(r.pagos), r.completosPct, r.p95S), ...conDatos.map((z) => z.estado)]),
+        fallan: conDatos.filter((z) => z.estado !== "aguanta").map((z) => z.nombre),
+        zonas: zs,
+      };
+      evaluados.set(f, p);
+      progreso?.(++hechos);
+      return p;
+    };
+    const bien = (p: Evaluado) => p.estadoPunto === "aguanta" && p.estadoRed === "aguanta";
+    const revienta = (p: Evaluado) => p.estadoPunto === "revienta" || p.estadoRed === "revienta";
+    const fTope = TOPE_PERSONAS_PUNTO / g;
+    let bueno: number | null = null;
+    let malo: number | null = null;
+    if (bien(evaluar(1))) {
+      bueno = 1;
+      for (let f = 2; bueno < fTope; f *= 2) {
+        const fx = Math.min(f, fTope);
+        if (bien(evaluar(fx))) bueno = fx;
+        else {
+          malo = fx;
+          break;
+        }
+      }
+    } else {
+      malo = 1;
+      for (let f = 0.5; g * f >= 2; f /= 2) {
+        if (bien(evaluar(f))) {
+          bueno = f;
+          break;
+        }
+        malo = f;
+      }
+    }
+    // Afinar entre lo que aguanta y lo que no (hasta unas pocas personas de diferencia)
+    if (bueno !== null && malo !== null)
+      for (let k = 0; k < 3 && g * (malo - bueno) >= 4; k++) {
+        const m = Math.sqrt(bueno * malo);
+        if (bien(evaluar(m))) bueno = m;
+        else malo = m;
+      }
+    // Si lo primero fue ir lento, seguir subiendo hasta ver dónde se revienta
+    if (malo !== null && ![...evaluados.values()].some((p) => p.factor >= malo! && revienta(p)))
+      for (let f = malo * 2, k = 0; k < 3; f *= 2, k++) {
+        const fx = Math.min(f, fTope);
+        if (revienta(evaluar(fx)) || fx >= fTope) break;
+      }
+    const lista = [...evaluados.values()].sort((x, y) => x.factor - y.factor);
+    const despues = lista.filter((p) => bueno === null || p.factor > bueno);
+    const roto = despues.find(revienta) ?? null;
+    const lento = despues.find((p) => !bien(p) && !revienta(p) && (!roto || p.factor < roto.factor)) ?? null;
+    const primero = malo !== null ? evaluados.get(malo)! : null;
+    let falla: LimitePunto["falla"] = null;
+    if (primero) {
+      const zf = primero.zonas.find((z) => z.id === foco);
+      if (primero.estadoPunto !== "aguanta") falla = { quien: "punto", nombres: [a.nombre], limites: zf?.limites ?? [], estado: primero.estadoPunto };
+      else {
+        // Si la única zona que falla es la del propio nodo, lo que falla es el punto
+        const nombres = primero.fallan.filter((n) => n !== a.nombre);
+        const limites = [...new Set(primero.zonas.filter((z) => nombres.includes(z.nombre)).flatMap((z) => z.limites))];
+        falla = nombres.length ? { quien: "red", nombres, limites, estado: primero.estadoRed } : { quien: "punto", nombres: [a.nombre], limites: zf?.limites ?? [], estado: primero.estadoRed };
+      }
+    }
+    const minimo = lista[0];
+    const redYaFalla = bueno === null && minimo.estadoPunto === "aguanta" && minimo.estadoRed !== "aguanta";
+    return {
+      seguro: bueno !== null ? (bueno === 1 ? g : personasRedondas(g * bueno)) : null,
+      lento: lento ? Math.round(lento.personas) : null,
+      quiebre: roto && !redYaFalla ? Math.round(roto.personas) : null,
+      aguantaTodo: malo === null && bueno !== null,
+      redYaFalla,
+      falla,
+      puntos: lista.map((p): PuntoLimite => ({ factor: p.factor, personas: p.personas, mensajesHora: p.mensajesHora, completosPct: p.completosPct, p95S: p.p95S, canalPct: p.canalPct, estadoPunto: p.estadoPunto, redCompletosPct: p.redCompletosPct, estadoRed: p.estadoRed, fallan: p.fallan })),
+    };
+  };
+
+  const vueltas = [0, 1, 2].map(buscar);
+  // La búsqueda del medio (por las personas que aguanta) da el límite; las otras dos, el rango
+  const valor = (x: (typeof vueltas)[number]) => (x.seguro ?? -1);
+  const orden = [...vueltas].sort((x, y) => valor(x) - valor(y));
+  const medio = orden[1];
+  const seguros = vueltas.map((x) => x.seguro).filter((x): x is number => x !== null);
+  const mediana = (xs: (number | null)[]) => {
+    const v = xs.filter((x): x is number => x !== null).sort((x, y) => x - y);
+    return v.length ? v[Math.floor((v.length - 1) / 2)] : null;
+  };
+  const seguro = medio.seguro;
+  return {
+    ...vacio,
+    personas: g,
+    deZona,
+    puntos: medio.puntos,
+    personasSeguro: seguro,
+    rango: seguro !== null && seguros.length === 3 && Math.min(...seguros) !== Math.max(...seguros) ? [Math.min(...seguros), Math.max(...seguros)] : null,
+    personasLento: mediana(vueltas.map((x) => x.lento)),
+    personasQuiebre: medio.redYaFalla ? null : mediana(vueltas.map((x) => x.quiebre)),
+    aguantaTodo: medio.aguantaTodo,
+    mensajesHoraMax: seguro !== null ? seguro * ritmo : null,
+    falla: medio.falla,
+    redYaFalla: medio.redYaFalla,
+  };
 }

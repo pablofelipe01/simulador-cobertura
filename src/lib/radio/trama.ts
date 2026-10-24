@@ -1,4 +1,4 @@
-// Trama · red de pagos por radio (MeshCore): equipos, precios, capacidad por frecuencia, cobertura por terreno y el
+// Trama · red por radio (MeshCore) para pagos, mensajes de WhatsApp y consultas a la IA donde no hay señal: equipos, precios, capacidad por frecuencia, cobertura por terreno y el
 // dimensionamiento por departamento, tal como los trae el documento de trabajo del Inge «Territorios sin
 // conectividad» (octubre de 2026). Son estimaciones de cálculo para planear; se ajustan midiendo
 // el canal en una red piloto.
@@ -17,10 +17,10 @@ export type ItemCatalogo = {
   importado: boolean;
 };
 
-/** Catálogo del cotizador (los equipos de la red de pagos). */
+/** Catálogo del cotizador (los equipos de la red). */
 export const CATALOGO: readonly ItemCatalogo[] = [
   { id: "minipc", grupo: "caja", nombre: "Mini PC sin ventilador Intel N100, 16 GB / SSD 512 GB (Linux)", detalle: "Ej. Minisforum UN100L; uno por torre", precio: 249, moneda: "USD", periodo: "unico", importado: true },
-  { id: "hub_usb", grupo: "caja", nombre: "Hub USB alimentado 7 puertos (industrial, metálico)", detalle: "Para las radios de pagos de la torre; precio de referencia", precio: 220_000, moneda: "COP", periodo: "unico", importado: false },
+  { id: "hub_usb", grupo: "caja", nombre: "Hub USB alimentado 7 puertos (industrial, metálico)", detalle: "Para las radios de la torre; precio de referencia", precio: 220_000, moneda: "COP", periodo: "unico", importado: false },
   { id: "ups", grupo: "caja", nombre: "Mini UPS / respaldo de energía", detalle: "Aguanta cortes cortos de luz", precio: 250_000, moneda: "COP", periodo: "unico", importado: false },
   { id: "cajaip", grupo: "caja", nombre: "Caja hermética IP65 + prensaestopas", detalle: "Para el mini PC y las radios en exterior", precio: 120_000, moneda: "COP", periodo: "unico", importado: false },
   { id: "solar_kit", grupo: "energia", nombre: "Kit solar para Starlink + caja (si no hay red eléctrica)", detalle: "Starlink gasta 75–100 W: ~400 W de panel + batería ~2 kWh + inversor", precio: 4_500_000, moneda: "COP", periodo: "unico", importado: false },
@@ -38,7 +38,7 @@ export const CATALOGO: readonly ItemCatalogo[] = [
   { id: "antena8", grupo: "radio", nombre: "Antena RF Explorer 8 dBi fibra de vidrio 1,3 m", detalle: "902–928 MHz, trae 1 m de cable CFD200 y soporte", precio: 29.9, moneda: "USD", periodo: "unico", importado: true },
   { id: "coax", grupo: "radio", nombre: "Cable N hembra → RP-SMA macho CFD400, 3 m", detalle: "Para bajar de la antena a la caja", precio: 19.9, moneda: "USD", periodo: "unico", importado: true },
   { id: "t1000", grupo: "radio", nombre: "SenseCAP T1000-E (nodo de la persona)", detalle: "Tarjeta BLE + GPS, sellada, se empareja con el celular", precio: 39.9, moneda: "USD", periodo: "unico", importado: true },
-  { id: "t114", grupo: "radio", nombre: "Heltec Mesh Node T114 (radio de pagos del gateway)", detalle: "Una por frecuencia, companion USB en el mini PC", precio: 27.9, moneda: "USD", periodo: "unico", importado: true },
+  { id: "t114", grupo: "radio", nombre: "Heltec Mesh Node T114 (radio del gateway)", detalle: "Una por frecuencia, companion USB en el mini PC", precio: 27.9, moneda: "USD", periodo: "unico", importado: true },
   { id: "xiao", grupo: "radio", nombre: "Seeed XIAO ESP32S3 & Wio-SX1262 Kit (billetera económica)", detalle: "BLE + LoRa; sin batería, carcasa ni GPS", precio: 11, moneda: "USD", periodo: "unico", importado: true },
   { id: "bat_xiao", grupo: "radio", nombre: "Batería LiPo ~1.000 mAh + carcasa para el XIAO", detalle: "Precio de referencia", precio: 40_000, moneda: "COP", periodo: "unico", importado: false },
 ];
@@ -62,7 +62,7 @@ export const PRECIOS = {
   solarStarlink: precio("solar_kit"),
   /** Sitio gateway sin radios: mini PC, hub, UPS, caja, tierra, torre de 12 m y kit solar. */
   sitioBase: precio("minipc") + precio("hub_usb") + precio("ups") + precio("cajaip") + precio("tierra") + precio("torre") + precio("solar_torre"),
-  /** Cada radio de pagos del gateway: Heltec T114 + antena 8 dBi + cable. */
+  /** Cada radio del gateway: Heltec T114 + antena 8 dBi + cable. */
   radio: precio("t114") + precio("antena8") + precio("coax"),
   /** Repetidor solar: P1 + pilas + antena 8 dBi + cable + tubo de 6 m + herrajes + base. */
   repetidor: precio("p1") + precio("pilas18650") + precio("antena8") + precio("coax") + precio("tubo") + precio("herrajes") + precio("base"),
@@ -241,7 +241,7 @@ export type Dimension = {
 };
 
 /**
- * Dimensionamiento de la red de pagos (el mismo cálculo del documento del Inge): celdas hexagonales de un repetidor
+ * Dimensionamiento de la red (el mismo cálculo del documento del Inge): celdas hexagonales de un repetidor
  * para cubrir el área, una radio cada 150 usuarios (SF11), sitios de hasta 4 radios y 19 celdas, Starlink cada 4,
  * 2 o 1 sitios según el terreno, y costos de inversión y de operación.
  */

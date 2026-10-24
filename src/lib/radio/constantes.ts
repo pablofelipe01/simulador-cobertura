@@ -103,7 +103,7 @@ export const ENLACES = {
 
 /**
  * Saltos máximos de diseño (enlaces desde el nodo hasta el gateway). MeshCore admite hasta 64 (flood.max), pero
- * Trama diseña con «uno o dos saltos» de repetidores para que el pago vuelva en segundos.
+ * Trama diseña con «uno o dos saltos» de repetidores para que el pago o el mensaje vuelva en segundos.
  */
 export const LIMITE_SALTOS_DEFECTO = 3;
 export const LIMITE_SALTOS_MAXIMO = 64;
