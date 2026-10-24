@@ -1,3 +1,8 @@
+// © 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero. Todos los derechos reservados.
+// Autor: Giancarlo González Guerrero, para el Ingeniero Pablo Felipe Acevedo y Melki, con ayuda de inteligencia
+// artificial. Prohibido su uso, copia, modificación o distribución sin licencia escrita de los titulares (Ley 23 de
+// 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
+
 // Exportación del escenario (JSON), de los nodos (CSV) y de la simulación para Google Earth (KMZ):
 // cobertura, nodos, enlaces, rango de alcance y mediciones de la regla.
 import { CLASES, ENLACES } from "@/lib/radio/constantes";
