@@ -55,7 +55,7 @@ export function PanelParametros({ estado, despachar, archivosHgt, onCargarHgt, o
             ))}
           </select>
           <span className="mt-1 block text-[12px] text-tenue">
-            {preset.uso} Sensibilidad {fmt(preset.sensibilidadDbm)} dBm · ≈ {fmt(preset.velocidadKbps, 2)} kbps · un pago ocupa ≈ {fmt(airePagoMs(preset) / 1000, 1)} s de aire. Todos los nodos de una frecuencia usan el mismo ajuste.
+            {preset.uso} Sensibilidad {fmt(preset.sensibilidadDbm)} dBm · ≈ {fmt(preset.velocidadKbps, 2)} kbps · un pago (o un mensaje corto de ida y vuelta) ocupa ≈ {fmt(airePagoMs(preset) / 1000, 1)} s de aire. Todos los nodos de una frecuencia usan el mismo ajuste.
           </span>
         </label>
         <div className="mt-2.5 grid grid-cols-2 gap-2">
@@ -83,7 +83,7 @@ export function PanelParametros({ estado, despachar, archivosHgt, onCargarHgt, o
           ))}
         </div>
         <p className="mt-1.5 text-[12px] leading-snug text-tenue">
-          El límite de saltos es el del diseño (los pagos de Trama van a 1–3 saltos); MeshCore deja hasta {LIMITE_SALTOS_MAXIMO} y solo los repetidores retransmiten.
+          El límite de saltos es el del diseño (los pagos y mensajes de Trama van a 1–3 saltos); MeshCore deja hasta {LIMITE_SALTOS_MAXIMO} y solo los repetidores retransmiten.
         </p>
         {fueraBanda && (
           <p className="mt-2 rounded-md bg-baja/15 px-2.5 py-1.5 text-[12px] leading-snug text-carbon">

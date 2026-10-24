@@ -1,8 +1,8 @@
 "use client";
 
 // Población y capacidad: «Poblar personas» reparte N billeteras al azar dentro de la red (o con la densidad de la
-// zona, como en el documento de Trama) y la prueba de carga manda 5, 15, 25… pagos al tiempo para ver hasta dónde
-// aguanta la frecuencia antes de reventarse.
+// zona, como en el documento de Trama) y la prueba de carga manda 5, 15, 25… pagos o mensajes de texto (WhatsApp,
+// consultas a la IA) al tiempo para ver hasta dónde aguanta la frecuencia antes de reventarse.
 import { Activity, Gauge, Trash, Users } from "lucide-react";
 import { useState } from "react";
 
@@ -201,7 +201,7 @@ function Curva({ curva }: { curva: CurvaCarga }) {
   const paso = ancho / pts.length;
   return (
     <figure className="space-y-1" aria-label="Curva de carga">
-      <svg viewBox={`0 0 ${ancho} ${alto + 28}`} className="w-full" role="img" aria-label="Pagos completos según cuántos salen al tiempo">
+      <svg viewBox={`0 0 ${ancho} ${alto + 28}`} className="w-full" role="img" aria-label="Completos según cuántos salen al tiempo">
         {[0, 50, 90, 100].map((v) => (
           <g key={v}>
             <line x1={0} x2={ancho} y1={alto - (v / 100) * alto} y2={alto - (v / 100) * alto} stroke={v === 90 ? "#2B2F2E" : "#D9D5CC"} strokeDasharray={v === 90 ? "4 3" : undefined} strokeWidth={1} />
@@ -224,7 +224,7 @@ function Curva({ curva }: { curva: CurvaCarga }) {
           );
         })}
         <text x={ancho / 2} y={alto + 25} textAnchor="middle" fontSize={9} fill="#6F7572">
-          pagos al tiempo
+          cuántos salen al tiempo
         </text>
       </svg>
       <figcaption className="space-y-1 text-[12px] leading-snug text-carbon-2">
@@ -237,7 +237,7 @@ function Curva({ curva }: { curva: CurvaCarga }) {
           {[
             curva.seguro !== null ? `Aguanta sin demora hasta ${curva.seguro} al tiempo.` : "",
             curva.lento !== null ? `Desde ${curva.lento}, lento: el 95 % tarda más de un minuto.` : "",
-            curva.quiebre !== null ? `Se revienta desde ${curva.quiebre}: menos del 90 % recibe su comprobante.` : `No se revienta con lo probado (hasta ${pts[pts.length - 1].n}).`,
+            curva.quiebre !== null ? `Se revienta desde ${curva.quiebre}: menos del 90 % recibe su respuesta.` : `No se revienta con lo probado (hasta ${pts[pts.length - 1].n}).`,
           ]
             .filter(Boolean)
             .join(" ")}
@@ -275,11 +275,11 @@ export function PruebaCarga({
       </Titulo>
       <div className="space-y-2.5">
         <p className="text-[12.5px] leading-snug text-carbon-2">
-          Manda varios {unidad} al tiempo desde las personas conectadas y mira cuántos completan el viaje, cuánto tardan y cuándo se revienta la frecuencia. Ajuste de radio: {preset.nombre}.
+          Por la red van pagos, mensajes de WhatsApp y consultas a la IA, y todos comparten el mismo canal. Manda varios {unidad} al tiempo desde las personas conectadas y mira cuántos completan el viaje, cuánto tardan y cuándo se revienta la frecuencia. Ajuste de radio: {preset.nombre}.
         </p>
         {ref && (
           <p className="rounded-md bg-papel-2 px-2.5 py-1.5 text-[12px] leading-snug text-carbon-2">
-            Trama con SF{ref.sf}: un pago ocupa el aire ~{fmt(ref.segPago, ref.segPago % 1 ? 1 : 0)} s; con el canal al {CAPACIDAD_TRAMA.canalPicoPct} % en la hora pico caben ~{ref.pagosHora} pagos por hora por frecuencia ({ref.usuariosFrecuencia} usuarios; {ref.usuariosFrecuencia * CAPACIDAD_TRAMA.radiosPorSitio} por sitio de 4 radios).
+            Trama con SF{ref.sf}: un pago ocupa el aire ~{fmt(ref.segPago, ref.segPago % 1 ? 1 : 0)} s; con el canal al {CAPACIDAD_TRAMA.canalPicoPct} % en la hora pico caben ~{ref.pagosHora} pagos por hora por frecuencia ({ref.usuariosFrecuencia} usuarios; {ref.usuariosFrecuencia * CAPACIDAD_TRAMA.radiosPorSitio} por sitio de 4 radios), y esa capacidad la comparten con los WhatsApp y las consultas a la IA.
           </p>
         )}
         <div className="flex flex-wrap gap-2">
@@ -289,7 +289,7 @@ export function PruebaCarga({
             onCambio={(tipo) => cambiar({ tipo })}
             opciones={[
               { valor: "pago", texto: "Pagos", titulo: "Orden (118 B), comprobante (126 B) y aviso a quien recibe, con sus acuses" },
-              { valor: "texto", texto: "Mensajes", titulo: "Un mensaje de texto al gateway y su respuesta" },
+              { valor: "texto", texto: "WhatsApp o IA", titulo: "Un mensaje de texto (un WhatsApp o una consulta a la IA) al gateway y su respuesta" },
             ]}
           />
           <Segmentado
@@ -351,7 +351,7 @@ export function PruebaCarga({
         {carga.fase === "probando" && (
           <p className="flex items-center gap-2 text-[13px] text-carbon-2" role="status">
             <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-salvia border-t-transparent" aria-hidden="true" />
-            {carga.curva ? "Probando con más y más pagos al tiempo…" : "Simulando el canal paquete por paquete…"}
+            {carga.curva ? "Probando con más y más al tiempo…" : "Simulando el canal paquete por paquete…"}
           </p>
         )}
         {carga.fase === "error" && <p className="text-[13px] text-sin">{carga.texto}</p>}

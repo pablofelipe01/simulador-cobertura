@@ -1,7 +1,8 @@
 "use client";
 
-// Barra superior: nombre del escenario, buscador, archivo (nuevo, ejemplo, importar, exportar) y tours guiados (abre el menú de Melki).
-import { ChevronDown, CircleQuestionMark, FileDown, FileUp, FolderOpen, PanelRightClose, PanelRightOpen, Plus, RotateCcw, Search } from "lucide-react";
+// Barra superior: nombre del escenario, buscador, archivo (nuevo, ejemplo, importar, exportar), Melki manos libres, tours
+// guiados (abre el menú de Melki) y los botones para mostrar u ocultar los paneles de los lados.
+import { AudioLines, ChevronDown, CircleQuestionMark, FileDown, FileUp, FolderOpen, PanelLeftOpen, PanelRightClose, PanelRightOpen, Plus, RotateCcw, Search } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 
 type Props = {
@@ -16,6 +17,12 @@ type Props = {
   onRecorrido: () => void;
   resultadosAbiertos: boolean;
   onResultados: () => void;
+  /** Panel izquierdo (en el escritorio): cuando está oculto aparece aquí el botón para volver a abrirlo. */
+  panelIzquierdo: boolean;
+  onPanelIzquierdo: () => void;
+  /** Melki manos libres: escucha todo el tiempo y se activa con «Hola Melki». */
+  manosLibres: boolean;
+  onManosLibres: () => void;
   /** Buscador; recibe una función para cerrarlo (en pantallas angostas se abre en una fila aparte). */
   buscador?: (alElegir?: () => void) => React.ReactNode;
 };
@@ -58,12 +65,25 @@ export function BarraSuperior(p: Props) {
 
   return (
     <header className="relative z-30 flex h-14 shrink-0 items-center gap-3 border-b border-linea bg-papel px-3 sm:px-4">
+      {!p.panelIzquierdo && (
+        <button
+          type="button"
+          onClick={p.onPanelIzquierdo}
+          className="-mr-1 hidden rounded-lg p-2 hover:bg-papel-2 lg:inline-flex"
+          title="Mostrar el panel"
+          aria-label="Mostrar el panel izquierdo"
+          aria-expanded={false}
+          data-tour="alternar-panel"
+        >
+          <PanelLeftOpen size={18} />
+        </button>
+      )}
       <div className="flex min-w-0 items-center gap-3">
         <span className="font-cond text-[22px] leading-none font-bold tracking-[0.06em] text-salvia-oscura">MELKI</span>
         <span className="hidden h-6 w-px bg-linea sm:block" />
         <div className="hidden min-w-0 sm:block">
           <h1 className="font-cond text-[17px] leading-tight font-semibold">Simulador de cobertura</h1>
-          <p className="text-[12px] leading-tight text-tenue">Red de pagos MeshCore · LoRa 920 MHz</p>
+          <p className="text-[12px] leading-tight text-tenue">Pagos, WhatsApp e IA por MeshCore · LoRa 920 MHz</p>
         </div>
       </div>
 
@@ -128,6 +148,21 @@ export function BarraSuperior(p: Props) {
         </div>
         <button
           type="button"
+          onClick={p.onManosLibres}
+          aria-pressed={p.manosLibres}
+          className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[14px] font-medium transition-colors ${p.manosLibres ? "bg-carbon text-white hover:bg-carbon-2" : "hover:bg-papel-2"}`}
+          data-tour="manos-libres"
+          title={p.manosLibres ? "Apagar manos libres (o diga «Melki, deja de escuchar»)" : "Manos libres: Melki le escucha y se activa cuando dice «Hola Melki»"}
+          aria-label={p.manosLibres ? "Apagar manos libres" : "Activar manos libres"}
+        >
+          <span className="relative grid place-items-center">
+            <AudioLines size={17} />
+            {p.manosLibres && <span className="absolute -top-1 -right-1 h-2 w-2 animate-pulse rounded-full bg-melki ring-1 ring-carbon" aria-hidden="true" />}
+          </span>
+          <span className="hidden xl:inline">Manos libres</span>
+        </button>
+        <button
+          type="button"
           onClick={p.onRecorrido}
           className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[14px] font-medium hover:bg-papel-2"
           data-tour="ayuda"
@@ -140,6 +175,8 @@ export function BarraSuperior(p: Props) {
           type="button"
           onClick={p.onResultados}
           className="hidden rounded-lg p-2 hover:bg-papel-2 lg:inline-flex"
+          aria-expanded={p.resultadosAbiertos}
+          data-tour="alternar-resultados"
           title={p.resultadosAbiertos ? "Ocultar resultados" : "Mostrar resultados"}
           aria-label={p.resultadosAbiertos ? "Ocultar resultados" : "Mostrar resultados"}
         >

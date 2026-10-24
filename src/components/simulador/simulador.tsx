@@ -2,7 +2,7 @@
 
 // Pantalla principal del simulador: estado, motor de cálculo, mapa, paneles, regla, buscador y Melki.
 import type { Map as MapaML } from "maplibre-gl";
-import { Play, RadioTower, Settings2, SlidersHorizontal, Sprout, Square, Waypoints } from "lucide-react";
+import { PanelLeftClose, Play, RadioTower, Settings2, SlidersHorizontal, Sprout, Square, Waypoints } from "lucide-react";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
 import { Melki } from "@/components/melki/melki";
@@ -15,7 +15,7 @@ import { buscarLugares, cargarReferencia, textoUbicacion } from "@/lib/geo/refer
 import { PERMISOS_AJUSTE, zonaDeRed, type Ajuste, type PedidoAjuste } from "@/lib/radio/ajuste";
 import { areaM2, margenEnPunto, poligonoCirculo } from "@/lib/radio/area";
 import { BYTES_PAGO, PEDIDO_CARGA_DEFECTO } from "@/lib/radio/carga";
-import { PEDIDO_ESTRES_DEFECTO } from "@/lib/radio/estres";
+import { PEDIDO_ESTRES_DEFECTO, type EstadoZona, type LimitePunto, type ResultadoEstres } from "@/lib/radio/estres";
 import { puntosAlAzar } from "@/lib/radio/poblar";
 import { EQUIPOS, META_UTIL_ESTUDIO_PCT, UMBRAL_SERVICIO_DB } from "@/lib/radio/constantes";
 import { metrosPorGrado } from "@/lib/radio/geo";
@@ -54,7 +54,7 @@ import type { FaseAjuste } from "./panel-ajuste";
 import { PanelAntenas } from "./panel-antenas";
 import { PanelParametros } from "./panel-parametros";
 import { CARGA_DEFECTO, MAX_POBLAR, PoblarPersonas, PruebaCarga, type AreaPoblar, type FaseCarga, type OpcionesCarga, type PedidoPoblar, type ResultadoPoblar } from "./panel-capacidad";
-import { COLOR_ESTADO, ESTRES_DEFECTO, MAX_POBLADAS, MAX_POR_ZONA, PruebaEstres, TEXTO_ESTADO, ZonaRapida, ZonasPopularidad, type CentroZona, type FaseEstres, type OpcionesEstres, type PedidoZonas, type ResultadoZonas } from "./panel-estres";
+import { COLOR_ESTADO, ESTRES_DEFECTO, MAX_POBLADAS, MAX_POR_ZONA, MUESTRA_PUNTO, PruebaEstres, TEXTO_ESTADO, ZONA_DEFECTO, ZonaRapida, ZonasPopularidad, type CentroZona, type FaseEstres, type OpcionesEstres, type PedidoPunto, type PedidoZonas, type ResultadoPunto, type ResultadoZonas } from "./panel-estres";
 import { PanelResultados } from "./panel-resultados";
 import { PanelSembrar, type FaseSiembra, type ViajeVisible } from "./panel-sembrar";
 import { ALTURA_REPETIDOR_DEFECTO, ALTURAS_REPETIDOR, escenarioMalla, nombreLibre, nuevaPieza, piezaDe } from "./piezas";
@@ -154,6 +154,9 @@ export function Simulador() {
   const [avisoHgt, setAvisoHgt] = useState<string | null>(null);
   const [pestana, setPestana] = useState<Pestana>("antenas");
   const [resultadosAbiertos, setResultadosAbiertos] = useState(true);
+  // Panel izquierdo plegable (en el escritorio) y Melki manos libres
+  const [panelIzquierdo, setPanelIzquierdo] = useState(true);
+  const [manosLibres, setManosLibres] = useState(false);
   const [hoja, setHoja] = useState<Hoja>(null);
   const [tour, setTour] = useState<IdTour | null>(null);
   const [voz, setVoz] = useState(false);
@@ -178,6 +181,8 @@ export function Simulador() {
   const [estres, setEstres] = useState<FaseEstres>({ fase: "nada" });
   const [ultimoZonas, setUltimoZonas] = useState<ResultadoZonas | null>(null);
   const idEstres = useRef(0);
+  /** Punto (gateway o repetidor) con una prueba en marcha desde su zona de popularidad, y qué está haciendo. */
+  const [puntoOcupado, setPuntoOcupado] = useState<{ id: string | null; texto: string } | null>(null);
   /** Escenario antes de aplicar el último ajuste (para deshacerlo desde el panel). */
   const ajusteAntes = useRef<Escenario | null>(null);
 
@@ -238,7 +243,7 @@ export function Simulador() {
       const a = porId.get(z.id);
       if (!a || z.usuarios === 0) return [];
       const texto = `${z.nombre} · ${TEXTO_ESTADO[z.estado].toLowerCase()} · ${Math.round(z.completosPct)} %`;
-      const titulo = `${z.nombre}: ${z.usuarios} personas, ${Math.round(z.pagosHora)} pagos/h; ${Math.round(z.completosPct)} % completos, el 95 % en ${Math.round(z.p95S)} s, canal ${Math.round(z.canalPct)} %`;
+      const titulo = `${z.nombre}: ${z.usuarios} personas, ${Math.round(z.pagosHora)} mensajes/h; ${Math.round(z.completosPct)} % completos, el 95 % en ${Math.round(z.p95S)} s, canal ${Math.round(z.canalPct)} %`;
       return [{ id: z.id, lat: a.lat, lon: a.lon, radioKm: z.radioZonaKm, color: COLOR_ESTADO[z.estado], texto, titulo }];
     });
   }, [estres, firma, escenario.antenas]);
@@ -792,8 +797,11 @@ export function Simulador() {
         nuevas.push(...lote);
         return { id: c.id, nombre: c.nombre, puestas: lote.length, pedidas: pedidaPorZona };
       });
+      const seleccion = ultimo.current.estado.seleccion;
       if (viejas.size) despachar({ tipo: "eliminar-varias", ids: [...viejas] });
       if (nuevas.length) despachar({ tipo: "insertar-varias", antenas: nuevas });
+      // El nodo que se estaba mirando sigue seleccionado (su tarjeta muestra la zona y sus pruebas)
+      if (seleccion && !viejas.has(seleccion) && nuevas.length) despachar({ tipo: "seleccionar", id: seleccion });
       const x: ResultadoZonas = { zonas, puestas: nuevas.length, pedidas: pedidaPorZona * centrosZona.length, radioKm, conSenal, recortado: porZona < pedidaPorZona, quitadas: viejas.size };
       setUltimoZonas(x);
       setCarga({ fase: "nada" });
@@ -835,12 +843,12 @@ export function Simulador() {
    * `rampa`, sube la carga hasta que cada zona se revienta.
    */
   const probarEstres = useCallback(
-    async (o: Partial<OpcionesEstres> = {}) => {
+    async (o: Partial<OpcionesEstres> = {}, texto?: string): Promise<ResultadoEstres | null> => {
       const m = motor.current;
       if (!m) return null;
       const id = ++idEstres.current;
       const opciones: OpcionesEstres = { ...ESTRES_DEFECTO, ...o };
-      setEstres({ fase: "probando", rampa: opciones.rampa, avance: 0 });
+      setEstres({ fase: "probando", rampa: opciones.rampa, avance: 0, texto });
       let r = ultimo.current.resultado;
       if (!r || ultimo.current.firma !== ultimo.current.firmaResultado) r = await esperarResultado();
       if (id !== idEstres.current) return null;
@@ -853,7 +861,7 @@ export function Simulador() {
         const x = await m.estres(
           { ...PEDIDO_ESTRES_DEFECTO, ...opciones, antenas: e.escenario.antenas.filter((a) => a.activa), enlaces: r.enlaces, nodos: r.nodos, parametros: e.escenario.parametros },
           (avance) => {
-            if (id === idEstres.current) setEstres({ fase: "probando", rampa: opciones.rampa, avance });
+            if (id === idEstres.current) setEstres({ fase: "probando", rampa: opciones.rampa, avance, texto });
           },
         );
         if (id !== idEstres.current) return null;
@@ -865,6 +873,129 @@ export function Simulador() {
       }
     },
     [esperarResultado],
+  );
+
+  /** Poner las zonas y probar de una vez la hora pico con toda esa gente enviando información. */
+  const ponerYProbar = useCallback(
+    async (o: PedidoZonas, opciones: Partial<OpcionesEstres> = {}): Promise<{ zonas: ResultadoZonas; estres: ResultadoEstres | null }> => {
+      const zonas = poblarZonas(o);
+      if ("error" in zonas) return { zonas, estres: null };
+      setPuntoOcupado({ id: o.centros?.length === 1 ? o.centros[0] : null, texto: "Simulando la red con la gente nueva…" });
+      try {
+        await esperarResultado();
+        return { zonas, estres: await probarEstres({ ...opciones, foco: null, rampa: false }) };
+      } finally {
+        setPuntoOcupado(null);
+      }
+    },
+    [poblarZonas, esperarResultado, probarEstres],
+  );
+
+  /**
+   * Un punto (gateway o repetidor) desde su zona de popularidad: «probar» pone N personas y simula la hora pico;
+   * «limite» sube la gente de ese punto, con el resto de la red como está, hasta encontrar cuántas aguanta (si está
+   * vacío, primero pone una muestra); «llenar» lo llena hasta ese límite y lo confirma simulando la hora pico con la
+   * gente puesta (si no queda estable, prueba con un poco menos).
+   */
+  const evaluarPunto = useCallback(
+    async (o: PedidoPunto): Promise<ResultadoPunto> => {
+      const a = existentes().find((x) => x.id === o.centro);
+      if (!a || !a.activa || a.poblada || !(a.rol === "REPETIDOR" || a.pasarela)) return { nombre: a?.nombre ?? o.centro, zonas: null, estres: null, limite: null, error: "Ese nodo no es un gateway ni un repetidor activo." };
+      const radioKm = o.radioKm ?? ZONA_DEFECTO.radioKm;
+      const tiene = () => existentes().filter((x) => x.poblada && x.zona === a.id).length;
+      let zonas: ResultadoZonas | null = null;
+      const salida = (x: Partial<ResultadoPunto>): ResultadoPunto => ({ nombre: a.nombre, zonas, estres: null, limite: null, error: null, ...x });
+      const poner = async (n: number, texto: string) => {
+        const z = poblarZonas({ centros: [a.id], n, radioKm });
+        zonas = z;
+        if ("error" in z) return z.error;
+        setPuntoOcupado({ id: a.id, texto });
+        await esperarResultado();
+        return null;
+      };
+      try {
+        setPuntoOcupado({ id: a.id, texto: "Preparando…" });
+        if (o.accion === "probar") {
+          const n = Math.min(MAX_POR_ZONA, Math.max(1, Math.round(o.n ?? ZONA_DEFECTO.n)));
+          const err = await poner(n, `Poniendo ${n.toLocaleString("es-CO")} personas y simulando la red…`);
+          if (err) return salida({ error: err });
+          setPuntoOcupado({ id: a.id, texto: "Simulando la hora pico…" });
+          const e = await probarEstres({ ...o.opciones, foco: null, rampa: false });
+          return salida({ estres: e, error: e ? null : "No pude hacer la prueba de la hora pico." });
+        }
+        // El límite: el que ya se buscó para este punto (al llenar desde su botón) o uno nuevo
+        const u = ultimo.current.estres;
+        let lim: LimitePunto | null = o.accion === "llenar" && o.n !== undefined && u.fase === "listo" && u.resultado.limite?.id === a.id ? u.resultado.limite : null;
+        let e: ResultadoEstres | null = null;
+        if (!lim) {
+          if (!tiene()) {
+            const err = await poner(Math.min(MAX_POR_ZONA, Math.max(1, Math.round(o.n ?? MUESTRA_PUNTO))), "Poniendo una muestra de gente y simulando la red…");
+            if (err) return salida({ error: err });
+          }
+          setPuntoOcupado({ id: a.id, texto: `Buscando el límite de ${a.nombre}…` });
+          e = await probarEstres({ ...o.opciones, foco: a.id, rampa: false, comparar: false }, `Buscando el límite de ${a.nombre}…`);
+          lim = e?.limite ?? null;
+          if (!lim) return salida({ estres: e, error: "No pude buscar el límite (falta simular la red o el motor se detuvo)." });
+        }
+        if (o.accion !== "llenar" || lim.motivo || lim.redYaFalla || lim.personasSeguro === null) return salida({ estres: e, limite: lim });
+        // Llenar hasta el límite y confirmarlo con la gente puesta
+        let n = Math.min(MAX_POR_ZONA, Math.max(1, Math.round(o.n ?? lim.personasSeguro)));
+        let llenado: LimitePunto["llenado"] = null;
+        for (let intento = 1; intento <= 3; intento++) {
+          const err = await poner(n, `Llenando ${a.nombre} con ${n.toLocaleString("es-CO")} personas…`);
+          if (err) return salida({ estres: e, limite: lim, error: err });
+          setPuntoOcupado({ id: a.id, texto: `Confirmando la hora pico con ${n.toLocaleString("es-CO")} personas…` });
+          const c = await probarEstres({ ...o.opciones, foco: null, rampa: false, comparar: false }, `Confirmando ${a.nombre} con ${n.toLocaleString("es-CO")} personas…`);
+          if (!c) break;
+          e = c;
+          const conDatos = c.zonas.filter((z) => z.pagos >= 4);
+          const zp = conDatos.find((z) => z.id === a.id);
+          const peor = (xs: EstadoZona[]): EstadoZona => (xs.includes("revienta") ? "revienta" : xs.includes("lento") ? "lento" : "aguanta");
+          const estadoPunto = zp ? peor([zp.estado]) : "aguanta";
+          const estadoRed = peor([c.estado, ...conDatos.map((z) => z.estado)]);
+          llenado = { personas: tiene(), estadoPunto, estadoRed, intentos: intento };
+          if (estadoPunto === "aguanta" && estadoRed === "aguanta") break;
+          n = Math.max(1, n < 40 ? n - 2 : Math.floor((n * 0.85) / 5) * 5);
+        }
+        const final: LimitePunto = { ...lim, llenado };
+        setEstres((f) => (f.fase === "listo" ? { ...f, resultado: { ...f.resultado, limite: final } } : f));
+        return salida({ estres: e ? { ...e, limite: final } : null, limite: final });
+      } finally {
+        setPuntoOcupado(null);
+      }
+    },
+    [poblarZonas, esperarResultado, probarEstres],
+  );
+
+  /** El límite de cada punto (o de los pedidos), uno a la vez con los demás como están; los vacíos reciben una muestra. */
+  const evaluarPuntos = useCallback(
+    async (o: { centros?: string[]; n?: number; radioKm?: number; opciones?: Partial<OpcionesEstres> } = {}): Promise<{ limites: LimitePunto[]; zonas: ResultadoZonas | null; error: string | null }> => {
+      const todos = centrosDe(existentes());
+      const lista = o.centros?.length ? todos.filter((c) => o.centros!.includes(c.id)) : todos;
+      if (!lista.length) return { limites: [], zonas: null, error: "Ponga primero el gateway y los repetidores: cada punto es uno de ellos." };
+      let zonas: ResultadoZonas | null = null;
+      try {
+        const vacios = lista.filter((c) => !c.personas);
+        if (vacios.length) {
+          zonas = poblarZonas({ centros: vacios.map((c) => c.id), n: o.n ?? MUESTRA_PUNTO, radioKm: o.radioKm });
+          if ("error" in zonas) return { limites: [], zonas, error: zonas.error };
+          setPuntoOcupado({ id: null, texto: "Poniendo una muestra de gente y simulando la red…" });
+          await esperarResultado();
+        }
+        const limites: LimitePunto[] = [];
+        for (const [k, c] of lista.entries()) {
+          const texto = `Límite de ${c.nombre} (${k + 1} de ${lista.length})…`;
+          setPuntoOcupado({ id: c.id, texto });
+          const e = await probarEstres({ ...o.opciones, foco: c.id, rampa: false, comparar: false }, texto);
+          if (e?.limite) limites.push(e.limite);
+        }
+        if (limites.length > 1) setEstres((f) => (f.fase === "listo" ? { ...f, limites } : f));
+        return { limites, zonas, error: limites.length ? null : "No pude buscar los límites (falta simular la red o el motor se detuvo)." };
+      } finally {
+        setPuntoOcupado(null);
+      }
+    },
+    [poblarZonas, esperarResultado, probarEstres],
   );
 
   /**
@@ -899,7 +1030,7 @@ export function Simulador() {
     [esperarResultado],
   );
 
-  /** Envía un pago de prueba (la orden firmada de 118 B) desde un nodo hasta el gateway por la ruta de la malla y lo anima en el mapa. */
+  /** Envía un mensaje de prueba (del tamaño de la orden firmada de un pago: 118 B) desde un nodo hasta el gateway por la ruta de la malla y lo anima en el mapa. */
   const enviarMensaje = useCallback(
     (desdeId: string): ViajeMensaje | null => {
       const { resultado: r, firma: fi, firmaResultado: fr, estado: e } = ultimo.current;
@@ -1145,6 +1276,17 @@ export function Simulador() {
         despachar({ tipo: "duplicar", id });
         pedirSimulacion();
       },
+      paneles: (c) => {
+        // «Pantalla limpia»: también se cierra la tarjeta del nodo seleccionado
+        if (c.izquierdo === false && c.derecho === false) despachar({ tipo: "seleccionar", id: null });
+        if (!esEscritorio()) {
+          if (c.izquierdo === false || c.derecho === false) setHoja(null);
+          return "celular";
+        }
+        if (c.izquierdo !== undefined) setPanelIzquierdo(c.izquierdo);
+        if (c.derecho !== undefined) setResultadosAbiertos(c.derecho);
+        return "escritorio";
+      },
       areasPoblar: () => areasPoblar(ultimo.current.estado.escenario),
       poblar: poblarPersonas,
       quitarPobladas: () => quitarPobladas(),
@@ -1153,8 +1295,10 @@ export function Simulador() {
       poblarZonas,
       quitarZonas,
       probarEstres,
+      evaluarPunto,
+      evaluarPuntos,
     }),
-    [inscribirNodo, pedirSimulacion, simular, centrar, encuadrar, encuadrarCaja, abrirPerfil, inspeccionar, cambiarModo, sembrarHacia, aceptarSiembra, enviarMensaje, disenarArea, aplicarDiseno, esperarResultado, pedirAjuste, aplicarAjuste, poblarPersonas, quitarPobladas, probarCarga, poblarZonas, quitarZonas, probarEstres],
+    [inscribirNodo, pedirSimulacion, simular, centrar, encuadrar, encuadrarCaja, abrirPerfil, inspeccionar, cambiarModo, sembrarHacia, aceptarSiembra, enviarMensaje, disenarArea, aplicarDiseno, esperarResultado, pedirAjuste, aplicarAjuste, poblarPersonas, quitarPobladas, probarCarga, poblarZonas, quitarZonas, probarEstres, evaluarPunto, evaluarPuntos],
   );
 
   const restaurar = useCallback((e: Escenario) => despachar({ tipo: "cargar", escenario: e }), []);
@@ -1221,6 +1365,8 @@ export function Simulador() {
     const def = tourPorId(id);
     devolverEscenario();
     limpiarPantalla();
+    // Los tours señalan partes del panel izquierdo
+    setPanelIzquierdo(true);
     // Los tours de las pestañas se hacen en el modo avanzado; al terminar se vuelve al modo de antes
     modoAntesDelTour.current ??= ultimo.current.estado.modo;
     despachar({ tipo: "modo", modo: def.modo ?? "avanzado" });
@@ -1303,6 +1449,7 @@ export function Simulador() {
     if (!p) return;
     if (p === "sembrar") {
       if (!esEscritorio()) setHoja("sembrar");
+      else setPanelIzquierdo(true);
       return;
     }
     if (p === "mapa") {
@@ -1311,7 +1458,10 @@ export function Simulador() {
     }
     if (esEscritorio()) {
       if (p === "resultados") setResultadosAbiertos(true);
-      else setPestana(p);
+      else {
+        setPanelIzquierdo(true);
+        setPestana(p);
+      }
     } else setHoja(p === "resultados" ? "resultado" : p);
   }, []);
 
@@ -1343,8 +1493,10 @@ export function Simulador() {
         setHoja(null);
         break;
       case "parametros":
-        if (esEscritorio()) setPestana("parametros");
-        else setHoja("parametros");
+        if (esEscritorio()) {
+          setPanelIzquierdo(true);
+          setPestana("parametros");
+        } else setHoja("parametros");
         break;
       case "resultados":
         if (esEscritorio()) setResultadosAbiertos(true);
@@ -1426,16 +1578,28 @@ export function Simulador() {
   );
 
   const selectorModo = (
-    <div className="border-b border-linea px-3 py-2" data-tour="modo">
-      <Segmentado<ModoApp>
-        etiqueta="Modo de la pantalla"
-        valor={estado.modo}
-        onCambio={cambiarModo}
-        opciones={[
-          { valor: "sembrar", texto: <><Sprout size={15} /> Sembrar la malla</>, titulo: "Paso a paso: gateway, repetidores y personas, como en Trama" },
-          { valor: "avanzado", texto: <><Settings2 size={15} /> Modo avanzado</>, titulo: "Todos los nodos, parámetros y herramientas del simulador" },
-        ]}
-      />
+    <div className="flex items-center gap-1.5 border-b border-linea px-3 py-2">
+      <div className="min-w-0 flex-1" data-tour="modo">
+        <Segmentado<ModoApp>
+          etiqueta="Modo de la pantalla"
+          valor={estado.modo}
+          onCambio={cambiarModo}
+          opciones={[
+            { valor: "sembrar", texto: <><Sprout size={15} /> Sembrar la malla</>, titulo: "Paso a paso: gateway, repetidores y personas, como en Trama" },
+            { valor: "avanzado", texto: <><Settings2 size={15} /> Modo avanzado</>, titulo: "Todos los nodos, parámetros y herramientas del simulador" },
+          ]}
+        />
+      </div>
+      <button
+        type="button"
+        onClick={() => setPanelIzquierdo(false)}
+        className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-carbon-2 hover:bg-black/5 hover:text-carbon"
+        title="Ocultar el panel (más espacio para el mapa). También: «Melki, pantalla limpia»"
+        aria-label="Ocultar el panel izquierdo"
+        data-tour="plegar-panel"
+      >
+        <PanelLeftClose size={18} />
+      </button>
     </div>
   );
 
@@ -1466,7 +1630,11 @@ export function Simulador() {
         nombre={a.nombre}
         personas={centros.find((c) => c.id === a.id)?.personas ?? 0}
         zona={zonaEstres(a.id)}
+        red={estresAlDia ? estresAlDia.estado : null}
+        limite={estres.fase === "listo" && estres.resultado.limite?.id === a.id ? estres.resultado.limite : (estres.fase === "listo" ? (estres.limites?.find((l) => l.id === a.id) ?? null) : null)}
+        ocupado={puntoOcupado ? (puntoOcupado.id === a.id || puntoOcupado.id === null ? puntoOcupado.texto : "Probando otro punto…") : estres.fase === "probando" ? (estres.texto ?? "Probando la hora pico…") : null}
         onPoner={(n, radioKm) => void poblarZonas({ centros: [a.id], n, radioKm })}
+        onPunto={(accion, n, radioKm) => void evaluarPunto({ centro: a.id, accion, n, radioKm })}
         onQuitar={() => void quitarZonas([a.id])}
       />
     ) : null;
@@ -1511,10 +1679,13 @@ export function Simulador() {
         seleccion={estado.seleccion}
         hayResultado={resultado !== null}
         ultimo={ultimoZonas}
+        ocupado={puntoOcupado !== null || estres.fase === "probando"}
         onPoner={(o) => {
           poblarZonas(o);
           if (!esEscritorio()) setHoja(null);
         }}
+        onProbar={(o) => void ponerYProbar(o)}
+        onLimites={(o) => void (o.centros?.length === 1 ? evaluarPunto({ centro: o.centros[0], accion: "limite", n: o.n, radioKm: o.radioKm }) : evaluarPuntos({ centros: o.centros, n: o.n, radioKm: o.radioKm }))}
         onQuitar={() => void quitarZonas()}
       />
       <PoblarPersonas
@@ -1594,10 +1765,18 @@ export function Simulador() {
         onRecorrido={() => avisarMelki("tours")}
         resultadosAbiertos={resultadosAbiertos}
         onResultados={() => setResultadosAbiertos((v) => !v)}
+        panelIzquierdo={panelIzquierdo}
+        onPanelIzquierdo={() => setPanelIzquierdo((v) => !v)}
+        manosLibres={manosLibres}
+        onManosLibres={() => setManosLibres((v) => !v)}
       />
 
       <div className="relative flex min-h-0 flex-1">
-        <aside className="hidden w-[340px] shrink-0 flex-col border-r border-linea bg-papel lg:flex" aria-label={estado.modo === "sembrar" ? "Sembrar la malla" : "Nodos y parámetros"}>
+        <aside
+          className={`hidden w-[340px] shrink-0 flex-col border-r border-linea bg-papel ${panelIzquierdo ? "lg:flex" : ""}`}
+          aria-label={estado.modo === "sembrar" ? "Sembrar la malla" : "Nodos y parámetros"}
+          data-tour="panel-izquierdo"
+        >
           {selectorModo}
           {estado.modo === "sembrar" ? (
             <div className="desplazable min-h-0 flex-1 overflow-y-auto p-3">{panelSembrar}</div>
@@ -1694,6 +1873,8 @@ export function Simulador() {
             onTour={empezarTour}
             vozActiva={voz}
             onVoz={setVoz}
+            manosLibres={manosLibres}
+            onManosLibres={setManosLibres}
           />
 
           {hoja && (
