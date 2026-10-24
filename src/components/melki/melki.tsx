@@ -1,18 +1,24 @@
+// © 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero. Todos los derechos reservados.
+// Autor: Giancarlo González Guerrero, para el Ingeniero Pablo Felipe Acevedo y Melki, con ayuda de inteligencia
+// artificial. Prohibido su uso, copia, modificación o distribución sin licencia escrita de los titulares (Ley 23 de
+// 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
+
 "use client";
 
 // Melki: botón flotante, conversación con el cerebro local, órdenes sobre el simulador (con deshacer),
-// aviso del resultado cuando termina la simulación, voz, dictado, manos libres (tipo Jarvis: escucha todo el tiempo,
-// se activa con «Hola Melki», ejecuta y contesta en voz alta) y menú de tours guiados (también en la primera visita).
+// aviso del resultado cuando termina la simulación, voz, dictado, el Asistente Melki por voz (tipo Jarvis: escucha
+// todo el tiempo, se activa con «Hola Melki», ejecuta y contesta en voz alta con trato de mayordomo; al activarse deja
+// el mapa libre y sugiere los paneles cuando hacen falta) y menú de tours guiados (también en la primera visita).
 // Escucha avisos de la ventana: «melki:abrir», «melki:tours» y «melki:pedir» (los usan los tours y la barra superior).
-import { AudioLines, Compass, Globe, LoaderCircle, Mic, Send, Settings2, ShieldCheck, Square, Trash2, Volume2, VolumeX, X } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { AudioLines, Compass, Globe, LoaderCircle, Mic, Play, Send, Settings2, ShieldCheck, Square, Trash2, Volume2, VolumeX, X } from "lucide-react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { consejoRed, estadoRed, piezaDe } from "@/lib/radio/estado-red";
 import type { Escenario, ResultadoSimulacion } from "@/lib/radio/tipos";
 
 import { MelkiAvatar } from "./avatar";
-import { HudVoz } from "./hud-voz";
-import { AYUDA_VOZ, controlDeVoz, detectarActivacion, limpiarComando, pareceEco, SALUDO_MANOS_LIBRES, textoParaVoz, type EstadoManosLibres } from "./manos-libres";
+import { HudVoz, type SugerenciaHud } from "./hud-voz";
+import { AYUDA_VOZ, controlDeVoz, detectarActivacion, frases, limpiarComando, pareceEco, textoParaVoz, type EstadoManosLibres, type Trato } from "./manos-libres";
 import { menuTours, pedidoDeTour, responder, SUGERENCIAS, type AccionMelki, type AccionRespuesta, type ContextoMelki, type Respuesta } from "./cerebro";
 import {
   borrarReconocedor,
@@ -29,16 +35,60 @@ import {
 } from "./dictado";
 import { accionAjuste, dividirEnPasos, ejecutarOrden, interpretarOrden, textoCoberturaUtil, textoRed, type Api, type Orden, type Pendiente } from "./ordenes";
 import type { IdTour } from "./tours";
-import { callar, hablar, sonando, vozDisponible } from "./voz";
+import { alCargarVoces, callar, fijarVozPreferida, hablar, puntajeVoz, sonando, vocesEspanol, vozDisponible } from "./voz";
 
 type Mensaje = { id: number; de: "melki" | "usuario"; texto: string; acciones?: AccionRespuesta[]; voz?: boolean };
 
 const CLAVE = "simulador-cobertura-melki-v1";
 const f1 = (x: number, d = 1) => x.toFixed(d).replace(".", ",");
 
-/** Manos libres: seguir la conversación sin repetir «Melki», leer las respuestas completas y el sonido al activarse. */
-type PreferenciasManos = { seguir: boolean; completo: boolean; sonido: boolean };
-const MANOS_DEFECTO: PreferenciasManos = { seguir: true, completo: false, sonido: true };
+/**
+ * Asistente Melki: seguir la conversación sin repetir «Melki», leer las respuestas completas, el sonido al activarse,
+ * ocultar los paneles al activarse, activarse al abrir el simulador, el trato (señor, señora o ninguno) y la voz.
+ */
+type PreferenciasManos = { seguir: boolean; completo: boolean; sonido: boolean; ocultar: boolean; siempre: boolean; trato: Trato; voz: string | null };
+const MANOS_DEFECTO: PreferenciasManos = { seguir: true, completo: false, sonido: true, ocultar: true, siempre: false, trato: "senor", voz: null };
+
+type Lado = "izquierdo" | "derecho";
+type Paneles = { izquierdo: boolean; derecho: boolean };
+
+/** Órdenes cuyo resultado se ve mejor en el panel de resultados (con los paneles ocultos, Melki ofrece mostrarlo). */
+const VER_RESULTADOS = new Set<Orden["tipo"]>([
+  "simular",
+  "estres",
+  "carga",
+  "limite",
+  "zonas",
+  "poblar",
+  "ajustar",
+  "aplicar-ajuste",
+  "disenar",
+  "cobertura-area",
+  "area-objetivo",
+  "sembrar",
+  "aceptar-siembra",
+  "mensaje",
+]);
+/** Órdenes que se revisan mejor en el panel de herramientas (los nodos y los parámetros). */
+const VER_HERRAMIENTAS = new Set<Orden["tipo"]>(["agregar", "pieza", "editar", "editar-varios", "renombrar", "duplicar", "parametros"]);
+
+/** ¿Pantalla de computador (con paneles a los lados del mapa)? */
+const ANCHO = "(min-width: 1024px)";
+const esEscritorio = () => typeof window !== "undefined" && window.matchMedia?.(ANCHO).matches === true;
+const suscribirAncho = (fn: () => void) => {
+  const q = window.matchMedia?.(ANCHO);
+  q?.addEventListener("change", fn);
+  return () => q?.removeEventListener("change", fn);
+};
+
+/** Permiso del micrófono para este sitio («granted»: no vuelve a preguntar). */
+async function permisoMicrofono(): Promise<PermissionState | "desconocido"> {
+  try {
+    return (await navigator.permissions.query({ name: "microphone" as PermissionName })).state;
+  } catch {
+    return "desconocido";
+  }
+}
 
 type Preferencias = { visto: boolean; voz: boolean; dictado?: ModoDictado; manos?: PreferenciasManos };
 
@@ -142,12 +192,14 @@ type Props = {
   onTour: (id: IdTour) => void;
   vozActiva: boolean;
   onVoz: (v: boolean) => void;
-  /** Manos libres: Melki escucha y se activa con su nombre. */
+  /** Asistente Melki: escucha y se activa con su nombre. */
   manosLibres: boolean;
   onManosLibres: (v: boolean) => void;
+  /** Qué paneles de los lados están abiertos en el computador. */
+  paneles: Paneles;
 };
 
-/** Reloj de manos libres (milisegundos). */
+/** Reloj del asistente (milisegundos). */
 const reloj = () => Date.now();
 
 /** Dos notas cortas al oír su nombre (o al dejar de escuchar). */
@@ -175,7 +227,7 @@ function tono(subir: boolean) {
   }
 }
 
-export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, vozActiva, onVoz, manosLibres, onManosLibres }: Props) {
+export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, vozActiva, onVoz, manosLibres, onManosLibres, paneles }: Props) {
   const [abierto, setAbierto] = useState(false);
   const [oferta, setOferta] = useState(() => !leerPreferencias().visto);
   const [hablando, setHablando] = useState(false);
@@ -210,13 +262,20 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   /** Último nodo que Melki puso o cambió: «súbelo a 20 m», «muévelo 2 km al norte». */
   const ultimoNodo = useRef<string | null>(null);
   const ultimoDeshacer = useRef<Escenario | null>(null);
-  // Manos libres
+  // Asistente Melki
   const [estadoVoz, setEstadoVoz] = useState<EstadoManosLibres>("apagado");
   const [escuchado, setEscuchado] = useState("");
   const [subtitulo, setSubtitulo] = useState("");
   const [avisoVoz, setAvisoVoz] = useState<string | null>(null);
   const [motorVoz, setMotorVoz] = useState("");
   const [manos, setManos] = useState<PreferenciasManos>(() => ({ ...MANOS_DEFECTO, ...leerPreferencias().manos }));
+  /** El panel que Melki acaba de sugerir (brilla en su barra). */
+  const [resaltado, setResaltado] = useState<Lado | null>(null);
+  /** El navegador no deja hablar hasta que la persona toque la página (al activarse solo, al abrir). */
+  const [vozBloqueada, setVozBloqueada] = useState(false);
+  const [voces, setVoces] = useState<{ nombre: string; idioma: string; natural: boolean }[]>([]);
+  const [permiso, setPermiso] = useState<PermissionState | "desconocido">("desconocido");
+  const escritorio = useSyncExternalStore(suscribirAncho, esEscritorio, () => false);
   const ml = useRef({
     activo: false,
     estado: "apagado" as EstadoManosLibres,
@@ -245,11 +304,30 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     pensando: 0,
     reinicios: [] as number[],
     saludado: false,
+    /** Cuántas veces lo han llamado solo por su nombre (para no contestar siempre igual). */
+    llamados: 0,
+    /** Cuándo lo despertó su nombre en lo que se iba oyendo (para no sonar dos veces). */
+    desperto: 0,
+    /** Paneles abiertos antes de activarse: se devuelven al apagarlo. */
+    panelesAntes: null as Paneles | null,
+    /** Cuándo sugirió cada panel, si dijeron que no y cuándo hizo la última sugerencia. */
+    sugerido: { izquierdo: 0, derecho: 0 },
+    rechazado: { izquierdo: false, derecho: false },
+    ultimaSugerencia: 0,
+    /** El mensaje de la última sugerencia (si le dicen «no» justo después, no la repite). */
+    sugerencia: null as { id: number; lado: Lado } | null,
+    /** Lo que no pudo decir porque el navegador no dejaba hablar todavía. */
+    bloqueada: "",
   });
-  const actual = useRef({ abierto, vozActiva, api, mensajes, manos, usados });
+  const actual = useRef({ abierto, vozActiva, api, mensajes, manos, usados, paneles });
   useEffect(() => {
-    actual.current = { abierto, vozActiva, api, mensajes, manos, usados };
+    actual.current = { abierto, vozActiva, api, mensajes, manos, usados, paneles };
   });
+  /** Las frases del asistente con el trato elegido. */
+  const fr = () => frases(actual.current.manos.trato);
+  useEffect(() => {
+    fijarVozPreferida(manos.voz);
+  }, [manos.voz]);
   // Desde que la pantalla sabe si la voz está encendida, manda ella (si el usuario la silencia, se respeta)
   useEffect(() => {
     ml.current.encendioVoz = false;
@@ -290,7 +368,17 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   }, [texto, abierto]);
 
   useEffect(() => {
-    if (ajustes) void reconocedorDescargado().then(setDescargado);
+    if (!ajustes) return;
+    void reconocedorDescargado().then(setDescargado);
+    void permisoMicrofono().then(setPermiso);
+    // Las voces del equipo (llegan tarde la primera vez)
+    const leer = () => setVoces(vocesEspanol().map((v) => ({ nombre: v.name, idioma: v.lang, natural: puntajeVoz(v) >= 70 })));
+    const t = window.setTimeout(leer, 0);
+    const quitar = alCargarVoces(leer);
+    return () => {
+      window.clearTimeout(t);
+      quitar();
+    };
   }, [ajustes]);
 
   const cortarDictado = () => {
@@ -391,7 +479,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     decir(r.texto);
   };
 
-  /* ───────────── Manos libres ───────────── */
+  /* ───────────── Asistente Melki (por voz) ───────────── */
 
   const fijarEstadoVoz = (e: EstadoManosLibres) => {
     ml.current.estado = e;
@@ -416,11 +504,14 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     }, 9000);
   };
 
-  /** Lee en voz alta, en orden, lo que Melki va respondiendo (resumido, salvo que se pida completo). */
-  const encolarVoz = (texto: string, completo = actual.current.manos.completo, despues: "atento" | "esperando" = "atento") => {
+  /**
+   * Lee en voz alta, en orden, lo que Melki va respondiendo (resumido, salvo que se pida completo). Con `guardar` en
+   * falso no cambia lo que se lee con «más detalle» (los saludos y las sugerencias).
+   */
+  const encolarVoz = (texto: string, completo = actual.current.manos.completo, despues: "atento" | "esperando" = "atento", guardar = true) => {
     const m = ml.current;
     m.trasHablar = despues;
-    m.ultimoCompleto = texto;
+    if (guardar) m.ultimoCompleto = texto;
     m.cola.push(textoParaVoz(texto, completo));
     window.clearTimeout(m.pensando);
     if (m.estado !== "hablando") siguienteVoz();
@@ -453,14 +544,42 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       window.setTimeout(() => ml.current.estado === "hablando" && siguienteVoz(), Math.min(6000, 1200 + t.length * 45));
       return;
     }
+    // Si se activó solo (al abrir el simulador), el navegador no deja hablar hasta que la persona toque la página
+    const activacion = (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation;
+    if (activacion && !activacion.hasBeenActive) {
+      vozRef.current.bloqueoVoz(t);
+      m.conVoz = false;
+      window.setTimeout(() => ml.current.estado === "hablando" && siguienteVoz(), Math.min(6000, 1200 + t.length * 45));
+      return;
+    }
     m.conVoz = true;
     setHablando(true);
-    hablar(t, () => {
-      const x = ml.current;
-      x.hablandoHasta = reloj();
-      x.recientes = [...x.recientes.filter((r) => x.hablandoHasta - r.hasta < 8000), { texto: t, hasta: x.hablandoHasta }];
-      if (x.estado === "hablando") siguienteVoz();
-    });
+    hablar(
+      t,
+      () => {
+        const x = ml.current;
+        x.hablandoHasta = reloj();
+        x.recientes = [...x.recientes.filter((r) => x.hablandoHasta - r.hasta < 8000), { texto: t, hasta: x.hablandoHasta }];
+        if (x.estado === "hablando") siguienteVoz();
+      },
+      (error) => error === "not-allowed" && vozRef.current.bloqueoVoz(t),
+    );
+  };
+
+  /** Guarda lo que no pudo decir y muestra «Toque aquí para oír mi voz». */
+  const bloqueoVoz = (t: string) => {
+    const m = ml.current;
+    if (!m.bloqueada) m.bloqueada = t;
+    setVozBloqueada(true);
+  };
+
+  /** Con el primer toque de la persona ya puede hablar: dice lo que tenía pendiente (el saludo). */
+  const desbloquearVoz = () => {
+    const m = ml.current;
+    const t = m.bloqueada;
+    m.bloqueada = "";
+    setVozBloqueada(false);
+    if (t && m.activo && (m.estado === "esperando" || m.estado === "atento")) encolarVoz(t, true, m.estado === "esperando" ? "esperando" : "atento", false);
   };
 
   const callarYa = () => {
@@ -519,6 +638,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       else if (m.estado === "esperando" && detectarActivacion(parcial).activado) {
         // Ya se oyó su nombre: responde enseguida, sin esperar a que termine la frase
         if (actual.current.manos.sonido) tono(true);
+        m.desperto = reloj();
         window.clearTimeout(m.atento);
         fijarEstadoVoz("atento");
         setEscuchado(detectarActivacion(parcial).resto);
@@ -541,17 +661,20 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       }
       if (actual.current.manos.sonido) tono(true);
       if (!a.resto) {
+        // Solo su nombre: contesta como un mayordomo y se queda atento al pedido
         setEscuchado("");
-        encolarVoz(a.ingles ? "Hi! ¿En qué le ayudo?" : "¿Sí? Le escucho.");
+        encolarVoz(fr().llamado(m.llamados++, a.ingles), true, "atento", false);
         return;
       }
       acumular(a.resto);
       return;
     }
-    // Atento: lo que diga es el pedido (si repite su nombre, se quita)
+    // Atento: lo que diga es el pedido (si repite su nombre, se quita). Solo su nombre: contesta como un mayordomo
+    // (el sonido ya lo dio si lo despertó lo que se iba oyendo de esta misma frase)
     if (a.activado && !a.resto) {
-      if (actual.current.manos.sonido) tono(true);
-      quedarAtento();
+      if (actual.current.manos.sonido && reloj() - m.desperto > 3000) tono(true);
+      setEscuchado("");
+      encolarVoz(fr().llamado(m.llamados++, a.ingles), true, "atento", false);
       return;
     }
     acumular(a.activado ? a.resto : frase);
@@ -586,8 +709,8 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       if (c.tipo === "apagar") {
         m.cola = [];
         m.despedida = true;
-        setSubtitulo("Listo, dejo de escuchar. Hasta pronto.");
-        if (actual.current.vozActiva || m.encendioVoz) hablar("Listo, dejo de escuchar. Hasta pronto.");
+        setSubtitulo(fr().despedida);
+        if (actual.current.vozActiva || m.encendioVoz) hablar(fr().despedida);
         onManosLibres(false);
         return;
       }
@@ -597,9 +720,18 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
         const conBoton = previo?.acciones?.some((x) => x.accion !== "deshacer") && /¿[^?]*\?\s*$/.test(previo.texto.split("\n")[0] ?? "");
         if (conBoton && /^(ok|okey|vale|listo|perfecto|de acuerdo)$/i.test(dicho.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[.,!¡]/g, "").trim()))
           return ejecutarVozComo("sí");
-        return encolarVoz("Con gusto. Aquí sigo, llámeme cuando quiera.", false, "esperando");
+        return encolarVoz(fr().gracias, false, "esperando", false);
       }
-      if (c.tipo === "no") return encolarVoz("Listo, no hago nada.", false, "esperando");
+      if (c.tipo === "no") {
+        // «No» a una sugerencia de panel: no la vuelve a ofrecer mientras esté activo
+        const previo = [...actual.current.mensajes].reverse().find((x) => x.de === "melki");
+        if (m.sugerencia && previo?.id === m.sugerencia.id) {
+          m.rechazado[m.sugerencia.lado] = true;
+          setResaltado(null);
+          return encolarVoz(fr().sinPanel, false, "esperando", false);
+        }
+        return encolarVoz(fr().nada, false, "esperando", false);
+      }
       if (c.tipo === "ayuda") {
         setMensajes((x) => [...x, { id: siguiente.current++, de: "usuario", texto: dicho, voz: true }]);
         setMensajes((x) => [...x, { id: siguiente.current++, de: "melki", texto: AYUDA_VOZ }]);
@@ -612,8 +744,8 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
         const afirmativo = c.indice === 0 && !/\b(primer[oa]?|uno|una|1)\b/.test(dicho.toLowerCase());
         const i = c.indice === "ultima" ? lista.length - 1 : afirmativo ? lista.findIndex((x) => x.accion !== "deshacer") : c.indice;
         const a = lista[i];
-        if (!ultimo || !a) return encolarVoz(afirmativo ? "No tengo nada pendiente para hacer. Dígame qué necesita." : "No tengo esa opción. Dígame qué necesita.");
-        if (actual.current.usados.has(`${ultimo.id}:${i}`)) return encolarVoz("Eso ya lo hice. Dígame qué sigue.");
+        if (!ultimo || !a) return encolarVoz(afirmativo ? fr().sinPendiente : fr().sinOpcion, true, "atento", false);
+        if (actual.current.usados.has(`${ultimo.id}:${i}`)) return encolarVoz(fr().yaHecho, true, "atento", false);
         setMensajes((x) => [...x, { id: siguiente.current++, de: "usuario", texto: dicho, voz: true }]);
         fijarEstadoVoz("pensando");
         // Algunos botones no responden con un mensaje (abrir un panel, empezar un tour): vuelve a escuchar
@@ -688,7 +820,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     const ahora = reloj();
     m.reinicios = [...m.reinicios.filter((t) => ahora - t < 20000), ahora];
     if (m.reinicios.length > 8) {
-      setAvisoVoz("El micrófono se apaga a cada rato. Revise la conexión o el permiso del micrófono y vuelva a activar manos libres.");
+      setAvisoVoz("El micrófono se apaga a cada rato. Revise la conexión o el permiso del micrófono y vuelva a activar el asistente.");
       m.activo = false;
       window.setTimeout(() => onManosLibres(false), 5000);
       return;
@@ -701,11 +833,11 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     const m = ml.current;
     fijarEstadoVoz("esperando");
     // Al saludar vuelve a esperar su nombre (no toma como pedido lo que se diga cerca)
-    const texto = m.saludado ? "Manos libres activo. Diga «Hola Melki» y su pedido." : SALUDO_MANOS_LIBRES;
+    const texto = fr().bienvenida(!m.saludado);
     m.saludado = true;
     setMensajes((x) => [...x, { id: siguiente.current++, de: "melki", texto }]);
     if (!actual.current.abierto) setNoLeido(true);
-    encolarVoz(texto, true, "esperando");
+    encolarVoz(texto, true, "esperando", false);
   };
 
   const iniciarManosLibres = () => {
@@ -722,6 +854,23 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     m.comando = "";
     m.cola = [];
     m.reinicios = [];
+    m.llamados = 0;
+    m.sugerido = { izquierdo: 0, derecho: 0 };
+    m.rechazado = { izquierdo: false, derecho: false };
+    m.ultimaSugerencia = 0;
+    m.sugerencia = null;
+    m.bloqueada = "";
+    setResaltado(null);
+    setVozBloqueada(false);
+    // Deja el mapa libre (en el celular cierra la hoja abierta); al apagarlo vuelven los paneles que estaban
+    m.panelesAntes = null;
+    if (actual.current.manos.ocultar) {
+      const p = actual.current.paneles;
+      if (esEscritorio()) m.panelesAntes = { ...p };
+      // Uno por uno: los dos a la vez es «pantalla limpia», que además quita la selección del nodo
+      if (p.izquierdo) actual.current.api.paneles({ izquierdo: false });
+      if (p.derecho || !esEscritorio()) actual.current.api.paneles({ derecho: false });
+    }
     setAvisoVoz(null);
     setEscuchado("");
     setSubtitulo("");
@@ -755,6 +904,83 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     setEscuchado("");
     setSubtitulo("");
     setAvisoVoz(null);
+    setResaltado(null);
+    setVozBloqueada(false);
+    m.bloqueada = "";
+    // Devuelve los paneles que estaban abiertos antes de activarse
+    const antes = m.panelesAntes;
+    m.panelesAntes = null;
+    if (antes && esEscritorio()) {
+      const p = actual.current.paneles;
+      if (antes.izquierdo && !p.izquierdo) actual.current.api.paneles({ izquierdo: true });
+      if (antes.derecho && !p.derecho) actual.current.api.paneles({ derecho: true });
+    }
+  };
+
+  /**
+   * Con los paneles ocultos, después de una orden cuyo resultado se ve mejor en un panel, ofrece mostrarlo: con una
+   * pregunta (que «sí» u «ok» acepta) a lo sumo cada 3 minutos por panel, y solo una sugerencia por minuto. La barra
+   * del asistente resalta el botón del panel aunque no lo diga.
+   */
+  const sugerirPanel = (tipo: Orden["tipo"] | "resultado") => {
+    const m = ml.current;
+    if (!m.activo || !esEscritorio()) return;
+    const p = actual.current.paneles;
+    const lado: Lado | null =
+      tipo === "resultado" || VER_RESULTADOS.has(tipo) ? (p.derecho ? null : "derecho") : VER_HERRAMIENTAS.has(tipo) && !p.izquierdo ? "izquierdo" : null;
+    if (!lado || m.rechazado[lado]) return;
+    setResaltado(lado);
+    const ahora = reloj();
+    if (ahora - m.sugerido[lado] < 180000 || ahora - m.ultimaSugerencia < 60000) return;
+    m.sugerido[lado] = ahora;
+    m.ultimaSugerencia = ahora;
+    const texto = lado === "derecho" ? fr().verResultados : fr().verHerramientas;
+    const id = siguiente.current++;
+    m.sugerencia = { id, lado };
+    setMensajes((x) => [
+      ...x,
+      { id, de: "melki", texto, acciones: [lado === "derecho" ? { texto: "Mostrar resultados", accion: "resultados" } : { texto: "Mostrar herramientas", accion: "herramientas" }] },
+    ]);
+    encolarVoz(texto, true, "atento", false);
+  };
+
+  /** Muestra el panel de resultados o el de herramientas y, si el asistente está activo, lo confirma de palabra. */
+  const mostrarPanel = (panel: "resultados" | "herramientas", confirmar = true) => {
+    onAccion(panel);
+    setResaltado(null);
+    const m = ml.current;
+    if (m.activo && confirmar) encolarVoz(fr().mostrando(panel), true, "atento", false);
+  };
+
+  /** Botones de la barra del asistente. */
+  const sugerenciaHud = (s: SugerenciaHud) => {
+    // Si está hablando, el panel se abre sin interrumpirlo
+    const ocupado = ml.current.estado === "hablando";
+    if (s === "resultados" || s === "herramientas") mostrarPanel(s, !ocupado);
+    else if (s === "que-hago") preguntar("¿Qué hago ahora?");
+    else ayudaVoz();
+  };
+
+  /** Pide el micrófono una vez para que el navegador lo recuerde (con «Permitir» no vuelve a preguntar). */
+  const permitirMicrofono = async () => {
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+      s.getTracks().forEach((t) => t.stop());
+    } catch {
+      // Lo negó o no hay micrófono: el estado lo dice
+    }
+    setPermiso(await permisoMicrofono());
+  };
+
+  /** Prueba de la voz elegida. */
+  const probarVoz = () => {
+    const t = fr().prueba;
+    if (ml.current.activo) {
+      encolarVoz(t, true, ml.current.estado === "esperando" ? "esperando" : "atento", false);
+      return;
+    }
+    setHablando(true);
+    hablar(t, () => setHablando(false));
   };
 
   const fijarManos = (c: Partial<PreferenciasManos>) => {
@@ -773,6 +999,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
         if (!id) return;
         esperando.current = null;
         agregarMelki(resumenResultado(r, actual.current.api, id));
+        sugerirPanel("resultado");
       }),
     [suscribir], // eslint-disable-line react-hooks/exhaustive-deps
   );
@@ -796,8 +1023,16 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     if (res.deshacer) ultimoDeshacer.current = res.deshacer;
     if (res.esperar) esperando.current = res.esperar;
     agregarMelki(res);
+    // Con los paneles ocultos, ofrece el que sirve (el resultado de una simulación lo ofrece cuando termine)
+    if (!res.luego && !(res.esperar && VER_RESULTADOS.has(orden.tipo))) sugerirPanel(orden.tipo);
     // Órdenes que tardan (el sembrado automático, el diseño por área): la respuesta llega cuando el motor termina
-    if (res.luego) void res.luego.then((r) => agregarMelki(r)).catch(() => agregarMelki({ texto: "No pude terminar ese cálculo. Intente de nuevo." }));
+    if (res.luego)
+      void res.luego
+        .then((r) => {
+          agregarMelki(r);
+          sugerirPanel(orden.tipo);
+        })
+        .catch(() => agregarMelki({ texto: "No pude terminar ese cálculo. Intente de nuevo." }));
   };
 
   /**
@@ -810,6 +1045,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     let hechos = 0;
     let conCambios = false;
     let verboPlan = "";
+    let ultimoTipo: Orden["tipo"] | null = null;
     for (let i = 0; i < total; i++) {
       // «Pon el gateway en X, un repetidor a 10 km al este»: el paso que empieza sin verbo usa el del anterior
       const sinVerbo = /^(un|una|otro|otra|el|la|los|las|\d)/i.test(pasos[i].trim());
@@ -834,6 +1070,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
         agregarMelki({ ...r, acciones: r.acciones?.filter((a) => a.accion !== "deshacer") });
       }
       hechos++;
+      ultimoTipo = orden.tipo;
       if (res.pendiente) break;
       // Deja que la pantalla se actualice antes del siguiente paso
       await new Promise((ok) => window.setTimeout(ok, 80));
@@ -845,6 +1082,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
         agregarMelki({ texto: `${resumen} Si algo no le gustó, puedo deshacerlo todo de una vez.`, acciones: [{ texto: "Deshacer todo", accion: "deshacer", escenario: antesPlan }] });
       } else agregarMelki({ texto: resumen });
     }
+    if (ultimoTipo && !esperando.current) sugerirPanel(ultimoTipo);
   };
 
   const preguntar = (q: string, deVoz = false) => {
@@ -855,25 +1093,29 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     if (!deVoz) setTexto("");
     // La voz de Melki
     const sinAcentos = pregunta.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    // Manos libres por escrito: «activa manos libres», «modo Jarvis», «escúchame»
-    if (/\b(activa|enciende|prende|pon|inicia|abre)\w* (el )?(modo )?(manos libres|jarvis|escucha)\b|^escuchame$|^modo jarvis$|\bquiero hablarte\b/.test(sinAcentos)) {
+    // El asistente por escrito: «activa el asistente», «asistente Melki», «activa manos libres», «modo Jarvis», «escúchame»
+    if (
+      /\b(activa|enciende|prende|pon|inicia|abre|llama)\w* (el |al )?(modo )?(manos libres|jarvis|escucha|asistente( melki| de voz| por voz)?)\b|^escuchame$|^modo jarvis$|^(el )?asistente melki$|\bquiero hablarte\b/.test(
+        sinAcentos,
+      )
+    ) {
       if (!hayReconocimientoNavegador() && !hayMicrofono()) {
-        agregarMelki({ texto: "Este navegador no puede escucharme. Use Edge o Chrome actualizados para el modo manos libres." });
+        agregarMelki({ texto: "Este navegador no puede escucharme. Use Edge o Chrome actualizados para el Asistente Melki." });
         return;
       }
       // El saludo llega cuando el micrófono esté listo
-      if (ml.current.activo) agregarMelki({ texto: "Ya le estoy escuchando: diga «Hola Melki» y su pedido." });
+      if (ml.current.activo) agregarMelki({ texto: fr().yaEscucho });
       else onManosLibres(true);
       return;
     }
-    if (/\b(desactiva|apaga|quita|termina|cierra)\w* (el )?(modo )?(manos libres|jarvis|escucha)\b|\bdeja de escuchar\b/.test(sinAcentos)) {
+    if (/\b(desactiva|apaga|quita|termina|cierra)\w* (el )?(modo )?(manos libres|jarvis|escucha|asistente( melki| de voz| por voz)?)\b|\bdeja de escuchar\b/.test(sinAcentos)) {
       if (ml.current.activo) {
         // Se despide sin cortarse
         ml.current.activo = false;
         ml.current.despedida = true;
       }
       onManosLibres(false);
-      agregarMelki({ texto: "Listo, ya no escucho. Cuando quiera, toque «Manos libres» o dígame «activa manos libres»." });
+      agregarMelki({ texto: "Listo, ya no escucho. Cuando quiera, toque «Asistente Melki» o dígame «activa el asistente»." });
       return;
     }
     if (/\b(activa|enciende|prende|pon)\w* (tu |la )?voz\b|\bhablame\b|\blee(me)? en voz alta\b/.test(sinAcentos) && vozDisponible()) {
@@ -888,6 +1130,13 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       onVoz(false);
       guardarPreferencias({ voz: false });
       agregarMelki({ texto: "Listo, ya no hablo en voz alta; sigo respondiendo por escrito." });
+      return;
+    }
+    // Con el asistente activo y los resultados ocultos, «muéstrame los resultados» abre el panel
+    if (ml.current.activo && esEscritorio() && !actual.current.paneles.derecho && /^(muestra\w*|abre|ensena\w*|ver|quiero ver|dejame ver)( me)? (los |el )?resultados?$/.test(sinAcentos.replace(/[¿?¡!.,]/g, "").trim())) {
+      onAccion("resultados");
+      setResaltado(null);
+      agregarMelki({ texto: fr().mostrando("resultados") });
       return;
     }
     if (/\b(deshac\w*|deshaz|revierte|revertir|anula lo [uú]ltimo)\b/i.test(pregunta)) {
@@ -932,6 +1181,11 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       onManosLibres(true);
       return;
     }
+    if (a.accion === "resultados" || a.accion === "herramientas") {
+      setUsados((u) => new Set(u).add(clave));
+      mostrarPanel(a.accion);
+      return;
+    }
     if (a.accion === "deshacer") deshacer(a.escenario, clave);
     else if (a.accion === "orden" && a.orden) {
       setUsados((u) => new Set(u).add(clave));
@@ -956,11 +1210,11 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     avisos.current = { preguntar, mostrarTours, cerrarOferta, oferta };
   });
   // Lo que llama el reconocimiento de voz siempre usa la versión de ahora (con el escenario de ahora)
-  const vozRef = useRef({ oirTexto, inicioFrase, ejecutarVoz, preguntar, pulsarAccion, arrancarEscucha, reanudar, listoParaEscuchar });
+  const vozRef = useRef({ oirTexto, inicioFrase, ejecutarVoz, preguntar, pulsarAccion, arrancarEscucha, reanudar, listoParaEscuchar, bloqueoVoz, desbloquearVoz });
   useEffect(() => {
-    vozRef.current = { oirTexto, inicioFrase, ejecutarVoz, preguntar, pulsarAccion, arrancarEscucha, reanudar, listoParaEscuchar };
+    vozRef.current = { oirTexto, inicioFrase, ejecutarVoz, preguntar, pulsarAccion, arrancarEscucha, reanudar, listoParaEscuchar, bloqueoVoz, desbloquearVoz };
   });
-  // Encender y apagar manos libres
+  // Encender y apagar el asistente
   const manosRef = useRef({ iniciarManosLibres, detenerManosLibres });
   useEffect(() => {
     manosRef.current = { iniciarManosLibres, detenerManosLibres };
@@ -969,6 +1223,29 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     if (manosLibres) manosRef.current.iniciarManosLibres();
     else manosRef.current.detenerManosLibres();
   }, [manosLibres]);
+  // «Activarme al abrir el simulador»: si el micrófono no está bloqueado, se activa solo y saluda
+  useEffect(() => {
+    if (!leerPreferencias().manos?.siempre || (!hayReconocimientoNavegador() && !hayMicrofono())) return;
+    let vigente = true;
+    const t = window.setTimeout(() => {
+      void permisoMicrofono().then((p) => vigente && p !== "denied" && !ml.current.activo && onManosLibres(true));
+    }, 1200);
+    return () => {
+      vigente = false;
+      window.clearTimeout(t);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Con el primer toque o tecla, el navegador ya deja hablar
+  useEffect(() => {
+    if (!vozBloqueada) return;
+    const soltar = () => vozRef.current.desbloquearVoz();
+    window.addEventListener("pointerup", soltar, { once: true });
+    window.addEventListener("keydown", soltar, { once: true });
+    return () => {
+      window.removeEventListener("pointerup", soltar);
+      window.removeEventListener("keydown", soltar);
+    };
+  }, [vozBloqueada]);
   useEffect(() => {
     const abrir = () => {
       setAbierto(true);
@@ -1017,8 +1294,12 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       subtitulo={subtitulo}
       aviso={avisoVoz}
       motor={motorVoz}
+      paneles={escritorio ? paneles : null}
+      resaltado={resaltado}
+      bloqueada={vozBloqueada}
       onCallar={callarYa}
-      onAyuda={ayudaVoz}
+      onSugerencia={sugerenciaHud}
+      onOirme={desbloquearVoz}
       onApagar={() => onManosLibres(false)}
     />
     <div className="pointer-events-none absolute right-3 bottom-8 z-30 flex flex-col items-end gap-3">
@@ -1060,8 +1341,8 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
                 onClick={() => onManosLibres(!manosLibres)}
                 className={`rounded-md p-1.5 ${manosLibres ? "bg-carbon text-white hover:bg-carbon-2" : "text-carbon-2 hover:bg-black/5"}`}
                 aria-pressed={manosLibres}
-                title={manosLibres ? "Apagar manos libres" : "Manos libres: le escucho todo el tiempo y me activo con «Hola Melki»"}
-                aria-label={manosLibres ? "Apagar manos libres" : "Activar manos libres"}
+                title={manosLibres ? "Apagar el Asistente Melki" : "Asistente Melki: le escucho todo el tiempo y me activo con «Hola Melki»"}
+                aria-label={manosLibres ? "Apagar el Asistente Melki" : "Activar el Asistente Melki"}
                 data-tour="manos-libres-chat"
               >
                 <AudioLines size={18} />
@@ -1127,14 +1408,98 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
                   </button>
                 )}
               </div>
-              <p className="mt-3 mb-1.5 flex items-center gap-1.5 font-cond text-[14px] font-semibold">
-                <AudioLines size={15} className="text-salvia-oscura" aria-hidden="true" /> Manos libres
+              <p className="mt-3 mb-1 flex items-center gap-1.5 font-cond text-[14px] font-semibold">
+                <AudioLines size={15} className="text-salvia-oscura" aria-hidden="true" /> Asistente Melki
               </p>
-              <p className="mb-1.5 text-[12px] leading-snug text-tenue">Le escucho todo el tiempo y me activo con «Hola Melki», «Oye Melki», «Hey Melki» o «Hello Melki». Usa el modo de dictado de arriba.</p>
-              <div className="space-y-1" role="group" aria-label="Opciones de manos libres">
+              <p className="mb-2 text-[12px] leading-snug text-tenue">
+                Le escucho todo el tiempo y me activo con «Hola Melki», «Oye Melki», «Hey Melki» o «Hello Melki» (también si el micrófono me entiende «Melky» o «Melqui»). Al activarme dejo el
+                mapa libre y le sugiero los paneles cuando hagan falta. Usa el modo de dictado de arriba.
+              </p>
+              <p className="mb-1 text-[12.5px] font-medium text-carbon">Cómo le hablo</p>
+              <div className="mb-2 flex gap-1" role="radiogroup" aria-label="Trato del asistente">
+                {(
+                  [
+                    ["senor", "Señor"],
+                    ["senora", "Señora"],
+                    ["ninguno", "Sin tratamiento"],
+                  ] as const
+                ).map(([t, nombre]) => (
+                  <button
+                    key={t}
+                    type="button"
+                    role="radio"
+                    aria-checked={manos.trato === t}
+                    onClick={() => fijarManos({ trato: t })}
+                    className={`flex-1 rounded-lg px-2 py-1.5 text-[12.5px] font-medium ring-1 transition-colors ${manos.trato === t ? "bg-salvia-clara/70 text-carbon ring-salvia" : "bg-white text-carbon-2 ring-linea hover:bg-papel-2"}`}
+                  >
+                    {nombre}
+                  </button>
+                ))}
+              </div>
+              {vozDisponible() && (
+                <>
+                  <label className="mb-1 block text-[12.5px] font-medium text-carbon" htmlFor="voz-asistente">
+                    Voz
+                  </label>
+                  <div className="mb-1 flex gap-1.5">
+                    <select
+                      id="voz-asistente"
+                      className="campo min-w-0 flex-1 py-1.5 text-[12.5px]"
+                      value={manos.voz ?? ""}
+                      onChange={(e) => fijarManos({ voz: e.target.value || null })}
+                    >
+                      <option value="">Automática: la más natural{voces[0] ? ` (${voces[0].nombre.replace(/^Microsoft |^Google /, "").split(/ - |\(/)[0].trim()})` : ""}</option>
+                      {voces.map((v) => (
+                        <option key={v.nombre} value={v.nombre}>
+                          {v.nombre}
+                          {v.natural ? " · natural" : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <button type="button" onClick={probarVoz} className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-white px-2.5 text-[12.5px] font-medium text-carbon ring-1 ring-linea hover:bg-papel-2">
+                      <Play size={13} aria-hidden="true" /> Probar
+                    </button>
+                  </div>
+                  {!voces.some((v) => v.natural) && (
+                    <p className="mb-2 text-[12px] leading-snug text-tenue">Para una voz más natural, abra el simulador en Microsoft Edge: trae voces neuronales en español, como Salomé (Colombia) o Dalia (México).</p>
+                  )}
+                </>
+              )}
+              <div className="space-y-1" role="group" aria-label="Opciones del Asistente Melki">
+                <Interruptor
+                  activo={manos.ocultar}
+                  onCambiar={(v) => fijarManos({ ocultar: v })}
+                  titulo="Dejar el mapa libre al activarme"
+                  detalle="Oculto el panel de herramientas y el de resultados; se los ofrezco cuando hagan falta y vuelven al apagarme."
+                />
+                <Interruptor
+                  activo={manos.siempre}
+                  onCambiar={(v) => {
+                    fijarManos({ siempre: v });
+                    // Al encenderlo, pide el micrófono de una vez para que el navegador no vuelva a preguntar
+                    if (v && permiso !== "granted") void permitirMicrofono();
+                  }}
+                  titulo="Activarme al abrir el simulador"
+                  detalle={`Al entrar le saludo («${frases(manos.trato).bienvenida(true).split(/(?<=\.) /).slice(0, 2).join(" ")}») y quedo atento a «Hola Melki», sin tocar nada.`}
+                />
                 <Interruptor activo={manos.seguir} onCambiar={(v) => fijarManos({ seguir: v })} titulo="Seguir la conversación" detalle="Después de responder me quedo atento unos segundos: no hace falta repetir mi nombre." />
                 <Interruptor activo={manos.completo} onCambiar={(v) => fijarManos({ completo: v })} titulo="Leer las respuestas completas" detalle="Si está apagado, digo lo principal y dejo el detalle escrito (diga «más detalle» para oírlo)." />
                 <Interruptor activo={manos.sonido} onCambiar={(v) => fijarManos({ sonido: v })} titulo="Sonido al activarme" detalle="Dos notas cortas cuando oigo mi nombre." />
+              </div>
+              <div className="mt-2 flex items-start gap-2 rounded-lg bg-papel px-2.5 py-2 text-[12px] leading-snug" data-permiso={permiso}>
+                <Mic size={14} className={`mt-0.5 shrink-0 ${permiso === "granted" ? "text-buena" : permiso === "denied" ? "text-sin" : "text-carbon-2"}`} aria-hidden="true" />
+                <span className="min-w-0 flex-1 text-carbon-2">
+                  {permiso === "granted"
+                    ? "Micrófono permitido en este sitio: puedo activarme sin preguntarle."
+                    : permiso === "denied"
+                      ? "El micrófono está bloqueado. Actívelo en el candado de la barra de direcciones («Micrófono: Permitir») y recargue la página."
+                      : "Dé acceso al micrófono una vez y elija «Permitir» (o «Permitir siempre»): así el navegador no le vuelve a preguntar. En la versión HTML el navegador puede preguntar al abrir el archivo."}
+                </span>
+                {permiso !== "granted" && permiso !== "denied" && hayMicrofono() && (
+                  <button type="button" onClick={() => void permitirMicrofono()} className="shrink-0 rounded-md bg-carbon px-2 py-1 text-[12px] font-medium text-white hover:bg-carbon-2">
+                    Dar acceso
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -1324,7 +1689,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
         <MelkiAvatar className="h-12 w-12" hablando={hablando} />
         {noLeido && !abierto && <span className="absolute top-0.5 right-0.5 h-3.5 w-3.5 rounded-full bg-melki ring-2 ring-white" aria-hidden="true" />}
         {manosLibres && estadoVoz !== "apagado" && (
-          <span className="absolute -bottom-0.5 -left-0.5 grid h-6 w-6 place-items-center rounded-full bg-carbon text-white ring-2 ring-white" title="Manos libres activo" aria-hidden="true">
+          <span className="absolute -bottom-0.5 -left-0.5 grid h-6 w-6 place-items-center rounded-full bg-carbon text-white ring-2 ring-white" title="Asistente Melki activo" aria-hidden="true">
             <AudioLines size={13} />
           </span>
         )}

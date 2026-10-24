@@ -1,3 +1,8 @@
+// © 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero. Todos los derechos reservados.
+// Autor: Giancarlo González Guerrero, para el Ingeniero Pablo Felipe Acevedo y Melki, con ayuda de inteligencia
+// artificial. Prohibido su uso, copia, modificación o distribución sin licencia escrita de los titulares (Ley 23 de
+// 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
+
 // Código del trabajador (Web Worker clásico, que importa la biblioteca con import()) del dictado privado: reconocimiento de voz Whisper
 // dentro del navegador con transformers.js. El audio nunca sale del equipo; solo se descargan, una vez,
 // la biblioteca, el motor ONNX y el modelo, que quedan guardados en IndexedDB para usarlos sin internet.
