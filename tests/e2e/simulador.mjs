@@ -1,3 +1,8 @@
+// © 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero. Todos los derechos reservados.
+// Autor: Giancarlo González Guerrero, para el Ingeniero Pablo Felipe Acevedo y Melki, con ayuda de inteligencia
+// artificial. Prohibido su uso, copia, modificación o distribución sin licencia escrita de los titulares (Ley 23 de
+// 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
+
 // Pruebas de extremo a extremo del simulador. Uso: node tests/e2e/simulador.mjs <carpeta-de-capturas>
 // Navegador: Microsoft Edge instalado (Windows) o el ejecutable indicado en CHROME_PATH.
 import { chromium } from "playwright-core";
@@ -83,6 +88,23 @@ await flujo("inicio", async (page, foto) => {
   await page.getByText("Potencia radiada (PIRE)").waitFor();
   await page.getByText("Alcance sin obstáculos (modelo)").waitFor();
   await foto("resultado");
+  // Autoría y licencia: metadatos de la página y «Archivo → Acerca del simulador y licencia»
+  afirmar((await page.locator('meta[name="author"]').getAttribute("content")) === "Giancarlo González Guerrero", "Falta el autor en los metadatos");
+  afirmar(/Todos los derechos reservados/.test((await page.locator('meta[name="copyright"]').getAttribute("content")) ?? ""), "Falta el copyright en los metadatos");
+  await page.getByRole("button", { name: /^Archivo/ }).click();
+  await page.getByRole("menuitem", { name: /Acerca del simulador y licencia/ }).click();
+  const acerca = page.getByRole("dialog", { name: "Acerca del simulador" });
+  await acerca.waitFor();
+  const aviso = await acerca.innerText();
+  afirmar(
+    /© 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero/.test(aviso) && /Creado por Giancarlo González Guerrero para el Ingeniero Pablo Felipe Acevedo y la empresa Melki, con ayuda de inteligencia artificial/.test(aviso) && /titulares de los derechos patrimoniales/.test(aviso) && /Prohibido usar, copiar/.test(aviso),
+    `El aviso de autoría no está completo: ${aviso.slice(0, 300)}`,
+  );
+  await acerca.getByText("Fundamento legal en Colombia").click();
+  await acerca.getByText(/Decisión Andina 351 de 1993/).waitFor();
+  await foto("acerca");
+  await page.keyboard.press("Escape");
+  await acerca.waitFor({ state: "detached" });
 });
 
 await flujo("coordenadas", async (page, foto) => {
@@ -1196,13 +1218,20 @@ await flujo(
       await page.waitForTimeout(900);
     };
 
-    // Activar: saluda (en voz alta) y espera su nombre
-    await page.getByRole("button", { name: "Activar manos libres" }).click();
+    // Activar: saluda como un mayordomo, deja el mapa libre (oculta los dos paneles) y espera su nombre
+    const resultados = page.locator("aside[aria-label=Resultados]");
+    const sinProgreso = () => page.waitForFunction(() => !document.querySelector("[role=progressbar]"), null, { timeout: 90000 });
+    await page.getByRole("button", { name: "Activar el Asistente Melki" }).first().click();
     await hud.waitFor();
     await esperarEstado(/^esperando$/);
     await callado();
-    afirmar(/Modo manos libres activo/.test(await dicho()), `No saludó en voz alta: ${await dicho()}`);
-    afirmar((await page.getByRole("button", { name: "Apagar manos libres" }).first().getAttribute("aria-pressed")) === "true", "El botón de la barra debería quedar encendido");
+    afirmar(/Hola, señor\. Bienvenido\./.test(await dicho()) && /presto a seguir sus órdenes/.test(await dicho()), `No saludó en voz alta: ${await dicho()}`);
+    afirmar((await page.getByRole("button", { name: "Apagar el Asistente Melki" }).first().getAttribute("aria-pressed")) === "true", "El botón de la barra debería quedar encendido");
+    await panel.waitFor({ state: "hidden", timeout: 5000 });
+    await resultados.waitFor({ state: "hidden", timeout: 5000 });
+    afirmar(/Asistente Melki/.test(await hud.innerText()), "La barra debería llamarse «Asistente Melki»");
+    for (const s of ["Mostrar resultados", "Mostrar herramientas", "¿Qué hago ahora?", "¿Qué puedo decir?"])
+      afirmar(await hud.getByRole("button", { name: s }).isVisible(), `Falta la sugerencia «${s}» en la barra`);
     await foto("activo");
 
     // Sin su nombre no hace nada
@@ -1211,12 +1240,22 @@ await flujo(
     await page.waitForTimeout(1500);
     afirmar((await nodosEnLista(page)) === nodos && (await estadoHud()) === "esperando", "Sin «Melki» no debería hacer nada");
 
-    // Con su nombre y los números en palabras: lo hace y lo dice
+    // Solo su nombre: contesta como un mayordomo y queda atento (también «Hello Melky», como lo escribe el reconocimiento)
+    await decir("Hola Melki");
+    await page.waitForFunction(() => /Hola, mi señor\. Le escucho; estoy atento y presto a seguir sus órdenes\./.test(window.__voz.dicho.join(" ")), null, { timeout: 15000 });
+    await esperarEstado(/^atento$/);
+    await callado();
+    await decir("Hello Melky");
+    await page.waitForFunction(() => /Hello, sir\. Le escucho/.test(window.__voz.dicho.join(" ")), null, { timeout: 15000 });
+    await callado();
+
+    // Con su nombre y los números en palabras: lo hace, lo dice y, con el panel oculto, ofrece mostrar las herramientas
     await decir("Hola Melki, inscribe un nodo antena en cuatro punto dos cinco, menos setenta y tres punto tres cero");
     await page.waitForFunction((n) => document.querySelectorAll("[data-tour=lista-antenas] > li").length === n + 1, nodos, { timeout: 20000 });
     await page.waitForFunction(() => /inscribí el nodo antena/.test(window.__voz.dicho.join(" ")), null, { timeout: 20000 });
+    await page.waitForFunction(() => /le muestro el panel de herramientas, señor\?/.test(window.__voz.dicho.join(" ")), null, { timeout: 20000 });
     await foto("orden-por-voz");
-    await esperarSimulacion(page);
+    await sinProgreso();
     await esperarEstado(/^(atento|esperando)$/);
     await callado();
 
@@ -1243,10 +1282,17 @@ await flujo(
     await esperarEstado(/^(atento|esperando)$/);
     await callado();
 
+    // La sugerencia de la barra muestra el panel de resultados y lo confirma
+    await hud.getByRole("button", { name: "Mostrar resultados" }).click();
+    await resultados.waitFor({ state: "visible", timeout: 10000 });
+    await page.waitForFunction(() => /Aquí tiene el panel de resultados/.test(window.__voz.dicho.join(" ")), null, { timeout: 15000 });
+    afirmar((await hud.getByRole("button", { name: "Mostrar resultados" }).count()) === 0, "Con el panel abierto ya no se sugiere");
+    await callado();
+
     // Pantalla limpia por voz y de vuelta
     await decir("Oye Melki, pantalla limpia");
     await panel.waitFor({ state: "hidden", timeout: 15000 });
-    await page.locator("aside[aria-label=Resultados]").waitFor({ state: "hidden", timeout: 15000 });
+    await resultados.waitFor({ state: "hidden", timeout: 15000 });
     await callado();
     await foto("pantalla-limpia");
     // El navegador corta la escucha: se vuelve a encender sola
@@ -1256,15 +1302,20 @@ await flujo(
     await esperarEstado(/^(atento|esperando)$/);
     await decir("Hey Melki, muestra los paneles");
     await panel.waitFor({ state: "visible", timeout: 15000 });
-    await page.locator("aside[aria-label=Resultados]").waitFor({ state: "visible", timeout: 15000 });
+    await resultados.waitFor({ state: "visible", timeout: 15000 });
+    await callado();
+    await decir("Oye Melki, pantalla limpia");
+    await resultados.waitFor({ state: "hidden", timeout: 15000 });
     await callado();
 
-    // «Deja de escuchar»: se despide y se apaga
+    // «Deja de escuchar»: se despide, se apaga y devuelve los paneles que estaban abiertos
     await decir("Melki, deja de escuchar");
     await hud.waitFor({ state: "detached", timeout: 15000 });
-    afirmar(/dejo de escuchar/.test(await dicho()), "Debería despedirse");
-    afirmar((await page.getByRole("button", { name: "Activar manos libres" }).first().getAttribute("aria-pressed")) === "false", "El botón de la barra debería quedar apagado");
+    afirmar(/Con su permiso, señor, dejo de escuchar/.test(await dicho()), "Debería despedirse");
+    afirmar((await page.getByRole("button", { name: "Activar el Asistente Melki" }).first().getAttribute("aria-pressed")) === "false", "El botón de la barra debería quedar apagado");
     afirmar(!(await page.evaluate(() => window.__voz.activo)), "El micrófono debería quedar apagado");
+    await panel.waitFor({ state: "visible", timeout: 5000 });
+    await resultados.waitFor({ state: "visible", timeout: 5000 });
   },
   { preparar: (page) => page.addInitScript(manosLibresDeMentira) },
 );
@@ -1275,7 +1326,7 @@ await flujo(
     await page.locator("[data-tour=mapa]").waitFor();
     await page.waitForTimeout(1500);
     await page.waitForFunction(() => !document.querySelector("[role=progressbar]"), null, { timeout: 90000 });
-    await page.getByRole("button", { name: "Activar manos libres" }).click();
+    await page.getByRole("button", { name: "Activar el Asistente Melki" }).first().click();
     const hud = page.locator("[data-tour=hud-voz]");
     await hud.waitFor();
     await page.waitForFunction(() => document.querySelector("[data-tour=hud-voz]")?.getAttribute("data-estado") === "esperando", null, { timeout: 20000 });
@@ -1284,10 +1335,59 @@ await flujo(
     const b = await hud.boundingBox();
     afirmar(b.x >= 0 && b.x + b.width <= 390, "La barra de voz debe caber en la pantalla");
     await foto("hud");
-    await page.getByRole("button", { name: "Apagar manos libres" }).first().click();
+    // En el celular no hay paneles a los lados: la barra solo sugiere «¿Qué hago ahora?» y la ayuda
+    afirmar((await hud.getByRole("button", { name: "Mostrar resultados" }).count()) === 0, "En el celular no se sugieren paneles");
+    await page.getByRole("button", { name: "Apagar el Asistente Melki" }).first().click();
     await hud.waitFor({ state: "detached" });
   },
   { tamano: { width: 390, height: 844 }, preparar: (page) => page.addInitScript(manosLibresDeMentira) },
+);
+
+// «Activarme al abrir el simulador»: con el micrófono permitido se activa solo; el navegador no deja hablar hasta el
+// primer toque, y entonces saluda «Hola, señor. Bienvenido».
+await flujo(
+  "asistente-al-abrir",
+  async (page, foto) => {
+    const hud = page.locator("[data-tour=hud-voz]");
+    await hud.waitFor({ timeout: 30000 });
+    await page.waitForFunction(() => document.querySelector("[data-tour=hud-voz]")?.getAttribute("data-estado") === "esperando", null, { timeout: 20000 });
+    afirmar((await page.getByRole("button", { name: "Apagar el Asistente Melki" }).first().getAttribute("aria-pressed")) === "true", "Debería activarse solo al abrir");
+    const oirme = hud.getByRole("button", { name: "Toque aquí para oír mi voz" });
+    await oirme.waitFor({ timeout: 10000 });
+    afirmar(!(await page.evaluate(() => window.__voz.dicho.join(" "))).includes("Bienvenido"), "Sin un toque el navegador no deja hablar");
+    await foto("sin-tocar");
+    await oirme.click();
+    await page.waitForFunction(() => /Hola, señor\. Bienvenido\./.test(window.__voz.dicho.join(" ")), null, { timeout: 15000 });
+    await oirme.waitFor({ state: "detached", timeout: 5000 });
+    afirmar(await page.evaluate(() => Boolean(window.__voz.activo)), "Debería quedar escuchando");
+    // Ajustes del asistente: trato, voz, activarse al abrir y el permiso del micrófono
+    await page.getByRole("button", { name: /^Abrir a Melki/ }).click();
+    await page.getByRole("button", { name: "Ajustes de voz" }).click();
+    const ajustes = page.getByRole("group", { name: "Ajustes de voz" });
+    await ajustes.getByRole("radio", { name: "Señora" }).click();
+    afirmar((await ajustes.getByRole("switch", { name: /Activarme al abrir el simulador/ }).getAttribute("aria-checked")) === "true", "El interruptor de activarse al abrir debería estar encendido");
+    afirmar(/Micrófono permitido/.test(await ajustes.innerText()), "Debería decir que el micrófono está permitido");
+    await ajustes.getByRole("button", { name: "Probar" }).click();
+    await page.waitForFunction(() => /Hola, señora\. Así sonará mi voz/.test(window.__voz.dicho.join(" ")), null, { timeout: 15000 });
+    await foto("ajustes");
+    await page.getByRole("button", { name: "Apagar el Asistente Melki" }).first().click();
+    await hud.waitFor({ state: "detached" });
+  },
+  {
+    preparar: async (page) => {
+      await page.addInitScript(manosLibresDeMentira);
+      await page.addInitScript(() => {
+        localStorage.setItem("simulador-cobertura-melki-v1", JSON.stringify({ visto: true, voz: false, manos: { siempre: true } }));
+        const consultar = navigator.permissions.query.bind(navigator.permissions);
+        navigator.permissions.query = (d) => (d.name === "microphone" ? Promise.resolve({ state: "granted" }) : consultar(d));
+        // Como un navegador recién abierto: sin un toque de la persona, la página no ha sido «activada»
+        let tocado = false;
+        window.addEventListener("pointerup", () => (tocado = true), { capture: true });
+        window.addEventListener("keydown", () => (tocado = true), { capture: true });
+        Object.defineProperty(navigator, "userActivation", { configurable: true, value: { get hasBeenActive() { return tocado; }, get isActive() { return tocado; } } });
+      });
+    },
+  },
 );
 
 let fallos = 0;
