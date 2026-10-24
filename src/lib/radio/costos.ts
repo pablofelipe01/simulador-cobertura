@@ -1,47 +1,57 @@
 // Costo interno de la infraestructura, solo para que el ajuste automático compare opciones (cobertura frente a
-// costo). No se muestra en la interfaz. Son precios de referencia en Colombia (pesos, consultados en octubre de
-// 2026 en distribuidores de torres, electrónica y energía solar); lo que importa es la proporción entre opciones:
-// del mástil liviano (hasta 12 m) a la torre riendada de celosía hay un salto de tecnología, y por encima de 30 m hace falta una torre
-// autosoportada que cuesta unas 8 veces una riendada de 30 m.
+// costo). No se muestra como cotización. Parte de los precios del documento de Trama (catálogo del cotizador, TRM
+// 3.158 con envío, arancel e IVA): el repetidor es el SenseCAP Solar Node P1 con antena de 8 dBi en un tubo de 6 m y
+// el gateway va en una torre arriostrada de 12 m con su mini PC, radios y Starlink. Las alturas que el documento no
+// trae se extrapolan de esos dos puntos (tramos de 3 m de torre arriostrada); por encima de 30 m hace falta una torre
+// autosoportada, que el ajuste nunca propone.
 import { patronPorId } from "./patron";
 import type { Antena } from "./tipos";
+import { CATALOGO, OPERACION_TRAMA, PRECIOS, unitarioCop } from "./trama";
 
-/** Alturas de torre que considera el ajuste (m): mástil de 6 m y torre riendada en tramos de 3 m. */
+/** Alturas de torre que considera el ajuste (m): el tubo de 6 m de Trama y torre arriostrada en tramos de 3 m. */
 export const ALTURAS_TORRE = [6, 9, 12, 15, 18, 21, 24, 27, 30] as const;
 /** Por encima de 30 m hace falta una torre autosoportada: el ajuste nunca la propone. */
 export const ALTURA_MAXIMA_M = 30;
 
-/** Mástil o torre instalada según la altura (m → pesos): estructura, riendas, concreto, puesta a tierra, montaje y transporte. */
+const precio = (id: string) => {
+  const it = CATALOGO.find((x) => x.id === id);
+  return it ? unitarioCop(it) : 0;
+};
+/** Mástil de Trama: tubo de hierro de 6 m, herrajes y base en concreto. */
+const MASTIL_6 = precio("tubo") + precio("herrajes") + precio("base");
+/** Torre arriostrada de 12 m del documento (secciones, templetes y base). */
+const TORRE_12 = precio("torre");
+
+/** Estructura instalada según la altura (m → pesos): 6 m y 12 m del documento; el resto, extrapolado. */
 const TORRE: [number, number][] = [
   [0, 0],
-  [3, 600_000],
-  // Mástil de tubo galvanizado o telescópico riendado (sirve para un nodo liviano con antena omnidireccional)
-  [6, 1_500_000],
-  [9, 2_600_000],
-  [12, 3_800_000],
-  // Torre riendada de celosía (tramos de 3 m)
-  [15, 10_400_000],
-  [18, 12_000_000],
-  [21, 13_600_000],
-  [24, 15_200_000],
-  [27, 16_800_000],
-  [30, 18_400_000],
+  [3, Math.round(MASTIL_6 * 0.6)],
+  [6, MASTIL_6],
+  // Dos tubos empalmados con doble juego de templetes
+  [9, Math.round((MASTIL_6 + TORRE_12) / 2)],
+  [12, TORRE_12],
+  // Torre arriostrada: cada tramo de 3 m suma sección, templetes y un poco más de base
+  [15, Math.round(TORRE_12 * 1.32)],
+  [18, Math.round(TORRE_12 * 1.68)],
+  [21, Math.round(TORRE_12 * 2.08)],
+  [24, Math.round(TORRE_12 * 2.52)],
+  [27, Math.round(TORRE_12 * 3)],
+  [30, Math.round(TORRE_12 * 3.55)],
 ];
 /** Torre autosoportada de más de 30 m, instalada (referencia: por qué no se propone). */
 const TORRE_AUTOSOPORTADA = 150_000_000;
 
-/** Nodo de infraestructura: radio en caja exterior, antena omnidireccional con cable y conectores, y kit solar. */
-const NODO_INFRA = 1_600_000;
-/** Montaje del nodo y la antena. */
-const INSTALACION = 600_000;
-/**
- * Sitio y operación durante 3 años: permiso o arriendo del predio, visitas de mantenimiento, transporte y cambio de
- * batería. Hace que, a igual cobertura, se prefieran menos antenas (cada sitio más es un punto que mantener).
- */
-const OPERACION = 3_000_000;
-/** El gateway lleva además el equipo de internet (una vez). */
-const INTERNET_GATEWAY = 1_600_000;
-/** Diferencia de cada tipo de antena frente a la omnidireccional (con su cable). */
+/** Meses de operación que entran en la comparación (3 años). */
+const MESES = 36;
+/** Repetidor sin el mástil: P1, pilas, antena de 8 dBi y cable CFD400. */
+const REPETIDOR_SIN_MASTIL = PRECIOS.repetidor - MASTIL_6;
+/** Repetidor: instalación y operación (pila y visita cada 3 años). */
+const OPERACION_REPETIDOR = OPERACION_TRAMA.instalacionRepetidor + MESES * ((OPERACION_TRAMA.bateriaRepetidor + OPERACION_TRAMA.visitaRepetidor) / OPERACION_TRAMA.vidaBateriaMeses);
+/** Sitio gateway sin la torre: mini PC, hub, UPS, caja, tierra, kit solar, una radio de pagos y el Starlink con su kit solar. */
+const GATEWAY_SIN_TORRE = PRECIOS.sitioBase - TORRE_12 + PRECIOS.radio + PRECIOS.starlink;
+/** Gateway: instalación del sitio, mantenimiento y Starlink comercial. */
+const OPERACION_GATEWAY = OPERACION_TRAMA.instalacionSitio + MESES * (OPERACION_TRAMA.mantenimientoSitioMes + OPERACION_TRAMA.starlinkMesComercial);
+/** Diferencia de cada tipo de antena frente a la omnidireccional de 8 dBi (con su cable). */
 const ANTENA: Record<string, number> = { omni: 0, yagi: 50_000, panel: 600_000, "sectorial-90": 850_000, "sectorial-120": 850_000, parabolica: 1_100_000 };
 /** Correr un nodo a otro sitio cercano: visita, acceso y permiso del predio. */
 export const COSTO_REUBICAR = 350_000;
@@ -62,8 +72,9 @@ export function costoTorre(alturaM: number): number {
 export function costoNodo(a: Antena): number {
   if ((a.tipo ?? "antena") !== "antena") return 0;
   const antena = ANTENA[patronPorId(a.patron).id] ?? 0;
-  return NODO_INFRA + INSTALACION + OPERACION + (a.pasarela ? INTERNET_GATEWAY : 0) + costoTorre(a.alturaM) + antena;
+  const base = a.pasarela ? GATEWAY_SIN_TORRE + OPERACION_GATEWAY : REPETIDOR_SIN_MASTIL + OPERACION_REPETIDOR;
+  return base + costoTorre(a.alturaM) + antena;
 }
 
-/** Costo de referencia de un nodo de apoyo típico (torre de 15 m): escala para comparar mejoras. */
-export const COSTO_APOYO_TIPICO = NODO_INFRA + INSTALACION + OPERACION + costoTorre(15);
+/** Costo de referencia de un repetidor de apoyo típico (P1 en tubo de 6 m): escala para comparar mejoras. */
+export const COSTO_APOYO_TIPICO = REPETIDOR_SIN_MASTIL + OPERACION_REPETIDOR + costoTorre(6);

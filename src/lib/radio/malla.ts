@@ -1,5 +1,5 @@
 // Enlaces entre nodos, comportamiento de la red mesh (saltos, puntos críticos) y factibilidad.
-import { BANDA_LIBRE_MHZ, DISTANCIA_MINIMA_M, ENLACES, META_UTIL_ESTUDIO_PCT, presetPorId, UMBRAL_CONFIABLE_DB, UMBRAL_UTIL_DB } from "./constantes";
+import { BANDA_LIBRE_MHZ, DISTANCIA_MINIMA_M, ENLACES, META_UTIL_ESTUDIO_PCT, PRESETS, presetPorId, UMBRAL_CONFIABLE_DB, UMBRAL_UTIL_DB } from "./constantes";
 import { perdidaEntorno } from "./entorno";
 import { distanciaM, rumbo } from "./geo";
 import { claseEnlace, longitudOnda, presupuestoEnlace } from "./modelo";
@@ -47,11 +47,25 @@ export function enlaceEntre(a: Antena, b: Antena, p: Parametros, relieve: Reliev
   };
 }
 
+/** En MeshCore solo los repetidores reenvían paquetes de otros; las billeteras y la radio del gateway no. */
+export function retransmite(a: Antena): boolean {
+  return a.rol === "REPETIDOR";
+}
+
+/**
+ * Enlaces entre nodos. Se calcula cada pareja en la que al menos uno retransmite o es el gateway: dos billeteras
+ * nunca se pasan los pagos entre sí, así que con cientos de personas no se calculan sus parejas.
+ */
 export function calcularEnlaces(antenas: Antena[], p: Parametros, relieve: Relieve): Enlace[] {
   const lambda = longitudOnda(p.frecuenciaMhz);
   const red = calculoRed(p);
   const enlaces: Enlace[] = [];
-  for (let i = 0; i < antenas.length; i++) for (let k = i + 1; k < antenas.length; k++) enlaces.push(enlaceEntre(antenas[i], antenas[k], p, relieve, red, lambda));
+  const util = antenas.map((a) => retransmite(a) || a.pasarela);
+  for (let i = 0; i < antenas.length; i++)
+    for (let k = i + 1; k < antenas.length; k++) {
+      if (!util[i] && !util[k]) continue;
+      enlaces.push(enlaceEntre(antenas[i], antenas[k], p, relieve, red, lambda));
+    }
   return enlaces.sort((x, y) => y.margen - x.margen);
 }
 
@@ -67,7 +81,7 @@ function grafo(antenas: Antena[], enlaces: Enlace[]): Grafo {
   return g;
 }
 
-/** Saltos (enlaces) desde la pasarela más cercana. Solo retransmiten las antenas que no son CLIENT_MUTE. */
+/** Saltos (enlaces) desde la pasarela más cercana. Solo retransmiten los repetidores (MeshCore). */
 function saltosDesdePasarelas(antenas: Antena[], g: Grafo, excluir?: string) {
   const porId = new Map(antenas.map((a) => [a.id, a]));
   const saltos = new Map<string, number>();
@@ -82,8 +96,8 @@ function saltosDesdePasarelas(antenas: Antena[], g: Grafo, excluir?: string) {
   while (cola.length) {
     const id = cola.shift()!;
     const nodo = porId.get(id)!;
-    // Un nodo que no retransmite recibe, pero no reenvía (salvo que sea la pasarela).
-    if (!nodo.pasarela && nodo.rol === "CLIENT_MUTE") continue;
+    // Un nodo que no retransmite recibe, pero no reenvía (salvo que sea la pasarela, donde empieza la búsqueda).
+    if (!nodo.pasarela && !retransmite(nodo)) continue;
     for (const v of g.get(id) ?? []) {
       if (v.id === excluir || saltos.has(v.id)) continue;
       saltos.set(v.id, saltos.get(id)! + 1);
@@ -116,26 +130,35 @@ function componentes(antenas: Antena[], g: Grafo) {
 }
 
 /**
- * Ruta más robusta hacia una pasarela con un máximo de `limite` saltos: maximiza el margen del
- * enlace más débil (cuello de botella). Meshtastic inunda la red, así que basta con que exista una ruta buena.
+ * Ruta más robusta hacia una pasarela con un máximo de `limite` saltos: maximiza el margen del enlace más débil
+ * (cuello de botella). En MeshCore el primer mensaje se inunda y la ruta que gana queda guardada para los demás.
  */
 function rutasRobustas(antenas: Antena[], g: Grafo, limite: number) {
   const porId = new Map(antenas.map((a) => [a.id, a]));
   let actual = new Map<string, { cuello: number; ruta: string[] }>();
   for (const a of antenas) if (a.pasarela) actual.set(a.id, { cuello: Infinity, ruta: [a.id] });
-  for (let k = 1; k <= limite; k++) {
+  // Una ruta solo pasa por repetidores: nunca tiene más saltos que repetidores + 1. Si una vuelta no mejora nada,
+  // las siguientes tampoco (con cientos de personas pobladas, esto evita cientos de vueltas inútiles).
+  const reenvian = antenas.filter((a) => a.pasarela || retransmite(a)).length;
+  const vueltas = Math.min(limite, reenvian + 1);
+  for (let k = 1; k <= vueltas; k++) {
     const nuevo = new Map(actual);
+    let cambio = false;
     for (const [u, info] of actual) {
       const nodo = porId.get(u)!;
-      if (!nodo.pasarela && nodo.rol === "CLIENT_MUTE") continue;
+      if (!nodo.pasarela && !retransmite(nodo)) continue;
       for (const w of g.get(u) ?? []) {
         if (porId.get(w.id)?.pasarela || info.ruta.includes(w.id)) continue;
         const cuello = Math.min(info.cuello, w.margen);
         const previo = nuevo.get(w.id);
-        if (!previo || cuello > previo.cuello) nuevo.set(w.id, { cuello, ruta: [w.id, ...info.ruta] });
+        if (!previo || cuello > previo.cuello) {
+          nuevo.set(w.id, { cuello, ruta: [w.id, ...info.ruta] });
+          cambio = true;
+        }
       }
     }
     actual = nuevo;
+    if (!cambio) break;
   }
   return actual;
 }
@@ -151,7 +174,7 @@ export function analizarMalla(antenas: Antena[], enlaces: Enlace[], limiteSaltos
   const alcanzados = saltos.size;
   const nodos: NodoMalla[] = antenas.map((a) => {
     let critico = false;
-    if (!a.pasarela && saltos.has(a.id) && a.rol !== "CLIENT_MUTE") {
+    if (!a.pasarela && saltos.has(a.id) && retransmite(a)) {
       const sin = saltosDesdePasarelas(antenas, g, a.id).saltos;
       critico = sin.size < alcanzados - 1;
     }
@@ -198,7 +221,9 @@ type DatosFactibilidad = {
 const nombreSenal = (margenDb: number) => (margenDb >= 45 ? "señal buena" : margenDb >= UMBRAL_CONFIABLE_DB ? "señal estable o mejor" : margenDb >= UMBRAL_UTIL_DB ? "señal media o mejor" : "servicio");
 
 export function evaluarFactibilidad(d: DatosFactibilidad): Factibilidad {
-  const { antenas, parametros: p, enlaces, analisis } = d;
+  const { parametros: p, enlaces, analisis } = d;
+  // Las personas de «Poblar personas» son una prueba de densidad: se cuentan aparte, no en la infraestructura
+  const antenas = d.antenas.filter((a) => !a.poblada);
   // Cobertura útil (señal media o mejor) en el área objetivo, si la hay, o en el área de estudio
   const obj = d.objetivo ?? null;
   const util = obj ? obj.utilPct : d.porcentajeUtil;
@@ -316,17 +341,17 @@ export function evaluarFactibilidad(d: DatosFactibilidad): Factibilidad {
   }
   for (const a of lejanas) {
     recomendaciones.push(
-      `${a.nombre} está a ${nodo.get(a.id)?.saltos} saltos de la pasarela y el límite es ${p.limiteSaltos}. Agregue una pasarela más cercana o suba el hop_limit (máximo 7; más saltos aumentan la congestión).`,
+      `${a.nombre} está a ${nodo.get(a.id)?.saltos} saltos del gateway y el diseño pide ${p.limiteSaltos} como máximo. MeshCore admite hasta 64, pero cada salto suma tiempo en el aire a cada pago y le quita capacidad a la frecuencia: acerque un repetidor o ponga otro sitio gateway.`,
     );
   }
   for (const a of criticos) {
     recomendaciones.push(`${a.nombre} es un punto único de falla: si se apaga, otros nodos pierden la pasarela. Agregue un enlace alterno que la rodee.`);
   }
   if (util < meta - 1e-9) {
-    const sugerencia =
-      preset.id === "LONG_FAST" || preset.id === "LONG_MODERATE" || preset.id === "LONG_SLOW"
-        ? "Agregue nodos antena en las zonas naranja y roja o eleve los existentes"
-        : `Agregue nodos antena o eleve los existentes; el preset Long Fast da ${fmt(presetPorId(p.preset).sensibilidadDbm - presetPorId("LONG_FAST").sensibilidadDbm)} dB más de margen que ${preset.nombre}`;
+    const masLento = PRESETS.filter((x) => x.sensibilidadDbm < preset.sensibilidadDbm - 0.5).sort((x, y) => y.sensibilidadDbm - x.sensibilidadDbm)[0];
+    const sugerencia = masLento
+      ? `Agregue repetidores en las zonas naranja y roja o eleve los existentes; ${masLento.nombre} da ${fmt(preset.sensibilidadDbm - masLento.sensibilidadDbm)} dB más de margen que ${preset.nombre}, a cambio de capacidad`
+      : "Agregue repetidores en las zonas naranja y roja o eleve los existentes";
     recomendaciones.push(`La cobertura útil (${nombreSenal(margenUtil)}) es ${fmt(util)} % ${obj ? `de «${obj.nombre}»` : "del área de estudio"} y la meta es ${fmtMeta(meta)} %. ${sugerencia}, o use «Ajústamelo automáticamente».`);
   }
   if (pasarelas.length === 1 && antenas.length > 3) recomendaciones.push("Hay una sola pasarela: una segunda pasarela da respaldo si la primera falla.");
@@ -346,7 +371,7 @@ export function evaluarFactibilidad(d: DatosFactibilidad): Factibilidad {
   else if (criterios.slice(0, 5).every((c) => c.ok)) nivel = "factible";
   else nivel = "ajustes";
   const titulo = { factible: "Factible", ajustes: "Factible con ajustes", "no-factible": "No factible todavía" }[nivel];
-  if (nivel === "factible" && recomendaciones.length === 0) recomendaciones.push("La red cumple los criterios. Valide en campo con una prueba de alcance (Range Test de Meshtastic).");
+  if (nivel === "factible" && recomendaciones.length === 0) recomendaciones.push("La red cumple los criterios. Valide en campo: un pago de prueba desde cada zona y un recorrido con la billetera mirando la SNR de los repetidores.");
   return { nivel, titulo, puntaje: Math.min(100, Math.max(0, puntaje)), criterios, recomendaciones };
 }
 

@@ -1,4 +1,6 @@
 // Motor de cálculo en segundo plano: descarga y decodifica el relieve, y simula sin bloquear la interfaz.
+import { curvaCarga, simularCarga } from "./carga";
+import { estresMalla } from "./estres";
 import type { Entrada, Salida } from "./protocolo";
 import { ColeccionHgt, decodificarTerrarium, leerHgt } from "./relieve";
 import { ajustarRed, disenarMallaArea, inspeccionar, olvidarRelieve, perfil, perfilTerreno, sembrarMalla, simular, type Contexto } from "./simulacion";
@@ -119,6 +121,17 @@ alcance.onmessage = async (e) => {
       case "ajustar": {
         const r = await ajustarRed(m.pedido, m.relieve, contexto(m.id, m.relieve, false));
         alcance.postMessage({ tipo: "ajuste", id: m.id, ajuste: r });
+        return;
+      }
+      case "carga": {
+        const carga = simularCarga(m.pedido);
+        const curva = m.curva && !carga.motivo ? curvaCarga(m.pedido) : null;
+        alcance.postMessage({ tipo: "carga", id: m.id, carga, curva });
+        return;
+      }
+      case "estres": {
+        const r = estresMalla(m.pedido, (avance) => alcance.postMessage({ tipo: "progreso", id: m.id, fase: "estres", avance }));
+        alcance.postMessage({ tipo: "estres", id: m.id, estres: r });
         return;
       }
       case "disenar": {

@@ -141,13 +141,13 @@ export function consejoRed(red: EstadoRed, limiteSaltos: number, opciones: { cal
     return {
       paso: 4,
       titulo: "Hay rutas demasiado largas",
-      texto: `${lista(red.lejos)} ${red.lejos.length === 1 ? "llega" : "llegan"} con más saltos que el límite (${limiteSaltos}): el mensaje se pierde en el camino. Ponga un repetidor más alto que acorte la ruta o suba el límite de saltos en el modo avanzado (máximo 7).`,
+      texto: `${lista(red.lejos)} ${red.lejos.length === 1 ? "llega" : "llegan"} con más saltos que el límite del diseño (${limiteSaltos}): cada pago tardaría más y le quitaría capacidad a la frecuencia. Ponga un repetidor más alto que acorte la ruta o suba el límite de saltos en el modo avanzado (MeshCore deja hasta 64).`,
       tono: "alerta",
     };
   return {
     paso: null,
     titulo: "¡Toda la gente está conectada!",
-    texto: `${red.conectadas.length} ${red.conectadas.length === 1 ? "persona" : "personas"} con ruta al gateway, máximo ${red.saltosMax} ${red.saltosMax === 1 ? "salto" : "saltos"}. Mire el flujo turquesa hacia el gateway y pruebe «Enviar un mensaje»: la IA le responde por la misma ruta.`,
+    texto: `${red.conectadas.length} ${red.conectadas.length === 1 ? "persona" : "personas"} con ruta al gateway, máximo ${red.saltosMax} ${red.saltosMax === 1 ? "salto" : "saltos"}. Mire el flujo turquesa hacia el gateway y pruebe «Enviar un pago de prueba»: el comprobante vuelve por la misma ruta. Con «Poblar personas» y la «Prueba de carga» (en Resultados) ve cuántos pagos aguanta la frecuencia.`,
     tono: "ok",
   };
 }

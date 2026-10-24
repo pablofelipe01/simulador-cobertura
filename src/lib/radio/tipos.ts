@@ -1,8 +1,11 @@
 import type { ClaseId, EquipoId, PresetId, ResolucionId } from "./constantes";
 import type { ClimaItm, SalidaItm } from "./itm";
 
-/** Rol Meshtastic simplificado: los CLIENT_MUTE no retransmiten mensajes de otros nodos. */
-export type Rol = "ROUTER" | "CLIENT" | "CLIENT_MUTE";
+/**
+ * Rol MeshCore: solo los repetidores retransmiten. El companion es el nodo de una persona (la billetera) o la radio
+ * del gateway conectada por USB al mini PC; el room server guarda mensajes y, por defecto, no retransmite.
+ */
+export type Rol = "REPETIDOR" | "COMPANION" | "ROOM_SERVER";
 
 /**
  * Tipo de nodo: «antena» = nodo antena de infraestructura (mástil o torre, genera cobertura);
@@ -23,8 +26,12 @@ export type Antena = {
   perdidaCableDb: number;
   equipo: EquipoId;
   rol: Rol;
-  /** Pasarela: nodo conectado a internet/MQTT o al servidor de la red. */
+  /** Pasarela (gateway): la radio conectada al mini PC con internet (Starlink) que recibe los pagos. */
   pasarela: boolean;
+  /** Persona puesta con «Poblar personas» (prueba de densidad): no cuenta en los criterios de la infraestructura. */
+  poblada?: boolean;
+  /** Zona de popularidad: id del gateway o repetidor alrededor del cual se pobló esta persona. */
+  zona?: string;
   activa: boolean;
   /** Tipo de antena (patrón de radiación). Sin valor = omnidireccional. */
   patron?: PatronId;

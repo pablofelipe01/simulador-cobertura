@@ -21,6 +21,9 @@ export type PedidoSiembra = {
   parametros: Parametros;
   maxRepetidores?: number;
   margenObjetivoDb?: number;
+  /** Saltos hasta el gateway de cada origen y límite de saltos del diseño: la cadena procura no pasarlo. */
+  saltosOrigen?: Record<string, number>;
+  limiteSaltos?: number;
 };
 
 export type PuntoSiembra = {
@@ -39,7 +42,16 @@ export type PuntoSiembra = {
 
 export type ResultadoDestino = { llega: boolean; margenDb: number; desde: string | null; desdeId: string | null; motivo: string | null };
 
-export type Siembra = { puntos: PuntoSiembra[]; destinos: ResultadoDestino[]; margenObjetivoDb: number };
+export type Siembra = {
+  puntos: PuntoSiembra[];
+  destinos: ResultadoDestino[];
+  margenObjetivoDb: number;
+  /** Altura de las torres propuestas y, si se subió para no pasar del límite de saltos, desde cuál (la pantalla lo completa). */
+  alturaM?: number;
+  alturaPedidaM?: number;
+  /** Saltos hasta el gateway de cada destino con la cadena propuesta. */
+  saltos?: (number | null)[];
+};
 
 /** Paso máximo entre repetidores (km) y apertura del abanico de búsqueda (grados a cada lado). */
 const PASO_MAX_KM = 14;
@@ -68,18 +80,31 @@ export function sembrar(pedido: PedidoSiembra, relieve: Relieve, caja: Caja): Si
   const puntos: PuntoSiembra[] = [];
   const enlace = (a: Antena, b: Antena) => enlaceEntre(a, b, p, relieve, red, lambda);
   const persona = (d: DestinoSiembra): Antena => ({ ...(d.antena ?? pedido.persona), id: "destino", lat: d.lat, lon: d.lon, pasarela: false });
+  // Saltos hasta el gateway de cada nodo de la red (los propuestos cuelgan de uno con un salto más)
+  const L = pedido.limiteSaltos;
+  const saltos = new Map(origenes.map((a) => [a.id, pedido.saltosOrigen?.[a.id] ?? (a.pasarela ? 0 : 1)]));
+  const hops = (a: Antena) => saltos.get(a.id) ?? 0;
+  const agotados = new Set<string>();
   const nuevo = (lat: number, lon: number): Antena => ({ ...pedido.repetidor, id: `propuesto-${puntos.length + 1}`, nombre: `Propuesto ${puntos.length + 1}`, lat, lon });
 
   /** Mejor origen para dar servicio a una persona en el destino. */
-  const servicio = (d: DestinoSiembra) => {
+  const servicio = (d: DestinoSiembra): { margen: number; desde: Antena } | null => {
     const rx = persona(d);
-    let mejor: { margen: number; desde: Antena } | null = null;
-    for (const o of origenes) {
-      if (distanciaM(o.lat, o.lon, d.lat, d.lon) > PASO_MAX_KM * 1500) continue;
-      const m = enlace(o, rx).margen;
-      if (!mejor || m > mejor.margen) mejor = { margen: m, desde: o };
+    const mejorDe = (lista: Antena[]) => {
+      let mejor: { margen: number; desde: Antena } | null = null;
+      for (const o of lista) {
+        if (distanciaM(o.lat, o.lon, d.lat, d.lon) > PASO_MAX_KM * 1500) continue;
+        const m = enlace(o, rx).margen;
+        if (!mejor || m > mejor.margen) mejor = { margen: m, desde: o };
+      }
+      return mejor;
+    };
+    // Dentro del límite de saltos primero; si ninguno da servicio así, cualquiera (se avisa con los saltos)
+    if (L !== undefined) {
+      const dentro = mejorDe(origenes.filter((o) => hops(o) + 1 <= L));
+      if (dentro && dentro.margen >= SERVICIO_DB) return dentro;
     }
-    return mejor;
+    return mejorDe(origenes);
   };
 
   // Primero los destinos más cercanos a la red: los siguientes pueden aprovechar esos repetidores
@@ -87,6 +112,7 @@ export function sembrar(pedido: PedidoSiembra, relieve: Relieve, caja: Caja): Si
     .map((d, i) => ({ d, i, dist: Math.min(...origenes.map((o) => distanciaM(o.lat, o.lon, d.lat, d.lon))) }))
     .sort((x, y) => x.dist - y.dist);
   const resultados: ResultadoDestino[] = pedido.destinos.map(() => ({ llega: false, margenDb: -Infinity, desde: null, desdeId: null, motivo: null }));
+  const saltosDestino: (number | null)[] = pedido.destinos.map(() => null);
 
   for (const { d, i } of orden) {
     if (!origenes.length) {
@@ -97,14 +123,19 @@ export function sembrar(pedido: PedidoSiembra, relieve: Relieve, caja: Caja): Si
       const s = servicio(d);
       if (s && s.margen >= SERVICIO_DB) {
         resultados[i] = { llega: true, margenDb: s.margen, desde: s.desde.nombre, desdeId: s.desde.id, motivo: null };
+        saltosDestino[i] = hops(s.desde) + 1;
         break;
       }
       if (puntos.length >= maximo) {
         resultados[i] = { llega: false, margenDb: s?.margen ?? -Infinity, desde: s?.desde.nombre ?? null, desdeId: s?.desde.id ?? null, motivo: `Se alcanzó el máximo de ${maximo} repetidores propuestos.` };
         break;
       }
-      // Avanzar desde el nodo de la red más cercano al destino
-      const actual = origenes.reduce((x, y) => (distanciaM(y.lat, y.lon, d.lat, d.lon) < distanciaM(x.lat, x.lon, d.lat, d.lon) ? y : x));
+      // Avanzar desde el nodo de la red más cercano al destino (con lugar para un repetidor más y la persona dentro del límite)
+      const conLugar = L === undefined ? origenes : origenes.filter((o) => hops(o) + 2 <= L && !agotados.has(o.id));
+      const desdeDonde = conLugar.length ? conLugar : origenes;
+      const actual = desdeDonde.reduce((x, y) => (distanciaM(y.lat, y.lon, d.lat, d.lon) < distanciaM(x.lat, x.lon, d.lat, d.lon) ? y : x));
+      // Si el nuevo repetidor sería el último que cabe en el límite, debe dar servicio al destino
+      const ultimoQueCabe = L !== undefined && hops(actual) + 2 === L;
       const D = distanciaM(actual.lat, actual.lon, d.lat, d.lon);
       const rumboBase = rumbo(actual.lat, actual.lon, d.lat, d.lon);
       const alcance = Math.min(D, PASO_MAX_KM * 1000);
@@ -120,9 +151,20 @@ export function sembrar(pedido: PedidoSiembra, relieve: Relieve, caja: Caja): Si
           candidatos.push({ lat: q.lat, lon: q.lon, suelo: relieve.elevacion(q.lat, q.lon), margen: e.margen, progreso: D - distanciaM(q.lat, q.lon, d.lat, d.lon), distancia: e.distanciaKm });
         }
       }
+      const rxDestino = persona(d);
       const elegir = (umbral: number) => {
         const validos = candidatos.filter((c) => c.margen >= umbral && c.progreso > 300);
         if (!validos.length) return null;
+        if (ultimoQueCabe) {
+          // El que le da al destino el mejor servicio (y, a igual servicio, la loma más alta)
+          const conServicio = validos
+            .map((c) => ({ c, m: enlace(nuevo(c.lat, c.lon), rxDestino).margen }))
+            .filter((x) => x.m >= SERVICIO_DB)
+            .sort((x, y) => y.m + y.c.suelo / 50 - (x.m + x.c.suelo / 50));
+          if (conServicio.length) return conServicio[0].c;
+          // Desde aquí no se llega dentro del límite: no se vuelve a intentar desde este nodo
+          agotados.add(actual.id);
+        }
         const mejorProgreso = Math.max(...validos.map((c) => c.progreso));
         // Entre los que avanzan casi lo máximo, la loma más alta (y, a igual altura, el enlace más holgado)
         return validos.filter((c) => c.progreso >= 0.8 * mejorProgreso).sort((x, y) => y.suelo + y.margen / 2 - (x.suelo + x.margen / 2))[0];
@@ -140,8 +182,9 @@ export function sembrar(pedido: PedidoSiembra, relieve: Relieve, caja: Caja): Si
       }
       const rep = nuevo(elegido.lat, elegido.lon);
       origenes.push(rep);
+      saltos.set(rep.id, hops(actual) + 1);
       puntos.push({ id: rep.id, desdeId: actual.id, lat: elegido.lat, lon: elegido.lon, sueloM: elegido.suelo, margenDb: elegido.margen, distanciaKm: elegido.distancia, desde: actual.nombre, destino: i });
     }
   }
-  return { puntos, destinos: resultados, margenObjetivoDb: objetivo };
+  return { puntos, destinos: resultados, margenObjetivoDb: objetivo, saltos: saltosDestino };
 }
