@@ -180,6 +180,37 @@ function crearApi(antenas) {
     },
     mostrarAjuste: (a, i) => llamadas.push(["mostrar-ajuste", i]),
     descartarAjuste: () => llamadas.push(["descartar-ajuste"]),
+    // Gente y capacidad (v12)
+    areasPoblar: () => [
+      ...api.medicionesActuales.filter((x) => x.tipo === "area").map((x) => ({ id: x.id, nombre: x.objetivo ? `Área objetivo «${x.nombre}»` : `Área «${x.nombre}»`, km2: 40, poligono: x.puntos, objetivo: Boolean(x.objetivo) })),
+      { id: "zona-red", nombre: "Alrededor de la red (3 km)", km2: 56.5, poligono: [], objetivo: false },
+      { id: "zona-estudio", nombre: "Área de estudio (10 km)", km2: 314, poligono: [], objetivo: false },
+    ],
+    poblar: (o) => {
+      llamadas.push(["poblar", o]);
+      const n = Math.round(o.densidadKm2 !== undefined ? 56.5 * o.densidadKm2 : (o.n ?? 250));
+      return { puestas: n, pedidas: n, area: "Alrededor de la red (3 km)", km2: 56.5, conSenal: Boolean(o.soloConSenal), quitadas: 0 };
+    },
+    quitarPobladas: () => (llamadas.push(["quitar-pobladas"]), 3),
+    cargaFalsa: null,
+    probarCarga: (o, curva) => {
+      llamadas.push(["carga", o, Boolean(curva)]);
+      return Promise.resolve(api.cargaFalsa);
+    },
+    // Zonas de popularidad y prueba de estrés (v12.1)
+    centrosZona: () => antenas.filter((a) => a.activa && !a.poblada && (a.rol === "REPETIDOR" || a.pasarela)).map((a) => ({ id: a.id, nombre: a.nombre, pieza: a.pasarela ? "gateway" : "repetidor", personas: 0 })),
+    poblarZonas: (o) => {
+      llamadas.push(["zonas", o]);
+      const centros = api.centrosZona().filter((c) => !o.centros?.length || o.centros.includes(c.id));
+      const n = o.n ?? 250;
+      return { zonas: centros.map((c) => ({ id: c.id, nombre: c.nombre, puestas: n, pedidas: n })), puestas: n * centros.length, pedidas: n * centros.length, radioKm: o.radioKm ?? 2, conSenal: true, recortado: false, quitadas: 0 };
+    },
+    quitarZonas: (c) => (llamadas.push(["quitar-zonas", c]), 500),
+    estresFalso: null,
+    probarEstres: (o) => {
+      llamadas.push(["estres", o]);
+      return Promise.resolve(api.estresFalso);
+    },
   };
   return api;
 }
@@ -244,7 +275,9 @@ function crearApi(antenas) {
   caso("Simular", m.interpretarOrden("simula por favor", api, null)?.tipo === "simular");
   const radio = m.interpretarOrden("radio de 12 km", api, null);
   caso("Radio de estudio", radio?.tipo === "parametros" && radio.cambios.radioKm === 12);
-  caso("Preset", m.interpretarOrden("usa Long Moderate", api, null)?.cambios?.preset === "LONG_MODERATE");
+  caso("Ajuste de radio: «usa SF10»", m.interpretarOrden("usa SF10", api, null)?.cambios?.preset === "SF10_250");
+  caso("Ajuste de radio: «usa el de capacidad»", m.interpretarOrden("usa el preset de capacidad", api, null)?.cambios?.preset === "SF9_250");
+  caso("Límite de saltos de MeshCore hasta 64", m.interpretarOrden("pon el límite de saltos en 12", api, null)?.cambios?.limiteSaltos === 12);
   caso("Señal en un punto", m.interpretarOrden("¿llega señal a 4.21, -73.35?", api, null)?.tipo === "senal");
   caso("Coordenada sola → opciones", m.interpretarOrden("4.51, -73.12", api, null)?.tipo === "coordenada-sola");
   caso("Pregunta general → la contesta el cerebro", m.interpretarOrden("¿qué es la pasarela?", api, null) === null);
@@ -329,11 +362,11 @@ function crearApi(antenas) {
   const c = { antenas: [], parametros: PARAMETROS, resultado: null, desactualizado: false, relieve: "teselas" };
   const menu = m.responder("Hazme un tour", c);
   caso(
-    "«Hazme un tour» → menú con los 7 tours, el básico primero",
-    menu.acciones?.length === 7 && menu.acciones[0].tour === "basico" && /recomendado/.test(menu.acciones[0].texto) && menu.acciones.every((a) => a.accion === "recorrido" && a.detalle),
+    "«Hazme un tour» → menú con los 8 tours, el básico primero",
+    menu.acciones?.length === 8 && menu.acciones[0].tour === "basico" && /recomendado/.test(menu.acciones[0].texto) && menu.acciones.every((a) => a.accion === "recorrido" && a.detalle),
     menu.acciones?.map((a) => a.tour).join(","),
   );
-  caso("«Ayuda» → menú de tours", m.responder("ayuda", c).acciones?.length === 7);
+  caso("«Ayuda» → menú de tours", m.responder("ayuda", c).acciones?.length === 8);
   const pedido = (q) => m.responder(q, c).acciones?.[0]?.tour;
   for (const [q, id] of [
     ["quiero el tutorial", "basico"],
@@ -351,7 +384,7 @@ function crearApi(antenas) {
   caso("«¿Qué puedes hacer?» ofrece los tours", m.responder("¿qué puedes hacer?", c).acciones?.some((a) => a.accion === "tours"));
 
   const ids = m.TOURS.map((x) => x.id);
-  caso("Siete tours con nombre, detalle e introducción", ids.length === 7 && new Set(ids).size === 7 && m.TOURS.every((x) => x.nombre && x.detalle && x.pasos.length >= 4 && !x.pasos[0].objetivo && !x.pasos[0].tarea));
+  caso("Ocho tours con nombre, detalle e introducción", ids.length === 8 && new Set(ids).size === 8 && m.TOURS.every((x) => x.nombre && x.detalle && x.pasos.length >= 4 && !x.pasos[0].objetivo && !x.pasos[0].tarea));
   caso("El tutorial básico tiene 7 pasos", m.TOURS[0].id === "basico" && m.TOURS[0].pasos.length === 8);
 
   // Cada paso práctico: no está hecho al entrar, «Hágalo por mí» lo hace y se detecta (con un simulador de mentira)
@@ -365,6 +398,8 @@ function crearApi(antenas) {
     let siembra = "nada";
     let propuesta = null;
     let mensaje = 0;
+    let carga = "nada";
+    let estres = "nada";
     const despachar = (a) => {
       estado = m.reductor(estado, a);
       if (["insertar", "editar", "parametros", "eliminar", "insertar-varias"].includes(a.tipo)) alDia = false;
@@ -378,7 +413,7 @@ function crearApi(antenas) {
     };
     const encuadres = [];
     const t = {
-      foto: () => ({ estado, inspeccion, perfil, perfilTerreno, siembra, mensaje }),
+      foto: () => ({ estado, inspeccion, perfil, perfilTerreno, siembra, mensaje, carga, estres }),
       alDia: () => alDia,
       despachar,
       perfilTerreno: () => (perfilTerreno = true),
@@ -414,6 +449,24 @@ function crearApi(antenas) {
           return {};
         },
         encuadrarCaja: (c) => encuadres.push(c),
+        poblar: (o) => {
+          const nuevas = Array.from({ length: o.n ?? 250 }, (_, k) => ({ id: `pob${k}`, nombre: `Persona ${k + 1}`, tipo: "nodo", lat: 4.2 + k * 1e-4, lon: -73.37, alturaM: 1.5, activa: true, pasarela: false, rol: "COMPANION", poblada: true }));
+          despachar({ tipo: "insertar-varias", antenas: nuevas });
+          return { puestas: nuevas.length, pedidas: nuevas.length, area: "Alrededor de la red (3 km)", km2: 56, conSenal: false, quitadas: 0 };
+        },
+        probarCarga: (o, curva) => {
+          carga = curva ? "curva" : "listo";
+          return Promise.resolve(null);
+        },
+        poblarZonas: (o) => {
+          const nuevas = Array.from({ length: o.n ?? 250 }, (_, k) => ({ id: `zon${k}`, nombre: `Persona Z${k + 1}`, tipo: "nodo", lat: 4.21 + k * 1e-4, lon: -73.36, alturaM: 1.5, activa: true, pasarela: false, rol: "COMPANION", poblada: true, zona: "g" }));
+          despachar({ tipo: "insertar-varias", antenas: nuevas });
+          return { zonas: [], puestas: nuevas.length, pedidas: nuevas.length, radioKm: 2, conSenal: true, recortado: false, quitadas: 0 };
+        },
+        probarEstres: (o) => {
+          estres = o.rampa ? "rampa" : "listo";
+          return Promise.resolve(null);
+        },
       },
     };
     let ok = true;
@@ -519,7 +572,7 @@ function crearApi(antenas) {
   // Conocimiento: Trama, repetidores, personas, mensajes y por qué alguien está en rojo
   const c = { antenas, parametros: PARAMETROS, resultado: null, desactualizado: false, relieve: "teselas", modo: "sembrar", red: api.redActual };
   caso("¿Qué es Trama? → gateway, repetidores y gente", /Gateway \+ Internet/.test(m.responder("¿qué es trama?", c).texto) && /repetidores/.test(m.responder("¿cómo siembro la red?", c).texto));
-  caso("¿Cómo viaja un mensaje? → inundación, ROUTER y tiempo en el aire", /inundación/.test(m.responder("¿cómo viaja un mensaje?", c).texto) && /ROUTER/.test(m.responder("¿cómo viaja un mensaje?", c).texto) && /en el aire/.test(m.responder("¿cuánto tarda un mensaje?", c).texto));
+  caso("¿Cómo viaja un mensaje? → MeshCore: inundación la primera vez, ruta directa por los repetidores y tiempo en el aire", /inunda/.test(m.responder("¿cómo viaja un mensaje?", c).texto) && /repetidor/.test(m.responder("¿cómo viaja un mensaje?", c).texto) && /MeshCore/.test(m.responder("¿cómo viaja un mensaje?", c).texto) && /en el aire/.test(m.responder("¿cuánto tarda un mensaje?", c).texto));
   caso("¿Dónde pongo los repetidores? → lomas y distancias", /loma/.test(m.responder("¿dónde pongo los repetidores?", c).texto));
   caso("¿Qué hago ahora? → el siguiente paso de la red", /sin cobertura|Persona 2/.test(m.responder("¿qué hago ahora?", c).texto), m.responder("¿qué hago ahora?", c).texto);
   caso("¿Cómo está la red? → conectadas y sin cobertura", /1 de 2 personas conectadas/.test(m.responder("¿cómo está la red?", c).texto), m.responder("¿cómo está la red?", c).texto);
@@ -533,7 +586,7 @@ function crearApi(antenas) {
   const anima = orden("anima la red");
   caso("«Anima la red» enciende el flujo animado", anima?.tipo === "vista" && anima.cambios.animarRed === true);
   caso("Responde qué es la animación (flujo, destellos e IA)", /turquesa/.test(m.responder("¿por qué parpadean y brillan los nodos?", c).texto) && /IA/.test(m.responder("¿qué son las líneas que se mueven?", c).texto));
-  caso("El mensaje cuenta la respuesta de la IA", /IA del gateway le contesta/.test(m.ejecutarOrden({ tipo: "mensaje", id: "p1" }, api).texto));
+  caso("El pago de prueba cuenta el comprobante de vuelta", /comprobante vuelve por la misma ruta/.test(m.ejecutarOrden({ tipo: "mensaje", id: "p1" }, api).texto));
 }
 
 // 11) Melki agente (v10): diseño por área, varias órdenes, posiciones relativas, lugares, lotes y vista
@@ -587,7 +640,7 @@ function crearApi(antenas) {
   const res = m.ejecutarOrden(d, api);
   caso("El diseño dibuja el área y avisa que está calculando", /Diseño la malla para 11\.226 ha/.test(res.texto) && api.llamadas.some((l) => l[0] === "medir" && /Área objetivo/.test(l[1].nombre)) && res.deshacer && res.luego);
   const final = await res.luego;
-  caso("Al terminar cuenta la cobertura real dentro del área y los repetidores", /^Listo: la malla cubre el 100 %/.test(final.texto) && /Sembré 1 repetidor de 15 m/.test(final.texto) && /buena 0 %, estable 100 %/.test(final.texto), final.texto.slice(0, 160).replace(/\n/g, " "));
+  caso("Al terminar cuenta la cobertura real dentro del área y los repetidores", /^Listo: la malla cubre el 100 %/.test(final.texto) && /Sembré 1 repetidor de 6 m/.test(final.texto) && /buena 0 %, estable 100 %/.test(final.texto), final.texto.slice(0, 160).replace(/\n/g, " "));
   caso("Ofrece deshacer y agregar respaldo", final.acciones?.some((a) => a.accion === "deshacer") && final.acciones?.some((a) => /respaldo/.test(a.texto) && a.orden?.respaldo === true));
   caso("El área del diseño queda como área objetivo con la meta pedida", api.llamadas.some((l) => l[0] === "area-objetivo" && l[1] && l[2]?.metaPct === 99.9 && l[2]?.margenDb === 30));
   caso("Con la meta cumplida ofrece optimizar el costo", final.acciones?.some((a) => a.orden?.tipo === "ajustar"));
@@ -631,9 +684,12 @@ function crearApi(antenas) {
   caso("«Elimina todo menos el gateway»", menos?.tipo === "eliminar-varios" && menos.ids.includes("r1") && menos.ids.includes("p1") && !menos.ids.includes("g"));
   m.ejecutarOrden(borrar, api);
   caso("Ejecuta el borrado en lote", api.llamadas.some((l) => l[0] === "eliminar-varias" && l[1].join() === "p1"));
-  caso("«Pon a Repetidor 1 como cliente» → rol CLIENT", orden("pon a Repetidor 1 como cliente")?.cambios?.rol === "CLIENT");
-  caso("«Repetidor 1 en modo mudo» → CLIENT_MUTE", orden("pon Repetidor 1 en modo mudo")?.cambios?.rol === "CLIENT_MUTE");
-  caso("«Usa en Persona 1 el equipo radio portátil»", orden("usa en Persona 1 el equipo radio portátil")?.cambios?.equipo === "portatil-2dbi");
+  caso("«Pon a Repetidor 1 como companion» → COMPANION", orden("pon a Repetidor 1 como companion")?.cambios?.rol === "COMPANION");
+  caso("«Que Repetidor 1 no retransmita» → COMPANION", orden("que Repetidor 1 no retransmita")?.cambios?.rol === "COMPANION");
+  caso("«Pon a Persona 1 como repetidor» → REPETIDOR", orden("pon a Persona 1 como repetidor")?.cambios?.rol === "REPETIDOR");
+  caso("«Repetidor 1 como room server» → ROOM_SERVER", orden("pon Repetidor 1 como room server")?.cambios?.rol === "ROOM_SERVER");
+  caso("«Usa en Persona 1 la tarjeta T1000»", orden("usa en Persona 1 la tarjeta T1000")?.cambios?.equipo === "t1000");
+  caso("«Usa en Persona 1 la billetera XIAO»", orden("usa en Persona 1 la billetera xiao")?.cambios?.equipo === "xiao");
   const vias = orden("muestra las vías");
   caso("«Muestra las vías» / «quita los ríos y los nombres»", vias?.cambios?.refVias === true && orden("quita los ríos y los nombres")?.cambios?.refRios === false && orden("quita los ríos y los nombres")?.cambios?.refNombres === false);
   caso("«Pon el mapa topográfico»", orden("pon el mapa topográfico")?.cambios?.fondo === "topografico");
@@ -734,9 +790,145 @@ function crearApi(antenas) {
   // Cerebro: costos sin precios y el área objetivo
   const c = { antenas, parametros: PARAMETROS, resultado: null, desactualizado: false, relieve: "teselas", modo: "sembrar" };
   const costos = m.responder("¿cuánto cuesta una torre de 30 metros?", c).texto;
-  caso("Explica cómo pesa el costo sin dar precios", /30 m/.test(costos) && /no los muestro/.test(costos) && !/\$|millones|\d{3}\.\d{3}/.test(costos));
+  caso("Explica cómo pesa el costo en el ajuste (con los precios de Trama)", /30 m/.test(costos) && /precios del documento de Trama/.test(costos));
   caso("Explica la cobertura útil y el área objetivo", /60 %/.test(m.responder("¿qué es el área objetivo?", c).texto));
   caso("«¿Qué puedes hacer?» incluye ajustar la red", /Ajustar la red/.test(m.responder("¿qué puedes hacer?", c).texto));
+}
+
+// 14) Gente y capacidad (v12): poblar personas, prueba de carga y dimensionamiento de Trama
+{
+  const g = base("g", "Gateway", 4.2, -73.37, { pasarela: true, rol: "COMPANION" });
+  const r1 = base("r1", "Repetidor 1", 4.25, -73.3, { rol: "REPETIDOR" });
+  const api = crearApi([g, r1]);
+  const orden = (t) => m.interpretarOrden(t, api, null);
+  const p1 = orden("puebla la zona con 250 personas");
+  caso("«Puebla la zona con 250 personas»", p1?.tipo === "poblar" && p1.pedido.n === 250, JSON.stringify(p1));
+  caso("«Popular personas» (como lo dictó el Inge) → 250", orden("popular personas")?.pedido?.n === 250);
+  const p2 = orden("en esta zona son 250 usuarios, repártelos por la malla");
+  caso("«Son 250 usuarios, repártelos por la malla» → alrededor de la red", p2?.tipo === "poblar" && p2.pedido.n === 250 && p2.pedido.areaId === "zona-red", JSON.stringify(p2));
+  const p3 = orden("reparte 1 persona por km2 solo donde haya señal");
+  caso("Densidad por km² y solo con señal", p3?.pedido?.densidadKm2 === 1 && p3.pedido.soloConSenal === true, JSON.stringify(p3));
+  caso("«Puebla con densidad dispersa» → 0,2 por km²", orden("puebla la zona con densidad dispersa")?.pedido?.densidadKm2 === 0.2);
+  caso("«Quita las pobladas»", orden("quita las pobladas")?.tipo === "quitar-pobladas");
+  const rp = m.ejecutarOrden(p1, api);
+  caso("Poblar reparte, explica y simula", api.llamadas.some((l) => l[0] === "poblar" && l[1].n === 250) && /repartí 250 personas al azar/.test(rp.texto) && rp.luego && rp.deshacer, rp.texto.slice(0, 160));
+  api.resultadoFalso = { nodos: [], enlaces: [] };
+  const despues = await rp.luego;
+  caso("Después de poblar ofrece la prueba de carga", despues.acciones?.some((a) => a.orden?.tipo === "carga" && a.orden.curva === false) && despues.acciones?.some((a) => a.orden?.tipo === "carga" && a.orden.curva === true));
+
+  const c1 = orden("envía 25 pagos al tiempo");
+  caso("«Envía 25 pagos al tiempo» → ráfaga de 25 pagos", c1?.tipo === "carga" && c1.opciones.mensajes === 25 && c1.opciones.tipo === "pago" && c1.opciones.modo === "rafaga" && !c1.curva, JSON.stringify(c1));
+  const c2 = orden("manda 5 mensajes al tiempo en 1 segundo");
+  caso("«5 mensajes al tiempo en 1 segundo» → texto, ventana de 1 s", c2?.opciones?.tipo === "texto" && c2.opciones.mensajes === 5 && c2.opciones.ventanaS === 1, JSON.stringify(c2));
+  caso("«¿Hasta cuántos pagos aguanta?» → curva", orden("¿hasta cuántos pagos aguanta?")?.curva === true);
+  caso("«Ver hasta que se revienta» → curva", orden("mandemos pagos hasta que se reviente")?.curva === true);
+  const c3 = orden("simula 55 pagos por hora");
+  caso("«55 pagos por hora» → continua", c3?.opciones?.modo === "continua" && c3.opciones.mensajes === 55);
+  caso("«Envía un pago desde Repetidor 1» sigue siendo el pago de prueba", orden("envía un pago desde Repetidor 1")?.tipo === "mensaje");
+  api.cargaFalsa = {
+    carga: { tipo: "pago", modo: "rafaga", mensajes: 25, remitentes: 240, entregados: 20, completos: 10, avisos: 8, avisosPedidos: 25, completosPct: 40, primerIntentoPct: 30, latenciaS: { p50: 48, p95: 140, max: 180 }, transmisiones: 400, reintentos: 60, inundaciones: 5, colisiones: 33, sordos: 4, perdidasCola: 0, esperasCanal: 80, canalGatewayPct: 92, ocupacion: [], duracionS: 200, ventanaS: 10, airePorPagoS: 9.4, saturada: true, lenta: false, motivo: null },
+    curva: { puntos: [{ n: 5, completosPct: 100, p95S: 50, canalPct: 40, colisiones: 0 }, { n: 10, completosPct: 95, p95S: 75, canalPct: 60, colisiones: 1 }, { n: 15, completosPct: 80, p95S: 90, canalPct: 70, colisiones: 3 }], quiebre: 15, seguro: 5, lento: 10 },
+  };
+  const rc = m.ejecutarOrden(orden("¿hasta cuántos pagos aguanta?"), api);
+  caso("La prueba de carga avisa que tarda y luego cuenta el resultado", /paquete por paquete como MeshCore/.test(rc.texto) && rc.luego);
+  const tc = (await rc.luego).texto;
+  caso("Resultado: se revienta, comprobantes, canal y referencia de Trama", /se revienta/.test(tc) && /40 % recibieron su comprobante/.test(tc) && /aguanta sin demora hasta 5/.test(tc) && /desde 10 aguanta pero lento/.test(tc) && /se revienta desde 15/.test(tc) && /55 pagos por hora/.test(tc) && /4 frecuencias/.test(tc), tc.slice(0, 240));
+
+  const d1 = orden("¿cuánto cuesta la red para el Chocó?");
+  caso("«¿Cuánto cuesta la red para el Chocó?» → departamento", d1?.tipo === "trama-departamento" && d1.id === "choco" && d1.adopcionPct === 30 && d1.sf === 11);
+  const td = m.ejecutarOrden(d1, api).texto;
+  caso("Chocó como en el documento: 35.880 usuarios, 240 repetidores, 60 sitios", /35\.880 usuarios/.test(td) && /240 repetidores/.test(td) && /60 sitios/.test(td) && /\$6,4 mil M/.test(td), td.slice(0, 260));
+  caso("«Norte de Santander con SF10» no se confunde con Santander", orden("¿cuánto cuesta la red en Norte de Santander con SF10?")?.id === "nsantander" && orden("¿cuánto cuesta la red en Norte de Santander con SF10?")?.sf === 10);
+  caso("«La meta del 99 % al menor costo» no es el departamento del Meta", orden("ajusta la red para llegar a la meta con el menor costo")?.tipo === "ajustar");
+  const col = orden("cuánto costaría cubrir todo el país con 50% de adopción");
+  caso("Todo el país con 50 % de adopción", col?.id === "colombia" && col.adopcionPct === 50);
+  const tCol = m.ejecutarOrden(orden("¿cuánto cuesta cubrir todo el país?"), api).texto;
+  caso("Colombia al 30 %: 950.655 usuarios, 7.017 repetidores, 1.602 sitios", /950\.655 usuarios/.test(tCol) && /7\.017 repetidores/.test(tCol) && /1\.602 sitios/.test(tCol), tCol.slice(0, 200));
+  const dim = orden("dimensiona 5.000 usuarios en 800 km2 de sabana");
+  caso("Dimensionar usuarios y área", dim?.tipo === "trama-dimensionar" && dim.usuarios === 5000 && dim.areaKm2 === 800 && dim.terreno === "sabana");
+
+  // Cerebro: conocimiento de Trama y MeshCore
+  const c = { antenas: [g, r1], parametros: { ...PARAMETROS, preset: "SF11_250" }, resultado: null, desactualizado: false, relieve: "teselas", modo: "sembrar" };
+  const t = (q) => m.responder(q, c).texto;
+  caso("«¿Cuánto cuesta un repetidor?» → precios de Trama", /repetidor completo en su tubo de 6 m ≈ \$1\.035\.000/.test(t("¿cuánto cuesta un repetidor?")), t("¿cuánto cuesta un repetidor?").slice(0, 300));
+  caso("«¿Qué lleva cada persona?» → billeteras XIAO y T1000-E", /XIAO ESP32S3/.test(t("¿qué lleva cada persona?")) && /T1000-E/.test(t("¿qué lleva cada persona?")));
+  caso("«¿Cuántos usuarios por frecuencia?» → 150 / 280 / 500", /150 usuarios/.test(t("¿cuántos usuarios por frecuencia?")) && /500 usuarios/.test(t("¿cuántos usuarios por frecuencia?")));
+  caso("«¿Cómo viaja un pago?» → MeshCore, acuses y comprobante", /MeshCore/.test(t("¿cómo viaja un pago?")) && /comprobante/.test(t("¿cómo viaja un pago?")) && /acuse/.test(t("¿cómo viaja un pago?")));
+  caso("«¿Qué roles hay?» → Repetidor, Companion y Room server", /Companion/.test(t("¿qué roles hay?")) && /Room server/.test(t("¿qué roles hay?")));
+  caso("Frecuencias de Trama y la banda de la ANE", /921,5/.test(t("¿qué frecuencia uso?")) && /915 a 928/.test(t("¿qué frecuencia uso?")));
+  caso("El gateway de Trama: torre de 12 m, mini PC y 4 radios", /12 m/.test(t("¿qué es el gateway?")) && /N100/.test(t("¿qué es el gateway?")) && /Starlink/.test(t("¿qué es el gateway?")));
+  caso("Ningún tema habla de Meshtastic", !["¿qué es esto?", "¿qué es un nodo?", "¿qué es el preset?", "¿cómo viaja un mensaje?", "¿qué roles hay?", "¿qué es la malla?", "¿qué es el límite de saltos?"].some((q) => /meshtastic/i.test(t(q))));
+  caso("Tour de capacidad por su tema", m.responder("hazme el tour de capacidad", c).acciones?.[0]?.tour === "capacidad");
+}
+
+// 15) Zonas de popularidad y prueba de estrés de la hora pico (v12.1): lo que pidió el Inge
+{
+  const g = base("g", "Gateway", 4.2, -73.37, { pasarela: true, rol: "COMPANION" });
+  const r1 = base("r1", "Repetidor 1", 4.25, -73.3, { rol: "REPETIDOR" });
+  const r12 = base("r12", "Repetidor 12", 4.15, -73.3, { rol: "REPETIDOR" });
+  const api = crearApi([g, r1, r12]);
+  const orden = (t) => m.interpretarOrden(t, api, null);
+  const inge1 = orden("Agrégale lo que viene siendo por cada punto una popularidad de 250 personas y verificar qué tan colapsada estaría la red para transferir información");
+  caso("«Por cada punto una popularidad de 250 personas y verificar qué tan colapsada» → zonas en todos + estrés con rampa", inge1?.tipo === "zonas" && inge1.pedido.n === 250 && !inge1.pedido.centros && inge1.estres?.rampa === true, JSON.stringify(inge1));
+  const inge2 = orden("Ayúdame de la siguiente manera quiero agregarle vuélveme a hacerlo de las 11226 hectáreas de manera estable y quiero agregarle por cada nodo o por cada antena 250 personas en los que sería como las zonas de popularidad para ver si se colapsa si se queda la red se disminuye el ancho de banda bueno para evaluar todas esas circunstancias");
+  caso(
+    "Diseño de 11.226 ha estable + 250 personas por nodo + estrés comparando ajustes",
+    inge2?.tipo === "disenar" && cerca(inge2.area.areaM2, 112260000, 1) && inge2.margenDb === 37 && inge2.despues?.zonas?.n === 250 && inge2.despues?.estres?.rampa === true && inge2.despues?.estres?.comparar === true,
+    JSON.stringify(inge2).slice(0, 240),
+  );
+  const rehacer = orden("vuélveme a hacerlo de las 11226 hectáreas de manera estable");
+  caso("«Vuélveme a hacerlo de las 11.226 ha de manera estable» → diseño estable", rehacer?.tipo === "disenar" && rehacer.margenDb === 37 && !rehacer.despues);
+  const uno = orden("pon 300 personas alrededor del Repetidor 1 a 3 km");
+  caso("«300 personas alrededor del Repetidor 1 a 3 km» → solo esa zona", uno?.tipo === "zonas" && uno.pedido.n === 300 && uno.pedido.radioKm === 3 && JSON.stringify(uno.pedido.centros) === '["r1"]' && uno.estres === null, JSON.stringify(uno));
+  caso("«Repetidor 12» no se confunde con «Repetidor 1»", JSON.stringify(orden("zona de popularidad de 100 personas en el Repetidor 12")?.pedido?.centros) === '["r12"]');
+  caso("«Zona de popularidad en el gateway» → 250 en el gateway", JSON.stringify(orden("zona de popularidad en el gateway")?.pedido) === '{"n":250,"centros":["g"]}');
+  caso("«En cada repetidor 150 personas a 1 km»", orden("en cada repetidor 150 personas a 1 km")?.pedido?.radioKm === 1 && orden("en cada repetidor 150 personas a 1 km")?.pedido?.n === 150);
+  caso("«Quita las zonas de popularidad»", orden("quita las zonas de popularidad")?.tipo === "quitar-zonas");
+  const e1 = orden("¿hasta cuántos usuarios aguanta cada repetidor?");
+  caso("«¿Hasta cuántos usuarios aguanta cada repetidor?» → estrés con rampa", e1?.tipo === "estres" && e1.opciones.rampa === true, JSON.stringify(e1));
+  caso("«Prueba de estrés en día de mercado» → 25 % en la hora pico", orden("haz la prueba de estrés en día de mercado")?.opciones?.horaPicoPct === 25);
+  caso("«¿Qué tan colapsada está la red?» → estrés", orden("¿qué tan colapsada está la red?")?.tipo === "estres");
+  caso("«Hora pico con 5 pagos por persona al día»", orden("prueba la hora pico con 5 pagos por persona al día")?.opciones?.pagosPersonaDia === 5);
+  caso("«¿Se disminuye el ancho de banda?» compara ajustes", orden("¿se disminuye el ancho de banda con la hora pico?")?.opciones?.comparar === true);
+  caso("La ráfaga y la curva de pagos siguen siendo la prueba de carga", orden("envía 25 pagos al tiempo")?.tipo === "carga" && orden("¿hasta cuántos pagos aguanta?")?.tipo === "carga" && orden("mandemos pagos hasta que se reviente")?.tipo === "carga");
+  caso("«Puebla la zona con 250 personas» sigue siendo poblar", orden("puebla la zona con 250 personas")?.tipo === "poblar");
+
+  // Ejecutar: zonas y luego la prueba de estrés, contada en palabras
+  const zona = (id, nombre, extra) => ({ id, nombre, pieza: id === "g" ? "gateway" : "repetidor", usuarios: 250, usuariosRuta: 250, pagosHora: 91, pagos: 45, completos: 9, completosPct: 20, p50S: 60, p95S: 240, canalPct: 98, txPct: 12.5, colisiones: 500, sordos: 200, perdidasCola: 0, alcanceKm: 2, alcanceCargaKm: 0.6, radioZonaKm: 1.8, airePersonaS: 3.4, canalPersonaPct: 0.09, energia: id === "g" ? null : { consumoWhDia: 1.1, generaWhDia: 14, bateriaWh: 34.6, autonomiaDias: 31, alcanza: true }, estado: "revienta", limites: ["canal", "choques", "alcance"], factorLento: null, factorQuiebre: 0.5, usuariosMax: 63, pagosHoraMax: 23, aguantaTodo: false, ...extra });
+  api.resultadoFalso = { nodos: [], enlaces: [] };
+  api.estresFalso = {
+    pagosPersonaDia: 2.4, horaPicoPct: 15, factor: 1, duracionMin: 30, preset: { id: "SF11_250", nombre: "Trama SF11 · 250 kHz (alcance)", velocidadKbps: 1.074 },
+    usuarios: 750, pedidosHora: 270, entregadosHora: 80, pagos: 135, completosPct: 24, p50S: 70, p95S: 240, canalGatewayPct: 98, utilBps: 66, canalBps: 1074, airePorPagoS: 9.4, estado: "revienta",
+    zonas: [zona("g", "Gateway"), zona("r1", "Repetidor 1", { completosPct: 18 }), zona("r12", "Repetidor 12", { completosPct: 30 })],
+    rampa: { puntos: [], factorSeguro: 0.25, factorLento: null, factorQuiebre: 0.5, usuariosMax: 188, maxEntregadosHora: 181, primera: "Repetidor 1" },
+    ajustes: [{ preset: "SF9_250", nombre: "Trama SF9 · 250 kHz (capacidad)", actual: false, conRuta: 700, completosPct: 82, p95S: 90, canalPct: 80, estado: "revienta", velocidadKbps: 3.5 }, { preset: "SF11_250", nombre: "Trama SF11 · 250 kHz (alcance)", actual: true, conRuta: 750, completosPct: 24, p95S: 240, canalPct: 98, estado: "revienta", velocidadKbps: 1.074 }],
+    motivo: null,
+  };
+  const rz = m.ejecutarOrden(inge1, api);
+  caso("Pone las zonas, avisa que prueba la hora pico y se puede deshacer", api.llamadas.some((l) => l[0] === "zonas" && l[1].n === 250) && /puse 750 personas en 3 zonas/.test(rz.texto) && /hora pico/.test(rz.texto) && rz.deshacer && rz.luego, rz.texto.slice(0, 200));
+  const tz = (await rz.luego).texto;
+  caso(
+    "Cuenta la hora pico: se revienta, zona por zona, alcance con carga, energía, rampa, ajustes y qué hacer",
+    /Resultado: se revienta/.test(tz) && /Zona por zona/.test(tz) && /• Repetidor 1 \(250 personas, 91 pagos\/h\): se revienta, 18 %/.test(tz) && /completa solo hasta 0,6 km \(atiende gente hasta 2,0 km\)/.test(tz) && /La energía no es el límite/.test(tz) && /aguanta sin demora hasta ~188 personas/.test(tz) && /como máximo ~181 pagos por hora/.test(tz) && /SF9 · 250 kHz: 82 %/.test(tz) && /4 frecuencias/.test(tz) && /aguanta hasta ~63 personas sin demora/.test(tz),
+    tz.slice(0, 300).replace(/\n/g, " "),
+  );
+  caso("El estrés va después de simular las zonas", api.llamadas.findIndex((l) => l[0] === "estres") > api.llamadas.findIndex((l) => l[0] === "zonas"));
+  const re = m.ejecutarOrden(e1, api);
+  caso("La prueba de estrés sola avisa qué mide y luego cuenta", /Subo la carga de la hora pico/.test(re.texto) && /Resultado: se revienta/.test((await re.luego).texto));
+  const qz = m.ejecutarOrden(orden("quita las zonas de popularidad"), api);
+  caso("Quitar las zonas dice cuántas personas y deja deshacer", /quité las zonas de popularidad \(500 personas\)/.test(qz.texto) && qz.deshacer);
+  // El diseño compuesto avisa que después pone las zonas
+  api.disenoFalso = { nodos: [], areaKm2: 112.26, muestras: 1000, inicialPct: 90, coberturaPct: 99, objetivoPct: 95, margenObjetivoDb: 37, respaldo: false, alcanzado: true, motivo: null, huecos: [] };
+  api.resultadoFalso = null;
+  const rd = m.ejecutarOrden(inge2, api);
+  caso("El diseño compuesto anuncia las zonas y la prueba de estrés", /Después pongo 250 personas alrededor de cada gateway y repetidor/.test(rd.texto) && /prueba de estrés/.test(rd.texto), rd.texto.slice(0, 240));
+  const fd = await rd.luego;
+  caso("Al terminar el diseño, pone las zonas y cuenta la prueba de estrés", api.llamadas.filter((l) => l[0] === "zonas").length === 2 && /Prueba de estrés de la hora pico/.test(fd.texto), fd.texto.slice(0, 120).replace(/\n/g, " "));
+
+  // Cerebro
+  const c = { antenas: [g, r1], parametros: { ...PARAMETROS, preset: "SF11_250" }, resultado: null, desactualizado: false, relieve: "teselas", modo: "sembrar" };
+  caso("«¿Qué es una zona de popularidad?» → explica zonas y estrés", /zonas de popularidad ponen gente alrededor/.test(m.responder("¿qué es una zona de popularidad?", c).texto));
+  caso("«¿Cuánto consume cada usuario?» → aire por persona", /segundos de aire en la hora pico/.test(m.responder("¿cuánto consume cada usuario de la red?", c).texto));
 }
 
 console.log(fallos ? `\n✗ ${fallos} prueba(s) fallaron` : "\n✓ Melki verificado");
