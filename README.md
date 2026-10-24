@@ -1,17 +1,20 @@
-# Simulador de cobertura · Red de pagos MeshCore (LoRa 915–928 MHz)
+# Simulador de cobertura · Red MeshCore de Trama: pagos, WhatsApp e IA (LoRa 915–928 MHz)
 
-Herramienta web para planear la red de pagos por radio de **Trama** sobre **MeshCore**: se ubican el gateway, los
+Herramienta web para planear la red por radio de **Trama** sobre **MeshCore**, que lleva la comunicación a donde
+normalmente no llega: por ella viajan **pagos, mensajes de WhatsApp por texto y consultas a la inteligencia
+artificial** en los lugares sin señal, y todo ese tráfico comparte el mismo canal. Se ubican el gateway, los
 repetidores y la gente por coordenadas (o en el mapa) y el simulador calcula la cobertura y el alcance sobre el relieve,
 los enlaces de la malla, los saltos hasta el gateway y la factibilidad de la red, con la paleta de colores de Radio
 Mobile. Con **«Poblar personas»** se llena la zona de billeteras al azar, con las **«Zonas de popularidad»** se pone
-gente alrededor de cada repetidor, la **«Prueba de estrés»** mide la hora pico zona por zona hasta que cada repetidor
-se revienta y la **«Prueba de carga»** dice cuántos pagos al tiempo aguanta cada frecuencia. Abre en el modo **«Sembrar la malla»**: primero el Gateway +
+gente alrededor de cada repetidor (la cantidad que se quiera) y se busca el límite de cada punto, la **«Prueba de
+estrés»** mide la hora pico zona por zona hasta que cada repetidor se revienta y la **«Prueba de carga»** dice cuántos
+pagos o mensajes al tiempo aguanta cada frecuencia. Abre en el modo **«Sembrar la malla»**: primero el Gateway +
 Internet, luego los repetidores según la distancia y al final la gente, con guía paso a paso, sembrado automático de
-repetidores y pagos de prueba que viajan por la malla. Usa los equipos, precios, capacidad y supuestos del documento de
+repetidores y mensajes de prueba que viajan por la malla. Usa los equipos, precios, capacidad y supuestos del documento de
 Trama del Inge. Incluye a **Melki**, un asistente local que ejecuta pedidos en español («pon el gateway en 4.2,
 -73.37», «puebla la zona con 250 personas», «por cada antena 250 personas y mira qué tan colapsada queda la red»,
-«¿hasta cuántos usuarios aguanta cada repetidor?», «envía 25 pagos al tiempo», «¿cuánto cuesta la red para el
-Chocó?», «conecta a los que faltan»), responde preguntas (cómo viaja un pago, por qué una persona
+«¿cuántas personas aguanta el Repetidor 1?», «llena el gateway hasta su límite», «envía 25 pagos al tiempo», «¿cuánto
+cuesta la red para el Chocó?», «conecta a los que faltan»), responde preguntas (cómo viaja un mensaje, por qué una persona
 está en rojo, qué hacer ahora) y da tours guiados.
 
 - **Sembrar la malla** (modo con que abre; «Modo avanzado» muestra todos los paneles):
@@ -24,14 +27,15 @@ está en rojo, qué hacer ahora) y da tours guiados.
     roja o naranja, con los saltos hasta el gateway
   - Sembrado automático: «Conectar a los que faltan» o «Llevar la red a un punto» propone, con el relieve real, una
     cadena de repetidores en las lomas con enlace sólido (≥ 30 dB); se revisa en el mapa y se pone o se descarta
-  - Enviar un pago de prueba: la orden firmada (118 B) se anima salto a salto hasta el gateway, con el tiempo en el
-    aire de LoRa, la espera al azar de cada repetidor de MeshCore, el límite de saltos del diseño y la probabilidad de
-    entrega con los 4 intentos; en cada transmisión destellan los vecinos que la oyen y el comprobante vuelve por la
-    misma ruta
+  - Enviar un mensaje de prueba (del tamaño de la orden firmada de un pago, 118 B; un WhatsApp o una consulta a la IA
+    viajan igual): se anima salto a salto hasta el gateway, con el tiempo en el aire de LoRa, la espera al azar de cada
+    repetidor de MeshCore, el límite de saltos del diseño y la probabilidad de entrega con los 4 intentos; en cada
+    transmisión destellan los vecinos que la oyen y la respuesta (el comprobante, la confirmación o lo que contesta la
+    IA) vuelve por la misma ruta
   - Malla animada: piezas redondas (el gateway con la nube «IA») que laten si están conectadas, parpadean en rojo sin
     cobertura y destellan al retransmitir; líneas turquesa que avanzan hacia el gateway con pulsos; alcance de cada
     nodo en turquesa siguiendo el relieve. Se apaga con «Animar el flujo de la información»
-  - «Cómo se juega» y alcance de referencia en terreno plano (gateway → gente, repetidor → gente según la torre,
+  - «Cómo funciona» (la guía corta del modo) y alcance de referencia en terreno plano (gateway → gente, repetidor → gente según la torre,
     repetidor ↔ repetidor) junto al que supone Trama por terreno (10 km en plano, 8 en sabana, 5 en montaña o ríos, 3
     en selva)
 - **Poblar personas** (en el Resultado, o pidiéndoselo a Melki): reparte N personas (o la densidad de Trama: 0,2, 1 o 5
@@ -40,24 +44,36 @@ está en rojo, qué hacer ahora) y da tours guiados.
   (puntos pequeños en el mapa, un renglón en la lista, resumen en «Nodos de campo», sin etiquetas de enlace) y no entran
   en el ajuste automático
 - **Zonas de popularidad** (al tocar un repetidor o el gateway —en su tarjeta del mapa o en la lista—, en el Resultado o
-  pidiéndoselo a Melki): N personas (50 a 1.000) a la redonda de un nodo (1, 2, 3 o 5 km) o de cada gateway y
-  repetidor, solo donde hay señal. Cada persona queda marcada con su zona; volver a poner una zona la reparte de nuevo y
-  «Quitar las zonas» las borra (hasta 4.000 personas pobladas en total)
-- **Prueba de estrés de la hora pico**: cada persona hace sus pagos del día (2,4 por persona, lo que supone Trama: 55
-  pagos/h con 150 usuarios) y el 15 % cae en la hora pico (25 % un día de mercado), con multiplicador ×1 a ×10. Se
-  simula el canal paquete por paquete y se mide en cada gateway y repetidor: las personas que entran a la malla por él
-  (su primer salto) y las que pasan de otras zonas, pagos por hora, % con comprobante, espera típica y del 95 %, % del
+  pidiéndoselo a Melki): la cantidad de personas que se quiera (hasta 2.000 por punto) a la redonda de un nodo (1, 2, 3
+  o 5 km) o de cada gateway y repetidor, solo donde hay señal. Cada persona queda marcada con su zona; volver a poner
+  una zona la reparte de nuevo y «Quitar las zonas» las borra (hasta 4.000 personas pobladas en total). En cada punto:
+  - «Poner y probar»: pone esa gente y simula de una vez la hora pico con todos enviando información; dice cómo
+    queda el punto y toda la red (estable, lenta o se revienta)
+  - «¿Cuántas aguanta?»: sube solo la gente de ese punto (su ritmo de mensajes), con el resto de la red como está, y
+    busca hasta cuántas personas aguantan sin demora el punto y la red, desde cuántas va lento, desde cuántas se
+    revienta y qué falla primero (el propio punto —canal lleno, ciclo de trabajo, cola, choques, alcance, energía— u
+    otra zona, como el gateway). Si el punto está vacío pone antes una muestra. Hace tres búsquedas independientes y
+    da la del medio con su rango, y dibuja la curva (personas en el punto frente a % con respuesta, del punto y de la
+    red). «¿Cuántas aguanta cada punto?» lo hace con todos, uno a la vez
+  - «Llenar hasta el límite»: pone exactamente esa cantidad y lo confirma simulando la hora pico con la gente puesta
+    (si no queda estable, prueba con un poco menos)
+- **Prueba de estrés de la hora pico**: cada persona manda sus mensajes del día —pagos, WhatsApp y consultas a la IA—
+  (2,4 por persona, el ritmo que supone Trama: 55 por hora con 150 usuarios; se sube con «Mensajes por persona al día»
+  o el multiplicador ×1 a ×10 si la gente escribe o consulta más) y el 15 % cae en la hora pico (25 % un día de
+  mercado). Se simula el canal paquete por paquete y se mide en cada gateway y repetidor: las personas que entran a la
+  malla por él (su primer salto) y las que pasan de otras zonas, mensajes por hora, % con respuesta, espera típica y del 95 %, % del
   tiempo con el canal ocupado, cuánto transmite frente al tope del 50 %, paquetes descartados por cola llena, hasta
   dónde completa el 90 % con esa carga frente a la persona más lejana que atiende, la energía del repetidor solar P1
-  (consumo al día frente a lo que repone el panel de 5 W) y el aire que gasta cada persona. Para toda la red: pagos por
-  hora pedidos y entregados, ancho de banda útil (bps de pagos frente a la velocidad del canal) y el canal del gateway.
+  (consumo al día frente a lo que repone el panel de 5 W) y el aire que gasta cada persona. Para toda la red: mensajes
+  por hora pedidos y entregados, ancho de banda útil (bps de mensajes frente a la velocidad del canal) y el canal del gateway.
   En el mapa cada zona se pinta verde (aguanta), naranja (lenta) o roja (se revienta). «¿Hasta dónde aguanta cada
   repetidor?» sube y baja la carga (×0,03 a ×32) y da cuántas personas aguanta cada zona sin demora, desde dónde se
-  revienta y la curva de rendimiento (pagos entregados frente a pedidos: sube hasta el máximo del canal y después cae
+  revienta y la curva de rendimiento (mensajes entregados frente a pedidos: sube hasta el máximo del canal y después cae
   por los choques). «Comparar ajustes de radio» repite la hora pico con los 7 ajustes (250 y 62,5 kHz), recalculando
   las rutas con la sensibilidad de cada uno
-- **Prueba de carga**: N pagos (orden, comprobante y aviso, con sus acuses) o mensajes saliendo al tiempo en 1 s, 10 s o
-  1 min, o un flujo por hora, simulados paquete por paquete como MeshCore. Da el porcentaje que recibió su comprobante,
+- **Prueba de carga**: N pagos (orden, comprobante y aviso, con sus acuses) o mensajes de texto (un WhatsApp o una
+  consulta a la IA y su respuesta) saliendo al tiempo en 1 s, 10 s o 1 min, o un flujo por hora, simulados paquete por
+  paquete como MeshCore. Da el porcentaje que recibió su respuesta,
   la espera típica y la del 95 %, el canal ocupado del gateway, los choques, los reintentos y los nodos más ocupados, y
   lo compara con Trama. «¿Hasta cuántos aguanta?» dibuja la curva: verde aguanta, naranja aguanta pero lento (el 95 %
   tarda más de un minuto) y rojo se revienta (menos del 90 % completa)
@@ -73,10 +89,28 @@ está en rojo, qué hacer ahora) y da tours guiados.
   25 m», «la persona»), órdenes en lote («sube todos los repetidores a 20 m», «borra todas las personas»), rol y
   equipo de un nodo, la gente y la capacidad («puebla con 250 personas», «por cada punto una popularidad de 250
   personas y verifica qué tan colapsada estaría la red», «¿hasta cuántos usuarios aguanta cada repetidor?», «prueba de
-  estrés en día de mercado», «envía 25 pagos al tiempo», «¿hasta cuántos pagos aguanta?»; y todo junto: «vuélveme a
+  estrés en día de mercado», «¿cuántas personas aguanta el Repetidor 1?», «llena el gateway hasta su límite», «pon 700
+  personas en el Repetidor 2 y mira la estabilidad», «el límite de cada punto», «envía 25 pagos al tiempo», «manda 15
+  mensajes de WhatsApp al tiempo», «¿hasta cuántos pagos aguanta?»; y todo junto: «vuélveme a
   hacer las 11.226 hectáreas de manera estable y por cada antena 250 personas para ver si se colapsa»), el
   dimensionamiento de Trama, capas y fondo del mapa, modos de cobertura, «simular al cambiar», relieve plano o real, nombre del
-  escenario, duplicar y seleccionar nodos, y su propia voz. Si no entiende un pedido de acción, lo dice y da ejemplos
+  escenario, duplicar y seleccionar nodos, los paneles («pantalla limpia», «muestra los paneles»), y su propia voz. Si no
+  entiende un pedido de acción, lo dice y da ejemplos. A «¿cómo dejo la mayor cobertura posible?» responde con
+  recomendaciones para el escenario (sitios altos, línea de vista, malla con respaldo, gateway al centro, SF y antena) y
+  el botón para proponer la opción de máxima cobertura; «dame la mayor cobertura posible» la calcula de una vez
+- **Melki manos libres** (tipo Jarvis; botón «Manos libres» de la barra de arriba, ícono de ondas del chat o «activa
+  manos libres»): Melki escucha todo el tiempo y se activa con su nombre: «Hola Melki», «Oye Melki», «Hey Melki» o
+  «Hello Melki» y el pedido de corrido. Entiende lo mismo que por escrito, con los números y las coordenadas dichos en
+  palabras («doscientas cincuenta personas», «cuatro punto dos, menos setenta y tres punto tres siete»); ejecuta,
+  contesta en voz alta (lo principal; el detalle queda escrito) y se queda atento unos segundos para seguir sin repetir
+  el nombre. Controles por voz: «para», «repite», «más detalle», «sí, hazlo» / «la segunda» (los botones de su
+  respuesta; «sí» nunca es «Deshacer»), «deshaz», «gracias», «deja de escuchar». Sin su nombre no hace nada; no toma
+  como pedido su propia voz cuando entra por el micrófono (lo que empieza a oírse mientras habla, o el eco de sus
+  últimas palabras). Una barra sobre el mapa muestra lo que entiende y lo que dice (subtítulos). En Ajustes de voz:
+  seguir la conversación, leer las respuestas completas y el sonido al activarse. Usa el mismo modo del dictado
+  («navegador» o «privado»); si el navegador corta la escucha, se vuelve a encender sola
+- **Panel izquierdo plegable**: el botón junto a «Modo avanzado» lo oculta y el de la barra de arriba lo devuelve (como
+  el de Resultados); con los dos ocultos queda solo el mapa, ideal para trabajar por voz
 - **Ajuste inteligente** («Ajústamelo automáticamente» en el Resultado, o pidiéndoselo a Melki): cuando la red sale
   «No factible» o «Factible con ajustes», analiza con el relieve real cómo dejarla factible con la mejor relación
   cobertura–costo: subir o bajar torres en tramos de 3 m (nunca más de 30 m), correr nodos a lomas cercanas, cambiar a
@@ -96,12 +130,14 @@ está en rojo, qué hacer ahora) y da tours guiados.
   parabólica) con azimut y elevación, pérdidas por entorno (vegetación y edificios), señal en margen, dBm, µV o
   dBµV/m con colores por clases, arcoíris o umbral, e informe de radioenlace como «Radio Link»
 - **Tours guiados** de Melki (botón «Tours» o «hazme un tour»): tutorial básico práctico de 7 pasos, «Sembrar la
-  malla», «¿Cuántos pagos aguanta?» (poblar, probar la carga, zonas de popularidad y la hora pico por repetidor), «Conocer la pantalla», «Red mesh completa», «Como Radio Mobile», «Medir y exportar» y «Hablar con Melki». En los pasos prácticos
+  malla», «¿Cuánto tráfico aguanta?» (poblar, probar la carga, zonas de popularidad y la hora pico por repetidor), «Conocer la pantalla», «Red mesh completa», «Como Radio Mobile», «Medir y exportar», «Hablar con Melki» y «Melki por voz
+  (manos libres)», que enseña a llamarlo, conversar, dejar la pantalla limpia y pedir la mayor cobertura posible. En los pasos prácticos
   Melki detecta cuando quedó hecho y ofrece «Hágalo por mí» y «Omitir paso»; todo ocurre en un escenario de práctica y
   al salir el del usuario vuelve tal cual (también si se cierra la página a mitad del tour)
 - **Dictado por voz** para Melki: micrófono junto al botón de enviar; el texto aparece en la caja para revisarlo y
-  corregirlo antes de enviarlo. Modo «navegador» (Web Speech de Edge o Chrome, con internet) o «privado» (el audio no
-  sale del equipo: reconocimiento en el dispositivo del navegador o Whisper dentro de la página)
+  corregirlo antes de enviarlo (los números dichos en palabras quedan en cifras). Modo «navegador» (Web Speech de Edge o
+  Chrome, con internet) o «privado» (el audio no sale del equipo: reconocimiento en el dispositivo del navegador o
+  Whisper dentro de la página)
 - **Regla** tipo Google Earth: línea, trayecto y área, editables, con perfil del terreno; se guardan con el escenario
 - **Mapa de referencia** local: departamentos y municipios (DANE), ríos y lagos principales y países (Natural Earth),
   buscador de lugares y coordenadas, menú del clic derecho y coordenadas bajo el cursor
@@ -134,7 +170,9 @@ npm run dev          # http://localhost:3000
 src/
   app/                      layout, página y estilos globales
   components/simulador/     pantalla principal, mapa, paneles, regla, buscador, capas de referencia, exportación
-  components/melki/         asistente: avatar, cerebro local, órdenes, tours guiados (tours.ts + recorrido.tsx), voz y dictado
+  components/melki/         asistente: avatar, cerebro local, órdenes, tours guiados (tours.ts + recorrido.tsx), voz y dictado;
+                            manos libres (manos-libres.ts: llamado, controles, resumen para la voz y eco; numeros.ts:
+                            números en palabras → cifras; hud-voz.tsx: la barra de voz sobre el mapa)
   datos/geo/                límites, nombres y ríos de referencia (ver LEEME.md: fuentes y licencias)
   lib/geo/                  consultas locales: municipio de un punto, búsqueda de lugares
   lib/radio/                motor: modelo, relieve, perfil, cobertura, malla, factibilidad, worker;
@@ -217,8 +255,10 @@ la cobertura útil, la confiable (≥ 37 dB), la que tiene servicio (≥ 20 dB) 
   (el siguiente de la ruta, el destino o los repetidores que la inundarían): con 1.750 personas una hora pico tarda
   ~0,1 s.
 - **Prueba de estrés** (`src/lib/radio/estres.ts`, en el Web Worker): corre la prueba de carga en modo continuo con
-  los pagos de la hora pico (personas × pagos al día × % de la hora pico × multiplicador, 30 minutos, dos sorteos) y la
-  reparte por zona (el nodo del primer salto de cada persona). Alcance con carga: los pagos de la zona se ordenan por
+  los mensajes de la hora pico (personas × mensajes al día × % de la hora pico × multiplicador, 30 minutos, dos
+  sorteos; cada mensaje con el tamaño de un pago del documento: 118 B de ida, 126 B de vuelta y un aviso de 126 B —un
+  WhatsApp largo o una respuesta larga de la IA ocupan más aire—) y la reparte por zona (el nodo del primer salto de
+  cada persona). Alcance con carga: los mensajes de la zona se ordenan por
   distancia en tramos de al menos 6 y se busca hasta dónde completa el 90 %; si los cercanos tampoco completan, es el
   canal y no la distancia. Energía del P1: 0,45 W al transmitir y 0,03 W escuchando; el panel de 5 W rinde ~4 horas de
   sol con 70 % de eficiencia (~14 Wh al día) y la batería útil es ~35 Wh; la transmisión del día es la de la hora pico
@@ -226,12 +266,25 @@ la cobertura útil, la confiable (≥ 37 dB), la que tiene servicio (≥ 20 dB) 
   una frecuencia SF11) la red se revienta (~56 % completos, canal del gateway ~97 %) y aguanta sin demora ~500
   personas; con 40 por nodo aguanta y llega a ~320 sin demora. Con SF9 la misma hora pico completa todos. El sitio de
   Trama lleva 4 radios (4 frecuencias): repartiendo los repetidores entre ellas la capacidad sube hasta 4 veces.
+- **Límite de un punto** (`estresMalla` con `foco`): la gente del punto es su zona de popularidad (o, si no tiene, la
+  que entra a la malla por él). La prueba de carga recibe un peso por persona (`pesos`: cada mensaje sale de una
+  persona al azar en proporción a su peso), así que se multiplica el ritmo de la gente del punto sin mover a nadie y
+  el resto de la red sigue igual. Se sube ×2, ×4, ×8… hasta que el punto o alguna zona deja de aguantar sin demora (el
+  90 % con respuesta y el 95 % en menos de un minuto), se afina tres veces entre lo que aguanta y lo que no, y se sigue
+  hasta ver dónde se revienta; tope 2.000 personas. Cerca del límite la espera cambia mucho de un sorteo a otro: cada
+  búsqueda usa una hora pico de 60 minutos y tres sorteos por paso, y se hacen tres búsquedas independientes; se da la
+  del medio y el rango (en el laboratorio, ±10 % para un repetidor). Si con muy poca gente en el punto la red ya no
+  aguanta, lo dice: la llenan las otras zonas. En el laboratorio (40 por nodo, SF11) un repetidor aguanta ~340
+  personas sin demora, va lento desde ~380 y se revienta desde ~640; con SF9, ~1.600. «Llenar hasta el límite» pone
+  esa gente y repite la hora pico con las personas puestas (si no queda estable, baja un 15 % y prueba de nuevo, hasta
+  tres veces).
 - **Poblar** (`src/lib/radio/poblar.ts`): puntos uniformes en área (la latitud se sortea en seno), dentro del polígono,
   con separación mínima y repetibles con la misma semilla (mulberry32).
 - **Trama** (`src/lib/radio/trama.ts`): catálogo del cotizador (TRM 3.158 con 3 % de colchón; lo importado suma 12 %
   de envío, 10 % de arancel y 19 % de IVA), conjuntos (repetidor ≈ $1.035.000, sitio gateway con 4 radios ≈ $9,4 M,
   Starlink con solar ≈ $6,1 M y $160.000 al mes), capacidad (SF11 / SF10 / SF9: 150 / 280 / 500 usuarios y 55 / 105 /
-  185 pagos por hora por frecuencia con el canal al 15 %), alcance por terreno, operación y regiones, y el
+  185 pagos por hora por frecuencia con el canal al 15 %; esa capacidad la comparten con los WhatsApp y las consultas
+  a la IA), alcance por terreno, operación y regiones, y el
   dimensionamiento del documento (`dimensionarTrama`): hexágonos de 2,598·r², una radio cada 150 usuarios con SF11,
   sitios de hasta 4 radios y 19 celdas, un Starlink cada 4, 2 o 1 sitios según el terreno, inversión y operación.
   Validado contra el documento: Chocó, Vichada y el total nacional (950.655 usuarios, 7.017 repetidores, 1.602 sitios,
@@ -289,6 +342,9 @@ piloto.
 - El ancho de banda de 250 kHz, deducido de los tiempos de un pago (9,5 / 5 / 3 s).
 - El tamaño del aviso a quien recibe (126 B, como el comprobante) y lo que tarda el banco (1,5 s) en la prueba de carga.
 - La ganancia de la antena de la billetera XIAO (2 dBi) y de la T1000-E (0 dBi), estimadas.
+- La mezcla del tráfico: la prueba de estrés usa 2,4 mensajes por persona al día con el tamaño de un pago; cuántos
+  WhatsApp y consultas a la IA manda cada persona, y su tamaño, cambian la capacidad (se ajusta con «Mensajes por
+  persona al día» o el multiplicador).
 
 ## Variables de entorno
 
@@ -316,4 +372,6 @@ mapas y de relieve solo reciben las teselas de la zona visible; no se envían no
 entiende y ejecuta los pedidos con un cerebro local, sin servicios externos; los límites, nombres y ríos de referencia
 vienen empaquetados con la aplicación. Dictado por voz: en el modo «navegador», Edge o Chrome procesan el audio en sus
 servidores; en el modo «privado» el audio no sale del equipo (solo se descargan una vez la biblioteca, el motor y el
-modelo, que quedan guardados en el navegador).
+modelo, que quedan guardados en el navegador). Manos libres usa el mismo modo: con «navegador», mientras está activo el
+audio del micrófono va de forma continua al servicio de Edge o Chrome; con «privado», no sale del equipo. Se apaga con
+el botón, con la X de la barra de voz o diciendo «Melki, deja de escuchar».

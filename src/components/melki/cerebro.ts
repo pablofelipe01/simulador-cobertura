@@ -15,8 +15,8 @@ import type { ModoApp } from "../simulador/estado";
 import { accionAjuste, textoCoberturaUtil, textoRed, type Orden } from "./ordenes";
 import { TOURS, type IdTour } from "./tours";
 
-/** «recorrido» empieza el tour indicado; «tours» muestra el menú de tours. */
-export type AccionMelki = "recorrido" | "tours" | "simular" | "ejemplo" | "agregar" | "inspeccionar" | "parametros" | "resultados" | "kmz" | "regla" | "orden" | "deshacer";
+/** «recorrido» empieza el tour indicado; «tours» muestra el menú de tours; «manos-libres» activa la escucha por voz. */
+export type AccionMelki = "recorrido" | "tours" | "simular" | "ejemplo" | "agregar" | "inspeccionar" | "parametros" | "resultados" | "kmz" | "regla" | "orden" | "deshacer" | "manos-libres";
 
 /** Con «detalle», la acción se muestra como una opción de menú (título y una línea). */
 export type AccionRespuesta = { texto: string; accion: AccionMelki; orden?: Orden; escenario?: Escenario; tour?: IdTour; detalle?: string };
@@ -62,7 +62,7 @@ function resumenMalla(c: ContextoMelki): Respuesta | null {
   const consejo = consejoRed(red, c.parametros.limiteSaltos);
   const acciones: AccionRespuesta[] = [];
   if (red.alDia && red.sinCobertura.length) acciones.push({ texto: "Conectar a los que faltan", accion: "orden", orden: { tipo: "sembrar", destino: "faltantes" } });
-  if (red.alDia && red.conectadas.length) acciones.push({ texto: "Enviar un pago de prueba", accion: "orden", orden: { tipo: "mensaje" } });
+  if (red.alDia && red.conectadas.length) acciones.push({ texto: "Enviar un mensaje de prueba", accion: "orden", orden: { tipo: "mensaje" } });
   return { texto: `${textoRed(red, c.parametros.limiteSaltos)} ${consejo.paso ? `Paso ${consejo.paso}: ` : ""}${consejo.titulo}. ${consejo.texto}`, acciones: acciones.length ? acciones : undefined };
 }
 
@@ -90,7 +90,7 @@ const TEMAS: Tema[] = [
     id: "saludo",
     claves: ["hola", "buenos dias", "buenas tardes", "buenas noches", "buenas", "hey", "saludos", "que tal"],
     responder: () => ({
-      texto: "¡Hola! Soy Melki. Siembro la red de pagos de Trama con usted (gateway, repetidores y gente), simulo su cobertura sobre el relieve real, pueblo la zona con personas y pruebo cuántos pagos aguanta cada frecuencia. Pídamelo con sus palabras o le muestro el simulador paso a paso.",
+      texto: "¡Hola! Soy Melki. Siembro con usted la red de Trama, que lleva pagos, mensajes de WhatsApp y consultas a la inteligencia artificial a donde no hay señal (gateway, repetidores y gente), simulo su cobertura sobre el relieve real, pueblo la zona con personas y pruebo cuánto tráfico aguanta cada frecuencia. Pídamelo con sus palabras o le muestro el simulador paso a paso.",
       acciones: [{ texto: "Ver los tours guiados", accion: "tours" }],
     }),
   },
@@ -106,7 +106,7 @@ const TEMAS: Tema[] = [
     claves: ["para que sirve", "que hace", "que es esto", "simulador", "como funciona", "como se usa", "como empiezo", "empezar"],
     responder: () => ({
       texto:
-        "El simulador planea la red de pagos por radio de Trama (MeshCore, LoRa en la banda libre de 915 a 928 MHz) sobre el relieve real. Tiene dos modos: «Sembrar la malla», el sencillo, donde pone el Gateway + Internet, los repetidores y la gente y le guío paso a paso; y el modo avanzado, con todos los paneles. Al simular ve el nivel de señal con los colores de Radio Mobile, el alcance de cada repetidor, los enlaces de la malla, los saltos hasta el gateway y un veredicto de factibilidad con recomendaciones. Con «Poblar personas» reparte la gente de la zona y con la «Prueba de carga» ve cuántos pagos aguanta la frecuencia antes de reventarse. También le dimensiono la red de un departamento con los precios del documento de Trama.",
+        "El simulador planea la red por radio de Trama (MeshCore, LoRa en la banda libre de 915 a 928 MHz) sobre el relieve real: por ella van pagos, mensajes de WhatsApp por texto y consultas a la inteligencia artificial en los lugares sin señal. Tiene dos modos: «Sembrar la malla», el sencillo, donde pone el Gateway + Internet, los repetidores y la gente y le guío paso a paso; y el modo avanzado, con todos los paneles. Al simular ve el nivel de señal con los colores de Radio Mobile, el alcance de cada repetidor, los enlaces de la malla, los saltos hasta el gateway y un veredicto de factibilidad con recomendaciones. Con «Poblar personas» reparte la gente de la zona y con la «Prueba de carga» ve cuántos pagos y mensajes aguanta la frecuencia antes de reventarse. También le dimensiono la red de un departamento con los precios del documento de Trama.",
       acciones: [{ texto: "Ver los tours guiados", accion: "tours" }],
     }),
   },
@@ -126,7 +126,7 @@ const TEMAS: Tema[] = [
       texto: [
         "Manejo el simulador con sus palabras; puede pedirme varias cosas en un mismo mensaje y todo se puede deshacer. Por ejemplo:",
         "• Sembrar la malla: «pon el gateway en Cumaral», «agrega un repetidor a 8 km al norte del gateway», «pon una persona en 4.31, -73.22», «conecta a los que faltan», «envía un pago desde Persona 1», «¿qué hago ahora?».",
-        "• Gente y capacidad: «puebla la zona con 250 personas», «reparte 1 persona por km² en el área objetivo», «solo donde haya señal», «envía 25 pagos al tiempo», «manda 15 mensajes en 10 segundos», «¿hasta cuántos pagos aguanta?», «quita las pobladas».",
+        "• Gente y capacidad: «puebla la zona con 250 personas», «reparte 1 persona por km² en el área objetivo», «solo donde haya señal», «envía 25 pagos al tiempo», «manda 15 mensajes de WhatsApp en 10 segundos», «¿hasta cuántos pagos aguanta?», «quita las pobladas».",
         "• Trama: «¿cuánto cuesta la red para el Chocó?», «¿y para todo el país con el 50 % de adopción?», «dimensiona 5.000 usuarios en 800 km² de sabana», «¿cuánto cuesta un repetidor?», «¿qué lleva cada persona?», «¿cuántos usuarios por frecuencia?».",
         "• Diseñar una red: «ármame una malla que cubra 11.226 hectáreas con señal media o mejor en el 99,9 %», «cubre 500 ha alrededor de Cumaral con repetidores de 12 m», «cubre el área que medí con respaldo».",
         "• Ajustar la red al mejor costo: «ajústamelo», «hazla factible sin pasar de 20 m», «optimiza el costo», «máximo 2 antenas de apoyo», «no muevas los nodos», «usa el área que medí como área objetivo con el 95 %».",
@@ -134,7 +134,8 @@ const TEMAS: Tema[] = [
         "• Nodos: «inscribe un nodo antena en 4°30'44\" N 73°07'24\" O a 12 m», «mueve Ejemplo 2 km al sur», «súbelo a 9 m», «sube todos los repetidores a 12 m», «borra todas las personas», «que Repetidor 2 no retransmita», «marca Torre 2 como pasarela».",
         "• Radio: «usa SF10», «la frecuencia a 921,5 MHz», «confiabilidad del 90 %», «usa Longley-Rice», «simula con vegetación densa», «informe del enlace Ejemplo y Torre 2».",
         "• Mapa, medir y exportar: «muestra las vías», «llévame a Villavicencio», «distancia entre Ejemplo y Torre 2», «perfil de Ejemplo a Torre 2», «¿cuánto cubre el área?», «exporta a Google Earth».",
-        "Si prefiere hablar, toque el micrófono y revise el texto antes de enviarlo. Y si quiere aprender paso a paso, pídame un tour guiado.",
+        "• Por voz, sin tocar nada: active «Manos libres» y diga «Hola Melki, pon el gateway en Cumaral»; «pantalla limpia» deja solo el mapa mientras trabajamos.",
+        "Si prefiere dictar, toque el micrófono y revise el texto antes de enviarlo. Y si quiere aprender paso a paso, pídame un tour guiado.",
       ].join("\n"),
       acciones: [{ texto: "Ver los tours guiados", accion: "tours" }],
     }),
@@ -256,7 +257,7 @@ const TEMAS: Tema[] = [
       const p = presetPorId(c.parametros.preset);
       const trama = ([11, 10, 9] as SfTrama[]).map((sf) => `SF${sf}: un pago ocupa ~${f(SF_TRAMA[sf].segPago, SF_TRAMA[sf].segPago % 1 ? 1 : 0)} s de aire, ${SF_TRAMA[sf].usuariosFrecuencia} usuarios por frecuencia y ${Math.round(SF_TRAMA[sf].factorRadio * 100)} % del alcance`).join("; ");
       return {
-        texto: `El ajuste de radio fija el factor de dispersión (SF) y el ancho de banda: más SF, más alcance pero cada paquete ocupa el aire más tiempo y caben menos pagos. Trama usa 250 kHz — ${trama}. La comunidad MeshCore usa canales de 62,5 kHz (más sensibles y más lentos; el de EE. UU. va en 910,525 MHz, fuera de la banda colombiana). Ahora: ${p.nombre}, ${f(p.sensibilidadDbm)} dBm de sensibilidad y ≈ ${f(airePagoMs(p) / 1000)} s de aire por pago a 2 saltos. Todos los nodos de una frecuencia usan el mismo ajuste.`,
+        texto: `El ajuste de radio fija el factor de dispersión (SF) y el ancho de banda: más SF, más alcance pero cada paquete ocupa el aire más tiempo y caben menos pagos y mensajes. Trama usa 250 kHz — ${trama}. La comunidad MeshCore usa canales de 62,5 kHz (más sensibles y más lentos; el de EE. UU. va en 910,525 MHz, fuera de la banda colombiana). Ahora: ${p.nombre}, ${f(p.sensibilidadDbm)} dBm de sensibilidad y ≈ ${f(airePagoMs(p) / 1000)} s de aire por pago a 2 saltos. Todos los nodos de una frecuencia usan el mismo ajuste.`,
         acciones: [{ texto: "Ir a parámetros", accion: "parametros" }],
       };
     },
@@ -282,7 +283,7 @@ const TEMAS: Tema[] = [
     responder: (c) => {
       const r = c.resultado;
       const base =
-        "En MeshCore solo los repetidores retransmiten: las billeteras y las radios del gateway (companion) envían y reciben lo suyo. El primer paquete hacia un destino se inunda por los repetidores; el destino devuelve la ruta y desde ahí cada pago va directo por ese camino: solo el siguiente repetidor de la ruta lo pasa. Evalúo cada pareja con al menos un repetidor o el gateway: enlace sólido desde 30 dB, inestable entre 20 y 30 dB y sin enlace por debajo de 20 dB (el peor de los dos sentidos).";
+        "En MeshCore solo los repetidores retransmiten: las billeteras y las radios del gateway (companion) envían y reciben lo suyo. El primer paquete hacia un destino se inunda por los repetidores; el destino devuelve la ruta y desde ahí cada pago o mensaje va directo por ese camino: solo el siguiente repetidor de la ruta lo pasa. Evalúo cada pareja con al menos un repetidor o el gateway: enlace sólido desde 30 dB, inestable entre 20 y 30 dB y sin enlace por debajo de 20 dB (el peor de los dos sentidos).";
       if (!r) return { texto: base };
       const s = r.enlaces.filter((e) => e.clase === "solido").length;
       const i = r.enlaces.filter((e) => e.clase === "inestable").length;
@@ -293,7 +294,7 @@ const TEMAS: Tema[] = [
     id: "saltos",
     claves: ["saltos", "hop", "hop limit", "hop_limit", "limite de saltos", "brincos", "flood max"],
     responder: (c) => ({
-      texto: `En MeshCore la ruta va escrita en el paquete y un mensaje puede pasar hasta por 64 repetidores; el límite de saltos de aquí (${c.parametros.limiteSaltos}) es el del diseño. Trama calcula los pagos a 2 saltos: cada salto más vuelve a ocupar el aire con la orden, el comprobante, el aviso y sus acuses, así que alarga la espera y le quita capacidad a la frecuencia. Reviso que cada persona y cada repetidor lleguen al gateway dentro de ese límite.`,
+      texto: `En MeshCore la ruta va escrita en el paquete y un mensaje puede pasar hasta por 64 repetidores; el límite de saltos de aquí (${c.parametros.limiteSaltos}) es el del diseño. Trama calcula los pagos a 2 saltos: cada salto más vuelve a ocupar el aire con cada mensaje y su respuesta (en un pago, la orden, el comprobante y el aviso) y sus acuses, así que alarga la espera y le quita capacidad a la frecuencia. Reviso que cada persona y cada repetidor lleguen al gateway dentro de ese límite.`,
     }),
   },
   {
@@ -302,7 +303,7 @@ const TEMAS: Tema[] = [
     responder: (c) => {
       const p = c.antenas.filter((a) => a.pasarela).map((a) => a.nombre);
       return {
-        texto: `El gateway (la pasarela) es el sitio con internet; todo pago del campo debe llegar a él. En Trama es una torre arriostrada de 12 m con un mini PC sin ventilador (Intel N100, Linux), un hub USB, una UPS, polo a tierra y hasta 4 radios Heltec T114 —una por frecuencia, como companion por USB— con antena de 8 dBi: ≈ ${pesos(PRECIOS.sitioBase + 4 * PRECIOS.radio)} con su kit solar. El internet entra por Starlink (kit con energía solar ≈ ${pesos(PRECIOS.starlink)} y ${pesos(PRECIOS.starlinkMes)} al mes; el plan comercial de la operación es ${pesos(OPERACION_TRAMA.starlinkMesComercial)}) o por un enlace WiFi punto a punto de 5 GHz (≈ ${pesos(PRECIOS.enlace)} el par) desde un sitio que lo tenga; un Starlink alimenta hasta ${TERRENOS_TRAMA.plano.sitiosPorStarlink} sitios en plano y 1 en selva. El gateway verifica cada pago con el banco y devuelve el comprobante por la misma ruta; en el simulador lleva además la nube «IA», el cerebro de inteligencia artificial que contesta las consultas de la gente. ${p.length ? `Ahora ${p.length === 1 ? "es" : "son"} gateway: ${p.join(", ")}.` : "Todavía no hay ninguno: póngalo primero."}`,
+        texto: `El gateway (la pasarela) es el sitio con internet; todo pago, WhatsApp o consulta a la IA del campo debe llegar a él. En Trama es una torre arriostrada de 12 m con un mini PC sin ventilador (Intel N100, Linux), un hub USB, una UPS, polo a tierra y hasta 4 radios Heltec T114 —una por frecuencia, como companion por USB— con antena de 8 dBi: ≈ ${pesos(PRECIOS.sitioBase + 4 * PRECIOS.radio)} con su kit solar. El internet entra por Starlink (kit con energía solar ≈ ${pesos(PRECIOS.starlink)} y ${pesos(PRECIOS.starlinkMes)} al mes; el plan comercial de la operación es ${pesos(OPERACION_TRAMA.starlinkMesComercial)}) o por un enlace WiFi punto a punto de 5 GHz (≈ ${pesos(PRECIOS.enlace)} el par) desde un sitio que lo tenga; un Starlink alimenta hasta ${TERRENOS_TRAMA.plano.sitiosPorStarlink} sitios en plano y 1 en selva. El gateway verifica cada pago con el banco, pasa los WhatsApp a internet y lleva la nube «IA», el cerebro de inteligencia artificial que contesta las consultas de la gente; la respuesta (el comprobante, la confirmación o lo que contesta la IA) vuelve por la misma ruta. ${p.length ? `Ahora ${p.length === 1 ? "es" : "son"} gateway: ${p.join(", ")}.` : "Todavía no hay ninguno: póngalo primero."}`,
       };
     },
   },
@@ -311,7 +312,7 @@ const TEMAS: Tema[] = [
     claves: ["rol", "roles", "repeater", "companion", "room server", "router", "client", "cliente", "silencioso", "no retransmite"],
     responder: () => ({
       texto:
-        "MeshCore tiene tres roles: Repetidor (pasa los paquetes de los demás; son los P1 de Trama en sus tubos), Companion (la billetera de la persona o la radio del gateway por USB: envía y recibe lo suyo y no retransmite) y Room server (guarda los mensajes de un grupo; por defecto no retransmite). Solo los repetidores sirven de puente: si una persona queda entre dos repetidores, no ayuda a pasar los pagos de otros.",
+        "MeshCore tiene tres roles: Repetidor (pasa los paquetes de los demás; son los P1 de Trama en sus tubos), Companion (la billetera de la persona o la radio del gateway por USB: envía y recibe lo suyo y no retransmite) y Room server (guarda los mensajes de un grupo; por defecto no retransmite). Solo los repetidores sirven de puente: si una persona queda entre dos repetidores, no ayuda a pasar los mensajes de otros.",
     }),
   },
   {
@@ -470,8 +471,70 @@ const TEMAS: Tema[] = [
     claves: ["dictar", "dictado", "microfono", "voz a texto", "hablarte", "hablarle", "por voz", "audio", "reconocimiento de voz", "me escuchas", "escucharme", "leer en voz alta", "voz de melki"],
     responder: () => ({
       texto:
-        "Toque el micrófono junto al botón de enviar y hable: lo que dice aparece en la caja de texto, lo revisa o corrige, y lo envía cuando quiera (nunca se envía solo). Toque el micrófono otra vez para terminar. En Ajustes de voz (el ícono junto al parlante) elige el modo: «Con el navegador», más preciso pero el audio lo procesa Edge o Chrome por internet, o «Privado, sin internet», donde el audio no sale de su equipo (la primera vez puede descargar unos 100 MB). Con el parlante yo leo mis respuestas en voz alta.",
+        "Toque el micrófono junto al botón de enviar y hable: lo que dice aparece en la caja de texto, lo revisa o corrige, y lo envía cuando quiera (nunca se envía solo). Toque el micrófono otra vez para terminar. En Ajustes de voz (el ícono junto al parlante) elige el modo: «Con el navegador», más preciso pero el audio lo procesa Edge o Chrome por internet, o «Privado, sin internet», donde el audio no sale de su equipo (la primera vez puede descargar unos 100 MB). Con el parlante yo leo mis respuestas en voz alta. Y si quiere hablarme sin tocar nada, active «Manos libres»: le escucho todo el tiempo y me activo cuando dice «Hola Melki».",
+      acciones: [{ texto: "Activar manos libres", accion: "manos-libres" }],
     }),
+  },
+  {
+    id: "manos-libres",
+    claves: [
+      "manos libres",
+      "modo manos libres",
+      "jarvis",
+      "modo jarvis",
+      "tipo jarvis",
+      "comandos de voz",
+      "comandos por voz",
+      "ordenes por voz",
+      "ordenes de voz",
+      "control por voz",
+      "controlar por voz",
+      "manejar por voz",
+      "hablar con melki",
+      "asistente de voz",
+      "palabra de activacion",
+      "escucha todo el tiempo",
+      "escuchar todo el tiempo",
+      "sin tocar nada",
+      "por voz sin escribir",
+    ],
+    responder: () => ({
+      texto: [
+        "Con «Manos libres» le escucho todo el tiempo, como un asistente de voz: diga «Hola Melki», «Oye Melki», «Hey Melki» o «Hello Melki» y su pedido, de corrido; lo hago, le contesto en voz alta y me quedo atento unos segundos para que siga sin repetir mi nombre.",
+        "• Entiendo lo mismo que por escrito: varias órdenes seguidas, números dichos en palabras («doscientas cincuenta personas») y coordenadas («cuatro punto dos, menos setenta y tres punto tres siete»).",
+        "• Para conversar: «para» (o «Melki, para» mientras hablo), «repite», «más detalle», «sí, hazlo» o «la segunda» para usar mis botones, «deshaz», «pantalla limpia» y «deja de escuchar».",
+        "• Se activa con el botón «Manos libres» de la barra de arriba, con el ícono de ondas de esta conversación o diciéndome por escrito «activa manos libres». Arriba del mapa ve lo que le entiendo y lo que le digo.",
+        "• Sin mi nombre no hago nada, por si alguien habla cerca. Funciona mejor en Edge o Chrome, con un micrófono cerca o audífonos; en Ajustes de voz elige si el audio lo procesa el navegador o se queda en su equipo.",
+      ].join("\n"),
+      acciones: [
+        { texto: "Activar manos libres", accion: "manos-libres" },
+        { texto: "Tour «Melki por voz»", accion: "recorrido", tour: "voz" },
+      ],
+    }),
+  },
+  {
+    id: "cobertura-maxima",
+    claves: [
+      "mayor cobertura",
+      "mayor cobertura posible",
+      "la mayor cobertura",
+      "maxima cobertura",
+      "cobertura maxima",
+      "mejor cobertura",
+      "mas cobertura posible",
+      "toda la cobertura posible",
+      "cubrir mas",
+      "cubra mas",
+      "llegar mas lejos",
+      "llegue mas lejos",
+      "mas alcance",
+      "mayor alcance",
+      "maximo alcance",
+      "aumentar el alcance",
+      "ampliar la cobertura",
+      "recomendaciones de cobertura",
+    ],
+    responder: (c) => coberturaMaxima(c),
   },
   {
     id: "rendimiento",
@@ -536,14 +599,14 @@ const TEMAS: Tema[] = [
   },
   {
     id: "trama",
-    claves: ["trama", "red de pagos", "pagos por radio", "sembrar", "sembrar la malla", "siembra", "sembrado", "modo sembrar", "como siembro", "como armo la red", "armar la red", "planear la red", "como hago la red", "el problema", "territorios sin conectividad"],
+    claves: ["trama", "red de pagos", "pagos por radio", "whatsapp", "mensajeria", "inteligencia artificial", "consultas a la ia", "que trafica", "trafico de la red", "que pasa por la red", "red de comunicacion", "sembrar", "sembrar la malla", "siembra", "sembrado", "modo sembrar", "como siembro", "como armo la red", "armar la red", "planear la red", "como hago la red", "el problema", "territorios sin conectividad"],
     responder: () => ({
       texto:
-        "Trama es una red de pagos por radio para el campo sin internet: la persona firma un pago en su billetera (un radio pequeño enlazado al celular por Bluetooth), la orden salta por repetidores solares MeshCore hasta un gateway con Starlink, el gateway la verifica con el banco y el comprobante vuelve por la misma ruta; quien recibe el pago recibe un aviso. «Sembrar la malla» es el modo sencillo para planearla: 1) el Gateway + Internet, en el sitio donde entra el internet (torre de 12 m con mini PC y 4 radios); 2) los repetidores, en tubos de 6 m o en lo alto de las lomas, cada uno al alcance del gateway o de otro conectado; 3) la gente, con su billetera a 1,5 m. Yo calculo con el relieve real quién queda conectado (verde), quién no (rojo) y cuántos saltos hay, propongo dónde poner repetidores, pueblo la zona con personas y pruebo cuántos pagos aguanta.",
+        "Trama es una red de comunicación por radio para llevar la conexión a donde normalmente no llega: por ella van pagos, mensajes de WhatsApp por texto y consultas a la inteligencia artificial. La persona usa su billetera (un radio pequeño enlazado al celular por Bluetooth): firma un pago, escribe un WhatsApp o le pregunta a la IA; el mensaje salta por repetidores solares MeshCore hasta un gateway con Starlink, que verifica el pago con el banco, pasa el WhatsApp a internet o le lleva la consulta a la IA, y la respuesta vuelve por la misma ruta; quien recibe un pago recibe un aviso. «Sembrar la malla» es el modo sencillo para planearla: 1) el Gateway + Internet, en el sitio donde entra el internet (torre de 12 m con mini PC y 4 radios); 2) los repetidores, en tubos de 6 m o en lo alto de las lomas, cada uno al alcance del gateway o de otro conectado; 3) la gente, con su billetera a 1,5 m. Yo calculo con el relieve real quién queda conectado (verde), quién no (rojo) y cuántos saltos hay, propongo dónde poner repetidores, pueblo la zona con personas y pruebo cuánto tráfico aguanta.",
       acciones: [
         { texto: "Cargar el ejemplo de malla", accion: "orden", orden: { tipo: "ejemplo-malla" } },
         { texto: "Tour «Sembrar la malla»", accion: "recorrido", tour: "sembrar" },
-        { texto: "Tour «¿Cuántos pagos aguanta?»", accion: "recorrido", tour: "capacidad" },
+        { texto: "Tour «¿Cuánto tráfico aguanta?»", accion: "recorrido", tour: "capacidad" },
       ],
     }),
   },
@@ -551,8 +614,8 @@ const TEMAS: Tema[] = [
     id: "animacion",
     claves: ["animacion", "animaciones", "parpadea", "parpadean", "brilla", "brillan", "destella", "destellan", "lineas que se mueven", "puntos que se mueven", "flujo", "turquesa", "nube", "nube ia", "ia del gateway", "inteligencia artificial"],
     responder: (c) => ({
-      texto: `La animación muestra cómo trabaja la malla. Las líneas turquesa avanzan por las rutas hacia el gateway: es por donde viajan los pagos. Cada pulso sale de una persona y lo pasan los repetidores (casi siempre el más cercano con buen enlace), que destellan al retransmitir; al llegar, la nube «IA» del gateway se enciende. Las piezas conectadas laten en verde; las que están sin cobertura parpadean en rojo y los repetidores sin red, en naranja. Con «Enviar un pago de prueba» se ve además quién oye cada transmisión (se abre una onda y destellan los vecinos), aunque solo el repetidor siguiente de la ruta la pasa; luego el comprobante vuelve por la misma ruta.${c.modo === "sembrar" ? " Se apaga con el interruptor «Animar el flujo de la información» o diciéndome «quita la animación»." : " Se ve en el modo «Sembrar la malla»."}`,
-      acciones: c.red?.alDia && c.red.conectadas.length ? [{ texto: "Enviar un pago de prueba", accion: "orden", orden: { tipo: "mensaje" } }] : undefined,
+      texto: `La animación muestra cómo trabaja la malla. Las líneas turquesa avanzan por las rutas hacia el gateway: es por donde viajan los pagos, los WhatsApp y las consultas a la IA. Cada pulso sale de una persona y lo pasan los repetidores (casi siempre el más cercano con buen enlace), que destellan al retransmitir; al llegar, la nube «IA» del gateway se enciende. Las piezas conectadas laten en verde; las que están sin cobertura parpadean en rojo y los repetidores sin red, en naranja. Con «Enviar un mensaje de prueba» se ve además quién oye cada transmisión (se abre una onda y destellan los vecinos), aunque solo el repetidor siguiente de la ruta la pasa; luego la respuesta vuelve por la misma ruta.${c.modo === "sembrar" ? " Se apaga con el interruptor «Animar el flujo de la información» o diciéndome «quita la animación»." : " Se ve en el modo «Sembrar la malla»."}`,
+      acciones: c.red?.alDia && c.red.conectadas.length ? [{ texto: "Enviar un mensaje de prueba", accion: "orden", orden: { tipo: "mensaje" } }] : undefined,
     }),
   },
   {
@@ -565,7 +628,7 @@ const TEMAS: Tema[] = [
         : "";
       const radios = (Object.keys(TERRENOS_TRAMA) as (keyof typeof TERRENOS_TRAMA)[]).map((k) => `${TERRENOS_TRAMA[k].nombre.toLowerCase()} ${TERRENOS_TRAMA[k].radioKm} km`).join(", ");
       return {
-        texto: `El repetidor de Trama es un SenseCAP Solar Node P1 con antena de 8 dBi en un tubo de 6 m (≈ ${pesos(PRECIOS.repetidor)}), con rol Repetidor: es el único que pasa los pagos de los demás. Para que sirva debe alcanzar al gateway o a otro repetidor conectado; si no, queda en naranja. El documento supone este alcance por repetidor con SF11: ${radios} (con SF10 baja a ~80 % y con SF9 a ~65 %); aquí el relieve real lo confirma o lo corrige. Póngalos en lo alto y mire si quedan en verde; o pídame «conecta a los que faltan» y busco las lomas por usted.${ahora}`,
+        texto: `El repetidor de Trama es un SenseCAP Solar Node P1 con antena de 8 dBi en un tubo de 6 m (≈ ${pesos(PRECIOS.repetidor)}), con rol Repetidor: es el único que pasa los pagos y mensajes de los demás. Para que sirva debe alcanzar al gateway o a otro repetidor conectado; si no, queda en naranja. El documento supone este alcance por repetidor con SF11: ${radios} (con SF10 baja a ~80 % y con SF9 a ~65 %); aquí el relieve real lo confirma o lo corrige. Póngalos en lo alto y mire si quedan en verde; o pídame «conecta a los que faltan» y busco las lomas por usted.${ahora}`,
         acciones: red?.alDia && red.sinCobertura.length ? [{ texto: "Conectar a los que faltan", accion: "orden", orden: { tipo: "sembrar", destino: "faltantes" } }] : undefined,
       };
     },
@@ -577,14 +640,14 @@ const TEMAS: Tema[] = [
       const red = c.red;
       const ahora = red?.personas.length && red.alDia ? ` Ahora: ${red.conectadas.length} de ${red.personas.length} conectadas${red.sinCobertura.length ? `, ${red.sinCobertura.length} sin cobertura` : ""}.` : "";
       return {
-        texto: `Cada persona lleva su billetera: el kit XIAO ESP32S3 + Wio-SX1262 con batería y carcasa (≈ ${pesos(PRECIOS.nodo.xiao)}) o la tarjeta SenseCAP T1000-E, sellada y con GPS (≈ ${pesos(PRECIOS.nodo.t1000)}), enlazada por Bluetooth a la aplicación del celular. Ahí firma la orden de pago y la manda por radio, sin señal celular; es companion: no retransmite los pagos de otros. Inscribirla cuesta ${pesos(OPERACION_TRAMA.inscripcionUsuario)}. En el mapa la pongo a 1,5 m con antena de 2 dBi. Verde = llega al gateway (el número es cuántos saltos); rojo = no alcanza ningún repetidor; ámbar = llega con más saltos que el límite. Con «Poblar personas» reparto cientos al azar.${ahora}`,
+        texto: `Cada persona lleva su billetera: el kit XIAO ESP32S3 + Wio-SX1262 con batería y carcasa (≈ ${pesos(PRECIOS.nodo.xiao)}) o la tarjeta SenseCAP T1000-E, sellada y con GPS (≈ ${pesos(PRECIOS.nodo.t1000)}), enlazada por Bluetooth a la aplicación del celular. Ahí firma sus pagos, escribe por WhatsApp o le consulta a la IA, y lo manda por radio, sin señal celular; es companion: no retransmite los mensajes de otros. Inscribirla cuesta ${pesos(OPERACION_TRAMA.inscripcionUsuario)}. En el mapa la pongo a 1,5 m con antena de 2 dBi. Verde = llega al gateway (el número es cuántos saltos); rojo = no alcanza ningún repetidor; ámbar = llega con más saltos que el límite. Con «Poblar personas» reparto cientos al azar.${ahora}`,
         acciones: [{ texto: "Poblar 250 personas", accion: "orden", orden: { tipo: "poblar", pedido: { n: 250 } } }],
       };
     },
   },
   {
     id: "mensaje",
-    claves: ["como viaja", "como viaja un pago", "como viaja un mensaje", "viaja el pago", "viaja el mensaje", "pago", "pagos", "comprobante", "acuse", "ack", "mensaje", "mensajes", "inundacion", "flooding", "tiempo en el aire", "airtime", "cuanto tarda", "cuanto demora", "latencia", "retransmision", "colision", "colisiones", "llega el mensaje", "reintentos"],
+    claves: ["como viaja", "como viaja un pago", "como viaja un mensaje", "como viaja un whatsapp", "como viaja una consulta", "viaja el pago", "viaja el mensaje", "pago", "pagos", "comprobante", "acuse", "ack", "mensaje", "mensajes", "inundacion", "flooding", "tiempo en el aire", "airtime", "cuanto tarda", "cuanto demora", "latencia", "retransmision", "colision", "colisiones", "llega el mensaje", "reintentos"],
     responder: (c) => {
       const p = presetPorId(c.parametros.preset);
       const t = (ms: number) => (ms < 1000 ? `${Math.round(ms)} ms` : `${f(ms / 1000)} s`);
@@ -592,20 +655,20 @@ const TEMAS: Tema[] = [
       const espera = esperaRetransmision(orden, "directa");
       const red = c.red;
       return {
-        texto: `Así viaja un pago en MeshCore: la persona firma la orden (${CAPACIDAD_TRAMA.ordenBytes} B) y la transmite; la primera vez se inunda por los repetidores y el gateway le devuelve la ruta, y desde ahí va directo: cada repetidor de la ruta espera un turno al azar (de 0 a ${t(espera.max)}) y la pasa al siguiente. Antes de hablar, cada radio escucha el canal y, si está ocupado, espera. Se confirma con un acuse; si no vuelve, reintenta ${INTENTOS - 1} veces por la ruta y la última por inundación. El gateway verifica el pago con el banco por Starlink, devuelve el comprobante (${CAPACIDAD_TRAMA.comprobanteBytes} B) y quien recibe el pago recibe un aviso. Con ${p.nombre}, la orden ocupa ${t(orden)} en el aire por salto y el pago completo a 2 saltos ≈ ${t(airePagoMs(p))}. Si dos radios transmiten a la vez donde alguien escucha, chocan: por eso la capacidad de una frecuencia tiene techo.${red?.alDia && red.conectadas.length ? " Pídame «envía un pago desde» una persona y lo verá viajar en el mapa, o «envía 15 pagos al tiempo»." : ""}`,
-        acciones: red?.alDia && red.conectadas.length ? [{ texto: "Enviar un pago de prueba", accion: "orden", orden: { tipo: "mensaje" } }] : undefined,
+        texto: `Así viaja un pago en MeshCore: la persona firma la orden (${CAPACIDAD_TRAMA.ordenBytes} B) y la transmite; la primera vez se inunda por los repetidores y el gateway le devuelve la ruta, y desde ahí va directo: cada repetidor de la ruta espera un turno al azar (de 0 a ${t(espera.max)}) y la pasa al siguiente. Antes de hablar, cada radio escucha el canal y, si está ocupado, espera. Se confirma con un acuse; si no vuelve, reintenta ${INTENTOS - 1} veces por la ruta y la última por inundación. El gateway verifica el pago con el banco por Starlink, devuelve el comprobante (${CAPACIDAD_TRAMA.comprobanteBytes} B) y quien recibe el pago recibe un aviso. Con ${p.nombre}, la orden ocupa ${t(orden)} en el aire por salto y el pago completo a 2 saltos ≈ ${t(airePagoMs(p))}. Un WhatsApp o una consulta a la IA viajan igual: suben al gateway, salen por Starlink y la respuesta vuelve por la misma ruta (una respuesta larga ocupa más aire). Si dos radios transmiten a la vez donde alguien escucha, chocan: por eso la capacidad de una frecuencia tiene techo.${red?.alDia && red.conectadas.length ? " Pídame «envía un pago desde» una persona y lo verá viajar en el mapa, o «envía 15 pagos al tiempo»." : ""}`,
+        acciones: red?.alDia && red.conectadas.length ? [{ texto: "Enviar un mensaje de prueba", accion: "orden", orden: { tipo: "mensaje" } }] : undefined,
       };
     },
   },
   {
     id: "capacidad",
-    claves: ["capacidad", "cuantos pagos", "pagos al tiempo", "mensajes al tiempo", "al mismo tiempo", "a la vez", "se revienta", "reventar", "saturacion", "saturar", "satura", "prueba de carga", "carga", "usuarios por frecuencia", "usuarios por sitio", "aguanta", "soporta"],
+    claves: ["capacidad", "cuantos pagos", "cuantos mensajes", "cuanto trafico", "trafico", "pagos al tiempo", "mensajes al tiempo", "al mismo tiempo", "a la vez", "se revienta", "reventar", "saturacion", "saturar", "satura", "prueba de carga", "carga", "usuarios por frecuencia", "usuarios por sitio", "aguanta", "soporta"],
     responder: (c) => {
       const p = presetPorId(c.parametros.preset);
       const sf = (p.anchoBandaKhz === 250 && p.sf >= 9 && p.sf <= 11 ? p.sf : 11) as SfTrama;
       const ref = SF_TRAMA[sf];
       return {
-        texto: `Trama dimensiona cada frecuencia para que el canal no pase del ${CAPACIDAD_TRAMA.canalPicoPct} % en la hora pico: con SF11 un pago ocupa ~9,5 s de aire y caben ~55 por hora (150 usuarios); con SF10, ~105 (280 usuarios); con SF9, ~185 (500 usuarios). Un sitio tiene 4 frecuencias, así que atiende ${SF_TRAMA[11].usuariosFrecuencia * CAPACIDAD_TRAMA.radiosPorSitio} usuarios con SF11. La hora pico se lleva el ${CAPACIDAD_TRAMA.horaPicoNormalPct} % de los pagos del día (el ${CAPACIDAD_TRAMA.horaPicoMercadoPct} % el día de mercado). Con ${p.nombre} la referencia es ~${ref.pagosHora} pagos por hora por frecuencia. Para verlo con su red: «Poblar personas» y luego «Prueba de carga» en Resultados (5, 15, 25… pagos al tiempo) o «¿Hasta cuántos aguanta?», que sube la cantidad hasta que menos del 90 % recibe su comprobante (y le marca desde cuándo la espera pasa de un minuto). En una ráfaga, más de 5 a 10 pagos en 10 s con SF11 ya hacen fila un minuto. Para la hora pico repetidor por repetidor, use las zonas de popularidad y la «Prueba de estrés».`,
+        texto: `Trama dimensiona cada frecuencia para que el canal no pase del ${CAPACIDAD_TRAMA.canalPicoPct} % en la hora pico: con SF11 un pago ocupa ~9,5 s de aire y caben ~55 por hora (150 usuarios); con SF10, ~105 (280 usuarios); con SF9, ~185 (500 usuarios). Esa capacidad la comparten los pagos, los WhatsApp y las consultas a la IA. Un sitio tiene 4 frecuencias, así que atiende ${SF_TRAMA[11].usuariosFrecuencia * CAPACIDAD_TRAMA.radiosPorSitio} usuarios con SF11. La hora pico se lleva el ${CAPACIDAD_TRAMA.horaPicoNormalPct} % de los mensajes del día (el ${CAPACIDAD_TRAMA.horaPicoMercadoPct} % el día de mercado). Con ${p.nombre} la referencia es ~${ref.pagosHora} pagos por hora por frecuencia. Para verlo con su red: «Poblar personas» y luego «Prueba de carga» en Resultados (5, 15, 25… pagos o mensajes al tiempo) o «¿Hasta cuántos aguanta?», que sube la cantidad hasta que menos del 90 % recibe su respuesta (y le marca desde cuándo la espera pasa de un minuto). En una ráfaga, más de 5 a 10 mensajes en 10 s con SF11 ya hacen fila un minuto. Para la hora pico repetidor por repetidor, use las zonas de popularidad y la «Prueba de estrés».`,
         acciones: [
           { texto: "15 pagos al tiempo", accion: "orden", orden: { tipo: "carga", opciones: { mensajes: 15 }, curva: false } },
           { texto: "¿Hasta cuántos aguanta?", accion: "orden", orden: { tipo: "carga", opciones: {}, curva: true } },
@@ -616,11 +679,12 @@ const TEMAS: Tema[] = [
   },
   {
     id: "estres",
-    claves: ["zona de popularidad", "zonas de popularidad", "popularidad", "punto de popularidad", "prueba de estres", "estres", "estresar", "colapso", "colapsa", "colapsar", "colapsada", "ancho de banda", "hora pico", "dia de mercado", "cuantos usuarios aguanta", "cuantas personas aguanta", "cada repetidor", "consumo por usuario", "cuanto consume", "ciclo de trabajo", "energia del repetidor", "alcance con carga", "hasta donde aguanta"],
+    claves: ["zona de popularidad", "zonas de popularidad", "popularidad", "punto de popularidad", "limite de un punto", "limite del repetidor", "limite de cada punto", "llenar hasta el limite", "cuantas personas soporta", "estabilidad de la red", "prueba de estres", "estres", "estresar", "colapso", "colapsa", "colapsar", "colapsada", "ancho de banda", "hora pico", "dia de mercado", "cuantos usuarios aguanta", "cuantas personas aguanta", "cada repetidor", "consumo por usuario", "cuanto consume", "ciclo de trabajo", "energia del repetidor", "alcance con carga", "hasta donde aguanta"],
     responder: () => ({
-      texto: `Las zonas de popularidad ponen gente alrededor de un repetidor o del gateway (o de cada uno): por ejemplo 250 personas a 2 km. Se ponen tocando el repetidor (en su tarjeta o en la lista hay «Zona de popularidad»), en Resultados o pidiéndomelo: «por cada antena 250 personas». La «Prueba de estrés» hace que todas paguen a su ritmo en la hora pico: ${f(PAGOS_PERSONA_DIA_TRAMA, 1)} pagos por persona al día (lo que supone Trama: 55 pagos/h con 150 usuarios) y el ${CAPACIDAD_TRAMA.horaPicoNormalPct} % en esa hora (${CAPACIDAD_TRAMA.horaPicoMercadoPct} % un día de mercado). Simulo el canal paquete por paquete y mido en cada gateway y repetidor: las personas que entran por él, los pagos que completan, la espera, qué tanto del canal oye ocupado, cuánto transmite (el tope es el ${TOPE_CICLO_PCT} %), los paquetes que pierde, hasta dónde completa con esa carga frente a su alcance sin carga, y la energía del repetidor solar (${f(ENERGIA_P1.txW, 2)} W al transmitir; el panel de 5 W repone ~${f(ENERGIA_P1.panelW * ENERGIA_P1.horasSol * ENERGIA_P1.eficiencia, 0)} Wh al día). Cada persona gasta unos segundos de aire en la hora pico (~0,1 % del canal con SF11); así 150 personas son el 15 % que diseña Trama. «¿Hasta dónde aguanta cada repetidor?» sube la carga hasta que cada zona se revienta y le dice cuántas personas aguanta; con «comparar ajustes» ve la misma hora pico con más ancho de banda o menos SF (más capacidad, menos alcance).`,
+      texto: `Las zonas de popularidad ponen gente alrededor de un repetidor o del gateway (o de cada uno): por ejemplo 250 personas a 2 km. Se ponen tocando el repetidor (en su tarjeta o en la lista hay «Zona de popularidad»), en Resultados o pidiéndomelo: «por cada antena 250 personas». Ahí escribe la cantidad que quiera y tiene «Poner y probar» (pone la gente y simula la hora pico con todos enviando información), «¿Cuántas aguanta?» (sube solo la gente de ese punto, con el resto de la red como está, hasta encontrar cuántas aguanta sin demora, desde cuántas va lento, desde cuántas se revienta y qué falla primero) y «Llenar hasta el límite», que lo llena y lo confirma. También: «¿cuántas personas aguanta el Repetidor 1?», «llena el gateway hasta su límite» o «el límite de cada punto». La «Prueba de estrés» hace que todas usen la red a su ritmo en la hora pico: ${f(PAGOS_PERSONA_DIA_TRAMA, 1)} mensajes por persona al día entre pagos, WhatsApp y consultas a la IA (el ritmo que supone Trama: 55 por hora con 150 usuarios; si la gente escribe o consulta más, se sube) y el ${CAPACIDAD_TRAMA.horaPicoNormalPct} % en esa hora (${CAPACIDAD_TRAMA.horaPicoMercadoPct} % un día de mercado). Simulo el canal paquete por paquete y mido en cada gateway y repetidor: las personas que entran por él, los mensajes que completan, la espera, qué tanto del canal oye ocupado, cuánto transmite (el tope es el ${TOPE_CICLO_PCT} %), los paquetes que pierde, hasta dónde completa con esa carga frente a su alcance sin carga, y la energía del repetidor solar (${f(ENERGIA_P1.txW, 2)} W al transmitir; el panel de 5 W repone ~${f(ENERGIA_P1.panelW * ENERGIA_P1.horasSol * ENERGIA_P1.eficiencia, 0)} Wh al día). Cada persona gasta unos segundos de aire en la hora pico (~0,1 % del canal con SF11); así 150 personas son el 15 % que diseña Trama. «¿Hasta dónde aguanta cada repetidor?» sube la carga hasta que cada zona se revienta y le dice cuántas personas aguanta; con «comparar ajustes» ve la misma hora pico con más ancho de banda o menos SF (más capacidad, menos alcance).`,
       acciones: [
         { texto: "250 personas en cada repetidor", accion: "orden", orden: { tipo: "zonas", pedido: { n: 250 }, estres: { rampa: true } } },
+        { texto: "¿Cuántas aguanta cada punto?", accion: "orden", orden: { tipo: "limite", llenar: false, opciones: {} } },
         { texto: "Probar la hora pico", accion: "orden", orden: { tipo: "estres", opciones: {} } },
         { texto: "¿Hasta dónde aguanta cada repetidor?", accion: "orden", orden: { tipo: "estres", opciones: { rampa: true } } },
       ],
@@ -656,7 +720,7 @@ const TEMAS: Tema[] = [
     id: "letra-pequena",
     claves: ["letra pequena", "supuestos", "limitaciones", "advertencias", "riesgos", "que tan confiables", "son exactos los numeros", "estimaciones"],
     responder: () => ({
-      texto: "La letra pequeña: las cifras de Trama son estimaciones de planeación. La capacidad (9,5 s por pago con SF11, el canal al 15 % en la hora pico) se debe medir en una red piloto; el alcance por terreno es un supuesto que aquí se corrige con el relieve real; los precios son de referencia (TRM del día, envío, arancel e IVA) y cambian con el proveedor; los datos de los departamentos son del DANE y pueden diferir de otras fuentes. En el simulador, el modelo de propagación se desvía unos 3 dB de Radio Mobile en los enlaces de prueba, la prueba de carga supone un aviso de 126 B y 1,5 s del banco, y el ancho de banda de 250 kHz se dedujo de los tiempos del documento (conviene confirmarlo con el Inge, igual que la banda: aquí vale de 915 a 928 MHz).",
+      texto: "La letra pequeña: las cifras de Trama son estimaciones de planeación. La capacidad (9,5 s por pago con SF11, el canal al 15 % en la hora pico) se debe medir en una red piloto; el alcance por terreno es un supuesto que aquí se corrige con el relieve real; los precios son de referencia (TRM del día, envío, arancel e IVA) y cambian con el proveedor; los datos de los departamentos son del DANE y pueden diferir de otras fuentes. En el simulador, el modelo de propagación se desvía unos 3 dB de Radio Mobile en los enlaces de prueba, la prueba de carga supone un aviso de 126 B y 1,5 s del banco y mide cada mensaje con el tamaño de un pago (un WhatsApp largo o una respuesta larga de la IA ocupan más aire), y el ancho de banda de 250 kHz se dedujo de los tiempos del documento (conviene confirmarlo con el Inge, igual que la banda: aquí vale de 915 a 928 MHz).",
     }),
   },
   {
@@ -690,6 +754,32 @@ const TEMAS: Tema[] = [
   },
 ];
 
+/** Recomendaciones para dejar la mayor cobertura posible, con lo que hay ahora en el escenario. */
+function coberturaMaxima(c: ContextoMelki): Respuesta {
+  const r = c.resultado;
+  const red = c.red;
+  const p = presetPorId(c.parametros.preset);
+  let ahora = "";
+  if (c.modo === "sembrar" && red?.alDia && red.personas.length) ahora = ` Ahora llegan al gateway ${red.conectadas.length} de ${red.personas.length} personas${red.aislados.length ? ` y ${red.aislados.length === 1 ? "un repetidor no alcanza" : `${red.aislados.length} repetidores no alcanzan`} la red` : ""}.`;
+  else if (r && !c.desactualizado) ahora = ` Ahora: ${textoCoberturaUtil(r)}.`;
+  const texto = [
+    `Para la mayor cobertura posible, lo que más rinde es la altura del sitio: un repetidor en una loma suele cubrir más que una torre más alta en el plano.${ahora} Después, que cada repetidor quede enlazado con un margen sólido y bien repartido, y luego la antena y la radio.`,
+    "• Lo alto primero: ponga el gateway y los repetidores en lomas o puntos despejados, por encima de los árboles y los techos; si un equipo queda debajo de la vegetación, pierde mucha señal.",
+    "• Línea de vista: entre dos nodos no debe haber lomas en medio; mire el perfil del enlace y que la zona de Fresnel quede despejada. Si una loma tapa, un repetidor encima de ella resuelve dos enlaces.",
+    "• Repartir la malla: cada repetidor al alcance del gateway o de otro conectado (mínimo 30 dB para un enlace sólido), sin amontonarlos, y con dos caminos donde se pueda («con respaldo»), para que un equipo caído no deje gente sin red.",
+    "• El gateway al centro de la zona: así hay menos saltos y nadie pasa el límite; con zonas muy lejanas, un segundo gateway rinde más que muchos saltos.",
+    `• Radio y antena: un SF más alto llega más lejos (SF11 más que SF10 o SF9) a cambio de menos capacidad; ahora usa ${p.nombre}. La antena de 8 dBi omnidireccional cubre alrededor; una sectorial o una Yagi llevan la señal más lejos hacia donde falta, y casi nada hacia atrás.`,
+    "• La gente: la billetera va a 1,5 m; en campo, subirla un poco o salir de debajo de los árboles mejora mucho la señal.",
+    "Yo lo hago por usted: «ajústamelo para la mayor cobertura posible» compara lomas cercanas, alturas hasta 30 m, antenas sectoriales y repetidores de apoyo, y le da la opción de máxima cobertura con su costo; «conecta a los que faltan» siembra repetidores donde hay gente sin señal; y «cubre 5 km a la redonda con respaldo» diseña una malla nueva.",
+  ].join("\n");
+  const acciones: AccionRespuesta[] = [];
+  if (r && !c.desactualizado) acciones.push({ texto: "Proponer la máxima cobertura", accion: "orden", orden: { tipo: "ajustar", aplicar: false, opcion: "maxima", opciones: {}, avisos: [] } });
+  if (c.modo === "sembrar" && red?.alDia && red.sinCobertura.length) acciones.push({ texto: "Conectar a los que faltan", accion: "orden", orden: { tipo: "sembrar", destino: "faltantes" } });
+  if (!r && c.antenas.length) acciones.push({ texto: "Simular ahora", accion: "simular" });
+  if (!c.antenas.length) acciones.push({ texto: "Cargar el ejemplo de malla", accion: "orden", orden: { tipo: "ejemplo-malla" } });
+  return { texto, acciones: acciones.length ? acciones : undefined };
+}
+
 /* ───────────── Tours guiados ───────────── */
 
 const opcionTour = (id: IdTour, recomendado = false): AccionRespuesta => {
@@ -711,13 +801,14 @@ const PIDE_TOUR = /\b(tour|tours|recorrido|tutorial|guia|guiame|guiado|paso a pa
 
 /** Tema de cada tour, para atender «hazme el tour de Radio Mobile» o «tutorial básico». */
 const TEMA_TOUR: [IdTour, RegExp][] = [
-  ["capacidad", /\b(capacidad|carga|poblar|poblacion|pagos|aguanta|revienta|satura\w*|estres|popularidad|colaps\w*|hora pico)\b/],
+  ["capacidad", /\b(capacidad|carga|poblar|poblacion|pagos|trafico|aguanta|revienta|satura\w*|estres|popularidad|colaps\w*|hora pico)\b/],
   ["sembrar", /\b(sembrar|siembra|sembrado|trama|gateway|repetidor\w*|personas|gente)\b/],
   ["basico", /\b(basico|basica|primera simulacion|principiante|desde cero|lo basico|empezar)\b/],
   ["pantalla", /\b(pantalla|partes|botones|interfaz|cada parte)\b/],
   ["radiomobile", /\b(radio ?mobile|propagacion|longley|confiabilidad|direccional|yagi|dbm|radioenlace|radio enlace|informe)\b/],
   ["medir", /\b(medir|mido|medicion|regla|exportar|kmz|google earth|distancias?|perfil)\b/],
   ["mesh", /\b(mesh|malla|red|saltos|pasarela|varios nodos)\b/],
+  ["voz", /\b(manos libres|jarvis|por voz|de voz|comandos de voz|hablando|escuchar\w*)\b/],
   ["melki", /\b(melki|hablar|hablarte|chat|dictar|dictado|voz|microfono|ordenes|pedirte)\b/],
 ];
 
@@ -803,7 +894,7 @@ export function responder(pregunta: string, c: ContextoMelki): Respuesta {
   }
   return {
     texto:
-      "No estoy seguro de haber entendido. Puedo sembrar la red (gateway, repetidores y gente), poblar la zona y probar cuántos pagos aguanta, dimensionar la red de un departamento, medir distancias, llevarlo a un municipio, explicar los colores, los enlaces y los saltos, o decirle por qué un nodo no llega al gateway. Pruebe: «¿qué puedes hacer?».",
+      "No estoy seguro de haber entendido. Puedo sembrar la red (gateway, repetidores y gente), poblar la zona y probar cuántos pagos, WhatsApp y consultas a la IA aguanta, dimensionar la red de un departamento, medir distancias, llevarlo a un municipio, explicar los colores, los enlaces y los saltos, o decirle por qué un nodo no llega al gateway. Pruebe: «¿qué puedes hacer?».",
     acciones: [{ texto: "Hacer el recorrido", accion: "recorrido" }],
   };
 }
@@ -822,7 +913,7 @@ export function noEntendiOrden(pregunta: string): Respuesta | null {
       "• «ármame una malla que cubra 11.226 hectáreas con señal media o mejor en el 99,9 %»",
       "• «pon el gateway en Cumaral» o «agrega un repetidor a 8 km al norte del gateway»",
       "• «sube todos los repetidores a 12 m», «borra todas las personas»",
-      "• «puebla la zona con 250 personas», «envía 25 pagos al tiempo», «¿hasta cuántos pagos aguanta?»",
+      "• «puebla la zona con 250 personas», «envía 25 pagos al tiempo», «manda 15 mensajes de WhatsApp al tiempo», «¿hasta cuántos pagos aguanta?»",
       "• «¿cuánto cuesta la red para el Chocó?»",
       "• «muestra las vías», «llévame a Villavicencio», «simula»",
       "Dígamelo con una de esas formas, o pregúnteme «¿qué puedes hacer?».",
@@ -831,4 +922,4 @@ export function noEntendiOrden(pregunta: string): Respuesta | null {
   };
 }
 
-export const SUGERENCIAS = ["Hazme un tour", "¿Qué hago ahora?", "¿Cómo viaja un pago?", "¿Cuántos pagos aguanta?"];
+export const SUGERENCIAS = ["Hazme un tour", "¿Qué hago ahora?", "¿Cómo viaja un mensaje?", "¿Cuántos pagos aguanta?"];

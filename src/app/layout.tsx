@@ -12,7 +12,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Simulador de cobertura · Red mesh LoRa 915 MHz",
-  description: "Simula la cobertura de la red de pagos por radio de Trama (MeshCore, LoRa 915–928 MHz) sobre el relieve real: repetidores, gateway, cuántos pagos aguanta cada frecuencia y la factibilidad de la red.",
+  description: "Simula la cobertura de la red por radio de Trama (MeshCore, LoRa 915–928 MHz), que lleva pagos, mensajes de WhatsApp y consultas a la inteligencia artificial a donde no hay señal: repetidores, gateway, cuánto tráfico aguanta cada frecuencia y la factibilidad de la red.",
   robots: { index: false, follow: false },
 };
 

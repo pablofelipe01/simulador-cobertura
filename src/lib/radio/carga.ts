@@ -1,4 +1,5 @@
-// Prueba de carga de la malla MeshCore: N pagos (o mensajes) al tiempo y hasta dónde aguanta la frecuencia.
+// Prueba de carga de la malla MeshCore: N pagos (o mensajes de texto: WhatsApp, consultas a la IA) al tiempo y hasta
+// dónde aguanta la frecuencia.
 // Simulación por eventos del canal LoRa, nodo por nodo, con lo que hace el firmware de MeshCore: espera aleatoria de
 // cada repetidor antes de retransmitir (txdelay 0,5 inundado y 0,3 directo), escucha antes de transmitir (si está
 // recibiendo, espera 120–360 ms; a los 4 s transmite igual), ciclo de trabajo del 50 % por hora, cola de 32 paquetes
@@ -38,6 +39,11 @@ export type PedidoCarga = {
   /** Lo que tarda el banco (o el servidor) en contestar, por Starlink (ms). */
   servidorMs: number;
   semilla: number;
+  /**
+   * Peso de cada remitente (id de la persona → veces su ritmo; sin valor = 1). Con pesos, cada mensaje sale de una
+   * persona al azar en proporción a su peso: así se carga más una zona sin mover a nadie.
+   */
+  pesos?: Record<string, number>;
 };
 
 export const PEDIDO_CARGA_DEFECTO: Omit<PedidoCarga, "antenas" | "enlaces" | "nodos" | "parametros"> = {
@@ -655,8 +661,28 @@ export function simularCargaDetalle(q: PedidoCarga): { resultado: ResultadoCarga
   }
   tiempos.sort((a, b) => a - b);
   r.mensajes = tiempos.length;
+  // Sin pesos, por turnos (cada persona manda igual); con pesos, al azar en proporción a su peso
+  let elegir = (k: number) => orden[k % orden.length];
+  if (q.pesos) {
+    const pesos = q.pesos;
+    const acumulado: number[] = [];
+    let total = 0;
+    for (const i of orden) acumulado.push((total += Math.max(0, pesos[nodos[i].id] ?? 1)));
+    if (total > 0)
+      elegir = () => {
+        const u = azar() * total;
+        let lo = 0;
+        let hi = acumulado.length - 1;
+        while (lo < hi) {
+          const m = (lo + hi) >> 1;
+          if (acumulado[m] > u) hi = m;
+          else lo = m + 1;
+        }
+        return orden[lo];
+      };
+  }
   tiempos.forEach((t0, k) => {
-    const remitente = orden[k % orden.length];
+    const remitente = elegir(k);
     const ru = rutas.get(remitente)!;
     let receptor = -1;
     if (q.tipo === "pago" && remitentes.length > 1) {

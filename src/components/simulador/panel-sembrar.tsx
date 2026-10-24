@@ -2,8 +2,9 @@
 
 // Modo «Sembrar la malla» (como en Trama): primero el Gateway + Internet, después los repetidores según la
 // distancia y por último la gente. El panel guía paso a paso, muestra el estado de la red, propone repetidores
-// automáticamente y deja enviar un pago de prueba para ver cómo viaja por la malla MeshCore.
-import { Check, ChevronDown, CircleAlert, Flag, Gamepad2, LocateFixed, PartyPopper, Send, Sparkles, Trash, Undo2, X } from "lucide-react";
+// automáticamente y deja enviar un mensaje de prueba (un pago, un WhatsApp o una consulta a la IA) para ver cómo viaja
+// por la malla MeshCore.
+import { BadgeCheck, BookOpenText, Check, ChevronDown, CircleAlert, Flag, LocateFixed, Send, Sparkles, Trash, Undo2, X } from "lucide-react";
 import { useEffect, useId, useMemo, useState, type Dispatch, type ReactNode } from "react";
 
 import { alcancePlanoKm } from "@/lib/radio/alcance-plano";
@@ -93,7 +94,7 @@ export function PanelSembrar(props: Props) {
     <div className="space-y-4">
       <Guia paso={consejo.paso} titulo={consejo.titulo} texto={consejo.texto} tono={consejo.tono} />
 
-      <ComoSeJuega abiertoAlInicio={red.gateways.length === 0} />
+      <ComoFunciona abiertoAlInicio={red.gateways.length === 0} />
 
       <section data-tour="piezas" aria-label="Piezas de la malla">
         <Titulo>Piezas de la malla</Titulo>
@@ -167,24 +168,24 @@ export function PanelSembrar(props: Props) {
   );
 }
 
-/** «Cómo se juega», como en Trama. */
-function ComoSeJuega({ abiertoAlInicio }: { abiertoAlInicio: boolean }) {
+/** «Cómo funciona»: la guía corta del modo sencillo. */
+function ComoFunciona({ abiertoAlInicio }: { abiertoAlInicio: boolean }) {
   const [abierto, setAbierto] = useState(abiertoAlInicio);
   return (
-    <div className="rounded-xl bg-white ring-1 ring-linea" data-tour="como-se-juega">
+    <div className="rounded-xl bg-white ring-1 ring-linea" data-tour="como-funciona">
       <button type="button" onClick={() => setAbierto((v) => !v)} aria-expanded={abierto} className="flex w-full items-center gap-2 px-3 py-2 text-left font-cond text-[14.5px] font-semibold">
-        <Gamepad2 size={17} className="shrink-0 text-salvia-oscura" />
-        <span className="flex-1">Cómo se juega</span>
+        <BookOpenText size={17} className="shrink-0 text-salvia-oscura" />
+        <span className="flex-1">Cómo funciona</span>
         <ChevronDown size={16} className={`shrink-0 text-tenue transition-transform ${abierto ? "rotate-180" : ""}`} />
       </button>
       {abierto && (
         <div className="space-y-1.5 px-3 pb-3 text-[13px] leading-snug text-carbon-2">
           <p>
-            Ponga el <b>Gateway + Internet</b> donde haya luz y señal —la cabecera, una finca—: es la única pieza con conexión (el router va a su lado) y ahí vive la <b>IA</b>. Riegue <b>repetidores</b> por las lomas
-            para llegar lejos, y suelte <b>personas</b> por el campo. Las que quedan en rojo no tienen cobertura: acérqueles un repetidor.
+            Ponga el <b>Gateway + Internet</b> donde haya luz y señal —la cabecera, una finca—: es la única pieza con conexión (el router va a su lado) y ahí vive la <b>IA</b>. Ubique <b>repetidores</b> en las lomas
+            para llegar lejos y agregue a las <b>personas</b> en el campo. Las que quedan en rojo no tienen cobertura: acérqueles un repetidor.
           </p>
           <p>
-            Las líneas turquesa que avanzan muestran por dónde viajan los pagos hacia el gateway: en MeshCore solo los repetidores pasan los paquetes de los demás (las billeteras no retransmiten), normalmente el más
+            Por la red viajan pagos, mensajes de WhatsApp por texto y consultas a la IA, aun donde no hay señal celular. Las líneas turquesa que avanzan muestran por dónde van hacia el gateway: en MeshCore solo los repetidores pasan los paquetes de los demás (las billeteras no retransmiten), normalmente el más
             cercano con buen enlace. Cada pieza destella al retransmitir y la nube «IA» del gateway se enciende cuando le llega algo.
           </p>
         </div>
@@ -235,7 +236,7 @@ function Guia({ paso, titulo, texto, tono }: { paso: number | null; titulo: stri
             {paso}
           </span>
         ) : tono === "ok" ? (
-          <PartyPopper size={18} className="shrink-0 text-buena" />
+          <BadgeCheck size={18} className="shrink-0 text-buena" />
         ) : tono === "alerta" ? (
           <CircleAlert size={18} className="shrink-0 text-melki-oscura" />
         ) : null}
@@ -477,10 +478,10 @@ function EnviarMensaje({ red, antenas, viaje, onEnviar, limite }: { red: EstadoR
   const nombres = new Map(antenas.map((a) => [a.id, a.nombre]));
   const v = viaje?.viaje;
   return (
-    <section data-tour="enviar-mensaje" aria-label="Enviar un pago de prueba">
-      <Titulo>Enviar un pago de prueba</Titulo>
+    <section data-tour="enviar-mensaje" aria-label="Enviar un mensaje de prueba">
+      <Titulo>Enviar un mensaje de prueba</Titulo>
       {candidatos.length === 0 ? (
-        <p className="text-[13px] leading-snug text-tenue">Ponga al menos una persona para enviar un pago al gateway.</p>
+        <p className="text-[13px] leading-snug text-tenue">Ponga al menos una persona para enviar un mensaje al gateway.</p>
       ) : (
         <>
           <div className="flex items-end gap-2">
@@ -505,7 +506,7 @@ function EnviarMensaje({ red, antenas, viaje, onEnviar, limite }: { red: EstadoR
         <div className="mt-2 space-y-1.5 rounded-lg bg-white p-2.5 ring-1 ring-linea" data-tour="viaje-mensaje" role="status">
           <p className={`flex items-center gap-1.5 font-cond text-[15px] font-semibold ${v.llega ? "text-buena" : "text-sin"}`}>
             {v.llega ? <Check size={17} /> : <X size={17} />}
-            {v.llega ? "El pago llega al gateway" : "El pago no llega"}
+            {v.llega ? "El mensaje llega al gateway" : "El mensaje no llega"}
           </p>
           {v.motivo && <p className="text-[12.5px] leading-snug text-carbon-2">{v.motivo}</p>}
           {v.ruta.length > 1 && (
@@ -540,16 +541,16 @@ function EnviarMensaje({ red, antenas, viaje, onEnviar, limite }: { red: EstadoR
                   <dd className="text-right tabular-nums">{pct(v.probabilidad)}</dd>
                   <dt className="text-tenue">Con los {INTENTOS} intentos</dt>
                   <dd className="text-right tabular-nums">{pct(v.probabilidadReintentos)}</dd>
-                  <dt className="text-tenue">Comprobante</dt>
+                  <dt className="text-tenue">Respuesta</dt>
                   <dd className="text-right tabular-nums">≈ {tiempo(v.totalMs.tipica)} de vuelta</dd>
                 </>
               )}
             </dl>
           )}
           <p className="text-[11.5px] leading-snug text-tenue">
-            {v.preset} · orden firmada de {v.bytes} bytes · {tiempo(v.aireMs)} en el aire por salto. Con la ruta aprendida va directo: cada repetidor espera un turno al azar y la pasa al siguiente; si no vuelve el acuse, se
+            {v.preset} · {v.bytes} bytes (el tamaño de una orden de pago) · {tiempo(v.aireMs)} en el aire por salto. Con la ruta aprendida va directo: cada repetidor espera un turno al azar y la pasa al siguiente; si no vuelve el acuse, se
             reintenta (el último intento, por inundación).
-            {v.llega ? " El gateway verifica el pago, lo pasa por Starlink y el comprobante vuelve por la misma ruta (más lo que tarde el banco)." : ""}
+            {v.llega ? " El gateway lo pasa por Starlink —el pago se verifica con el banco, el WhatsApp sale a internet y la consulta va a la IA— y la respuesta vuelve por la misma ruta (más lo que tarde el banco o la IA)." : ""}
           </p>
         </div>
       )}

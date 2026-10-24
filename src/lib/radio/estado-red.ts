@@ -109,7 +109,7 @@ export function consejoRed(red: EstadoRed, limiteSaltos: number, opciones: { cal
     return {
       paso: 2,
       titulo: "Ponga los repetidores",
-      texto: "Toque «Repetidor» y riéguelos por las lomas para llegar lejos, a una distancia que alcance el gateway (empiece a 5–10 km). Cada repetidor debe alcanzar al gateway o a otro repetidor conectado.",
+      texto: "Toque «Repetidor» y ubíquelos en las lomas para llegar lejos, a una distancia que alcance el gateway (empiece a 5–10 km). Cada repetidor debe alcanzar al gateway o a otro repetidor conectado.",
       tono: "info",
     };
   if (!red.alDia)
@@ -127,7 +127,7 @@ export function consejoRed(red: EstadoRed, limiteSaltos: number, opciones: { cal
     return {
       paso: 3,
       titulo: "Ponga a la gente",
-      texto: "Toque «Persona» y suéltelas por el campo, en las casas o fincas de la gente. Verde = conectada al gateway; rojo = sin cobertura.",
+      texto: "Toque «Persona» y ubíquelas en el campo, en las casas o fincas de la gente. Verde = conectada al gateway; rojo = sin cobertura.",
       tono: "info",
     };
   if (red.sinCobertura.length)
@@ -141,13 +141,13 @@ export function consejoRed(red: EstadoRed, limiteSaltos: number, opciones: { cal
     return {
       paso: 4,
       titulo: "Hay rutas demasiado largas",
-      texto: `${lista(red.lejos)} ${red.lejos.length === 1 ? "llega" : "llegan"} con más saltos que el límite del diseño (${limiteSaltos}): cada pago tardaría más y le quitaría capacidad a la frecuencia. Ponga un repetidor más alto que acorte la ruta o suba el límite de saltos en el modo avanzado (MeshCore deja hasta 64).`,
+      texto: `${lista(red.lejos)} ${red.lejos.length === 1 ? "llega" : "llegan"} con más saltos que el límite del diseño (${limiteSaltos}): cada mensaje tardaría más y le quitaría capacidad a la frecuencia. Ponga un repetidor más alto que acorte la ruta o suba el límite de saltos en el modo avanzado (MeshCore deja hasta 64).`,
       tono: "alerta",
     };
   return {
     paso: null,
     titulo: "¡Toda la gente está conectada!",
-    texto: `${red.conectadas.length} ${red.conectadas.length === 1 ? "persona" : "personas"} con ruta al gateway, máximo ${red.saltosMax} ${red.saltosMax === 1 ? "salto" : "saltos"}. Mire el flujo turquesa hacia el gateway y pruebe «Enviar un pago de prueba»: el comprobante vuelve por la misma ruta. Con «Poblar personas» y la «Prueba de carga» (en Resultados) ve cuántos pagos aguanta la frecuencia.`,
+    texto: `${red.conectadas.length} ${red.conectadas.length === 1 ? "persona" : "personas"} con ruta al gateway, máximo ${red.saltosMax} ${red.saltosMax === 1 ? "salto" : "saltos"}. Mire el flujo turquesa hacia el gateway y pruebe «Enviar un mensaje de prueba»: la respuesta vuelve por la misma ruta. Con «Poblar personas» y la «Prueba de carga» (en Resultados) ve cuántos pagos, WhatsApp y consultas a la IA aguanta la frecuencia.`,
     tono: "ok",
   };
 }
