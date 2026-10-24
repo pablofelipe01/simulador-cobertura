@@ -61,7 +61,7 @@ function resumenMalla(r: ResultadoSimulacion, api: Api, id: string): Respuesta {
   const general = textoRed(red, limite);
   const acciones: AccionRespuesta[] = [];
   if (red.sinCobertura.length) acciones.push({ texto: "Conectar a los que faltan", accion: "orden", orden: { tipo: "sembrar", destino: "faltantes" } });
-  else if (red.conectadas.length) acciones.push({ texto: "Enviar un mensaje de prueba", accion: "orden", orden: { tipo: "mensaje" } });
+  else if (red.conectadas.length) acciones.push({ texto: "Enviar un pago de prueba", accion: "orden", orden: { tipo: "mensaje" } });
   const a = id !== "*" ? antenas.find((x) => x.id === id) : undefined;
   const info = a ? red.porNodo.get(a.id) : undefined;
   if (a && info) {
