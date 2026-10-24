@@ -34,6 +34,23 @@ export function centroPoligono(poligono: Poligono): { lat: number; lon: number }
   return { lat: (c.sur + c.norte) / 2, lon: (c.oeste + c.este) / 2 };
 }
 
+/**
+ * Hasta qué distancia del borde de un área la red que ya existe todavía le sirve: unos dos saltos de repetidor en
+ * plano (~10 km cada uno con SF11). Más lejos, una malla pedida en otro municipio se diseña con su propio gateway,
+ * sin encadenar repetidores por kilómetros de campo vacío ni bajar el relieve de todo el camino.
+ */
+export const ALCANCE_RED_EXISTENTE_M = 20_000;
+
+/** ¿Un nodo en (lat, lon) puede ser parte de la red que cubre el área? (dentro de ella o a menos del alcance). */
+export function sirveAlArea(poligono: Poligono, lat: number, lon: number, alcanceM = ALCANCE_RED_EXISTENTE_M): boolean {
+  if (!poligono.length || dentroPoligono(lon, lat, poligono)) return true;
+  const c = centroPoligono(poligono);
+  const m = metrosPorGrado(c.lat);
+  const d = (la: number, lo: number) => Math.hypot((la - c.lat) * m.lat, (lo - c.lon) * m.lon);
+  const radio = Math.max(...poligono.map(([lo, la]) => d(la, lo)));
+  return d(lat, lon) <= radio + alcanceM;
+}
+
 /** Círculo de radio dado (m) como polígono de muchos lados. */
 export function poligonoCirculo(lat: number, lon: number, radioM: number, lados = 72): Poligono {
   const puntos: Poligono = [];

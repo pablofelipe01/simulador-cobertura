@@ -319,6 +319,54 @@ export function dimensionarDepartamento(dep: DepartamentoTrama, adopcionPct = 30
   });
 }
 
+export type CostoRed = {
+  gateways: number;
+  repetidores: number;
+  personas: number;
+  /** Inversión (COP): sitios del gateway, repetidores, equipos de la gente, instalación y transporte. */
+  inversion: { sitios: number; repetidores: number; personas: number; instalacion: number; transporte: number; total: number };
+  /** Operación mensual (COP): internet, mantenimiento de los sitios, baterías y visitas a los repetidores, soporte. */
+  mensual: { internet: number; sitios: number; repetidores: number; soporte: number; total: number };
+  /** La inversión repartida en los años del documento, más la operación: lo que cuesta la red al mes. */
+  totalMes: number;
+  logistica: number;
+};
+
+/**
+ * Lo que cuesta una red concreta con los precios del documento de Trama: cada gateway es un sitio completo (mini PC,
+ * hub, UPS, caja, tierra, torre de 12 m, kit solar, una radio T114 y Starlink con su kit solar); cada repetidor, un P1
+ * solar con pilas, antena de 8 dBi, cable, tubo de 6 m, herrajes y base; cada persona, su billetera. `logistica`
+ * encarece instalación, transporte y visitas según la región (1 = sin recargo).
+ */
+export function costoRedTrama(gateways: number, repetidores: number, personas = 0, nodo: NodoUsuario = "xiao", logistica = 1, pr = PRECIOS, op = OPERACION_TRAMA): CostoRed {
+  const g = Math.max(0, Math.round(gateways));
+  const r = Math.max(0, Math.round(repetidores));
+  const p = Math.max(0, Math.round(personas));
+  const sitios = (pr.sitioBase + pr.radio + pr.starlink) * g;
+  const reps = pr.repetidor * r;
+  const nodos = pr.nodo[nodo] * p;
+  const equipos = sitios + reps + nodos;
+  const instalacion = (op.instalacionSitio * g + op.instalacionRepetidor * r) * logistica + op.inscripcionUsuario * p;
+  const transporte = equipos * (op.transportePct / 100) * logistica;
+  const total = equipos + instalacion + transporte;
+  const mensual = {
+    internet: op.starlinkMesComercial * g,
+    sitios: op.mantenimientoSitioMes * logistica * g,
+    repetidores: ((op.bateriaRepetidor + op.visitaRepetidor * logistica) / op.vidaBateriaMeses) * r,
+    soporte: op.soporteUsuarioMes * p,
+  };
+  const totalMensual = mensual.internet + mensual.sitios + mensual.repetidores + mensual.soporte;
+  return {
+    gateways: g,
+    repetidores: r,
+    personas: p,
+    inversion: { sitios, repetidores: reps, personas: nodos, instalacion, transporte, total },
+    mensual: { ...mensual, total: totalMensual },
+    totalMes: total / (12 * op.aniosInversion) + totalMensual,
+    logistica,
+  };
+}
+
 /** Formato de pesos como en el documento: «$6,4 mil M», «$248 M», «$178.065». */
 export function pesosTrama(v: number): string {
   const n = (x: number, d: number) => x.toLocaleString("es-CO", { maximumFractionDigits: d });
