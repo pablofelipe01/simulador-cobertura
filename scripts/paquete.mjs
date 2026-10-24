@@ -1,3 +1,8 @@
+// © 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero. Todos los derechos reservados.
+// Autor: Giancarlo González Guerrero, para el Ingeniero Pablo Felipe Acevedo y Melki, con ayuda de inteligencia
+// artificial. Prohibido su uso, copia, modificación o distribución sin licencia escrita de los titulares (Ley 23 de
+// 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
+
 // Arma los paquetes de avance para probar sin instalar nada (con INSTRUCTIVO.txt):
 //  • SIMULADOR_avance_<fecha>_HTML.zip – «SIMULADOR.html» con doble clic (siempre)
 //  • SIMULADOR_avance_<fecha>.zip      – servidor autónomo + Node.js portátil + lanzador .bat (solo al ejecutarlo en Windows)
@@ -10,7 +15,7 @@ import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, stat
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { construirHtml } from "./html/build.mjs";
+import { construirHtml, licenciaWindows } from "./html/build.mjs";
 import { comprimirCarpeta } from "./zip.mjs";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -110,6 +115,7 @@ OPCIÓN B · Con servidor local   (${zipServidor})
 const contenidoServidor = conServidor
   ? `  ${zipServidor}
     Iniciar SIMULADOR.bat  arranca el simulador con servidor (Windows)
+    LICENCIA.txt           autoría, titulares y licencia de uso
     app\\                   la aplicación compilada (Next.js)
     runtime\\               Node.js portátil y el lanzador
 `
@@ -124,7 +130,10 @@ const instructivo =
     .replaceAll("{{CONTENIDO_SERVIDOR}}", contenidoServidor)
     .replace(/\r?\n/g, "\r\n");
 writeFileSync(path.join(html, "INSTRUCTIVO.txt"), instructivo);
-if (conServidor) writeFileSync(path.join(raiz, "INSTRUCTIVO.txt"), instructivo);
+if (conServidor) {
+  writeFileSync(path.join(raiz, "INSTRUCTIVO.txt"), instructivo);
+  writeFileSync(path.join(raiz, "LICENCIA.txt"), licenciaWindows());
+}
 
 // 5. Comprimir
 paso("Comprimiendo…");
