@@ -1,8 +1,14 @@
-// Melki manos libres (tipo Jarvis): Melki escucha todo el tiempo y se activa con su nombre («Hola Melki», «Oye
-// Melki», «Hey Melki», «Hello Melki»); ejecuta la orden, contesta en voz alta y se queda atento unos segundos para
-// seguir la conversación sin repetir su nombre. Aquí está lo que no depende de la pantalla: reconocer el llamado,
-// los controles de voz («para», «repite», «más detalle», «sí, hazlo», «la segunda», «deja de escuchar»), limpiar lo
-// dicho y resumir la respuesta para leerla.
+// © 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero. Todos los derechos reservados.
+// Autor: Giancarlo González Guerrero, para el Ingeniero Pablo Felipe Acevedo y Melki, con ayuda de inteligencia
+// artificial. Prohibido su uso, copia, modificación o distribución sin licencia escrita de los titulares (Ley 23 de
+// 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
+
+// Asistente Melki (por voz, tipo Jarvis): Melki escucha todo el tiempo y se activa con su nombre («Hola Melki», «Oye
+// Melki», «Hey Melki», «Hello Melky»…, en las formas en que el reconocimiento lo escribe); ejecuta la orden, contesta
+// en voz alta, con el trato cortés de un mayordomo, y se queda atento unos segundos para seguir la conversación sin
+// repetir su nombre. Aquí está lo que no depende de la pantalla: reconocer el llamado, los controles de voz («para»,
+// «repite», «más detalle», «sí, hazlo», «la segunda», «deja de escuchar»), limpiar lo dicho, resumir la respuesta para
+// leerla y las frases del asistente.
 import { normalizarDictado } from "./dictado";
 import { numerosEnPalabras } from "./numeros";
 import { paraHablar } from "./voz";
@@ -19,10 +25,31 @@ const normal = (t: string) =>
     .trim();
 
 /** Cómo suele quedar «Melki» en el reconocimiento de voz (una palabra o dos: «mel ki»). */
-const NOMBRE = /^(?:melk[iy]s?|mel+k[iy]|melqu[iy]|melkey|melkee|melchi|nelk[iy]|belk[iy]|welk[iy])$/;
-const NOMBRE_DOS = /^mel+ (?:k[iy]|qu[iy]|key|kee)$/;
+const NOMBRE = /^(?:melk[iy]e?s?|mel+k[iy]e?|melqu[iy]|melk[ie]y|melkee|melkie|melchi|melgi|melky|malk[iy]|milk[iy]|nelk[iy]|belk[iy]|welk[iy]|elk[iy])$/;
+const NOMBRE_DOS = /^(?:mel+|mell|meel) (?:k[iy]|qu[iy]|key|kee|kie|ki[eé]|chi|gui)$/;
+
+/** Distancia de edición entre dos palabras cortas (para aceptar «Melkí», «Mekli», «Melkis»…). */
+function distancia(a: string, b: string): number {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++)
+    for (let j = 1; j <= b.length; j++) {
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+    }
+  return d[a.length][b.length];
+}
+
+/** ¿La palabra es el nombre de Melki tal como lo pudo escribir el reconocimiento? */
+export function esNombre(palabra: string): boolean {
+  const k = normal(palabra);
+  if (NOMBRE.test(k)) return true;
+  // Una letra de más, de menos o cambiada («melkis», «mekli», «melka»), solo en palabras del largo del nombre
+  return k.length >= 4 && k.length <= 7 && /^[mnbvwe]/.test(k) && distancia(k, "melki") <= 1;
+}
+
 /** Saludos con que se llama a Melki, en español y en inglés. */
-const SALUDO_ES = /^(?:hola|ola|oye|oiga|oigan|ey|ei|eh|epa|buenas|ok|okey|oka|vale)$/;
+const SALUDO_ES = /^(?:hola|ola|oye|oiga|oigan|ey|ei|eh|epa|buenas|buenos|dias|tardes|noches|ok|okey|oka|vale|querido|querida|mi)$/;
 const SALUDO_EN = /^(?:hey|hei|hello|helo|hellou|jelou|hi|hai|okay)$/;
 
 export type Activacion = { activado: boolean; resto: string; ingles: boolean };
@@ -41,7 +68,7 @@ export function detectarActivacion(frase: string): Activacion {
   let i = -1;
   let largo = 1;
   for (let k = 0; k < claves.length; k++) {
-    if (NOMBRE.test(claves[k])) {
+    if (esNombre(claves[k])) {
       i = k;
       break;
     }
@@ -81,7 +108,7 @@ export function controlDeVoz(frase: string): ControlVoz | null {
   if (/^(repite|repitelo|repitemelo|repiteme|otra vez|de nuevo|que dijiste|no te (entendi|escuche|oi)|no escuche|como dijiste|perdon que dijiste)$/.test(t)) return { tipo: "repetir" };
   if (/^(mas detalles?|dame (mas )?detalles?|con detalle|explicame( mas| mejor)?|explica( mas| mejor)?|leelo todo|leeme todo|lee todo|dime todo|completo|la respuesta completa|amplia|amplialo|cuentame mas|y que mas|sigue)$/.test(t)) return { tipo: "detalle" };
   if (
-    /^(apaga|desactiva|termina|cierra|sal de|quita|deten)\w* (el )?(modo )?(manos libres|escucha|microfono|jarvis)$|^deja de escuchar(me)?$|^ya no (me )?escuches$|^no me escuches$|^(adios|chao|hasta luego|hasta pronto|nos vemos|bye|goodbye)( melki)?$/.test(
+    /^(apaga|desactiva|termina|cierra|sal de|quita|deten)\w* (el )?(modo )?(manos libres|escucha|microfono|jarvis|asistente( melki| de voz)?)$|^deja de escuchar(me)?$|^ya no (me )?escuches$|^no me escuches$|^(adios|chao|hasta luego|hasta pronto|nos vemos|bye|goodbye)( melki)?$/.test(
       t,
     )
   )
@@ -149,8 +176,48 @@ export function pareceEco(oido: string, dicho: string): boolean {
   return palabras.length === 1 ? dentro === 1 : dentro / palabras.length >= 0.75;
 }
 
-/** Lo que Melki dice al activar el modo y la ayuda por voz. */
-export const SALUDO_MANOS_LIBRES = "Modo manos libres activo. Diga «Hola Melki» y su pedido; por ejemplo, «Hola Melki, ¿qué hago ahora?». Para terminar, diga «Melki, deja de escuchar».";
+/** Cómo se dirige Melki a la persona. */
+export type Trato = "senor" | "senora" | "ninguno";
+
+/**
+ * Las frases del Asistente Melki, con el trato cortés y elegante de un mayordomo. `vez` va contando los llamados para
+ * no repetir siempre lo mismo.
+ */
+export function frases(trato: Trato) {
+  const s = trato === "senor" ? "señor" : trato === "senora" ? "señora" : "";
+  /** «…, señor» o nada. */
+  const coma = (frase: string) => (s ? `${frase}, ${s}` : frase);
+  const bienvenido = trato === "senora" ? "Bienvenida" : trato === "senor" ? "Bienvenido" : "Le doy la bienvenida";
+  const llamados = [coma("Dígame") + ".", coma("A sus órdenes") + ".", coma("Le escucho") + ".", `¿En qué le sirvo${s ? `, ${s}` : ""}?`];
+  return {
+    bienvenida: (primera: boolean) =>
+      primera
+        ? `${coma("Hola")}. ${bienvenido}. Soy Melki, su asistente: estoy atento y presto a seguir sus órdenes. Cuando me necesite, diga «Hola Melki».`
+        : `${coma("A su servicio")}. Diga «Hola Melki» cuando me necesite.`,
+    llamado: (vez: number, ingles: boolean) =>
+      ingles
+        ? `Hello${s ? `, ${trato === "senora" ? "madam" : "sir"}` : ""}. Le escucho.`
+        : vez === 0
+          ? `${s ? `Hola, mi ${s}` : "Hola"}. Le escucho; estoy atento y presto a seguir sus órdenes.`
+          : llamados[(vez - 1) % llamados.length],
+    despedida: `Con su permiso${s ? `, ${s}` : ""}, dejo de escuchar. Aquí estaré cuando me necesite.`,
+    gracias: `Es un placer${s ? `, ${s}` : ""}. Aquí sigo; llámeme cuando quiera.`,
+    nada: `Como usted diga${s ? `, ${s}` : ""}. No hago nada.`,
+    sinPendiente: `No tengo nada pendiente${s ? `, ${s}` : ""}. Dígame qué necesita.`,
+    sinOpcion: `No tengo esa opción${s ? `, ${s}` : ""}. Dígame qué necesita.`,
+    yaHecho: `Eso ya está hecho${s ? `, ${s}` : ""}. ¿Qué sigue?`,
+    yaEscucho: `Ya le estoy escuchando${s ? `, ${s}` : ""}: diga «Hola Melki» y su pedido.`,
+    /** Sugerencias cuando los paneles están ocultos (terminan en pregunta: «sí» u «ok» las acepta). */
+    verResultados: `Para verlo con más detalle, ¿desea que le muestre el panel de resultados${s ? `, ${s}` : ""}?`,
+    verHerramientas: `Para revisar los nodos y los parámetros, ¿le muestro el panel de herramientas${s ? `, ${s}` : ""}?`,
+    mostrando: (panel: "resultados" | "herramientas") => `${coma("Con gusto")}. Aquí tiene el panel de ${panel}.`,
+    sinPanel: `Como usted diga${s ? `, ${s}` : ""}. Lo dejo oculto; cuando lo necesite, pídamelo o toque el botón de mi barra.`,
+    prueba: `${coma("Hola")}. Así sonará mi voz. Estoy a sus órdenes.`,
+  };
+}
+
+/** Lo que Melki dice al activar el asistente (con el trato por defecto). */
+export const SALUDO_MANOS_LIBRES = frases("senor").bienvenida(true);
 
 export const AYUDA_VOZ =
-  "Por voz entiendo lo mismo que por escrito. Dígame «Hola Melki», «Oye Melki» o «Hey Melki» y su pedido; por ejemplo: «pon el gateway en Cumaral», «conecta a los que faltan», «puebla la zona con doscientas cincuenta personas», «¿cuántas personas aguanta el Repetidor 1?», «¿cómo dejo la mayor cobertura posible?» o «pantalla limpia». Después de responder me quedo atento unos segundos: siga hablando sin repetir mi nombre. Para usar mis botones diga «sí, hazlo» o «la segunda»; también entiendo «para», «repite», «más detalle», «deshaz» y «deja de escuchar».";
+  "Soy el Asistente Melki: por voz entiendo lo mismo que por escrito. Dígame «Hola Melki», «Oye Melki» o «Hey Melki» y su pedido; por ejemplo: «pon el gateway en Cumaral», «conecta a los que faltan», «puebla la zona con doscientas cincuenta personas», «¿cuántas personas aguanta el Repetidor 1?», «¿cómo dejo la mayor cobertura posible?», «muestra el panel de resultados» o «pantalla limpia». Después de responder me quedo atento unos segundos: siga hablando sin repetir mi nombre. Para usar mis botones diga «sí, hazlo» o «la segunda»; también entiendo «para», «repite», «más detalle», «deshaz» y «deja de escuchar».";

@@ -1,3 +1,8 @@
+// © 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero. Todos los derechos reservados.
+// Autor: Giancarlo González Guerrero, para el Ingeniero Pablo Felipe Acevedo y Melki, con ayuda de inteligencia
+// artificial. Prohibido su uso, copia, modificación o distribución sin licencia escrita de los titulares (Ley 23 de
+// 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
+
 // Versión HTML: el mismo simulador en una carpeta con «SIMULADOR.html» que se abre con doble clic (sin servidor).
 // Los componentes vienen sin cambios de src/; solo el arranque del Web Worker se reemplaza por uno que lo
 // arma desde un Blob (los navegadores no cargan workers desde file://). El CSS y las tipografías salen del
@@ -47,7 +52,20 @@ const comun = {
   logLevel: "warning",
 };
 
+/** Autoría y licencia (src/lib/autoria.ts), para dejarlas en los archivos que se generan. */
+async function leerAutoria() {
+  const r = await build({ entryPoints: [path.join(repo, "src", "lib", "autoria.ts")], bundle: true, format: "esm", platform: "neutral", write: false, logLevel: "warning" });
+  return import(`data:text/javascript;base64,${Buffer.from(r.outputFiles[0].text).toString("base64")}`);
+}
+
+/** LICENSE del repositorio como LICENCIA.txt para Windows (con BOM y saltos CRLF, como el instructivo). */
+export function licenciaWindows() {
+  return "\uFEFF" + readFileSync(path.join(repo, "LICENSE"), "utf8").replace(/\r?\n/g, "\r\n");
+}
+
 export async function construirHtml(salida = path.join(repo, "dist", "html", "SIMULADOR-HTML")) {
+  const { AVISO_CODIGO, AUTOR, DERECHOS } = await leerAutoria();
+  const escapar = (t) => t.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
   const next = path.join(repo, ".next");
   const inicio = path.join(next, "server", "app", "index.html");
   if (!existsSync(inicio)) throw new Error("Falta un `next build` reciente (no encuentro .next/server/app/index.html).");
@@ -70,7 +88,7 @@ export async function construirHtml(salida = path.join(repo, "dist", "html", "SI
     entryPoints: [path.join(aqui, "main.tsx")],
     outfile: path.join(archivos, "simulador.js"),
     define: { ...comun.define, __MOTOR_WORKER_SRC__: JSON.stringify(codigoWorker) },
-    banner: { js: 'var process={env:{NODE_ENV:"production"}};' },
+    banner: { js: `/*! ${AVISO_CODIGO} Ver LICENCIA.txt. */\nvar process={env:{NODE_ENV:"production"}};` },
     loader: { ".css": "empty" },
     plugins: [
       {
@@ -98,9 +116,12 @@ export async function construirHtml(salida = path.join(repo, "dist", "html", "SI
   writeFileSync(
     path.join(salida, "SIMULADOR.html"),
     `<!doctype html>
+<!-- ${AVISO_CODIGO.replaceAll("--", "–")} Ver LICENCIA.txt. -->
 <html lang="es" class="${claseHtml}">
 <head>
 <meta charset="utf-8">
+<meta name="author" content="${escapar(AUTOR)}">
+<meta name="copyright" content="${escapar(DERECHOS)}">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#F4F2EE">
 <meta name="robots" content="noindex, nofollow">
@@ -116,6 +137,7 @@ export async function construirHtml(salida = path.join(repo, "dist", "html", "SI
 </html>
 `,
   );
+  writeFileSync(path.join(salida, "LICENCIA.txt"), licenciaWindows());
   return salida;
 }
 

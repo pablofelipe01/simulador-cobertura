@@ -1,3 +1,10 @@
+/*
+ * © 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero. Todos los derechos reservados.
+ * Autor: Giancarlo González Guerrero, para el Ingeniero Pablo Felipe Acevedo y Melki, con ayuda de inteligencia
+ * artificial. Prohibido su uso, copia, modificación o distribución sin licencia escrita de los titulares (Ley 23 de
+ * 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
+ */
+
 @import "tailwindcss";
 
 /* Paleta Melki: papel de campo, carbón, salvia; el naranja es solo de Melki (el asistente). */
@@ -962,7 +969,7 @@ body {
   }
 }
 
-/* Melki manos libres: las barritas del orbe se mueven mientras escucha o habla */
+/* Asistente Melki: las barritas del orbe se mueven mientras escucha o habla */
 .barra-voz {
   height: 6px;
   transition: height 0.2s ease;
@@ -985,5 +992,74 @@ body {
   .barra-voz.activa {
     animation: none;
     height: 10px;
+  }
+}
+
+/* Asistente Melki: barra de vidrio oscuro, orbe con anillo de color que gira (rápido mientras piensa) y un halo que
+   respira; la sugerencia del momento brilla. */
+.hud-asistente {
+  background: linear-gradient(135deg, rgba(30, 37, 37, 0.93), rgba(36, 50, 46, 0.9) 55%, rgba(52, 44, 40, 0.9));
+  animation: hud-entrada 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.orbe-anillo {
+  background: conic-gradient(from 0deg, var(--orbe-a), var(--orbe-b), var(--orbe-c), var(--orbe-a));
+  animation: orbe-giro 7s linear infinite;
+}
+.orbe-centro {
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--orbe-b) 55%, #fff 10%), var(--orbe-a) 60%, color-mix(in srgb, var(--orbe-a) 70%, #000));
+}
+.orbe-aura {
+  background: radial-gradient(circle, var(--orbe-b), transparent 70%);
+  animation: orbe-respira 3.4s ease-in-out infinite;
+}
+.orbe-voz[data-estado="atento"] .orbe-anillo {
+  animation-duration: 2.6s;
+}
+.orbe-voz[data-estado="pensando"] .orbe-anillo {
+  animation-duration: 1.1s;
+}
+.orbe-voz[data-estado="atento"] .orbe-aura {
+  animation-duration: 1.5s;
+}
+.orbe-voz[data-estado="hablando"] .orbe-aura {
+  animation-duration: 1s;
+}
+.chip-resaltado {
+  animation: chip-brillo 1.8s ease-in-out infinite;
+}
+
+@keyframes hud-entrada {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes orbe-giro {
+  to {
+    transform: rotate(1turn);
+  }
+}
+@keyframes orbe-respira {
+  0%,
+  100% {
+    transform: scale(0.9);
+    opacity: 0.4;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.85;
+  }
+}
+@keyframes chip-brillo {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 214, 140, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(255, 214, 140, 0.28);
   }
 }

@@ -1,3 +1,8 @@
+// © 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero. Todos los derechos reservados.
+// Autor: Giancarlo González Guerrero, para el Ingeniero Pablo Felipe Acevedo y Melki, con ayuda de inteligencia
+// artificial. Prohibido su uso, copia, modificación o distribución sin licencia escrita de los titulares (Ley 23 de
+// 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
+
 // Órdenes de Melki para la gente y la capacidad de la red (pagos, WhatsApp y consultas a la IA): «Poblar personas» (reparte N billeteras al azar
 // en la zona), las zonas de popularidad («por cada antena 250 personas»), la prueba de estrés de la hora pico por
 // repetidor («¿qué tan colapsada está la red?», «¿hasta cuántos usuarios aguanta cada repetidor?»), la prueba de

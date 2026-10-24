@@ -1,3 +1,8 @@
+// © 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero. Todos los derechos reservados.
+// Autor: Giancarlo González Guerrero, para el Ingeniero Pablo Felipe Acevedo y Melki, con ayuda de inteligencia
+// artificial. Prohibido su uso, copia, modificación o distribución sin licencia escrita de los titulares (Ley 23 de
+// 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
+
 "use client";
 
 // Pantalla principal del simulador: estado, motor de cálculo, mapa, paneles, regla, buscador y Melki.
@@ -28,6 +33,9 @@ import type { Fase } from "@/lib/radio/protocolo";
 import type { Inspeccion } from "@/lib/radio/simulacion";
 import type { Antena, AreaObjetivo, Escenario, FuenteRelieve, Medicion, Perfil, PerfilTerreno, ResultadoSimulacion, TipoNodo } from "@/lib/radio/tipos";
 
+import { AVISO_CODIGO, PROGRAMA } from "@/lib/autoria";
+
+import { Acerca } from "./acerca";
 import { BarraSuperior } from "./barra-superior";
 import { Buscador, type Destino } from "./buscador";
 import { BarraMapa, Inspector, Leyenda } from "./controles-mapa";
@@ -157,6 +165,11 @@ export function Simulador() {
   // Panel izquierdo plegable (en el escritorio) y Melki manos libres
   const [panelIzquierdo, setPanelIzquierdo] = useState(true);
   const [manosLibres, setManosLibres] = useState(false);
+  const [acerca, setAcerca] = useState(false);
+  // Autoría y licencia también en la consola del navegador
+  useEffect(() => {
+    console.info(`%c${PROGRAMA}%c\n${AVISO_CODIGO}`, "font-weight:600", "");
+  }, []);
   const [hoja, setHoja] = useState<Hoja>(null);
   const [tour, setTour] = useState<IdTour | null>(null);
   const [voz, setVoz] = useState(false);
@@ -1506,6 +1519,14 @@ export function Simulador() {
         if (kmz) kmz();
         else simular();
         break;
+      case "acerca":
+        setAcerca(true);
+        break;
+      case "herramientas":
+        // El panel de la izquierda (nodos y parámetros, o «Sembrar la malla»)
+        if (esEscritorio()) setPanelIzquierdo(true);
+        else setHoja(estado.modo === "sembrar" ? "sembrar" : "antenas");
+        break;
     }
   };
 
@@ -1763,6 +1784,7 @@ export function Simulador() {
         onExportarCsv={() => exportarCsv(escenario, resultado)}
         onExportarKmz={kmz}
         onRecorrido={() => avisarMelki("tours")}
+        onAcerca={() => setAcerca(true)}
         resultadosAbiertos={resultadosAbiertos}
         onResultados={() => setResultadosAbiertos((v) => !v)}
         panelIzquierdo={panelIzquierdo}
@@ -1875,6 +1897,7 @@ export function Simulador() {
             onVoz={setVoz}
             manosLibres={manosLibres}
             onManosLibres={setManosLibres}
+            paneles={{ izquierdo: panelIzquierdo, derecho: resultadosAbiertos }}
           />
 
           {hoja && (
@@ -1930,6 +1953,7 @@ export function Simulador() {
         ))}
       </nav>
 
+      {acerca && <Acerca onCerrar={() => setAcerca(false)} />}
       {tour && <Recorrido key={tour} tour={tourPorId(tour)} t={apiTour} preparar={prepararTour} voz={voz} onTerminar={terminarTour} />}
     </div>
   );

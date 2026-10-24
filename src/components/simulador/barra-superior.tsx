@@ -1,9 +1,16 @@
+// © 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero. Todos los derechos reservados.
+// Autor: Giancarlo González Guerrero, para el Ingeniero Pablo Felipe Acevedo y Melki, con ayuda de inteligencia
+// artificial. Prohibido su uso, copia, modificación o distribución sin licencia escrita de los titulares (Ley 23 de
+// 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
+
 "use client";
 
-// Barra superior: nombre del escenario, buscador, archivo (nuevo, ejemplo, importar, exportar), Melki manos libres, tours
+// Barra superior: nombre del escenario, buscador, archivo (nuevo, ejemplo, importar, exportar), Asistente Melki, tours
 // guiados (abre el menú de Melki) y los botones para mostrar u ocultar los paneles de los lados.
-import { AudioLines, ChevronDown, CircleQuestionMark, FileDown, FileUp, FolderOpen, PanelLeftOpen, PanelRightClose, PanelRightOpen, Plus, RotateCcw, Search } from "lucide-react";
+import { AudioLines, ChevronDown, CircleQuestionMark, FileDown, FileUp, FolderOpen, PanelLeftOpen, PanelRightClose, PanelRightOpen, Plus, RotateCcw, Scale, Search } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
+
+import { DERECHOS } from "@/lib/autoria";
 
 type Props = {
   nombre: string;
@@ -15,12 +22,14 @@ type Props = {
   onExportarCsv: () => void;
   onExportarKmz: (() => void) | null;
   onRecorrido: () => void;
+  /** «Acerca del simulador»: autoría, titularidad y licencia. */
+  onAcerca: () => void;
   resultadosAbiertos: boolean;
   onResultados: () => void;
   /** Panel izquierdo (en el escritorio): cuando está oculto aparece aquí el botón para volver a abrirlo. */
   panelIzquierdo: boolean;
   onPanelIzquierdo: () => void;
-  /** Melki manos libres: escucha todo el tiempo y se activa con «Hola Melki». */
+  /** Asistente Melki: escucha todo el tiempo y se activa con «Hola Melki». */
   manosLibres: boolean;
   onManosLibres: () => void;
   /** Buscador; recibe una función para cerrarlo (en pantallas angostas se abre en una fila aparte). */
@@ -131,6 +140,9 @@ export function BarraSuperior(p: Props) {
               {item(<FileDown size={16} />, "Guardar escenario (.json)", p.onExportarJson, "Nodos, parámetros y mediciones, para compartir o retomar")}
               {item(<FileDown size={16} />, "Nodos en Excel (.csv)", p.onExportarCsv)}
               {item(<FileUp size={16} />, "Cobertura para Google Earth (.kmz)", p.onExportarKmz, p.onExportarKmz ? "Señal, nodos, enlaces, alcance y mediciones" : "Disponible después de simular")}
+              <div className="my-1 h-px bg-linea" />
+              {item(<Scale size={16} />, "Acerca del simulador y licencia", p.onAcerca, "Autoría, titulares y uso permitido")}
+              <p className="px-2.5 pt-1 pb-1.5 text-[11px] leading-snug text-tenue">{DERECHOS}</p>
             </div>
           )}
           <input
@@ -152,14 +164,14 @@ export function BarraSuperior(p: Props) {
           aria-pressed={p.manosLibres}
           className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[14px] font-medium transition-colors ${p.manosLibres ? "bg-carbon text-white hover:bg-carbon-2" : "hover:bg-papel-2"}`}
           data-tour="manos-libres"
-          title={p.manosLibres ? "Apagar manos libres (o diga «Melki, deja de escuchar»)" : "Manos libres: Melki le escucha y se activa cuando dice «Hola Melki»"}
-          aria-label={p.manosLibres ? "Apagar manos libres" : "Activar manos libres"}
+          title={p.manosLibres ? "Apagar el Asistente Melki (o diga «Melki, deja de escuchar»)" : "Asistente Melki: le escucha todo el tiempo y se activa cuando dice «Hola Melki»"}
+          aria-label={p.manosLibres ? "Apagar el Asistente Melki" : "Activar el Asistente Melki"}
         >
           <span className="relative grid place-items-center">
             <AudioLines size={17} />
             {p.manosLibres && <span className="absolute -top-1 -right-1 h-2 w-2 animate-pulse rounded-full bg-melki ring-1 ring-carbon" aria-hidden="true" />}
           </span>
-          <span className="hidden xl:inline">Manos libres</span>
+          <span className="hidden xl:inline">Asistente Melki</span>
         </button>
         <button
           type="button"

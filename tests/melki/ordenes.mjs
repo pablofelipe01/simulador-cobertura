@@ -1,3 +1,8 @@
+// © 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero. Todos los derechos reservados.
+// Autor: Giancarlo González Guerrero, para el Ingeniero Pablo Felipe Acevedo y Melki, con ayuda de inteligencia
+// artificial. Prohibido su uso, copia, modificación o distribución sin licencia escrita de los titulares (Ley 23 de
+// 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
+
 // Pruebas de Melki (sin navegador): interpreta pedidos en español y los ejecuta sobre un simulador de mentira.
 // Uso: npm run prueba:melki
 import { build } from "esbuild";
@@ -15,8 +20,8 @@ export { normalizarDictado, componerTexto, quitarRepeticiones } from "./src/comp
 export { TOURS } from "./src/components/melki/tours";
 export { pedidoDeTour } from "./src/components/melki/cerebro";
 export { numerosEnPalabras } from "./src/components/melki/numeros";
-export { detectarActivacion, controlDeVoz, limpiarComando, textoParaVoz, pareceEco, AYUDA_VOZ, SALUDO_MANOS_LIBRES } from "./src/components/melki/manos-libres";
-export { paraHablar } from "./src/components/melki/voz";
+export { detectarActivacion, controlDeVoz, limpiarComando, textoParaVoz, pareceEco, AYUDA_VOZ, SALUDO_MANOS_LIBRES, esNombre, frases } from "./src/components/melki/manos-libres";
+export { paraHablar, puntajeVoz } from "./src/components/melki/voz";
 export { estadoInicial, reductor } from "./src/components/simulador/estado";
 export { estadoRed } from "./src/lib/radio/estado-red";
 `;
@@ -407,7 +412,7 @@ function crearApi(antenas) {
   caso("El tutorial básico tiene 7 pasos", m.TOURS[0].id === "basico" && m.TOURS[0].pasos.length === 8);
 
   // Cada paso práctico: no está hecho al entrar, «Hágalo por mí» lo hace y se detecta (con un simulador de mentira)
-  const SOLO_PANTALLA = new Set(["medir:A Google Earth", "voz:Active manos libres"]); // dependen de botones en pantalla
+  const SOLO_PANTALLA = new Set(["medir:A Google Earth", "voz:Active el asistente"]); // dependen de botones en pantalla
   for (const tour of m.TOURS.filter((x) => x.practica && x.id !== "melki")) {
     let estado = { ...m.estadoInicial(), escenario: tour.practica.escenario(), autoSimular: tour.practica.autoSimular };
     let alDia = false;
@@ -995,9 +1000,9 @@ function crearApi(antenas) {
   caso("El tema de estrés explica «¿Cuántas aguanta?» y «Llenar hasta el límite»", /¿Cuántas aguanta\?/.test(m.responder("¿qué es una zona de popularidad?", c).texto) && /Llenar hasta el límite/.test(m.responder("¿qué es una zona de popularidad?", c).texto));
 }
 
-// ─── 17. Melki manos libres (tipo Jarvis): llamado, controles, números, eco, paneles y la mayor cobertura ───
+// ─── 17. Asistente Melki (tipo Jarvis): llamado, controles, números, eco, paneles, trato, voz y la mayor cobertura ───
 {
-  console.log("\n17. Manos libres");
+  console.log("\n17. Asistente Melki");
   const act = (f) => m.detectarActivacion(f);
   for (const [frase, resto, ingles] of [
     ["Hola Melki, pon el gateway en Cumaral", "pon el gateway en Cumaral", false],
@@ -1008,12 +1013,19 @@ function crearApi(antenas) {
     ["Melki por favor conecta a los que faltan", "conecta a los que faltan", false],
     ["conecta a los que faltan, Melki", "conecta a los que faltan", false],
     ["Oye Melqui", "", false],
+    ["Hello Melky, ¿cómo está la red?", "¿cómo está la red?", true],
+    ["hola melkis simula", "simula", false],
+    ["Hola Melkie, conecta a los que faltan", "conecta a los que faltan", false],
+    ["oye mekli pantalla limpia", "pantalla limpia", false],
+    ["Hola mel qui, ¿qué hago ahora?", "¿qué hago ahora?", false],
   ])
     caso(`Llamado: «${frase}»`, ((a) => a.activado && a.resto === resto && a.ingles === ingles)(act(frase)), JSON.stringify(act(frase)));
   caso("Sin el nombre no se activa", !act("pon el gateway en Cumaral").activado && !act("hola, ¿cómo estás?").activado && !act("el melón está maduro").activado);
+  caso("Las formas del nombre: Melki, Melky, Melqui, Melkis, Mekli, Melkie", ["Melki", "Melky", "melqui", "Melkis", "mekli", "Melkie", "Melkí", "MELKY"].every((w) => m.esNombre(w)), ["Melki", "Melky", "melqui", "Melkis", "mekli", "Melkie", "Melkí", "MELKY"].filter((w) => !m.esNombre(w)).join(","));
+  caso("Palabras parecidas no son el nombre", ["mejor", "melón", "menos", "milk", "mapa", "medir", "nodo", "valle", "melodía", "helicóptero"].every((w) => !m.esNombre(w)), ["mejor", "melón", "menos", "milk", "mapa", "medir", "nodo", "valle", "melodía", "helicóptero"].filter((w) => m.esNombre(w)).join(","));
 
   const ctl = (f) => m.controlDeVoz(f)?.tipo ?? null;
-  caso("Controles: para, repite, más detalle, deja de escuchar, gracias, no, ayuda", ctl("para") === "callar" && ctl("Melki, silencio") === "callar" && ctl("repite") === "repetir" && ctl("¿qué dijiste?") === "repetir" && ctl("más detalle") === "detalle" && ctl("léelo todo") === "detalle" && ctl("deja de escuchar") === "apagar" && ctl("apaga el modo manos libres") === "apagar" && ctl("adiós") === "apagar" && ctl("gracias") === "gracias" && ctl("no, gracias") === "no" && ctl("¿qué te puedo decir?") === "ayuda");
+  caso("Controles: para, repite, más detalle, deja de escuchar, gracias, no, ayuda", ctl("para") === "callar" && ctl("Melki, silencio") === "callar" && ctl("repite") === "repetir" && ctl("¿qué dijiste?") === "repetir" && ctl("más detalle") === "detalle" && ctl("léelo todo") === "detalle" && ctl("deja de escuchar") === "apagar" && ctl("apaga el modo manos libres") === "apagar" && ctl("apaga el asistente") === "apagar" && ctl("desactiva el asistente Melki") === "apagar" && ctl("adiós") === "apagar" && ctl("gracias") === "gracias" && ctl("no, gracias") === "no" && ctl("¿qué te puedo decir?") === "ayuda");
   caso("«Sí, hazlo», «dale», «la segunda», «la última» usan los botones", m.controlDeVoz("sí, hazlo")?.indice === 0 && m.controlDeVoz("dale")?.indice === 0 && m.controlDeVoz("la segunda")?.indice === 1 && m.controlDeVoz("el tercero")?.indice === 2 && m.controlDeVoz("la última")?.indice === "ultima");
   caso("Una orden no es un control", ctl("pon el gateway en Cumaral") === null && ctl("no conectes a nadie más") === null && ctl("para el Repetidor 1 usa 12 m") === null);
 
@@ -1050,6 +1062,24 @@ function crearApi(antenas) {
   caso("Reconoce el eco de su propia voz", m.pareceEco("diga hola Melki y su pedido", m.SALUDO_MANOS_LIBRES) && m.pareceEco("le dejé el detalle escrito", "La red cubre el 82 %. Le dejé el detalle escrito."));
   caso("Lo que dice el usuario no es eco", !m.pareceEco("pon el gateway en Cumaral", m.SALUDO_MANOS_LIBRES) && !m.pareceEco("conecta a los que faltan", "Listo, simulé la red: llegan 40 de 45 personas."));
 
+  // Trato de mayordomo: el saludo, el llamado y las sugerencias de paneles
+  const fs = m.frases("senor");
+  caso("Al activarse: «Hola, señor. Bienvenido» y queda presto a sus órdenes", /^Hola, señor\. Bienvenido\./.test(fs.bienvenida(true)) && /presto a seguir sus órdenes/.test(fs.bienvenida(true)) && /Hola Melki/.test(fs.bienvenida(true)), fs.bienvenida(true));
+  caso("Al llamarlo por su nombre: «Hola, mi señor. Le escucho; estoy atento y presto a seguir sus órdenes»", fs.llamado(0, false) === "Hola, mi señor. Le escucho; estoy atento y presto a seguir sus órdenes." && fs.llamado(1, false) !== fs.llamado(2, false) && /^Hello, sir/.test(fs.llamado(0, true)));
+  caso("Con «señora» y sin tratamiento", /^Hola, señora\. Bienvenida\./.test(m.frases("senora").bienvenida(true)) && /mi señora/.test(m.frases("senora").llamado(0, false)) && !/señor/.test(m.frases("ninguno").bienvenida(true) + m.frases("ninguno").llamado(0, false) + m.frases("ninguno").despedida));
+  caso("Las sugerencias de paneles terminan en pregunta («sí» u «ok» las aceptan)", /panel de resultados, señor\?$/.test(fs.verResultados) && /panel de herramientas, señor\?$/.test(fs.verHerramientas) && /panel de resultados/.test(fs.mostrando("resultados")));
+  caso("El saludo de bienvenida es el de siempre", m.SALUDO_MANOS_LIBRES === fs.bienvenida(true));
+  // La voz más natural primero
+  const voces = [
+    { name: "Microsoft Sabina - Spanish (Mexico)", lang: "es-MX" },
+    { name: "Google español de Estados Unidos", lang: "es-US" },
+    { name: "Microsoft Salome Online (Natural) - Spanish (Colombia)", lang: "es-CO" },
+    { name: "Microsoft Dalia Online (Natural) - Spanish (Mexico)", lang: "es-MX" },
+    { name: "eSpeak Spanish", lang: "es" },
+    { name: "Google US English", lang: "en-US" },
+  ].sort((a, b) => m.puntajeVoz(b) - m.puntajeVoz(a));
+  caso("Elige la voz neuronal colombiana, luego las naturales y Google; las robóticas al final", voces[0].name.includes("Salome") && voces[1].name.includes("Dalia") && voces[2].name.startsWith("Google español") && m.puntajeVoz({ name: "eSpeak Spanish", lang: "es" }) < m.puntajeVoz({ name: "Microsoft Sabina - Spanish (Mexico)", lang: "es-MX" }) && m.puntajeVoz({ name: "Google US English", lang: "en-US" }) < 0, voces.map((v) => v.name.split(" ")[1]).join(" > "));
+
   // Pantalla limpia: los paneles de los lados
   const api = crearApi([base("g", "Gateway", 4.2, -73.37, { pasarela: true })]);
   const pan = (t) => m.interpretarOrden(t, api, null);
@@ -1057,6 +1087,7 @@ function crearApi(antenas) {
   caso("«Muestra los paneles» los vuelve a abrir", ((o) => o?.tipo === "paneles" && o.izquierdo === true && o.derecho === true)(pan("muestra los paneles")));
   caso("«Cierra el panel izquierdo» y «oculta los resultados» van por separado", ((o) => o?.izquierdo === false && o.derecho === undefined)(pan("cierra el panel izquierdo")) && ((o) => o?.derecho === false && o.izquierdo === undefined)(pan("oculta los resultados")) && pan("abre el panel de resultados")?.derecho === true);
   caso("«Muestra los resultados» (sin panel) no es una orden de paneles", pan("muestra los resultados")?.tipo !== "paneles" && pan("limpia el mapa")?.tipo === "nuevo");
+  caso("«Muéstrame las herramientas» abre el panel de la izquierda", ((o) => o?.tipo === "paneles" && o.izquierdo === true && o.derecho === undefined)(pan("muéstrame las herramientas")) && pan("abre el panel de herramientas")?.izquierdo === true);
   const rp = m.ejecutarOrden(pan("pantalla limpia"), api);
   caso("Ejecuta la pantalla limpia y lo cuenta", /pantalla limpia, solo el mapa/.test(rp.texto) && api.llamadas.some((l) => l[0] === "paneles" && l[1].izquierdo === false && l[1].derecho === false), rp.texto);
   api.pantalla = "celular";
@@ -1077,9 +1108,16 @@ function crearApi(antenas) {
   caso("Explica manos libres y ofrece activarlo y el tour", /Hola Melki/.test(rm.texto) && /deja de escuchar/.test(rm.texto) && rm.acciones?.some((a) => a.accion === "manos-libres") && rm.acciones?.some((a) => a.tour === "voz"), rm.texto.slice(0, 100));
   caso("«Modo Jarvis» y «comandos de voz» llevan al mismo tema", m.responder("modo jarvis", c).acciones?.some((a) => a.accion === "manos-libres") && m.responder("¿qué comandos de voz entiendes?", c).acciones?.some((a) => a.accion === "manos-libres"));
   caso("Un «Hola Melki» escrito sigue siendo un saludo", !m.responder("Hola Melki", c).acciones?.some((a) => a.accion === "manos-libres"));
-  caso("«¿Qué puedes hacer?» menciona la voz", /Manos libres/.test(m.responder("¿qué puedes hacer?", c).texto));
+  // Autoría y licencia
+  for (const q of ["¿Quién creó el simulador?", "¿quién te creó?", "¿Cuál es la licencia de uso?", "¿quién es el autor?", "derechos de autor", "¿se puede patentar?"]) {
+    const r = m.responder(q, c);
+    caso(`«${q}» → autoría y licencia`, /Creado por Giancarlo González Guerrero para el Ingeniero Pablo Felipe Acevedo y la empresa Melki/.test(r.texto) && /© 2026/.test(r.texto) && r.acciones?.some((a) => a.accion === "acerca"), r.texto.slice(0, 80));
+  }
+  caso("La licencia de la banda de radio no es la del programa", !/Giancarlo/.test(m.responder("¿necesito licencia para usar la banda de 915 MHz?", c).texto));
+  caso("«¿Qué puedes hacer?» menciona el Asistente Melki", /Asistente Melki/.test(m.responder("¿qué puedes hacer?", c).texto));
+  caso("«¿Qué es el Asistente Melki?» explica el trato, los paneles y la activación al abrir", ((r) => /mayordomo/.test(r.texto) && /oculto el panel de herramientas y el de resultados/.test(r.texto) && /al abrir el simulador/.test(r.texto) && r.acciones?.some((a) => a.accion === "manos-libres"))(m.responder("¿qué es el asistente Melki?", c)));
   const tv = m.TOURS.find((x) => x.id === "voz");
-  caso("Tour «Melki por voz»: activa, llama por el nombre, pantalla limpia y la mayor cobertura", tv && tv.pasos.some((p) => p.objetivo === "manos-libres" && p.tarea) && tv.pasos.some((p) => [].concat(p.objetivo).includes("plegar-panel")) && tv.pasos.some((p) => /mayor cobertura posible/.test(p.texto)));
+  caso("Tour «Asistente Melki por voz»: activa, llama por el nombre, el mapa libre con sugerencias y la mayor cobertura", tv && tv.nombre === "Asistente Melki por voz" && tv.pasos.some((p) => p.objetivo === "manos-libres" && p.tarea) && tv.pasos.some((p) => [].concat(p.objetivo).includes("hud-sugerencias")) && tv.pasos.some((p) => /mayor cobertura posible/.test(p.texto)));
   caso("«Hazme el tour de manos libres» → tour voz", m.pedidoDeTour("hazme el tour de manos libres")?.acciones?.[0]?.tour === "voz" && m.pedidoDeTour("guíame para hablar con Melki y dictarle")?.acciones?.[0]?.tour === "melki");
   caso("La ayuda por voz trae ejemplos y los controles", /Hola Melki/.test(m.AYUDA_VOZ) && /sí, hazlo/.test(m.AYUDA_VOZ) && /pantalla limpia/.test(m.AYUDA_VOZ) && /mayor cobertura posible/.test(m.AYUDA_VOZ));
 }

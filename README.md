@@ -17,6 +17,11 @@ Trama del Inge. Incluye a **Melki**, un asistente local que ejecuta pedidos en e
 cuesta la red para el Chocó?», «conecta a los que faltan»), responde preguntas (cómo viaja un mensaje, por qué una persona
 está en rojo, qué hacer ahora) y da tours guiados.
 
+> **© 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero. Todos los derechos reservados.**
+> Creado por Giancarlo González Guerrero para el Ingeniero Pablo Felipe Acevedo y la empresa Melki, con ayuda de
+> inteligencia artificial. Uso, copia, modificación o distribución sin licencia escrita de los titulares: prohibidos.
+> Ver [Autoría y licencia](#autoría-y-licencia) y [LICENSE](LICENSE).
+
 - **Sembrar la malla** (modo con que abre; «Modo avanzado» muestra todos los paneles):
   - Tres piezas, con los equipos de Trama: *Gateway + Internet* (torre arriostrada de 12 m con mini PC N100 y radios
     Heltec T114 de 8 dBi, companion), *Repetidor* (SenseCAP Solar Node P1 con antena RF Explorer de 8 dBi, rol
@@ -98,17 +103,26 @@ está en rojo, qué hacer ahora) y da tours guiados.
   entiende un pedido de acción, lo dice y da ejemplos. A «¿cómo dejo la mayor cobertura posible?» responde con
   recomendaciones para el escenario (sitios altos, línea de vista, malla con respaldo, gateway al centro, SF y antena) y
   el botón para proponer la opción de máxima cobertura; «dame la mayor cobertura posible» la calcula de una vez
-- **Melki manos libres** (tipo Jarvis; botón «Manos libres» de la barra de arriba, ícono de ondas del chat o «activa
-  manos libres»): Melki escucha todo el tiempo y se activa con su nombre: «Hola Melki», «Oye Melki», «Hey Melki» o
-  «Hello Melki» y el pedido de corrido. Entiende lo mismo que por escrito, con los números y las coordenadas dichos en
+- **Asistente Melki** por voz (tipo Jarvis; botón «Asistente Melki» de la barra de arriba, ícono de ondas del chat o
+  «activa el asistente»): Melki escucha todo el tiempo y se activa con su nombre: «Hola Melki», «Oye Melki», «Hey
+  Melki» o «Hello Melki» y el pedido de corrido; reconoce el nombre como lo escribe el reconocimiento («Melky»,
+  «Melqui», «Melkis», «Mel ki»…). Habla con el trato cortés de un mayordomo: al activarse saluda «Hola, señor.
+  Bienvenido…» y, si solo lo llaman por su nombre, contesta «Hola, mi señor. Le escucho; estoy atento y presto a seguir
+  sus órdenes». Al activarse oculta el panel de herramientas y el de resultados para dejar el mapa libre; cuando un
+  resultado se ve mejor en un panel, pregunta si lo muestra («sí» lo abre) y su barra trae los botones «Mostrar
+  resultados», «Mostrar herramientas», «¿Qué hago ahora?» y «¿Qué puedo decir?»; al apagarlo, los paneles vuelven. Entiende lo mismo que por escrito, con los números y las coordenadas dichos en
   palabras («doscientas cincuenta personas», «cuatro punto dos, menos setenta y tres punto tres siete»); ejecuta,
   contesta en voz alta (lo principal; el detalle queda escrito) y se queda atento unos segundos para seguir sin repetir
   el nombre. Controles por voz: «para», «repite», «más detalle», «sí, hazlo» / «la segunda» (los botones de su
   respuesta; «sí» nunca es «Deshacer»), «deshaz», «gracias», «deja de escuchar». Sin su nombre no hace nada; no toma
   como pedido su propia voz cuando entra por el micrófono (lo que empieza a oírse mientras habla, o el eco de sus
-  últimas palabras). Una barra sobre el mapa muestra lo que entiende y lo que dice (subtítulos). En Ajustes de voz:
-  seguir la conversación, leer las respuestas completas y el sonido al activarse. Usa el mismo modo del dictado
-  («navegador» o «privado»); si el navegador corta la escucha, se vuelve a encender sola
+  últimas palabras). Una barra de vidrio sobre el mapa, con un orbe animado según lo que hace, muestra lo que entiende y
+  lo que dice (subtítulos). En Ajustes de voz: el trato (señor, señora o sin tratamiento), la voz (elige sola la más
+  natural del equipo, como las neuronales de Edge, y se puede escoger y probar otra), dejar el mapa libre, activarse
+  al abrir el simulador (con el micrófono permitido, saluda solo; si el navegador no deja hablar hasta el primer toque,
+  lo avisa), seguir la conversación, leer las respuestas completas y el sonido al activarse, y el permiso del micrófono
+  («Dar acceso» para que el navegador no vuelva a preguntar). Usa el mismo modo del dictado («navegador» o «privado»);
+  si el navegador corta la escucha, se vuelve a encender sola
 - **Panel izquierdo plegable**: el botón junto a «Modo avanzado» lo oculta y el de la barra de arriba lo devuelve (como
   el de Resultados); con los dos ocultos queda solo el mapa, ideal para trabajar por voz
 - **Ajuste inteligente** («Ajústamelo automáticamente» en el Resultado, o pidiéndoselo a Melki): cuando la red sale
@@ -130,8 +144,8 @@ está en rojo, qué hacer ahora) y da tours guiados.
   parabólica) con azimut y elevación, pérdidas por entorno (vegetación y edificios), señal en margen, dBm, µV o
   dBµV/m con colores por clases, arcoíris o umbral, e informe de radioenlace como «Radio Link»
 - **Tours guiados** de Melki (botón «Tours» o «hazme un tour»): tutorial básico práctico de 7 pasos, «Sembrar la
-  malla», «¿Cuánto tráfico aguanta?» (poblar, probar la carga, zonas de popularidad y la hora pico por repetidor), «Conocer la pantalla», «Red mesh completa», «Como Radio Mobile», «Medir y exportar», «Hablar con Melki» y «Melki por voz
-  (manos libres)», que enseña a llamarlo, conversar, dejar la pantalla limpia y pedir la mayor cobertura posible. En los pasos prácticos
+  malla», «¿Cuánto tráfico aguanta?» (poblar, probar la carga, zonas de popularidad y la hora pico por repetidor), «Conocer la pantalla», «Red mesh completa», «Como Radio Mobile», «Medir y exportar», «Hablar con Melki» y «Asistente
+  Melki por voz», que enseña a llamarlo, conversar, trabajar con el mapa libre y sus sugerencias y pedir la mayor cobertura posible. En los pasos prácticos
   Melki detecta cuando quedó hecho y ofrece «Hágalo por mí» y «Omitir paso»; todo ocurre en un escenario de práctica y
   al salir el del usuario vuelve tal cual (también si se cierra la página a mitad del tour)
 - **Dictado por voz** para Melki: micrófono junto al botón de enviar; el texto aparece en la caja para revisarlo y
@@ -171,9 +185,10 @@ src/
   app/                      layout, página y estilos globales
   components/simulador/     pantalla principal, mapa, paneles, regla, buscador, capas de referencia, exportación
   components/melki/         asistente: avatar, cerebro local, órdenes, tours guiados (tours.ts + recorrido.tsx), voz y dictado;
-                            manos libres (manos-libres.ts: llamado, controles, resumen para la voz y eco; numeros.ts:
-                            números en palabras → cifras; hud-voz.tsx: la barra de voz sobre el mapa)
+                            Asistente Melki (manos-libres.ts: llamado, controles, frases de mayordomo, resumen para la
+                            voz y eco; numeros.ts: números en palabras → cifras; hud-voz.tsx: la barra del asistente)
   datos/geo/                límites, nombres y ríos de referencia (ver LEEME.md: fuentes y licencias)
+  lib/autoria.ts            autoría, titulares y licencia (los usan «Acerca del simulador», Melki y la versión HTML)
   lib/geo/                  consultas locales: municipio de un punto, búsqueda de lugares
   lib/radio/                motor: modelo, relieve, perfil, cobertura, malla, factibilidad, worker;
                             estado-red (piezas y guía), siembra (repetidores automáticos), mensaje (viaje de un paquete
@@ -372,6 +387,29 @@ mapas y de relieve solo reciben las teselas de la zona visible; no se envían no
 entiende y ejecuta los pedidos con un cerebro local, sin servicios externos; los límites, nombres y ríos de referencia
 vienen empaquetados con la aplicación. Dictado por voz: en el modo «navegador», Edge o Chrome procesan el audio en sus
 servidores; en el modo «privado» el audio no sale del equipo (solo se descargan una vez la biblioteca, el motor y el
-modelo, que quedan guardados en el navegador). Manos libres usa el mismo modo: con «navegador», mientras está activo el
+modelo, que quedan guardados en el navegador). El Asistente Melki usa el mismo modo: con «navegador», mientras está activo el
 audio del micrófono va de forma continua al servicio de Edge o Chrome; con «privado», no sale del equipo. Se apaga con
 el botón, con la X de la barra de voz o diciendo «Melki, deja de escuchar».
+
+## Autoría y licencia
+
+- **Autor:** Giancarlo González Guerrero, para el Ingeniero Pablo Felipe Acevedo y la empresa Melki, con ayuda de
+  herramientas de inteligencia artificial bajo su dirección y revisión. El autor conserva sus derechos morales.
+- **Titulares de los derechos patrimoniales:** el Ingeniero Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero,
+  según el contrato entre las partes.
+- **Licencia de uso restringido** ([LICENSE](LICENSE)): todos los derechos reservados. Se prohíbe usar, copiar,
+  reproducir, modificar, adaptar, traducir, distribuir, comunicar públicamente, vender, arrendar, sublicenciar o
+  descompilar el programa, en todo o en parte, sin licencia o autorización previa, expresa y escrita de sus titulares.
+  Que el código pueda verse en este repositorio no concede ninguna licencia.
+- **Fundamento legal en Colombia:** Constitución Política, art. 61; Decisión Andina 351 de 1993 (arts. 3, 11, 13 y 23 a
+  27: los programas de ordenador se protegen como obras literarias); Ley 23 de 1982 (arts. 12, 20 y 30) y sus
+  modificaciones (Ley 1450 de 2011, art. 28; Ley 1915 de 2018); Decreto 1360 de 1989, compilado en el Decreto 1066 de
+  2015; Ley 44 de 1993; Código Penal, arts. 270 a 272 (Ley 1032 de 2006). Texto vigente en el Gestor Normativo de
+  Función Pública.
+- **Dónde está el aviso:** en la cabecera de cada archivo de código, en `LICENSE`, en `src/lib/autoria.ts` (la fuente
+  única que usan la pantalla y Melki), en «Archivo → Acerca del simulador y licencia», en los metadatos de la página
+  (autor y copyright), en la consola del navegador, en la versión HTML (`SIMULADOR.html`, `archivos/simulador.js` y
+  `LICENCIA.txt`) y en el instructivo del paquete. Melki responde «¿quién creó el simulador?» o «¿cuál es la licencia
+  de uso?».
+- Las bibliotecas de código abierto, las tipografías, los mapas base y los datos geográficos conservan sus propias
+  licencias y no hacen parte de esta reserva.

@@ -1,3 +1,8 @@
+// © 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero. Todos los derechos reservados.
+// Autor: Giancarlo González Guerrero, para el Ingeniero Pablo Felipe Acevedo y Melki, con ayuda de inteligencia
+// artificial. Prohibido su uso, copia, modificación o distribución sin licencia escrita de los titulares (Ley 23 de
+// 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
+
 // «Poblar personas»: reparte N personas (billeteras) al azar dentro de un área para probar la red con la densidad real
 // de una zona (Trama: 0,2 usuarios/km² disperso, 1 medio, 5 denso). El reparto es uniforme sobre el terreno y
 // repetible con la misma semilla.

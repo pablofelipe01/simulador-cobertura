@@ -2,6 +2,9 @@
   "name": "simulador-cobertura",
   "version": "0.1.0",
   "private": true,
+  "description": "Simulador de cobertura de la red MeshCore de Trama. © 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero. Todos los derechos reservados.",
+  "author": "Giancarlo González Guerrero",
+  "license": "UNLICENSED",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

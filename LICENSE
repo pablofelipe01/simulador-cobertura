@@ -1,0 +1,78 @@
+SIMULADOR DE COBERTURA · RED MESHCORE DE TRAMA
+Licencia de uso restringido · Todos los derechos reservados
+
+© 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero.
+
+
+1. AUTORÍA
+
+Este programa de computador fue creado por Giancarlo González Guerrero para el
+Ingeniero Pablo Felipe Acevedo y la empresa Melki, con ayuda de herramientas de
+inteligencia artificial que el autor dirigió, seleccionó, revisó y adaptó.
+
+El autor conserva sus derechos morales, entre ellos el de ser reconocido como
+autor de la obra, que son perpetuos, inalienables e irrenunciables.
+
+
+2. TITULARIDAD
+
+Titulares de los derechos patrimoniales: el Ingeniero Pablo Felipe Acevedo,
+Melki y Giancarlo González Guerrero, según el contrato entre las partes.
+
+
+3. QUÉ PROTEGE ESTA LICENCIA
+
+El soporte lógico completo: el código fuente y el código objeto, la versión
+HTML, el motor de cálculo, el asistente Melki, sus textos y tours, la interfaz,
+los diagramas, los instructivos y la documentación, en cualquier versión.
+
+
+4. USO PROHIBIDO SIN LICENCIA
+
+Se prohíbe usar, copiar, reproducir, modificar, adaptar, traducir, distribuir,
+comunicar públicamente, vender, arrendar, sublicenciar, descompilar o aplicar
+ingeniería inversa a este programa, en todo o en parte, sin licencia o
+autorización previa, expresa y escrita de sus titulares.
+
+Que el código pueda verse en un repositorio no concede ninguna licencia ni
+autoriza ninguno de esos usos. Tampoco se permite suprimir o alterar este aviso
+ni la información de autoría y titularidad que acompaña al programa.
+
+
+5. COMPONENTES DE TERCEROS
+
+Las bibliotecas de código abierto (Next.js, React, MapLibre GL, Lucide, entre
+otras), las tipografías Barlow, los mapas base y los datos geográficos (DANE,
+Natural Earth, teselas de relieve) conservan sus propias licencias y no hacen
+parte de esta reserva.
+
+
+6. FUNDAMENTO LEGAL
+
+- Constitución Política de Colombia, artículo 61: el Estado protege la
+  propiedad intelectual.
+- Decisión Andina 351 de 1993, artículos 3, 11, 13 y 23 a 27: los programas
+  de ordenador se protegen como obras literarias, en código fuente y en código
+  objeto; reproducirlos, aun para uso personal, exige autorización del
+  titular, salvo la copia de seguridad.
+- Ley 23 de 1982 (artículos 12, 20 y 30), modificada, entre otras, por la Ley
+  1450 de 2011 (artículo 28) y la Ley 1915 de 2018: derechos patrimoniales y
+  morales del autor y obras creadas en cumplimiento de un contrato de
+  prestación de servicios.
+- Decreto 1360 de 1989, compilado en el Decreto 1066 de 2015 (artículos
+  2.6.1.3.1 a 2.6.1.3.7): el soporte lógico es una creación del dominio
+  literario y se puede inscribir en el Registro Nacional del Derecho de Autor.
+- Ley 44 de 1993: modifica y adiciona la Ley 23 de 1982.
+- Código Penal, Ley 599 de 2000, artículos 270, 271 y 272, modificados por la
+  Ley 1032 de 2006: violación a los derechos morales y patrimoniales de autor,
+  incluido el soporte lógico, y a sus mecanismos de protección; los artículos
+  271 y 272 prevén prisión de 4 a 8 años y multa de 26,66 a 1.000 salarios
+  mínimos legales mensuales vigentes.
+
+El texto vigente de estas normas se consulta en el Gestor Normativo de
+Función Pública (www.funcionpublica.gov.co/eva/gestornormativo).
+
+
+7. LICENCIAS
+
+Para obtener una licencia de uso, comuníquese con los titulares.

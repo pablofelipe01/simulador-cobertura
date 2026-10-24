@@ -1,3 +1,8 @@
+// © 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero. Todos los derechos reservados.
+// Autor: Giancarlo González Guerrero, para el Ingeniero Pablo Felipe Acevedo y Melki, con ayuda de inteligencia
+// artificial. Prohibido su uso, copia, modificación o distribución sin licencia escrita de los titulares (Ley 23 de
+// 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
+
 // Tours guiados de Melki. Cada tour es una lista de pasos: los de explicación resaltan una parte de la pantalla;
 // los prácticos piden hacer algo (inscribir un nodo, simular, medir…), detectan solos cuando quedó hecho y traen
 // «Hágalo por mí». Los tours prácticos corren sobre un escenario de práctica: al salir, el del usuario vuelve tal cual.
@@ -739,7 +744,7 @@ export const TOURS: Tour[] = [
         objetivo: "microfono",
         lado: "izquierda",
         titulo: "Dícteme",
-        texto: "También puede tocar el micrófono y hablarme: lo que dice aparece en la caja para revisarlo y corregirlo, y solo se envía cuando usted quiera. Puede dictar con el navegador o en modo privado, sin internet. Y con «Manos libres» le escucho sin tocar nada: diga «Hola Melki» y su pedido (lo enseño en el tour «Melki por voz»).",
+        texto: "También puede tocar el micrófono y hablarme: lo que dice aparece en la caja para revisarlo y corregirlo, y solo se envía cuando usted quiera. Puede dictar con el navegador o en modo privado, sin internet. Y con el «Asistente Melki» le escucho sin tocar nada: diga «Hola Melki» y su pedido (lo enseño en el tour «Asistente Melki por voz»).",
         asegurar: () => avisarMelki("abrir"),
       },
       {
@@ -772,20 +777,20 @@ export const TOURS: Tour[] = [
   },
   {
     id: "voz",
-    nombre: "Melki por voz (manos libres)",
-    detalle: "Hablarme sin tocar nada: «Hola Melki» y su pedido, conversar, pantalla limpia y la mayor cobertura posible.",
+    nombre: "Asistente Melki por voz",
+    detalle: "Hablarme sin tocar nada: «Hola Melki» y su pedido, conversar, el mapa libre con mis sugerencias y la mayor cobertura posible.",
     minutos: 3,
     modo: "sembrar",
-    practica: { escenario: () => renombrado(escenarioMalla(), "Práctica: Melki por voz"), autoSimular: true },
+    practica: { escenario: () => renombrado(escenarioMalla(), "Práctica: Asistente Melki"), autoSimular: true },
     pasos: [
       {
-        titulo: "Melki manos libres",
-        texto: "Puedo escucharle todo el tiempo, como un asistente de voz: usted me llama por mi nombre y me da la orden, yo la hago y le contesto en voz alta. Así puede trabajar con las manos libres, con la pantalla limpia y solo el mapa. Estamos en un escenario de práctica.",
+        titulo: "El Asistente Melki",
+        texto: "Puedo escucharle todo el tiempo, como un asistente de voz: usted me llama por mi nombre y me da la orden, yo la hago y le contesto en voz alta, a su servicio. Así puede trabajar con las manos libres y solo el mapa. Estamos en un escenario de práctica.",
       },
       {
         objetivo: "manos-libres",
-        titulo: "Active manos libres",
-        texto: "Toque «Manos libres» en la barra de arriba (o escríbame «activa manos libres»). La primera vez el navegador le pide permiso para usar el micrófono: permítalo. Funciona mejor en Edge o Chrome.",
+        titulo: "Active el asistente",
+        texto: "Toque «Asistente Melki» en la barra de arriba (o escríbame «activa el asistente»). La primera vez el navegador le pide permiso para usar el micrófono: permítalo. Funciona mejor en Edge o Chrome.",
         tarea: {
           hecho: () => elemento('[data-tour="manos-libres"][aria-pressed="true"]') !== null,
           hacer: () => elemento('[data-tour="manos-libres"][aria-pressed="false"]')?.click(),
@@ -795,7 +800,7 @@ export const TOURS: Tour[] = [
       {
         objetivo: ["hud-voz", "manos-libres"],
         titulo: "Llámeme por mi nombre",
-        texto: "Diga «Hola Melki» y su pedido, de corrido: «Hola Melki, ¿cómo está la red?» o «Oye Melki, conecta a los que faltan». También entiendo «Hey Melki» y «Hello Melki». Sin mi nombre no hago nada, por si alguien habla cerca. En esta barra ve lo que le entiendo y lo que le contesto.",
+        texto: "Diga «Hola Melki» y su pedido, de corrido: «Hola Melki, ¿cómo está la red?» o «Oye Melki, conecta a los que faltan». También entiendo «Hey Melki» y «Hello Melki», y si solo dice «Hola Melki» le contesto «Hola, mi señor. Le escucho». Sin mi nombre no hago nada, por si alguien habla cerca. En esta barra ve lo que le entiendo y lo que le contesto.",
       },
       {
         objetivo: ["hud-voz", "manos-libres"],
@@ -803,9 +808,9 @@ export const TOURS: Tour[] = [
         texto: "Después de responder me quedo atento unos segundos: siga hablando sin decir «Melki». Para usar mis botones diga «sí, hazlo» o «la segunda»; «repite» y «más detalle» para oír todo; «para» me calla y «deshaz» revierte lo último. Los números y las coordenadas se pueden decir en palabras.",
       },
       {
-        objetivo: ["plegar-panel", "alternar-panel", "hud-voz"],
-        titulo: "Pantalla limpia",
-        texto: "Con este botón se pliega el panel de la izquierda (y con el de la barra de arriba, los resultados). O dígame «pantalla limpia» y dejo solo el mapa mientras trabajamos por voz; «muestra los paneles» los vuelve a abrir.",
+        objetivo: ["hud-sugerencias", "hud-voz"],
+        titulo: "El mapa libre y mis sugerencias",
+        texto: "Al activarme oculto el panel de herramientas y el de resultados para dejarle el mapa libre. Cuando un resultado se vea mejor en un panel, le pregunto si se lo muestro («sí» lo abre); también están estos botones y «muestra los resultados», «muestra los paneles» o «pantalla limpia». Al apagarme, los paneles vuelven.",
       },
       {
         objetivo: ["hud-voz", "manos-libres"],
@@ -815,10 +820,10 @@ export const TOURS: Tour[] = [
       {
         objetivo: ["hud-voz", "manos-libres"],
         titulo: "Para terminar",
-        texto: "Diga «Melki, deja de escuchar» o toque la X de esta barra. Consejos: hable de corrido justo después de mi nombre, con el micrófono cerca; con parlantes a todo volumen, baje un poco el volumen o use audífonos para que no me oiga a mí mismo.",
+        texto: "Diga «Melki, deja de escuchar» o toque la X de esta barra. En Ajustes de voz elige cómo le hablo, la voz y si me activo solo al abrir el simulador. Consejos: hable de corrido justo después de mi nombre, con el micrófono cerca; con parlantes a todo volumen, baje un poco el volumen o use audífonos para que no me oiga a mí mismo.",
       },
     ],
-    final: "Ya sabe trabajar conmigo por voz: llamarme por mi nombre, conversar sin repetirlo, usar mis botones con «sí, hazlo», dejar la pantalla limpia y pedirme la mayor cobertura posible.",
+    final: "Ya sabe trabajar conmigo por voz: llamarme por mi nombre, conversar sin repetirlo, usar mis botones con «sí, hazlo», trabajar con el mapa libre y pedirme la mayor cobertura posible. A su servicio.",
   },
 ];
 

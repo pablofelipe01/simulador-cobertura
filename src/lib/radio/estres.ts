@@ -1,3 +1,8 @@
+// © 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero. Todos los derechos reservados.
+// Autor: Giancarlo González Guerrero, para el Ingeniero Pablo Felipe Acevedo y Melki, con ayuda de inteligencia
+// artificial. Prohibido su uso, copia, modificación o distribución sin licencia escrita de los titulares (Ley 23 de
+// 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
+
 // Prueba de estrés de la malla en la hora pico, repetidor por repetidor («zonas de popularidad»). Cada persona hace
 // sus mensajes del día (pagos, WhatsApp y consultas a la IA) y una parte cae en la hora pico (Trama: 15 % un día normal, 25 % un día de mercado). Se simula el
 // canal paquete por paquete (la prueba de carga de MeshCore) y se mide en cada gateway y repetidor: cuántas personas

@@ -1,3 +1,8 @@
+// © 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero. Todos los derechos reservados.
+// Autor: Giancarlo González Guerrero, para el Ingeniero Pablo Felipe Acevedo y Melki, con ayuda de inteligencia
+// artificial. Prohibido su uso, copia, modificación o distribución sin licencia escrita de los titulares (Ley 23 de
+// 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
+
 // Cerebro local de Melki: temas con palabras clave y respuestas que usan el estado actual del simulador.
 // No envía nada a internet. Más adelante se puede conectar a un modelo de IA (ver variables de entorno).
 import { CLASES, presetPorId } from "@/lib/radio/constantes";
@@ -8,6 +13,7 @@ import { airePagoMs, bytesDatos, esperaRetransmision, INTENTOS, tiempoEnAireMs }
 import { ENERGIA_P1, PAGOS_PERSONA_DIA_TRAMA, TOPE_CICLO_PCT } from "@/lib/radio/estres";
 import { CAPACIDAD_TRAMA, CATALOGO, COTIZADOR, DEPARTAMENTOS_TRAMA, OPERACION_TRAMA, PRECIOS, SF_TRAMA, TERRENOS_TRAMA, unitarioCop, type SfTrama } from "@/lib/radio/trama";
 import { esReferencia, resumenRed as resumenParametros } from "@/lib/radio/red";
+import { DERECHOS, CREDITO, TITULARIDAD } from "@/lib/autoria";
 import type { Antena, Escenario, Parametros, ResultadoSimulacion } from "@/lib/radio/tipos";
 
 import type { ModoApp } from "../simulador/estado";
@@ -15,8 +21,8 @@ import type { ModoApp } from "../simulador/estado";
 import { accionAjuste, textoCoberturaUtil, textoRed, type Orden } from "./ordenes";
 import { TOURS, type IdTour } from "./tours";
 
-/** «recorrido» empieza el tour indicado; «tours» muestra el menú de tours; «manos-libres» activa la escucha por voz. */
-export type AccionMelki = "recorrido" | "tours" | "simular" | "ejemplo" | "agregar" | "inspeccionar" | "parametros" | "resultados" | "kmz" | "regla" | "orden" | "deshacer" | "manos-libres";
+/** «recorrido» empieza el tour indicado; «tours» muestra el menú de tours; «manos-libres» activa la escucha por voz; «acerca» abre la autoría y la licencia. */
+export type AccionMelki = "recorrido" | "tours" | "simular" | "ejemplo" | "agregar" | "inspeccionar" | "parametros" | "resultados" | "kmz" | "regla" | "orden" | "deshacer" | "manos-libres" | "acerca" | "herramientas";
 
 /** Con «detalle», la acción se muestra como una opción de menú (título y una línea). */
 export type AccionRespuesta = { texto: string; accion: AccionMelki; orden?: Orden; escenario?: Escenario; tour?: IdTour; detalle?: string };
@@ -134,7 +140,7 @@ const TEMAS: Tema[] = [
         "• Nodos: «inscribe un nodo antena en 4°30'44\" N 73°07'24\" O a 12 m», «mueve Ejemplo 2 km al sur», «súbelo a 9 m», «sube todos los repetidores a 12 m», «borra todas las personas», «que Repetidor 2 no retransmita», «marca Torre 2 como pasarela».",
         "• Radio: «usa SF10», «la frecuencia a 921,5 MHz», «confiabilidad del 90 %», «usa Longley-Rice», «simula con vegetación densa», «informe del enlace Ejemplo y Torre 2».",
         "• Mapa, medir y exportar: «muestra las vías», «llévame a Villavicencio», «distancia entre Ejemplo y Torre 2», «perfil de Ejemplo a Torre 2», «¿cuánto cubre el área?», «exporta a Google Earth».",
-        "• Por voz, sin tocar nada: active «Manos libres» y diga «Hola Melki, pon el gateway en Cumaral»; «pantalla limpia» deja solo el mapa mientras trabajamos.",
+        "• Por voz, sin tocar nada: active el «Asistente Melki» y diga «Hola Melki, pon el gateway en Cumaral»; le dejo el mapa libre y le ofrezco los paneles cuando hagan falta.",
         "Si prefiere dictar, toque el micrófono y revise el texto antes de enviarlo. Y si quiere aprender paso a paso, pídame un tour guiado.",
       ].join("\n"),
       acciones: [{ texto: "Ver los tours guiados", accion: "tours" }],
@@ -471,13 +477,63 @@ const TEMAS: Tema[] = [
     claves: ["dictar", "dictado", "microfono", "voz a texto", "hablarte", "hablarle", "por voz", "audio", "reconocimiento de voz", "me escuchas", "escucharme", "leer en voz alta", "voz de melki"],
     responder: () => ({
       texto:
-        "Toque el micrófono junto al botón de enviar y hable: lo que dice aparece en la caja de texto, lo revisa o corrige, y lo envía cuando quiera (nunca se envía solo). Toque el micrófono otra vez para terminar. En Ajustes de voz (el ícono junto al parlante) elige el modo: «Con el navegador», más preciso pero el audio lo procesa Edge o Chrome por internet, o «Privado, sin internet», donde el audio no sale de su equipo (la primera vez puede descargar unos 100 MB). Con el parlante yo leo mis respuestas en voz alta. Y si quiere hablarme sin tocar nada, active «Manos libres»: le escucho todo el tiempo y me activo cuando dice «Hola Melki».",
-      acciones: [{ texto: "Activar manos libres", accion: "manos-libres" }],
+        "Toque el micrófono junto al botón de enviar y hable: lo que dice aparece en la caja de texto, lo revisa o corrige, y lo envía cuando quiera (nunca se envía solo). Toque el micrófono otra vez para terminar. En Ajustes de voz (el ícono junto al parlante) elige el modo: «Con el navegador», más preciso pero el audio lo procesa Edge o Chrome por internet, o «Privado, sin internet», donde el audio no sale de su equipo (la primera vez puede descargar unos 100 MB). Con el parlante yo leo mis respuestas en voz alta. Y si quiere hablarme sin tocar nada, active el «Asistente Melki»: le escucho todo el tiempo y me activo cuando dice «Hola Melki».",
+      acciones: [{ texto: "Activar el Asistente Melki", accion: "manos-libres" }],
+    }),
+  },
+  {
+    id: "autoria",
+    // Sin «licencia» sola: «¿necesito licencia para la banda de 915?» es una pregunta de radio
+    claves: [
+      "quien te creo",
+      "quien creo el simulador",
+      "quien creo esto",
+      "quien creo este programa",
+      "quien hizo el simulador",
+      "quien hizo esto",
+      "quien hizo este programa",
+      "quien desarrollo",
+      "quien programo",
+      "quien es el autor",
+      "autor del simulador",
+      "autor",
+      "autoria",
+      "creador",
+      "creditos",
+      "derechos de autor",
+      "propiedad intelectual",
+      "licencia del simulador",
+      "licencia de uso",
+      "licencia del programa",
+      "licencia del software",
+      "copyright",
+      "acerca del simulador",
+      "puedo copiar el codigo",
+      "puedo usar el codigo",
+      "titulares",
+      "patente",
+      "patentar",
+      "patentarlo",
+      "registro de software",
+      "registrar el software",
+    ],
+    responder: () => ({
+      texto: [
+        `${CREDITO} ${DERECHOS}`,
+        `• ${TITULARIDAD}`,
+        "• Usarlo, copiarlo, modificarlo o distribuirlo sin licencia escrita de los titulares está prohibido: los programas de computador se protegen como obras literarias (Decisión Andina 351 de 1993 y Ley 23 de 1982), y el Código Penal castiga la violación del derecho de autor sobre el soporte lógico (artículos 270 a 272).",
+        "• Que el código se vea en un repositorio no da permiso de usarlo. El aviso completo está en «Archivo → Acerca del simulador y licencia».",
+        "• El software, como tal, no se patenta en la Comunidad Andina (Decisión 486 de 2000, art. 15): se protege por derecho de autor desde que se crea, y se puede inscribir en el Registro Nacional del Derecho de Autor (Dirección Nacional de Derecho de Autor) como prueba de la autoría y la titularidad.",
+      ].join("\n"),
+      acciones: [{ texto: "Ver la licencia", accion: "acerca" }],
     }),
   },
   {
     id: "manos-libres",
     claves: [
+      "asistente melki",
+      "asistente por voz",
+      "asistente inteligente",
       "manos libres",
       "modo manos libres",
       "jarvis",
@@ -500,14 +556,15 @@ const TEMAS: Tema[] = [
     ],
     responder: () => ({
       texto: [
-        "Con «Manos libres» le escucho todo el tiempo, como un asistente de voz: diga «Hola Melki», «Oye Melki», «Hey Melki» o «Hello Melki» y su pedido, de corrido; lo hago, le contesto en voz alta y me quedo atento unos segundos para que siga sin repetir mi nombre.",
+        "Con el «Asistente Melki» le escucho todo el tiempo, como un asistente de voz: diga «Hola Melki», «Oye Melki», «Hey Melki» o «Hello Melki» y su pedido, de corrido (también le entiendo si el micrófono escribe «Melky» o «Melqui»); lo hago, le contesto en voz alta, con el trato de un mayordomo, y me quedo atento unos segundos para que siga sin repetir mi nombre. Si solo dice «Hola Melki», le respondo «Hola, mi señor. Le escucho; estoy atento y presto a seguir sus órdenes».",
         "• Entiendo lo mismo que por escrito: varias órdenes seguidas, números dichos en palabras («doscientas cincuenta personas») y coordenadas («cuatro punto dos, menos setenta y tres punto tres siete»).",
         "• Para conversar: «para» (o «Melki, para» mientras hablo), «repite», «más detalle», «sí, hazlo» o «la segunda» para usar mis botones, «deshaz», «pantalla limpia» y «deja de escuchar».",
-        "• Se activa con el botón «Manos libres» de la barra de arriba, con el ícono de ondas de esta conversación o diciéndome por escrito «activa manos libres». Arriba del mapa ve lo que le entiendo y lo que le digo.",
+        "• Se activa con el botón «Asistente Melki» de la barra de arriba, con el ícono de ondas de esta conversación o diciéndome por escrito «activa el asistente». Al activarme oculto el panel de herramientas y el de resultados para dejarle el mapa libre; cuando un resultado se vea mejor en un panel, le pregunto si se lo muestro, y vuelven al apagarme. Arriba del mapa ve lo que le entiendo, lo que le digo y mis sugerencias.",
+        "• En Ajustes de voz elige cómo le hablo (señor, señora o sin tratamiento), la voz (la más natural que tenga su equipo; en Edge hay voces neuronales como Salomé de Colombia) y si me activo solo al abrir el simulador, con el micrófono permitido.",
         "• Sin mi nombre no hago nada, por si alguien habla cerca. Funciona mejor en Edge o Chrome, con un micrófono cerca o audífonos; en Ajustes de voz elige si el audio lo procesa el navegador o se queda en su equipo.",
       ].join("\n"),
       acciones: [
-        { texto: "Activar manos libres", accion: "manos-libres" },
+        { texto: "Activar el Asistente Melki", accion: "manos-libres" },
         { texto: "Tour «Melki por voz»", accion: "recorrido", tour: "voz" },
       ],
     }),
@@ -808,7 +865,7 @@ const TEMA_TOUR: [IdTour, RegExp][] = [
   ["radiomobile", /\b(radio ?mobile|propagacion|longley|confiabilidad|direccional|yagi|dbm|radioenlace|radio enlace|informe)\b/],
   ["medir", /\b(medir|mido|medicion|regla|exportar|kmz|google earth|distancias?|perfil)\b/],
   ["mesh", /\b(mesh|malla|red|saltos|pasarela|varios nodos)\b/],
-  ["voz", /\b(manos libres|jarvis|por voz|de voz|comandos de voz|hablando|escuchar\w*)\b/],
+  ["voz", /\b(asistente melki|manos libres|jarvis|por voz|de voz|comandos de voz|hablando|escuchar\w*)\b/],
   ["melki", /\b(melki|hablar|hablarte|chat|dictar|dictado|voz|microfono|ordenes|pedirte)\b/],
 ];
 

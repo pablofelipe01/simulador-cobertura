@@ -1,3 +1,8 @@
+// © 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero. Todos los derechos reservados.
+// Autor: Giancarlo González Guerrero, para el Ingeniero Pablo Felipe Acevedo y Melki, con ayuda de inteligencia
+// artificial. Prohibido su uso, copia, modificación o distribución sin licencia escrita de los titulares (Ley 23 de
+// 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
+
 // Áreas objetivo: polígonos (círculo, cuadrado, rectángulo o el área medida con la regla), puntos de muestra
 // dentro del área y la cobertura que da la simulación dentro de ella, por clase de señal.
 import { CLASES, type ClaseId } from "./constantes";

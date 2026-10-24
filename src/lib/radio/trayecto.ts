@@ -1,3 +1,8 @@
+// © 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero. Todos los derechos reservados.
+// Autor: Giancarlo González Guerrero, para el Ingeniero Pablo Felipe Acevedo y Melki, con ayuda de inteligencia
+// artificial. Prohibido su uso, copia, modificación o distribución sin licencia escrita de los titulares (Ley 23 de
+// 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
+
 // Evaluación de un trayecto entre dos extremos: difracción, ajuste de red (Longley-Rice) y pérdidas desglosadas.
 // La usan los enlaces, la inspección de un punto y el informe de radioenlace; la cobertura repite el mismo
 // cálculo en línea para no crear objetos por celda.
