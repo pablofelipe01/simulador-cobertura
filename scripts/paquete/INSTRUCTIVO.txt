@@ -1,14 +1,18 @@
-SIMULADOR DE COBERTURA · Red de pagos MeshCore · LoRa 915–928 MHz · avance del {{FECHA}}
-=====================================================================================
+SIMULADOR DE COBERTURA · Red MeshCore de Trama: pagos, WhatsApp e IA · LoRa 915–928 MHz · avance del {{FECHA}}
+================================================================================================
 
-Herramienta para planear la red de pagos por radio de Trama (MeshCore):
-cobertura con la paleta de Radio Mobile sobre el relieve real, alcance
+Herramienta para planear la red por radio de Trama (MeshCore), que lleva
+la comunicación a donde normalmente no llega: por ella viajan pagos,
+mensajes de WhatsApp por texto y consultas a la inteligencia artificial
+en los lugares sin señal, y todo ese tráfico comparte el mismo canal.
+Muestra la cobertura con la paleta de Radio Mobile sobre el relieve real, alcance
 de cada repetidor, enlaces de la malla, saltos hasta el gateway y
 factibilidad de la red. Con "Poblar personas" se llena la zona de gente,
 con las "Zonas de popularidad" se pone gente alrededor de cada
-repetidor, la "Prueba de estrés" mide la hora pico zona por zona hasta
-que cada repetidor se revienta y la "Prueba de carga" dice cuántos pagos
-al tiempo aguanta cada frecuencia. Abre en el modo "Sembrar la malla": el Gateway +
+repetidor (la cantidad que quiera) y se busca el límite de cada punto,
+la "Prueba de estrés" mide la hora pico zona por zona hasta que cada
+repetidor se revienta y la "Prueba de carga" dice cuántos pagos o
+mensajes al tiempo aguanta cada frecuencia. Abre en el modo "Sembrar la malla": el Gateway +
 Internet, los repetidores y la gente, con guía paso a paso.
 Usa los equipos, precios y supuestos del documento de Trama (repetidor
 SenseCAP Solar Node P1 con antena de 8 dBi en tubo de 6 m, gateway en
@@ -54,11 +58,14 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
         simulador busca con el relieve real las lomas donde poner
         repetidores y los propone como torres naranjas punteadas;
         "Poner" los agrega y "Deshacer" los quita.
-      - "Enviar un pago de prueba": la orden firmada (118 bytes) sale de
-        una persona y la pasan los repetidores hasta el gateway, como en
-        MeshCore (solo los repetidores retransmiten; con la ruta
-        aprendida va directo). Dice los saltos, el tiempo, la
-        probabilidad con los 4 intentos y el comprobante que vuelve.
+      - "Enviar un mensaje de prueba": un mensaje del tamaño de la orden
+        firmada de un pago (118 bytes; un WhatsApp o una consulta a la IA
+        viajan igual) sale de una persona y lo pasan los repetidores
+        hasta el gateway, como en MeshCore (solo los repetidores
+        retransmiten; con la ruta aprendida va directo). Dice los
+        saltos, el tiempo, la probabilidad con los 4 intentos y la
+        respuesta que vuelve (el comprobante, la confirmación o lo que
+        contesta la IA).
       - "Ejemplo de malla" carga un gateway, un repetidor y tres
         personas; la más lejana queda sin cobertura para practicar.
       - La malla está animada: las líneas turquesa avanzan hacia el
@@ -82,59 +89,78 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
         renglón. Volver a poblar reparte de nuevo; "Quitar las ..." las
         borra sin tocar las que puso a mano.
       - "Zonas de popularidad": gente alrededor de cada repetidor y del
-        gateway (o de uno solo). Elija cuántas por zona (50, 150, 250,
-        500 o el número que quiera, hasta 1.000), a cuántos km (1, 2, 3
+        gateway (o de uno solo). Escriba cuántas por zona (50, 150, 250,
+        500 o el número que quiera, hasta 2.000), a cuántos km (1, 2, 3
         o 5) y dónde ("En cada gateway y repetidor" o "Solo alrededor
-        de..."). También sale al tocar un repetidor: en su tarjeta del
-        mapa y en la lista de piezas hay "Zona de popularidad · Poblar
-        alrededor". "Quitar las zonas" las borra.
-      - "Prueba de estrés · hora pico": cada persona hace sus pagos del
-        día (2,4 por persona, lo que supone Trama; o 1, 5 o 10) y una
-        parte cae en la hora pico (15 % un día normal, 25 % un día de
-        mercado); "×2, ×5, ×10" multiplica la carga. "Probar la hora
-        pico" mide toda la red (pagos por hora pedidos y entregados,
-        canal del gateway, ancho de banda útil) y cada gateway y
-        repetidor: cuántas personas atiende, % de pagos completos, la
+        de..."). También sale al tocar un repetidor o el gateway: en su
+        tarjeta del mapa y en la lista de piezas está "Zona de
+        popularidad" con un campo para escribir las personas y:
+          · "Poner y probar": pone esa gente y simula de una vez la hora
+            pico con todos enviando información; dice cómo queda el
+            punto y toda la red (estable, lenta o se revienta).
+          · "¿Cuántas aguanta?": sube solo la gente de ese punto, con el
+            resto de la red como está, y dice hasta cuántas personas
+            aguantan sin demora el punto y la red, desde cuántas va
+            lento, desde cuántas se revienta y qué falla primero (el
+            propio punto o, por ejemplo, el gateway). Si está vacío pone
+            antes una muestra de 100 (o las que escribió). En la prueba
+            de estrés sale "Límite de ..." con su curva.
+          · "Llenar hasta el límite": pone esa cantidad y lo confirma
+            simulando la hora pico con la gente puesta.
+        En el Resultado, "¿Cuántas aguanta cada punto?" busca el límite
+        de todos, uno a la vez. "Quitar las zonas" las borra.
+      - "Prueba de estrés · hora pico": cada persona manda sus mensajes
+        del día (pagos, WhatsApp y consultas a la IA: 2,4 por persona,
+        el ritmo que supone Trama; o 1, 5 o 10 si escriben o consultan
+        más) y una parte cae en la hora pico (15 % un día normal, 25 %
+        un día de mercado); "×2, ×5, ×10" multiplica la carga. "Probar
+        la hora pico" mide toda la red (mensajes por hora pedidos y
+        entregados, canal del gateway, ancho de banda útil) y cada
+        gateway y repetidor: cuántas personas atiende, % de mensajes completos, la
         espera, el canal ocupado, cuánto transmite (el tope es 50 %),
         hasta dónde completa con esa carga, la energía del repetidor
         solar y por qué se revienta. En el mapa cada zona queda verde
         (aguanta), naranja (lenta) o roja (se revienta).
       - "¿Hasta dónde aguanta cada repetidor?": sube la carga hasta que
         cada zona se revienta y dice cuántas personas aguanta cada una
-        y toda la red; la curva muestra los pagos que entrega la red
+        y toda la red; la curva muestra los mensajes que entrega la red
         según los que se le piden (sube hasta el máximo del canal y
         luego cae). Con "Comparar ajustes de radio" repite la hora pico
         con los otros ajustes (más capacidad con SF9, más alcance con
         62,5 kHz).
-      - "Prueba de carga": elija Pagos o Mensajes, cuántos salen al
+      - "Prueba de carga": elija Pagos o "WhatsApp o IA", cuántos salen al
         tiempo (5, 15, 25, 50…) y en cuánto tiempo (1 s, 10 s o 1 min),
         o "Por hora" (55, 105, 185, 300 por hora). "Probar" simula el
         canal paquete por paquete como MeshCore: cada radio escucha
         antes de hablar, los repetidores esperan un turno al azar, los
         acuses vuelven y, si no, se reintenta (3 por la ruta y el
         último por inundación). Dice qué porcentaje recibió su
-        comprobante, la espera típica, el canal ocupado del gateway, los
+        respuesta, la espera típica, el canal ocupado del gateway, los
         choques y los reintentos, y lo compara con Trama (SF11: ~55
-        pagos por hora por frecuencia, 150 usuarios, 600 por sitio).
+        pagos por hora por frecuencia, 150 usuarios, 600 por sitio;
+        esa capacidad la comparten los WhatsApp y las consultas a la IA).
       - "¿Hasta cuántos aguanta?": sube la cantidad y dibuja las barras:
         verde aguanta, naranja aguanta pero lento (el 95 % tarda más de
         un minuto) y rojo se revienta (menos del 90 % recibe su
-        comprobante).
+        respuesta).
       - Pruebe a cambiar el ajuste de radio en el modo avanzado
         (Parámetros: SF11, SF10 o SF9 de Trama) y vuelva a probar: SF9
-        aguanta unas 3 veces más pagos, con menos alcance.
+        aguanta unas 3 veces más mensajes, con menos alcance.
  c) Tours guiados: toque "Tours" (arriba a la derecha) o pídale a
     Melki "hazme un tour". Melki pregunta cuál quiere:
       - Tutorial básico (3 min, recomendado para empezar): su primera
         simulación en 7 pasos, haciéndola usted mismo.
       - Sembrar la malla (4 min): gateway, repetidores, gente,
-        conectar a los que faltan y un pago de prueba.
-      - ¿Cuántos pagos aguanta? (4 min): poblar 250 personas, mandar
-        pagos al tiempo, poner zonas de popularidad y ver hasta dónde
+        conectar a los que faltan y un mensaje de prueba.
+      - ¿Cuánto tráfico aguanta? (4 min): poblar 250 personas, mandar
+        mensajes al tiempo, poner zonas de popularidad y ver hasta dónde
         aguanta cada repetidor en la hora pico.
       - Conocer la pantalla: para qué sirve cada parte.
       - Red mesh completa, Como Radio Mobile, Medir y exportar y
         Hablar con Melki.
+      - Melki por voz (3 min): activar manos libres, llamarlo por su
+        nombre, conversar, dejar la pantalla limpia y pedirle la mayor
+        cobertura posible.
     En los pasos prácticos Melki le dice qué hacer, detecta solo cuando
     quedó hecho y trae "Hágalo por mí" y "Omitir paso"; "Salir" termina
     cuando quiera. Se practica en un escenario aparte: al terminar, el
@@ -156,19 +182,23 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
         "envía un pago desde Persona 1"
       - "Puebla la zona con 250 personas", "reparte 1 persona por km²
         solo donde haya señal", "envía 25 pagos al tiempo", "manda 15
-        mensajes en 10 segundos", "¿hasta cuántos pagos aguanta?",
+        mensajes de WhatsApp en 10 segundos", "¿hasta cuántos pagos aguanta?",
         "simula 55 pagos por hora", "quita las pobladas"
       - Zonas y hora pico: "por cada antena 250 personas y mira qué tan
         colapsada queda la red", "pon 300 personas alrededor del
         Repetidor 1 a 3 km", "¿hasta cuántos usuarios aguanta cada
         repetidor?", "prueba de estrés en día de mercado", "¿se
         disminuye el ancho de banda?", "quita las zonas de popularidad"
+      - El límite de un punto: "¿cuántas personas aguanta el Repetidor
+        1?", "llena el gateway hasta su límite", "pon 700 personas en el
+        Repetidor 2 y mira la estabilidad", "el límite de personas de
+        cada punto", "llena cada repetidor hasta su límite"
       - Trama: "¿cuánto cuesta la red para el Chocó?", "¿y con el 50 %
         de adopción y SF10?", "¿cuánto cuesta cubrir todo el país?",
         "dimensiona 5.000 usuarios en 800 km² de sabana", "¿cuánto
         cuesta un repetidor?", "¿qué lleva cada persona?", "¿cuántos
         usuarios por frecuencia?", "¿qué frecuencias usa Trama?"
-      - "¿Cómo viaja un pago?", "¿qué hago ahora?", "¿por qué
+      - "¿Cómo viaja un mensaje?", "¿qué hago ahora?", "¿por qué
         Persona 3 está en rojo?", "¿qué roles hay?", "modo avanzado"
       - "Inscribe una antena en esta coordenada" y luego la coordenada,
         por ejemplo 4°13'30" N 73°21'00" O o 4.225, -73.35
@@ -241,7 +271,32 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
  m) Dictado por voz: en la conversación con Melki, toque el micrófono y
     hable; el texto aparece en la caja para revisarlo antes de enviarlo.
     "Con el navegador" (Edge o Chrome por internet) o "Privado, sin
-    internet" (el audio no sale del equipo).
+    internet" (el audio no sale del equipo). Los números dichos en
+    palabras quedan en cifras.
+ o) Melki manos libres (tipo Jarvis): toque "Manos libres" en la barra
+    de arriba (o el ícono de ondas en la conversación) y permita el
+    micrófono. Melki escucha todo el tiempo y se activa con su nombre:
+        "Hola Melki, pon el gateway en Cumaral"
+        "Oye Melki, puebla la zona con doscientas cincuenta personas"
+        "Hey Melki, ¿cuántas personas aguanta el Repetidor 1?"
+        "Hola Melki, ¿cómo dejo la mayor cobertura posible?"
+        "Oye Melki, pantalla limpia"
+    Lo hace, le contesta en voz alta (lo principal; el detalle queda
+    escrito en la conversación) y se queda atento unos segundos: siga
+    hablando sin repetir su nombre. También entiende "para", "repite",
+    "más detalle", "sí, hazlo" o "la segunda" (los botones de su
+    respuesta), "deshaz" y "deja de escuchar". Sin su nombre no hace
+    nada. La barra oscura sobre el mapa muestra lo que entiende y lo
+    que dice; con la X se apaga. En Ajustes de voz (la tuerca de la
+    conversación): seguir la conversación, leer las respuestas
+    completas y el sonido al activarse.
+    Consejos: Edge o Chrome actualizados, el micrófono cerca o
+    audífonos (con parlantes a todo volumen Melki se puede oír a sí
+    mismo), y hablar de corrido justo después de "Melki".
+ p) Pantalla limpia: el botón junto a "Modo avanzado" oculta el panel
+    de la izquierda y el de la barra de arriba lo devuelve; el de la
+    derecha oculta los Resultados. O dígale a Melki "pantalla limpia" y
+    "muestra los paneles".
  n) Funciones de Radio Mobile (modo avanzado): modelo Calibrado o
     Longley-Rice, confiabilidad, clima, polarización, suelo,
     refractividad, entorno (vegetación o edificios), antenas
@@ -253,7 +308,7 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
 --------------
 - El protocolo es MeshCore: solo los repetidores retransmiten; las
   billeteras y las radios del gateway son companion. El primer paquete
-  hacia un destino se inunda y desde ahí los pagos van directos por la
+  hacia un destino se inunda y desde ahí los mensajes van directos por la
   ruta aprendida. El ajuste de radio por defecto es el de Trama: SF11 /
   250 kHz (un pago ≈ 9,5 s de aire a 2 saltos), en 920 MHz; las otras
   frecuencias de Trama son 921,5, 924 y 925,5 MHz. La ANE reconoce el
@@ -263,14 +318,17 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
   Mobile: se desvía unos 3 dB en los enlaces y 5 dB en el mapa. Es una
   herramienta de planeación: confirme en campo antes de instalar (un
   ping o un trace de MeshCore entre los equipos y el SNR que reporta).
-- La prueba de carga y la de estrés son estimaciones: suponen un aviso
-  de 126 bytes para quien recibe el pago y 1,5 s del banco; entre
+- La prueba de carga y la de estrés son estimaciones: miden cada
+  mensaje con el tamaño de un pago (118 bytes de ida, 126 de vuelta y
+  un aviso de 126 para quien recibe; un WhatsApp largo o una respuesta
+  larga de la IA ocupan más aire) y 1,5 s del banco; entre
   billeteras estiman quién oye a quién sobre terreno plano; la energía
   del repetidor solar supone 0,45 W al transmitir, 0,03 W escuchando y
   ~14 Wh al día del panel de 5 W. La prueba usa una sola frecuencia: el
   sitio de Trama lleva 4 radios y, repartiendo los repetidores entre
-  ellas, aguanta hasta 4 veces más. La capacidad real se mide en una red
-  piloto.
+  ellas, aguanta hasta 4 veces más. El límite de un punto cambia un poco
+  de un sorteo a otro: se dan tres búsquedas, la del medio y su rango.
+  La capacidad real se mide en una red piloto.
 - Las cifras de Trama (precios con la TRM del documento, alcance por
   terreno, capacidad por frecuencia y datos por departamento del DANE)
   son de planeación y cambian con el proveedor y el sitio.
@@ -279,7 +337,12 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
   escenario" para pasar un escenario de una a otra.
 - El mapa base y el relieve en línea solo reciben la zona que se ve en
   pantalla; no se envían nodos, mediciones ni resultados. Melki
-  entiende y ejecuta los pedidos aquí mismo, sin internet.
+  entiende y ejecuta los pedidos aquí mismo, sin internet. Con manos
+  libres en el modo "Con el navegador", el audio del micrófono va a
+  Edge o Chrome mientras está activo; en "Privado" no sale del equipo.
+- Si abre la versión HTML con doble clic y el navegador pide permiso
+  del micrófono a cada rato, elija "Permitir" o use el modo "Privado"
+  en Ajustes de voz, que pide el permiso una sola vez.
 - La demostración es genérica: no contiene datos de ningún cliente.
 
 
