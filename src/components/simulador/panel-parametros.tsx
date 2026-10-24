@@ -6,6 +6,8 @@ import { useId, useRef, type Dispatch } from "react";
 
 import { BANDA_LIBRE_MHZ, LIMITE_SALTOS_MAXIMO, PRESETS, presetPorId, RESOLUCIONES, type PresetId, type ResolucionId } from "@/lib/radio/constantes";
 import { ENTORNOS, entornoPorId, perdidaEntorno } from "@/lib/radio/entorno";
+import { airePagoMs } from "@/lib/radio/mensaje";
+import { CAPACIDAD_TRAMA } from "@/lib/radio/trama";
 import type { ClimaItm } from "@/lib/radio/itm";
 import { camposVariabilidad, CLIMAS, CONFIABILIDADES, confiabilidadDe, esReferencia, RED_REFERENCIA, SUELOS, VARIABILIDADES, type ConfiabilidadId } from "@/lib/radio/red";
 import type { EntornoId, ModeloId, PolarizacionId, SueloId, VariabilidadId } from "@/lib/radio/tipos";
@@ -44,7 +46,7 @@ export function PanelParametros({ estado, despachar, archivosHgt, onCargarHgt, o
       <section data-tour="radio">
         <Titulo>Radio LoRa</Titulo>
         <label htmlFor={idPreset} className="block">
-          <span className="mb-1 block text-[13px] text-carbon-2">Preset de Meshtastic</span>
+          <span className="mb-1 block text-[13px] text-carbon-2">Ajuste de radio MeshCore</span>
           <select id={idPreset} className="campo" value={p.preset} onChange={(e) => cambiar({ preset: e.target.value as PresetId })}>
             {PRESETS.map((x) => (
               <option key={x.id} value={x.id}>
@@ -53,11 +55,11 @@ export function PanelParametros({ estado, despachar, archivosHgt, onCargarHgt, o
             ))}
           </select>
           <span className="mt-1 block text-[12px] text-tenue">
-            Sensibilidad {fmt(preset.sensibilidadDbm)} dBm · ≈ {fmt(preset.velocidadKbps, 2)} kbps. Todos los nodos de la red deben usar el mismo preset.
+            {preset.uso} Sensibilidad {fmt(preset.sensibilidadDbm)} dBm · ≈ {fmt(preset.velocidadKbps, 2)} kbps · un pago ocupa ≈ {fmt(airePagoMs(preset) / 1000, 1)} s de aire. Todos los nodos de una frecuencia usan el mismo ajuste.
           </span>
         </label>
         <div className="mt-2.5 grid grid-cols-2 gap-2">
-          <CampoNumero etiqueta="Frecuencia" unidad="MHz" valor={p.frecuenciaMhz} min={860} max={960} paso={0.125} onCambio={(v) => cambiar({ frecuenciaMhz: v })} />
+          <CampoNumero etiqueta="Frecuencia" unidad="MHz" valor={p.frecuenciaMhz} min={860} max={960} paso={0.025} onCambio={(v) => cambiar({ frecuenciaMhz: v })} />
           <CampoNumero
             etiqueta="Límite de saltos"
             valor={p.limiteSaltos}
@@ -67,6 +69,22 @@ export function PanelParametros({ estado, despachar, archivosHgt, onCargarHgt, o
             tour="saltos"
           />
         </div>
+        <div className="mt-2 flex flex-wrap items-center gap-1.5" role="group" aria-label="Frecuencias de Trama">
+          <span className="text-[12px] text-tenue">Frecuencias de Trama:</span>
+          {CAPACIDAD_TRAMA.frecuenciasMhz.map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => cambiar({ frecuenciaMhz: f })}
+              className={`rounded-full px-2 py-0.5 text-[12px] font-medium tabular-nums ring-1 ${p.frecuenciaMhz === f ? "bg-carbon text-white ring-carbon" : "bg-white ring-linea hover:bg-papel-2"}`}
+            >
+              {fmt(f, f % 1 ? 1 : 0)}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1.5 text-[12px] leading-snug text-tenue">
+          El límite de saltos es el del diseño (los pagos de Trama van a 1–3 saltos); MeshCore deja hasta {LIMITE_SALTOS_MAXIMO} y solo los repetidores retransmiten.
+        </p>
         {fueraBanda && (
           <p className="mt-2 rounded-md bg-baja/15 px-2.5 py-1.5 text-[12px] leading-snug text-carbon">
             Fuera de la banda de uso libre 915–928 MHz (ANE, Resolución 000028 de 2026).
@@ -81,7 +99,7 @@ export function PanelParametros({ estado, despachar, archivosHgt, onCargarHgt, o
           <CampoNumero etiqueta="Ganancia" unidad="dBi" valor={p.gananciaRxDbi} min={-5} max={15} paso={0.5} onCambio={(v) => cambiar({ gananciaRxDbi: v })} />
           <CampoNumero etiqueta="Pérdida extra" unidad="dB" valor={p.perdidaExtraDb} min={0} max={40} paso={1} onCambio={(v) => cambiar({ perdidaExtraDb: v })} />
         </div>
-        <p className="mt-1.5 text-[12px] leading-snug text-tenue">Radio portátil a 1,5–2,5 m. La pérdida extra representa el cuerpo, la cabina de un vehículo u otras pérdidas fijas.</p>
+        <p className="mt-1.5 text-[12px] leading-snug text-tenue">La billetera de la persona (XIAO o T1000-E) va a 1,5 m. La pérdida extra representa el cuerpo, una casa o la cabina de un vehículo.</p>
         <label htmlFor={idEntorno} className="mt-2.5 block" data-tour="entorno">
           <span className="mb-1 block text-[13px] text-carbon-2">Entorno de la zona</span>
           <select id={idEntorno} className="campo" value={p.entorno} onChange={(e) => cambiar({ entorno: e.target.value as EntornoId })}>

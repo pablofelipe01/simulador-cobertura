@@ -1,5 +1,5 @@
 // Estado de la aplicación: escenario (nodos + parámetros + mediciones), vista del mapa y preferencias.
-import { EQUIPOS, LIMITE_SALTOS_DEFECTO, PRESETS, type EquipoId } from "@/lib/radio/constantes";
+import { EQUIPOS, LIMITE_SALTOS_DEFECTO, LIMITE_SALTOS_MAXIMO, PRESETS, type EquipoId } from "@/lib/radio/constantes";
 import { ENTORNOS } from "@/lib/radio/entorno";
 import type { Pieza } from "@/lib/radio/estado-red";
 import type { ClimaItm } from "@/lib/radio/itm";
@@ -70,9 +70,11 @@ export type Estado = {
 };
 
 export const PARAMETROS_DEFECTO: Parametros = {
-  preset: "LONG_FAST",
-  frecuenciaMhz: 915,
-  alturaRxM: 2.5,
+  preset: "SF11_250",
+  // Primera de las cuatro frecuencias de un sitio Trama (920 / 921,5 / 924 / 925,5 MHz)
+  frecuenciaMhz: 920,
+  // La persona lleva su nodo (billetera) a la altura de la mano
+  alturaRxM: 1.5,
   gananciaRxDbi: 2,
   perdidaExtraDb: 0,
   radioKm: 10,
@@ -119,11 +121,12 @@ export function nuevoId(prefijo = "a"): string {
 /** Valores por defecto según el tipo: el nodo antena va en mástil; el nodo de campo, en mano o en un poste bajo. */
 export function nuevaAntena(lat: number, lon: number, existentes: Antena[], datos: Partial<Antena> = {}): Antena {
   const tipo: TipoNodo = datos.tipo ?? "antena";
+  // Nodo antena = repetidor solar P1 con antena de 8 dBi; nodo de campo = billetera XIAO
   const equipo = tipo === "antena" ? EQUIPOS[0] : EQUIPOS[2];
   const base = tipo === "antena" ? "Antena" : "Nodo";
   let n = existentes.filter((a) => (a.tipo ?? "antena") === tipo).length + 1;
   while (existentes.some((a) => a.nombre === `${base} ${n}`)) n++;
-  const rol: Rol = tipo === "antena" ? "ROUTER" : "CLIENT";
+  const rol: Rol = tipo === "antena" ? "REPETIDOR" : "COMPANION";
   return {
     id: nuevoId(),
     nombre: `${base} ${n}`,
@@ -405,7 +408,16 @@ export function guardar(e: Estado) {
 const numero = (v: unknown, defecto: number, min = -Infinity, max = Infinity) =>
   typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : defecto;
 
-const ROLES: Rol[] = ["ROUTER", "CLIENT", "CLIENT_MUTE"];
+const ROLES: Rol[] = ["REPETIDOR", "COMPANION", "ROOM_SERVER"];
+
+/** Rol de un escenario guardado: los nombres viejos (v1–v11) pasan a los roles de MeshCore. */
+function rolLeido(raw: unknown, tipo: TipoNodo, defecto: Rol): Rol {
+  if (ROLES.includes(raw as Rol)) return raw as Rol;
+  if (raw === "ROUTER") return "REPETIDOR";
+  if (raw === "CLIENT") return tipo === "antena" ? "REPETIDOR" : "COMPANION";
+  if (raw === "CLIENT_MUTE") return "COMPANION";
+  return defecto;
+}
 
 /** Valida y completa un escenario leído de un archivo o del almacenamiento. */
 export function validarEscenario(x: unknown): Escenario | null {
@@ -426,8 +438,10 @@ export function validarEscenario(x: unknown): Escenario | null {
       gananciaDbi: numero(raw.gananciaDbi, base.gananciaDbi, -5, 20),
       perdidaCableDb: numero(raw.perdidaCableDb, base.perdidaCableDb, 0, 20),
       equipo: EQUIPOS.some((q) => q.id === raw.equipo) ? (raw.equipo as EquipoId) : "personalizado",
-      rol: ROLES.includes(raw.rol as Rol) ? (raw.rol as Rol) : base.rol,
+      rol: rolLeido(raw.rol, tipo, base.rol),
       pasarela: Boolean(raw.pasarela),
+      ...(raw.poblada ? { poblada: true } : {}),
+      ...(raw.poblada && typeof raw.zona === "string" && raw.zona ? { zona: raw.zona } : {}),
       activa: raw.activa !== false,
       ...(raw.patron && raw.patron !== "omni" && PATRONES.some((x) => x.id === raw.patron)
         ? { patron: raw.patron as PatronId, azimutDeg: ((numero(raw.azimutDeg, 0) % 360) + 360) % 360, elevacionDeg: numero(raw.elevacionDeg, 0, -45, 45) }
@@ -444,7 +458,7 @@ export function validarEscenario(x: unknown): Escenario | null {
     perdidaExtraDb: numero(p.perdidaExtraDb, d.perdidaExtraDb, 0, 40),
     radioKm: numero(p.radioKm, d.radioKm, 1, 40),
     resolucion: p.resolucion === "rapida" || p.resolucion === "fina" ? p.resolucion : "normal",
-    limiteSaltos: Math.round(numero(p.limiteSaltos, d.limiteSaltos, 1, 7)),
+    limiteSaltos: Math.round(numero(p.limiteSaltos, d.limiteSaltos, 1, LIMITE_SALTOS_MAXIMO)),
     modelo: p.modelo === "itm" ? "itm" : "calibrado",
     polarizacion: p.polarizacion === "horizontal" ? "horizontal" : "vertical",
     clima: ([1, 2, 3, 4, 5, 6, 7].includes(p.clima as number) ? p.clima : d.clima) as ClimaItm,
