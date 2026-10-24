@@ -37,7 +37,7 @@ export { alcancePlanoKm } from "./src/lib/radio/alcance-plano";
 export { Relieve } from "./src/lib/radio/relieve";
 export { evaluadorMargen, calcularCobertura, crearMalla } from "./src/lib/radio/cobertura";
 export { disenar, cajaDiseno } from "./src/lib/radio/diseno";
-export { poligonoCirculo, poligonoRectangulo, conArea, radioDeArea, areaM2, dentroPoligono, coberturaEnArea, porcentajeSobre, celdasEnPoligono } from "./src/lib/radio/area";
+export { poligonoCirculo, poligonoRectangulo, conArea, radioDeArea, areaM2, dentroPoligono, coberturaEnArea, porcentajeSobre, celdasEnPoligono, sirveAlArea } from "./src/lib/radio/area";
 export { ajustar, cajaAjuste, textoCambio, analisisAjuste, PERMISOS_AJUSTE, contornoCirculos } from "./src/lib/radio/ajuste";
 export { costoTorre, costoNodo, ALTURA_MAXIMA_M } from "./src/lib/radio/costos";
 `;
@@ -415,6 +415,13 @@ caso("Sin D, todas conectadas", sinD.nodos.every((n) => n.saltos !== null));
   const area = m.conArea(m.poligonoCirculo(4.2, -73.37, m.radioDeArea(objetivo)), objetivo);
   caso("Área objetivo de 11.226 ha medida igual que la regla", cerca(m.areaM2(area), objetivo, 1), `${(m.areaM2(area) / 1e4).toFixed(1)} ha`);
   caso("Punto dentro y fuera del área", m.dentroPoligono(-73.37, 4.2, area) && !m.dentroPoligono(-73.2, 4.2, area));
+  // La red que ya existe solo entra al diseño si alcanza el área (dentro o a menos de ~20 km del borde)
+  const radioA = m.radioDeArea(objetivo);
+  const aDist = (km) => m.desplazar(4.2, -73.37, radioA + km * 1000, 90);
+  caso(
+    "La red que ya existe entra al diseño solo si alcanza el área (≤ 20 km del borde)",
+    m.sirveAlArea(area, 4.2, -73.37) && m.sirveAlArea(area, aDist(15).lat, aDist(15).lon) && !m.sirveAlArea(area, aDist(30).lat, aDist(30).lon) && !m.sirveAlArea(area, 4.5149, -73.0024),
+  );
   const rect = m.poligonoRectangulo(4.2, -73.37, 10000, 12000);
   caso("Rectángulo de 10 × 12 km ≈ 120 km²", cerca(m.areaM2(rect) / 1e6, 120, 1.5), (m.areaM2(rect) / 1e6).toFixed(2));
 
