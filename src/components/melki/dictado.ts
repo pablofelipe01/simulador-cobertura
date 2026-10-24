@@ -6,6 +6,7 @@
 import { CONFIG } from "@/lib/config";
 
 import { CODIGO_TRABAJADOR } from "./dictado-trabajador";
+import { numerosEnPalabras } from "./numeros";
 
 export type ModoDictado = "navegador" | "privado";
 export type EstadoDictado = "preparando" | "escuchando" | "transcribiendo" | "inactivo";
@@ -15,6 +16,8 @@ export type EventosDictado = {
   onTexto: (final: string, parcial: string) => void;
   onEstado: (estado: EstadoDictado, detalle?: string) => void;
   onError: (mensaje: string) => void;
+  /** Empezó a oírse una frase nueva (lo usa manos libres para no confundir la voz de Melki con la del usuario). */
+  onInicioFrase?: () => void;
 };
 
 export type Dictado = {
@@ -77,9 +80,9 @@ export function normalizarDictado(texto: string): string {
   return t;
 }
 
-/** Junta lo que ya estaba escrito con lo dictado (con mayúscula inicial si la caja estaba vacía). */
+/** Junta lo que ya estaba escrito con lo dictado (números en cifras y mayúscula inicial si la caja estaba vacía). */
 export function componerTexto(base: string, dictado: string): string {
-  const d = normalizarDictado(dictado);
+  const d = normalizarDictado(numerosEnPalabras(dictado));
   if (!base.trim()) return d.charAt(0).toUpperCase() + d.slice(1);
   return d ? `${base.replace(/\s+$/, "")} ${d}` : base;
 }
@@ -120,7 +123,12 @@ function conReconocedor(Clase: ClaseReconocedor, idioma: string, local: boolean,
   if (local) r.processLocally = true;
   let final = "";
   let terminado = false;
+  let vistos = 0;
   r.onresult = (e) => {
+    if (e.results.length > vistos) {
+      vistos = e.results.length;
+      eventos.onInicioFrase?.();
+    }
     let confirmado = "";
     let parcial = "";
     for (let i = 0; i < e.results.length; i++) {
@@ -354,6 +362,7 @@ async function conWhisper(eventos: EventosDictado, control: ControlDictado): Pro
       if (previo.length > Math.ceil(0.3 / bloque)) previo.shift();
       if (rms > umbral) {
         hablando = true;
+        eventos.onInicioFrase?.();
         frase = previo;
         previo = [];
         silencioS = 0;

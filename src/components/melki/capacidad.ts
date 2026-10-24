@@ -1,4 +1,4 @@
-// Órdenes de Melki para la gente y la capacidad de la red de pagos: «Poblar personas» (reparte N billeteras al azar
+// Órdenes de Melki para la gente y la capacidad de la red (pagos, WhatsApp y consultas a la IA): «Poblar personas» (reparte N billeteras al azar
 // en la zona), las zonas de popularidad («por cada antena 250 personas»), la prueba de estrés de la hora pico por
 // repetidor («¿qué tan colapsada está la red?», «¿hasta cuántos usuarios aguanta cada repetidor?»), la prueba de
 // carga («envía 25 pagos al tiempo», «¿hasta cuántos aguanta?») y el dimensionamiento de Trama por departamento o
@@ -23,7 +23,7 @@ import {
 import type { Parametros, ResultadoSimulacion } from "@/lib/radio/tipos";
 
 import type { OpcionesCarga, PedidoPoblar } from "../simulador/panel-capacidad";
-import { textoZonas, type CentroZona, type OpcionesEstres, type PedidoZonas } from "../simulador/panel-estres";
+import { MAX_POR_ZONA, MUESTRA_PUNTO, textoLimite, textoLlenado, textoZonas, ZONA_DEFECTO, type CentroZona, type OpcionesEstres, type PedidoZonas } from "../simulador/panel-estres";
 import type { Respuesta } from "./cerebro";
 import type { Api, Orden, ResultadoOrden } from "./ordenes";
 
@@ -106,7 +106,7 @@ function ejecutarPoblar(o: Extract<Orden, { tipo: "poblar" }>, api: Api): Result
     deshacer: antes,
     luego: api.esperarResultado().then(
       (r): Respuesta => ({
-        texto: `${textoPobladas(r, api)} Ahora puede probar cuántos pagos aguanta la frecuencia: «envía 15 pagos al tiempo» o «¿hasta cuántos pagos aguanta?».`,
+        texto: `${textoPobladas(r, api)} Ahora puede probar cuántos pagos, WhatsApp y consultas a la IA aguanta la frecuencia: «envía 15 pagos al tiempo», «manda 15 mensajes de WhatsApp al tiempo» o «¿hasta cuántos pagos aguanta?».`,
         acciones: [
           { texto: "15 pagos al tiempo", accion: "orden", orden: { tipo: "carga", opciones: { mensajes: 15 }, curva: false } },
           { texto: "¿Hasta cuántos aguanta?", accion: "orden", orden: { tipo: "carga", opciones: {}, curva: true } },
@@ -120,9 +120,9 @@ function ejecutarPoblar(o: Extract<Orden, { tipo: "poblar" }>, api: Api): Result
 /* ───────────── Prueba de carga ───────────── */
 
 function interpretarCarga(texto: string, tn: string): Orden | null {
-  const unidad = String.raw`(pagos?|mensajes?|transacciones?|transferencias?|envios?|paquetes?)`;
+  const unidad = String.raw`(pagos?|mensajes?|whatsapps?|consultas?|transacciones?|transferencias?|envios?|paquetes?)`;
   const curva =
-    /\bhasta (cuant\w*|donde|que punto|que se revient\w*|reventar\w*)\b.*\b(aguant\w*|soport\w*|resist\w*|da|llega|revient\w*|pagos?|mensajes?)\b|\bcuando se revienta\b|\bhasta que se revient\w*|\bpunto de quiebre\b|\bcapacidad (maxima|de la red|del canal|de la frecuencia)\b|\bcuant\w* (pagos?|mensajes?|transacciones?) (aguanta|soporta|resiste|caben|da)\b|\b(aguanta|soporta|resiste)\b.*\b(pagos?|mensajes?|transacciones?|carga)\b|\bcurva de carga\b/.test(
+    /\bhasta (cuant\w*|donde|que punto|que se revient\w*|reventar\w*)\b.*\b(aguant\w*|soport\w*|resist\w*|da|llega|revient\w*|pagos?|mensajes?)\b|\bcuando se revienta\b|\bhasta que se revient\w*|\bpunto de quiebre\b|\bcapacidad (maxima|de la red|del canal|de la frecuencia)\b|\bcuant\w* (pagos?|mensajes?|whatsapps?|consultas?|transacciones?) (aguanta|soporta|resiste|caben|da)\b|\b(aguanta|soporta|resiste)\b.*\b(pagos?|mensajes?|whatsapps?|transacciones?|carga)\b|\bcurva de carga\b/.test(
       tn,
     );
   const explicita = /\b(prueba|test|ensayo) de (carga|estres|capacidad|saturacion)\b|\bestres(a\w*)?\b|\bsatura\w*\b.*\b(red|canal|frecuencia)\b/.test(tn);
@@ -133,7 +133,7 @@ function interpretarCarga(texto: string, tn: string): Orden | null {
   if (/^(que|como|por que|para que)\b.*\b(es|son|significa|funciona)\b/.test(tn) && !cuantos && !curva) return null; // pregunta de concepto
   const opciones: Partial<OpcionesCarga> = {};
   if (cuantos) opciones.mensajes = Math.min(2000, Number(cuantos[1]));
-  if (/\bmensajes?\b/.test(tn) && !/\bpagos?\b/.test(tn)) opciones.tipo = "texto";
+  if (/\b(mensajes?|whatsapps?|consultas?)\b/.test(tn) && !/\bpagos?\b/.test(tn)) opciones.tipo = "texto";
   else opciones.tipo = "pago";
   if (/\b(por hora|cada hora|en una hora|en la hora)\b/.test(tn)) {
     opciones.modo = "continua";
@@ -154,7 +154,7 @@ function interpretarCarga(texto: string, tn: string): Orden | null {
 export function textoCarga(r: ResultadoCarga, curva: CurvaCargaResultado | null, p: Parametros, ventanaS: number): string {
   if (r.motivo) return r.motivo;
   const preset = presetPorId(p.preset);
-  const unidad = r.tipo === "pago" ? "pagos" : "mensajes";
+  const unidad = r.tipo === "pago" ? "pagos" : "mensajes de texto (WhatsApp o IA)";
   const como = r.modo === "rafaga" ? `${r.mensajes} ${unidad} al tiempo (en ${seg(ventanaS)})` : `${r.mensajes} ${unidad} por hora`;
   const partes: string[] = [];
   partes.push(
@@ -168,17 +168,17 @@ export function textoCarga(r: ResultadoCarga, curva: CurvaCargaResultado | null,
     const tramos: string[] = [];
     if (curva.seguro !== null) tramos.push(`aguanta sin demora hasta ${curva.seguro} al tiempo`);
     if (curva.lento !== null) tramos.push(`desde ${curva.lento} aguanta pero lento (el 95 % tarda más de un minuto)`);
-    if (curva.quiebre !== null) tramos.push(`se revienta desde ${curva.quiebre} (menos del 90 % recibe su comprobante)`);
+    if (curva.quiebre !== null) tramos.push(`se revienta desde ${curva.quiebre} (menos del 90 % recibe su respuesta)`);
     else if (curva.puntos.length) tramos.push(`hasta ${curva.puntos[curva.puntos.length - 1].n} al tiempo no se revienta`);
     if (tramos.length) partes.push(`Subiendo la cantidad: ${tramos.join("; ")}.`);
   }
   if (preset.anchoBandaKhz === 250 && preset.sf >= 9 && preset.sf <= 11) {
     const ref = SF_TRAMA[preset.sf as SfTrama];
-    partes.push(`Referencia de Trama con SF${preset.sf}: ~${ref.pagosHora} pagos por hora por frecuencia con el canal al ${CAPACIDAD_TRAMA.canalPicoPct} % (${ref.usuariosFrecuencia} usuarios; ${ref.usuariosFrecuencia * CAPACIDAD_TRAMA.radiosPorSitio} por sitio de 4 radios).`);
+    partes.push(`Referencia de Trama con SF${preset.sf}: ~${ref.pagosHora} pagos por hora por frecuencia con el canal al ${CAPACIDAD_TRAMA.canalPicoPct} % (${ref.usuariosFrecuencia} usuarios; ${ref.usuariosFrecuencia * CAPACIDAD_TRAMA.radiosPorSitio} por sitio de 4 radios); esa capacidad la comparten con los WhatsApp y las consultas a la IA.`);
   }
   if (r.saturada || r.lenta) {
     const consejos = ["repartir la gente en las 4 frecuencias del sitio (920, 921,5, 924 y 925,5 MHz)"];
-    if (preset.sf > 9 && preset.anchoBandaKhz === 250) consejos.push(`bajar a SF${preset.sf - 1} si el alcance lo permite (más pagos por hora, menos alcance)`);
+    if (preset.sf > 9 && preset.anchoBandaKhz === 250) consejos.push(`bajar a SF${preset.sf - 1} si el alcance lo permite (más mensajes por hora, menos alcance)`);
     consejos.push("acortar las rutas (menos saltos)");
     partes.push(`Para que aguante más: ${consejos.join(", ")}.`);
   }
@@ -189,7 +189,7 @@ function ejecutarCarga(o: Extract<Orden, { tipo: "carga" }>, api: Api): Resultad
   const p = api.parametros();
   const ventana = o.opciones.ventanaS ?? 10;
   const n = o.opciones.mensajes ?? (o.opciones.modo === "continua" ? 55 : 15);
-  const unidad = o.opciones.tipo === "texto" ? "mensajes" : "pagos";
+  const unidad = o.opciones.tipo === "texto" ? "mensajes de texto (WhatsApp o IA)" : "pagos";
   const quePrueba = o.curva
     ? `Subo la cantidad de ${unidad} al tiempo (5, 10, 15, 25, 40…) hasta que la frecuencia se reviente`
     : o.opciones.modo === "continua"
@@ -220,7 +220,7 @@ const CADA = /\b(?:por|en|para|a|de|alrededor de|cerca de)\s+cada\s+(?:punto|nod
 const POPULARIDAD = /\b(popularidad|zonas? populares?|puntos? calientes?|zonas? calientes?)\b/;
 const ALREDEDOR = /\b(alrededor|a la redonda|en torno|al rededor|cerca)\b/;
 /** Lo que pide ver qué pasa con la carga: colapso, estrés, ancho de banda, cuánto aguanta. */
-const PIDE_ESTRES = /\b(colaps\w*|revent\w*|revient\w*|satur\w*|estres\w*|aguant\w*|soport\w*|resist\w*|ancho de banda|capacidad|transferir|se cae|se caiga|caeria|evalu\w*|verific\w*|hora pico|que tan|congestion\w*|falla\w*)\b/;
+const PIDE_ESTRES = /\b(colaps\w*|revent\w*|revient\w*|satur\w*|estres\w*|aguant\w*|soport\w*|resist\w*|ancho de banda|capacidad|transferir|se cae|se caiga|caeria|evalu\w*|verific\w*|hora pico|que tan|congestion\w*|falla\w*|estabilidad|queda estable|quede estable|sigue estable|siga estable)\b/;
 const PIDE_RAMPA = /\b(hasta (donde|cuant\w*|que punto)|limite|maximo|cuant\w* (usuarios|personas|gente) (aguanta|soporta|resiste|caben)|antes de que|punto de (estres|quiebre)|colaps\w*|revent\w*|revient\w*|estres\w*|circunstancias)\b/;
 const PIDE_COMPARAR = /\b(ancho de banda|ajustes? de radio|sf ?\d+|62[.,]5|250 khz|125 khz|otro ajuste|otros ajustes|circunstancias)\b/;
 
@@ -244,16 +244,16 @@ function centrosNombrados(tn: string, centros: CentroZona[]): CentroZona[] {
   return vistos.sort((a, b) => a.ini - b.ini).map((v) => v.c);
 }
 
-/** Opciones de la prueba de estrés que trae el texto: rampa, comparar ajustes, día de mercado, pagos al día, multiplicador. */
+/** Opciones de la prueba de estrés que trae el texto: rampa, comparar ajustes, día de mercado, mensajes al día, multiplicador. */
 function opcionesEstres(tn: string): Partial<OpcionesEstres> {
   const o: Partial<OpcionesEstres> = { rampa: PIDE_RAMPA.test(tn), comparar: PIDE_COMPARAR.test(tn) };
   if (/\b(dia de mercado|mercado|feria|quincena|dia de pago)\b/.test(tn)) o.horaPicoPct = CAPACIDAD_TRAMA.horaPicoMercadoPct;
-  const dia = tn.match(/(\d{1,2}(?:[.,]\d+)?)\s*pagos?\s*(?:por|al|cada|a el)\s*(?:persona|usuario|dia)/);
+  const dia = tn.match(/(\d{1,2}(?:[.,]\d+)?)\s*(?:pagos?|mensajes?|whatsapps?|consultas?)\s*(?:por|al|cada|a el)\s*(?:persona|usuario|dia)/);
   if (dia) o.pagosPersonaDia = Math.min(50, Math.max(0.1, numero(dia[1])));
   const veces = tn.match(/\bx\s?(\d{1,2})\b|\b(\d{1,2})\s*veces\b/);
   if (veces) o.factor = Math.min(50, Math.max(1, Number(veces[1] ?? veces[2])));
-  else if (/\b(el doble|doble de (carga|gente|pagos))\b/.test(tn)) o.factor = 2;
-  else if (/\b(el triple|triple de (carga|gente|pagos))\b/.test(tn)) o.factor = 3;
+  else if (/\b(el doble|doble de (carga|gente|pagos|mensajes|trafico))\b/.test(tn)) o.factor = 2;
+  else if (/\b(el triple|triple de (carga|gente|pagos|mensajes|trafico))\b/.test(tn)) o.factor = 3;
   return o;
 }
 
@@ -264,13 +264,14 @@ function interpretarZonas(texto: string, tn: string, api: Api): Orden | null {
   const gente = tn.match(new RegExp(`${NUM}\\s*${GENTE}`));
   const popular = POPULARIDAD.test(tn);
   const cada = CADA.test(tn);
-  const alrededor = ALREDEDOR.test(tn) && nombrados.length > 0;
+  // «Alrededor del Repetidor 1» o «pon 700 personas en el Repetidor 1»
+  const alrededor = (ALREDEDOR.test(tn) || /\b(pon\w*|agreg\w*|anad\w*|mete\w*|coloca\w*|carga\w*)\b/.test(tn)) && nombrados.length > 0;
   if (!popular && !(cada && gente) && !(alrededor && gente)) return null;
   // Preguntas de concepto («¿qué es una zona de popularidad?») las contesta el cerebro
   if (/^(que|como|para que|por que)\s+(es|son|significa|sirve|funciona)\b/.test(tn) && !gente) return null;
   const pedido: PedidoZonas = {};
   const cuantos = gente ?? tn.match(new RegExp(`\\bpopularidad\\s+(?:de|con)\\s+${NUM}`));
-  pedido.n = cuantos ? Math.min(1000, Math.max(1, Math.round(numero(`${cuantos[1]}${cuantos[2] ? " mil" : ""}`)))) : 250;
+  pedido.n = cuantos ? Math.min(MAX_POR_ZONA, Math.max(1, Math.round(numero(`${cuantos[1]}${cuantos[2] ? " mil" : ""}`)))) : 250;
   const km = tn.match(/\b(?:a|en|dentro de|en un radio de|radio de)\s+(\d{1,2}(?:[.,]\d+)?)\s*(?:km|kilometros?)\b/) ?? tn.match(/\b(\d{1,2}(?:[.,]\d+)?)\s*(?:km|kilometros?)\s*(?:a la redonda|de radio|alrededor)\b/);
   const metros = tn.match(/\b(\d{2,4})\s*(?:m|metros)\s*(?:a la redonda|de radio|alrededor)\b/);
   if (km) pedido.radioKm = Math.min(20, Math.max(0.2, numero(km[1])));
@@ -286,10 +287,10 @@ function interpretarZonas(texto: string, tn: string, api: Api): Orden | null {
 
 function interpretarEstres(texto: string, tn: string): Orden | null {
   // La ráfaga («envía 25 pagos al tiempo», «55 pagos por hora») es la prueba de carga
-  if (/\b(al tiempo|a la vez|al mismo tiempo|simultane\w*|de golpe|en rafaga|juntos|juntas)\b/.test(tn) || /\b\d{1,4}\s*(pagos?|mensajes?)\s+(por|cada)\s+hora\b/.test(tn)) return null;
+  if (/\b(al tiempo|a la vez|al mismo tiempo|simultane\w*|de golpe|en rafaga|juntos|juntas)\b/.test(tn) || /\b\d{1,4}\s*(pagos?|mensajes?|whatsapps?|consultas?)\s+(por|cada)\s+hora\b/.test(tn)) return null;
   const porZona = /\b(cada|por|el|un|del)\s+(repetidor|zona|antena|nodo)\b|\bhora pico\b|\b(usuarios|personas|gente)\b/.test(tn);
   // «¿Hasta cuántos pagos aguanta?» es la curva de ráfagas
-  if (/\bcuant\w* (pagos?|mensajes?|transacciones?)\b/.test(tn) && !porZona) return null;
+  if (/\bcuant\w* (pagos?|mensajes?|whatsapps?|consultas?|transacciones?)\b/.test(tn) && !porZona) return null;
   const pide =
     /\b(prueba|test|ensayo) de (estres|saturacion)\b|\bestres\w*\b|\bhora pico\b|\bdia de mercado\b|\bcolaps\w*\b|\bancho de banda\b/.test(tn) ||
     /\b(cuant\w*|hasta cuant\w*)\s+(usuarios|personas|gente|billeteras|clientes)\b.*\b(aguant\w*|soport\w*|resist\w*|caben|puede|atiende)\b/.test(tn) ||
@@ -313,7 +314,7 @@ function textoConectadas(r: ResultadoSimulacion | null, api: Api): string {
   return `De las ${ent(de.length)} personas de las zonas, ${ent(ok)} llegan al gateway (${pct((100 * ok) / de.length)} %).`;
 }
 
-const estadoTxt = (e: ZonaEstres["estado"]) => ({ aguanta: "aguanta", lento: "aguanta, pero lento", revienta: "se revienta", "sin-pagos": "sin pagos" })[e];
+const estadoTxt = (e: ZonaEstres["estado"]) => ({ aguanta: "aguanta", lento: "aguanta, pero lento", revienta: "se revienta", "sin-pagos": "sin mensajes" })[e];
 const LIMITES: Record<ZonaEstres["limites"][number], string> = {
   canal: "canal lleno",
   ciclo: `al tope del ciclo de trabajo (${TOPE_CICLO_PCT} %)`,
@@ -329,7 +330,7 @@ export function textoEstres(r: ResultadoEstres): string {
   if (r.motivo) return r.motivo;
   const partes: string[] = [];
   partes.push(
-    `Prueba de estrés de la hora pico (${r.preset.nombre}): ${ent(r.usuarios)} personas con ruta × ${f1(r.pagosPersonaDia, 1)} pagos al día × ${r.horaPicoPct} % en la hora pico${r.factor !== 1 ? ` × ${r.factor}` : ""} = ${ent(r.pedidosHora)} pagos por hora. Resultado: ${r.estado === "revienta" ? "se revienta" : r.estado === "lento" ? "aguanta, pero lento" : "aguanta"}. ${pct(r.completosPct)} % de los pagos recibieron su comprobante y el 95 % en menos de ${seg(r.p95S)}. Entregó ${ent(r.entregadosHora)} de ${ent(r.pedidosHora)} pagos por hora (ancho de banda útil ~${ent(r.utilBps)} bps de pagos, de ${f1(r.canalBps / 1000, 2)} kbps que da el canal); el canal del gateway estuvo ocupado el ${pct(r.canalGatewayPct)} % (Trama diseña al ${CAPACIDAD_TRAMA.canalPicoPct} %).`,
+    `Prueba de estrés de la hora pico (${r.preset.nombre}): ${ent(r.usuarios)} personas con ruta × ${f1(r.pagosPersonaDia, 1)} mensajes al día (pagos, WhatsApp y consultas a la IA) × ${r.horaPicoPct} % en la hora pico${r.factor !== 1 ? ` × ${r.factor}` : ""} = ${ent(r.pedidosHora)} mensajes por hora. Resultado: ${r.estado === "revienta" ? "se revienta" : r.estado === "lento" ? "aguanta, pero lento" : "aguanta"}. ${pct(r.completosPct)} % de los mensajes recibieron su respuesta y el 95 % en menos de ${seg(r.p95S)}. Entregó ${ent(r.entregadosHora)} de ${ent(r.pedidosHora)} mensajes por hora (ancho de banda útil ~${ent(r.utilBps)} bps de mensajes, de ${f1(r.canalBps / 1000, 2)} kbps que da el canal); el canal del gateway estuvo ocupado el ${pct(r.canalGatewayPct)} % (Trama diseña al ${CAPACIDAD_TRAMA.canalPicoPct} %).`,
   );
   const zonas = r.zonas.filter((z) => z.usuarios > 0).sort((a, b) => a.completosPct - b.completosPct);
   if (zonas.length) {
@@ -343,7 +344,7 @@ export function textoEstres(r: ResultadoEstres): string {
               ? `; va lenta aun con la carga más baja probada (~${ent(z.usuarios * z.factorLento)} personas)`
               : "; no aguanta ni con la carga más baja probada"
           : "";
-      return `• ${z.nombre} (${ent(z.usuarios)} personas, ${ent(z.pagosHora)} pagos/h): ${estadoTxt(z.estado)}, ${pct(z.completosPct)} % completos, el 95 % en ${seg(z.p95S)}, canal ${pct(z.canalPct)} %, transmite el ${f1(z.txPct, 1)} % del tiempo${lim}${rampa}.`;
+      return `• ${z.nombre} (${ent(z.usuarios)} personas, ${ent(z.pagosHora)} mensajes/h): ${estadoTxt(z.estado)}, ${pct(z.completosPct)} % completos, el 95 % en ${seg(z.p95S)}, canal ${pct(z.canalPct)} %, transmite el ${f1(z.txPct, 1)} % del tiempo${lim}${rampa}.`;
     });
     partes.push(`Zona por zona (las personas que entran a la malla por cada nodo):\n${lineas.join("\n")}${zonas.length > 6 ? `\n• y ${zonas.length - 6} zonas más en el panel` : ""}`);
   }
@@ -360,11 +361,11 @@ export function textoEstres(r: ResultadoEstres): string {
     tramos.push(q.usuariosMax !== null ? `toda la malla aguanta sin demora hasta ~${ent(q.usuariosMax)} personas (${veces(q.factorSeguro!)} la carga)` : "la malla no aguanta ni con la carga más baja probada");
     if (q.factorLento !== null) tramos.push(`desde ${veces(q.factorLento)} va lenta`);
     tramos.push(q.factorQuiebre !== null ? `se revienta desde ${veces(q.factorQuiebre)} (~${ent(r.usuarios * q.factorQuiebre)} personas)` : "con lo probado no se revienta");
-    partes.push(`Subiendo la carga: ${tramos.join("; ")}. Esta frecuencia entrega como máximo ~${ent(q.maxEntregadosHora)} pagos por hora; si se le pide más, los choques se comen el canal y entrega menos.${q.primera ? ` La primera zona en reventarse es ${q.primera}.` : ""}`);
+    partes.push(`Subiendo la carga: ${tramos.join("; ")}. Esta frecuencia entrega como máximo ~${ent(q.maxEntregadosHora)} mensajes por hora; si se le pide más, los choques se comen el canal y entrega menos.${q.primera ? ` La primera zona en reventarse es ${q.primera}.` : ""}`);
   }
   if (r.ajustes) {
     const otros = r.ajustes.map((a) => `${a.nombre.replace(/^Trama /, "").replace(/ \((alcance|capacidad)\)$/, "")}${a.actual ? " (el de ahora)" : ""}: ${a.conRuta ? `${pct(a.completosPct)} % completos, ${ent(a.conRuta)} con ruta` : "nadie con ruta"}`);
-    partes.push(`La misma hora pico con otros ajustes de radio: ${otros.join("; ")}. Más ancho de banda o menos SF: el pago dura menos en el aire y caben más, pero baja el alcance.`);
+    partes.push(`La misma hora pico con otros ajustes de radio: ${otros.join("; ")}. Más ancho de banda o menos SF: cada mensaje dura menos en el aire y caben más, pero baja el alcance.`);
   }
   if (r.estado !== "aguanta") {
     const consejos = ["repartir los repetidores en las 4 frecuencias del sitio (hasta 4 veces la capacidad)"];
@@ -380,7 +381,7 @@ export function textoEstres(r: ResultadoEstres): string {
 }
 
 const textoQuePruebo = (o: Partial<OpcionesEstres>) =>
-  `${o.rampa ? "Subo la carga de la hora pico (×0,5, ×1, ×2, ×4…) hasta que cada zona se reviente" : "Simulo la hora pico"}${o.horaPicoPct === CAPACIDAD_TRAMA.horaPicoMercadoPct ? " de un día de mercado" : ""}: cada persona hace sus ${f1(o.pagosPersonaDia ?? PAGOS_PERSONA_DIA_TRAMA, 1)} pagos al día y el ${o.horaPicoPct ?? CAPACIDAD_TRAMA.horaPicoNormalPct} % cae en esa hora; mido en cada gateway y repetidor los pagos completos, la espera, el canal, el ciclo de trabajo, las colas, el alcance con carga y la energía${o.comparar ? ", y repito con los otros ajustes de radio" : ""}`;
+  `${o.rampa ? "Subo la carga de la hora pico (×0,5, ×1, ×2, ×4…) hasta que cada zona se reviente" : "Simulo la hora pico"}${o.horaPicoPct === CAPACIDAD_TRAMA.horaPicoMercadoPct ? " de un día de mercado" : ""}: cada persona manda sus ${f1(o.pagosPersonaDia ?? PAGOS_PERSONA_DIA_TRAMA, 1)} mensajes al día (pagos, WhatsApp y consultas a la IA) y el ${o.horaPicoPct ?? CAPACIDAD_TRAMA.horaPicoNormalPct} % cae en esa hora; mido en cada gateway y repetidor los mensajes completos, la espera, el canal, el ciclo de trabajo, las colas, el alcance con carga y la energía${o.comparar ? ", y repito con los otros ajustes de radio" : ""}`;
 
 /** Después de poner las zonas: simula su conexión y, si se pidió, la prueba de estrés. */
 export async function seguirConZonas(pedido: PedidoZonas, estres: Partial<OpcionesEstres> | null, api: Api): Promise<Respuesta> {
@@ -438,6 +439,94 @@ function ejecutarEstres(o: Extract<Orden, { tipo: "estres" }>, api: Api): Result
   };
 }
 
+/* ───────────── Límite de un punto ───────────── */
+
+/** «¿Cuántas personas aguanta el Repetidor 1?», «el límite del gateway», «hasta qué punto soporta este repetidor». */
+const PIDE_LIMITE = /\b(limite|maximo|maxima|tope|hasta (que|donde) punto|hasta cuant\w*|cuant\w* (personas|usuarios|gente|billeteras|clientes)\b.*\b(aguant\w*|soport\w*|resist\w*|caben|cabe|puede|atiende))\b/;
+/** «Llena el Repetidor 2 hasta su límite», «pon en el gateway el máximo de personas que aguante». */
+const PIDE_LLENAR = /\b(llen\w*|pon\w*|agreg\w*|anad\w*|mete\w*|carg\w*|complet\w*|coloca\w*)\b.*\b(limite|maximo|maxima|tope|lo que (aguante|soporte|resista|pueda)|(todas )?las que (aguante|soporte|quepan|resista))\b/;
+
+function interpretarLimite(texto: string, tn: string, api: Api): Orden | null {
+  if (!PIDE_LIMITE.test(tn) && !PIDE_LLENAR.test(tn)) return null;
+  // Tiene que hablar de gente o de aguantar («el límite de saltos» o «la altura máxima» son otra cosa)
+  if (/\blimite de saltos\b|\baltura maxima\b|\bmaximo \d+ (repetidores|antenas|sitios)\b/.test(tn)) return null;
+  if (!/\b(personas?|usuari\w*|gente|billeteras?|clientes?|aguant\w*|soport\w*|resist\w*|popularidad|zona|capacidad|caben|llen\w*)\b/.test(tn)) return null;
+  if (/^(que|como|para que|por que)\s+(es|son|significa)\b/.test(tn)) return null;
+  const centros = api.centrosZona();
+  const nombrados = centrosNombrados(tn, centros);
+  let elegidos: string[] | undefined;
+  if (nombrados.length) elegidos = nombrados.map((c) => c.id);
+  else if (/\b(este|ese|esta|esa|el seleccionado|la seleccionada)\s+(punto|repetidor|nodo|antena|gateway|torre)\b/.test(tn)) {
+    const sel = api.seleccion();
+    if (!sel || !centros.some((c) => c.id === sel)) return null;
+    elegidos = [sel];
+  } else if ((CADA.test(tn) || /\bcada\s+(punto|nodo|antena|repetidor\w*|torre|gateway|sitio|zona)\b|\b(todos|todas)\s+(los|las)\s+(puntos|nodos|antenas|repetidores|zonas)\b/.test(tn)) && /\b(limite|maximo|maxima|tope)\b/.test(tn)) elegidos = undefined;
+  else return null;
+  const gente = tn.match(new RegExp(`${NUM}\\s*${GENTE}`));
+  const n = gente ? Math.min(MAX_POR_ZONA, Math.max(1, Math.round(numero(`${gente[1]}${gente[2] ? " mil" : ""}`)))) : undefined;
+  const km = tn.match(/\b(?:a|en|dentro de|en un radio de|radio de)\s+(\d{1,2}(?:[.,]\d+)?)\s*(?:km|kilometros?)\b/);
+  const opciones = opcionesEstres(tn);
+  delete opciones.rampa;
+  delete opciones.comparar;
+  return { tipo: "limite", centros: elegidos, n, radioKm: km ? Math.min(20, Math.max(0.2, numero(km[1]))) : undefined, llenar: PIDE_LLENAR.test(tn), opciones };
+}
+
+/** Lo que pasó con la red completa en la última prueba (una línea). */
+const lineaRed = (e: ResultadoEstres | null) =>
+  e && !e.motivo ? ` La red completa en la hora pico: ${pct(e.completosPct)} % de los mensajes con respuesta, el 95 % en menos de ${seg(e.p95S)}, canal del gateway al ${pct(e.canalGatewayPct)} %.` : "";
+
+function ejecutarLimite(o: Extract<Orden, { tipo: "limite" }>, api: Api): ResultadoOrden {
+  const antes = api.instantanea();
+  const centros = api.centrosZona();
+  if (!centros.length) return { texto: "Ponga primero el gateway y los repetidores: cada punto es uno de ellos.", acciones: [{ texto: "Poner el gateway", accion: "orden", orden: { tipo: "pieza", pieza: "gateway", datos: {} } }] };
+  const radioKm = o.radioKm ?? ZONA_DEFECTO.radioKm;
+  const como = "subo la gente de ese punto, con el resto de la red como está, y simulo la hora pico paquete por paquete con todos enviando información (pagos, WhatsApp y consultas a la IA)";
+  const deshacer = { texto: "Deshacer", accion: "deshacer" as const, escenario: antes };
+  const uno = o.centros?.length === 1 ? centros.find((c) => c.id === o.centros![0]) : null;
+  if (uno) {
+    const muestra = !uno.personas ? ` Como no tiene gente, primero pongo ${ent(o.n ?? MUESTRA_PUNTO)} de muestra a ${f1(radioKm, radioKm % 1 ? 1 : 0)} km.` : "";
+    return {
+      texto: `${o.llenar ? `Busco cuántas personas aguanta ${uno.nombre} y lo lleno hasta ese límite` : `Busco cuántas personas aguanta ${uno.nombre}`}: ${como}.${muestra} Tardo unos segundos.`,
+      deshacer: antes,
+      luego: api.evaluarPunto({ centro: uno.id, accion: o.llenar ? "llenar" : "limite", n: o.n, radioKm, opciones: o.opciones }).then((x): Respuesta => {
+        if (x.error || !x.limite) return { texto: x.error ?? "No pude buscar el límite.", acciones: [deshacer] };
+        const l = x.limite;
+        const seguro = !l.motivo && !l.redYaFalla && l.personasSeguro !== null ? Math.min(MAX_POR_ZONA, l.personasSeguro) : null;
+        const acciones: Respuesta["acciones"] = [];
+        if (!o.llenar && seguro !== null) acciones.push({ texto: `Llenar ${uno.nombre} hasta el límite (${ent(seguro)})`, accion: "orden", orden: { tipo: "limite", centros: [uno.id], n: seguro, radioKm, llenar: true, opciones: o.opciones } });
+        acciones.push({ texto: "¿Hasta dónde aguanta toda la malla?", accion: "orden", orden: { tipo: "estres", opciones: { ...o.opciones, rampa: true } } }, deshacer);
+        return { texto: `${textoLimite(l)}${l.llenado ? ` ${textoLlenado(l)}${lineaRed(x.estres)}` : ""}\nSon estimaciones para planear; se validan midiendo el canal en una red piloto.`, acciones };
+      }),
+    };
+  }
+  const lista = o.centros?.length ? centros.filter((c) => o.centros!.includes(c.id)) : centros;
+  return {
+    texto: `Busco el límite de ${lista.length === 1 ? lista[0].nombre : `cada punto (${lista.length})`}, uno a la vez: ${como}.${lista.some((c) => !c.personas) ? ` A los que no tienen gente les pongo primero ${ent(o.n ?? MUESTRA_PUNTO)} de muestra.` : ""}${o.llenar ? " Después los lleno hasta su límite y pruebo toda la red junta." : ""} Tardo unos segundos.`,
+    deshacer: antes,
+    luego: (async (): Promise<Respuesta> => {
+      const x = await api.evaluarPuntos({ centros: o.centros, n: o.n, radioKm, opciones: o.opciones });
+      if (x.error || !x.limites.length) return { texto: x.error ?? "No pude buscar los límites.", acciones: [deshacer] };
+      const partes = [`Límite de cada punto (uno a la vez, con los demás como están):\n${x.limites.map((l) => `• ${textoLimite(l, true)}`).join("\n")}`];
+      if (o.llenar) {
+        const llenables = x.limites.filter((l) => !l.motivo && !l.redYaFalla && l.personasSeguro !== null);
+        for (const l of llenables) api.poblarZonas({ centros: [l.id], n: Math.min(MAX_POR_ZONA, l.personasSeguro!), radioKm });
+        await api.esperarResultado();
+        const e = await api.probarEstres({ ...o.opciones, rampa: true });
+        if (e && !e.motivo) {
+          partes.push(
+            `Llené ${llenables.length === 1 ? "el punto" : `los ${llenables.length} puntos`} hasta su límite al mismo tiempo (${ent(llenables.reduce((s, l) => s + Math.min(MAX_POR_ZONA, l.personasSeguro!), 0))} personas): ${e.estado === "revienta" ? "juntos se revienta" : e.estado === "lento" ? "juntos aguanta, pero lento" : "juntos aguanta"} (${pct(e.completosPct)} % de los mensajes con respuesta), porque comparten el canal.${e.rampa?.usuariosMax !== null && e.rampa?.usuariosMax !== undefined ? ` Para que toda la malla quede estable a la vez: ~${ent(e.rampa.usuariosMax)} personas en total.` : ""}`,
+          );
+        }
+      } else partes.push("Si todos se llenan a la vez comparten el canal y aguantan menos: «¿hasta dónde aguanta toda la malla?» lo mide con la red subiendo junta.");
+      partes.push("Son estimaciones para planear; se validan midiendo el canal en una red piloto.");
+      return {
+        texto: partes.join("\n"),
+        acciones: [...(o.llenar ? [] : [{ texto: "Llenar cada punto hasta su límite", accion: "orden" as const, orden: { tipo: "limite" as const, centros: o.centros, radioKm, llenar: true, opciones: o.opciones } }]), { texto: "¿Hasta dónde aguanta toda la malla?", accion: "orden" as const, orden: { tipo: "estres" as const, opciones: { ...o.opciones, rampa: true } } }, deshacer],
+      };
+    })(),
+  };
+}
+
 /* ───────────── Dimensionamiento de Trama ───────────── */
 
 const sinTildes = (t: string) => t.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
@@ -478,7 +567,7 @@ function terrenoEn(tn: string): TerrenoTrama | null {
 }
 
 function interpretarTrama(texto: string, tn: string, api: Api): Orden | null {
-  const pideCosto = /\b(cuanto (cuesta|vale|sale|costaria|valdria|saldria)|costo|costos|presupuesto|inversion|dimension\w*|cuant\w* (repetidores|sitios|torres|starlink|radios|gateways)|que se necesita|que necesito|cuanta infraestructura|cubrir|cubriria|llevar la red|red de pagos)\b/.test(tn);
+  const pideCosto = /\b(cuanto (cuesta|vale|sale|costaria|valdria|saldria)|costo|costos|presupuesto|inversion|dimension\w*|cuant\w* (repetidores|sitios|torres|starlink|radios|gateways)|que se necesita|que necesito|cuanta infraestructura|cubrir|cubriria|llevar la red|red de pagos|red de comunicacion)\b/.test(tn);
   if (!pideCosto) return null;
   const p = api.parametros();
   const sf = sfEn(tn, p);
@@ -502,7 +591,7 @@ function textoDimension(d: Dimension, titulo: string, sf: SfTrama, nodo: NodoUsu
   return [
     `${titulo}: ${ent(d.usuarios)} usuarios en ${ent(d.areaKm2)} km² (${terreno}, SF${sf}, billetera ${nodoTxt}).`,
     `Cada repetidor cubre ~${f1(d.radioKm)} km de radio (${ent(d.celdaKm2)} km² por celda hexagonal); manda la ${d.manda}.`,
-    `Se necesitan ${ent(d.repetidores)} repetidores solares (P1 + antena 8 dBi en tubo de 6 m), ${ent(d.sitios)} ${d.sitios === 1 ? "sitio gateway" : "sitios gateway"} (torre de 12 m, mini PC N100 y hasta 4 radios Heltec T114), ${ent(d.radios)} radios de pagos, ${ent(d.starlinks)} Starlink y ${ent(d.enlaces)} enlaces WiFi punto a punto.`,
+    `Se necesitan ${ent(d.repetidores)} repetidores solares (P1 + antena 8 dBi en tubo de 6 m), ${ent(d.sitios)} ${d.sitios === 1 ? "sitio gateway" : "sitios gateway"} (torre de 12 m, mini PC N100 y hasta 4 radios Heltec T114), ${ent(d.radios)} radios de gateway, ${ent(d.starlinks)} Starlink y ${ent(d.enlaces)} enlaces WiFi punto a punto.`,
     `Inversión: ${pesosTrama(d.costo.total)} (sitios ${pesosTrama(d.costo.sitios)}, radios ${pesosTrama(d.costo.radios)}, repetidores ${pesosTrama(d.costo.repetidores)}, internet ${pesosTrama(d.costo.internet)}, billeteras ${pesosTrama(d.costo.nodos)}, instalación ${pesosTrama(d.costo.instalacion)} y transporte ${pesosTrama(d.costo.transporte)}); ${pesosTrama(d.porUsuario)} por usuario.`,
     `Operación: ${pesosTrama(d.mensual)} al mes (${pesosTrama(d.mensualPorUsuario)} por usuario); con la inversión pagada en ${OPERACION_TRAMA.aniosInversion} años, ${pesosTrama(d.totalMesPorUsuario)} por usuario al mes.`,
     "Son cuentas de planeación del documento de Trama; el diseño fino sale de simular el relieve real aquí.",
@@ -535,11 +624,13 @@ function ejecutarTrama(o: Extract<Orden, { tipo: "trama-departamento" | "trama-d
 
 /** Órdenes de población, capacidad y dimensionamiento de Trama (null si el texto no es de esto). */
 export function interpretarCapacidad(texto: string, tn: string, api: Api): Orden | null {
-  return interpretarZonas(texto, tn, api) ?? interpretarEstres(texto, tn) ?? interpretarCarga(texto, tn) ?? interpretarPoblar(texto, tn, api) ?? interpretarTrama(texto, tn, api);
+  return interpretarLimite(texto, tn, api) ?? interpretarZonas(texto, tn, api) ?? interpretarEstres(texto, tn) ?? interpretarCarga(texto, tn) ?? interpretarPoblar(texto, tn, api) ?? interpretarTrama(texto, tn, api);
 }
 
-export function ejecutarCapacidad(o: Extract<Orden, { tipo: "poblar" | "quitar-pobladas" | "carga" | "zonas" | "quitar-zonas" | "estres" | "trama-departamento" | "trama-dimensionar" }>, api: Api): ResultadoOrden {
+export function ejecutarCapacidad(o: Extract<Orden, { tipo: "poblar" | "quitar-pobladas" | "carga" | "zonas" | "quitar-zonas" | "estres" | "limite" | "trama-departamento" | "trama-dimensionar" }>, api: Api): ResultadoOrden {
   switch (o.tipo) {
+    case "limite":
+      return ejecutarLimite(o, api);
     case "zonas":
       return ejecutarZonas(o, api);
     case "quitar-zonas": {
