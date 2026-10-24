@@ -447,7 +447,7 @@ await flujo(
     await page.getByRole("button", { name: "Sí, muéstreme" }).click();
     const menu = page.getByRole("region", { name: "Conversación con Melki" }).getByRole("group", { name: "Tours guiados" });
     await menu.waitFor();
-    afirmar((await menu.getByRole("button").count()) === 8, "El menú debería tener 8 tours");
+    afirmar((await menu.getByRole("button").count()) === 9, "El menú debería tener 9 tours");
     afirmar(/^Tutorial básico \(recomendado\)/.test(await menu.getByRole("button").first().innerText()), "El tutorial básico debería ir primero");
     await foto("menu");
     await menu.getByRole("button", { name: /^Conocer la pantalla/ }).click();
@@ -612,7 +612,7 @@ await flujo(
     await page.waitForFunction(() => Number(document.querySelector("[data-rutas-vivas]")?.dataset.rutasVivas) >= 2 && document.querySelector("[data-animacion]")?.dataset.animacion === "si", null, { timeout: 15000 });
     await page.waitForSelector(".pieza.transmite, .pieza-ia.piensa", { state: "attached", timeout: 15000 });
     await page.locator("[data-tour=alcance-referencia]").getByText(/Repetidor de 6 m → gente/).waitFor();
-    await page.getByRole("button", { name: "Cómo se juega" }).waitFor();
+    await page.getByRole("button", { name: "Cómo funciona" }).waitFor();
     await page.locator('[aria-label="Persona Persona 3"]').waitFor();
     await page.getByText("Cómo leer el mapa").waitFor();
     await foto("malla");
@@ -704,19 +704,19 @@ await flujo(
     const envio = page.locator("[data-tour=enviar-mensaje]");
     await envio.getByRole("button", { name: "Enviar" }).click();
     const viaje = page.locator("[data-tour=viaje-mensaje]");
-    await viaje.getByText("El pago llega al gateway").waitFor();
-    afirmar(/de 3 permitidos/.test(await viaje.innerText()) && /Con los 4 intentos/.test(await viaje.innerText()) && /orden firmada de 13\d bytes/.test(await viaje.innerText()), `Faltan datos del viaje: ${await viaje.innerText()}`);
+    await viaje.getByText("El mensaje llega al gateway").waitFor();
+    afirmar(/de 3 permitidos/.test(await viaje.innerText()) && /Con los 4 intentos/.test(await viaje.innerText()) && /13\d bytes \(el tamaño de una orden de pago\)/.test(await viaje.innerText()), `Faltan datos del viaje: ${await viaje.innerText()}`);
     await page.locator(".paquete-mensaje").waitFor({ state: "attached" });
     await foto("viajando");
     // Llega al gateway, la IA «piensa» y la respuesta vuelve por la misma ruta
     await page.waitForSelector(".pieza-ia.piensa", { state: "attached", timeout: 20000 });
     await page.waitForSelector(".paquete-mensaje.respuesta", { state: "attached", timeout: 20000 });
     await page.waitForSelector(".paquete-mensaje.entregado", { state: "attached", timeout: 25000 });
-    afirmar(/Comprobante/.test(await viaje.innerText()), "Falta el comprobante en el viaje");
+    afirmar(/Respuesta/.test(await viaje.innerText()) && /WhatsApp/.test(await viaje.innerText()), "Falta la respuesta (pago, WhatsApp o IA) en el viaje");
     // Desde la persona sin cobertura no llega
     await envio.getByLabel("Desde").selectOption({ label: "Persona 3" });
     await envio.getByRole("button", { name: "Enviar" }).click();
-    await viaje.getByText("El pago no llega").waitFor();
+    await viaje.getByText("El mensaje no llega").waitFor();
     afirmar(/No tiene ruta/.test(await viaje.innerText()), "Debería decir que no tiene ruta");
     await foto("no-llega");
   },
@@ -772,7 +772,7 @@ await flujo(
     await chat.getByText(/Listo: puse/).waitFor();
     await chat.getByText(/3 de 3 personas conectadas/).waitFor({ timeout: 90000 });
     await decir("envía un pago desde Persona 3");
-    await chat.getByText(/Envié un pago de prueba desde «Persona 3»: la orden firmada \(\d+ bytes\) llega al gateway/).waitFor();
+    await chat.getByText(/Envié un mensaje de prueba desde «Persona 3» del tamaño de un pago \(la orden firmada, \d+ bytes\): llega al gateway/).waitFor();
     await decir("¿cómo viaja un pago?");
     await chat.getByText(/Así viaja un pago en MeshCore/).waitFor();
     await decir("pon una persona en 4.35, -72.9");
@@ -805,7 +805,7 @@ await flujo(
     // Varias órdenes en un mensaje, con posiciones relativas y referencias («la persona»)
     await decir("pon una persona a 3 km al sur del gateway y envía un mensaje desde la persona");
     await chat.getByText(/^Paso 1 de 2: Listo: puse la persona/).waitFor({ timeout: 30000 });
-    await chat.getByText(/^Paso 2 de 2: Envié un pago de prueba desde «Persona 1»/).waitFor({ timeout: 120000 });
+    await chat.getByText(/^Paso 2 de 2: Envié un mensaje de prueba desde «Persona 1»/).waitFor({ timeout: 120000 });
     await chat.getByText(/^Listo, hice los 2 pasos/).waitFor({ timeout: 30000 });
     await decir("muestra las vías y quita los ríos");
     await chat.getByText(/^Paso 2 de 2: Listo: el mapa ya no muestra los ríos/).waitFor({ timeout: 30000 });
@@ -957,7 +957,7 @@ await flujo(
 
     // ¿Hasta cuántos aguanta?
     await carga.getByRole("button", { name: /Hasta cuántos aguanta/ }).click();
-    await res.getByRole("img", { name: /Pagos completos según cuántos salen al tiempo/ }).waitFor({ timeout: 120000 });
+    await res.getByRole("img", { name: /Completos según cuántos salen al tiempo/ }).waitFor({ timeout: 120000 });
     afirmar(/Se revienta desde \d+/.test(await res.innerText()) || /No se revienta/.test(await res.innerText()), `La curva no dice dónde se revienta: ${await res.innerText()}`);
     await res.scrollIntoViewIfNeeded();
     await foto("curva");
@@ -1004,9 +1004,9 @@ await flujo(
     const estres = resultados.locator("[data-tour=prueba-estres]");
     await estres.getByRole("button", { name: /^Probar la hora pico/ }).click();
     const res = estres.locator("[data-tour=resultado-estres]");
-    await res.getByText(/% de los pagos de la hora pico con comprobante/).waitFor({ timeout: 90000 });
+    await res.getByText(/% de los mensajes de la hora pico con respuesta/).waitFor({ timeout: 90000 });
     const texto = await res.innerText();
-    afirmar(/Pagos por hora/.test(texto) && /Canal del gateway/.test(texto) && /Ancho de banda útil/.test(texto) && /Zona por zona/.test(texto), `Faltan cifras del estrés: ${texto.slice(0, 300)}`);
+    afirmar(/Mensajes por hora/.test(texto) && /Canal del gateway/.test(texto) && /Ancho de banda útil/.test(texto) && /Zona por zona/.test(texto), `Faltan cifras del estrés: ${texto.slice(0, 300)}`);
     afirmar(/Gateway/.test(texto) && /Repetidor 1/.test(texto) && /atiende hasta \d/.test(texto) && /energía [\d,]+ de \d+ Wh\/día/.test(texto), `Falta el detalle por zona: ${texto.slice(0, 500)}`);
     await page.locator(".etiqueta-estres").first().waitFor({ timeout: 10000 });
     afirmar((await page.locator(".etiqueta-estres").count()) >= 1, "Faltan las zonas pintadas en el mapa");
@@ -1016,7 +1016,7 @@ await flujo(
     // ¿Hasta dónde aguanta cada repetidor?, comparando ajustes de radio
     await estres.getByText("Comparar ajustes de radio").click();
     await estres.getByRole("button", { name: /Hasta dónde aguanta cada repetidor/ }).click();
-    await res.getByRole("img", { name: /Pagos por hora entregados según los pedidos/ }).waitFor({ timeout: 120000 });
+    await res.getByRole("img", { name: /Mensajes por hora entregados según los pedidos/ }).waitFor({ timeout: 120000 });
     const rampa = await res.innerText();
     afirmar(/Toda la malla aguanta sin demora hasta ~[\d.]+ personas|no aguanta ni con lo mínimo/.test(rampa) && /(Aguanta sin demora hasta|Aguanta más de) ~[\d.]+ personas/.test(rampa), `La rampa no dice cuánto aguanta: ${rampa.slice(0, 400)}`);
     afirmar(/La misma hora pico con otro ajuste de radio/.test(rampa) && /SF9 · 250 kHz/.test(rampa), "Falta la comparación de ajustes de radio");
@@ -1031,11 +1031,37 @@ await flujo(
     await page.locator("[data-tour=tarjeta-nodo] [data-tour=zona-rapida]").waitFor();
     await foto("ficha-repetidor");
     // Repartir de nuevo solo la del repetidor (500 personas a 3 km)
-    await rapida.getByLabel(/Personas alrededor de Repetidor 1/).selectOption("500");
+    await rapida.getByLabel(/Personas alrededor de Repetidor 1/).fill("500");
     await rapida.getByLabel("Radio de la zona").selectOption("3");
     await rapida.getByRole("button", { name: "Repartir de nuevo" }).click();
     await zonas.getByText(/alrededor de Repetidor 1, a 3 km/).waitFor({ timeout: 20000 });
     await esperarRed(page);
+
+    // El punto: la cantidad que se quiera, «Poner y probar», «¿Cuántas aguanta?» y «Llenar hasta el límite» (v12.2)
+    if (!(await rapida.count())) await page.locator("[data-tour=lista-piezas]").getByRole("button", { name: /Repetidor 1/ }).first().click();
+    await rapida.waitFor();
+    await rapida.getByLabel(/Personas alrededor de Repetidor 1/).fill("220");
+    await rapida.getByRole("button", { name: /Poner y probar/ }).click();
+    await rapida.getByText(/Hora pico: .* · red (estable|lenta|se revienta)/).waitFor({ timeout: 120000 });
+    afirmar(/Zona de popularidad · \d{2,3} personas/.test(await rapida.innerText()), `La zona no quedó con ~220 personas: ${await rapida.innerText()}`);
+    await rapida.getByRole("button", { name: /¿Cuántas aguanta\?/ }).click();
+    const limite = rapida.locator("[data-tour=limite-punto]");
+    await limite.waitFor({ timeout: 120000 });
+    const tLimite = await limite.innerText();
+    afirmar(/Repetidor 1 (aguanta sin demora hasta ~[\d.]+ personas|aguanta más de [\d.]+ personas|no aguanta)|la red no aguanta/.test(tLimite), `El punto no dice cuántas aguanta: ${tLimite}`);
+    const bloque = estres.locator("[data-tour=limite-estres]");
+    await bloque.waitFor({ timeout: 10000 });
+    afirmar(/Límite de Repetidor 1/.test(await bloque.innerText()) && /con el resto de la red como está/.test(await bloque.innerText()), "Falta el límite del punto en la prueba de estrés");
+    await bloque.getByRole("img", { name: /Mensajes completos según las personas en Repetidor 1/ }).waitFor({ timeout: 10000 });
+    await foto("limite-punto");
+    const llenar = rapida.getByRole("button", { name: /Llenar hasta el límite \(/ });
+    if (await llenar.count()) {
+      await llenar.click();
+      await rapida.getByText(/Lo llené con [\d.]+ personas y simulé la hora pico/).waitFor({ timeout: 180000 });
+      afirmar(/el punto (estable|lento|se revienta), la red (estable|lenta|se revienta)/.test(await rapida.innerText()), `No cuenta cómo quedó al llenarlo: ${await rapida.innerText()}`);
+      await esperarRed(page);
+      await foto("llenar-limite");
+    }
 
     // Por chat, como lo pidió el Inge
     await page.getByRole("button", { name: /Abrir a Melki/ }).click();
@@ -1045,6 +1071,11 @@ await flujo(
     await chat.getByText(/puse \d+ personas en 2 zonas/).first().waitFor({ timeout: 30000 });
     await chat.getByText(/Prueba de estrés de la hora pico/).waitFor({ timeout: 150000 });
     await foto("melki-estres");
+    await chat.getByLabel("Pregunta para Melki").fill("¿Cuántas personas aguanta el Repetidor 1?");
+    await page.keyboard.press("Enter");
+    await chat.getByText(/Busco cuántas personas aguanta Repetidor 1/).waitFor({ timeout: 30000 });
+    await chat.getByText(/Repetidor 1 (aguanta sin demora hasta ~[\d.]+ personas|aguanta más de|no aguanta)|la red no aguanta/).first().waitFor({ timeout: 150000 });
+    await foto("melki-limite");
 
     // Quitar las zonas
     await zonas.getByRole("button", { name: "Quitar las zonas" }).click();
@@ -1054,6 +1085,209 @@ await flujo(
     afirmar(segZonas < 60, `Poner y simular las zonas tardó ${segZonas.toFixed(1)} s`);
   },
   { sembrar: true },
+);
+
+// Manos libres: micrófono y voz de mentira. window.__voz.decir(texto) «habla» al reconocedor (como Chrome: un parcial
+// y luego el final, en un resultado nuevo); lo que Melki dice queda en window.__voz.dicho.
+const manosLibresDeMentira = () => {
+  const voz = { dicho: [], activo: null, inicios: 0 };
+  window.__voz = voz;
+  class Reconocedor {
+    constructor() {
+      this.lang = "";
+      this.resultados = [];
+    }
+    start() {
+      voz.activo = this;
+      voz.inicios++;
+    }
+    stop() {
+      if (voz.activo === this) voz.activo = null;
+      setTimeout(() => this.onend?.(), 30);
+    }
+    abort() {
+      if (voz.activo === this) voz.activo = null;
+      this.onend?.();
+    }
+  }
+  Reconocedor.available = async () => "unavailable";
+  window.SpeechRecognition = Reconocedor;
+  window.webkitSpeechRecognition = Reconocedor;
+  voz.decir = (texto) => {
+    const r = voz.activo;
+    if (!r) return false;
+    const i = r.resultados.length;
+    r.resultados.push({ isFinal: false, 0: { transcript: texto.split(" ").slice(0, 2).join(" ") } });
+    r.onresult?.({ resultIndex: i, results: [...r.resultados] });
+    setTimeout(() => {
+      r.resultados[i] = { isFinal: true, 0: { transcript: texto } };
+      r.onresult?.({ resultIndex: i, results: [...r.resultados] });
+    }, 150);
+    return true;
+  };
+  // El navegador corta la escucha de vez en cuando
+  voz.cortar = () => {
+    const r = voz.activo;
+    voz.activo = null;
+    r?.onend?.();
+  };
+  let cola = [];
+  let sonando = false;
+  const siguiente = () => {
+    const u = cola[0];
+    if (!u) {
+      sonando = false;
+      return;
+    }
+    sonando = true;
+    setTimeout(() => {
+      if (cola[0] !== u) return;
+      cola.shift();
+      u.onend?.();
+      siguiente();
+    }, 120 + u.text.length * 2);
+  };
+  const sintesis = {
+    get speaking() {
+      return sonando;
+    },
+    getVoices: () => [],
+    speak(u) {
+      voz.dicho.push(u.text);
+      cola.push(u);
+      if (!sonando) siguiente();
+    },
+    cancel() {
+      const c = cola;
+      cola = [];
+      sonando = false;
+      c.forEach((u) => u.onerror?.({ error: "interrupted" }));
+    },
+  };
+  Object.defineProperty(window, "speechSynthesis", { value: sintesis, configurable: true });
+  window.SpeechSynthesisUtterance = class {
+    constructor(text) {
+      this.text = text;
+    }
+  };
+};
+
+await flujo(
+  "manos-libres",
+  async (page, foto) => {
+    await esperarSimulacion(page);
+    const panel = page.locator("[data-tour=panel-izquierdo]");
+    // Panel izquierdo plegable: el botón junto a «Modo avanzado» lo oculta y el de la barra de arriba lo devuelve
+    await page.getByRole("button", { name: "Ocultar el panel izquierdo" }).click();
+    await panel.waitFor({ state: "hidden" });
+    await foto("panel-plegado");
+    await page.getByRole("button", { name: "Mostrar el panel izquierdo" }).click();
+    await panel.waitFor({ state: "visible" });
+
+    const hud = page.locator("[data-tour=hud-voz]");
+    const estadoHud = () => hud.getAttribute("data-estado");
+    const esperarEstado = (re, timeout = 20000) =>
+      page.waitForFunction((s) => new RegExp(s).test(document.querySelector("[data-tour=hud-voz]")?.getAttribute("data-estado") ?? ""), re.source, { timeout });
+    const decir = async (texto) => afirmar(await page.evaluate((x) => window.__voz.decir(x), texto), `El micrófono no estaba escuchando al decir «${texto}»`);
+    const dicho = () => page.evaluate(() => window.__voz.dicho.join(" | "));
+    // Como una persona: deja una pausa después de que Melki termina de hablar (lo que llega enseguida se toma como eco)
+    const callado = async () => {
+      await page.waitForFunction(() => !window.speechSynthesis.speaking, null, { timeout: 20000 });
+      await page.waitForTimeout(900);
+    };
+
+    // Activar: saluda (en voz alta) y espera su nombre
+    await page.getByRole("button", { name: "Activar manos libres" }).click();
+    await hud.waitFor();
+    await esperarEstado(/^esperando$/);
+    await callado();
+    afirmar(/Modo manos libres activo/.test(await dicho()), `No saludó en voz alta: ${await dicho()}`);
+    afirmar((await page.getByRole("button", { name: "Apagar manos libres" }).first().getAttribute("aria-pressed")) === "true", "El botón de la barra debería quedar encendido");
+    await foto("activo");
+
+    // Sin su nombre no hace nada
+    const nodos = await nodosEnLista(page);
+    await decir("inscribe un nodo antena en 4.3, -73.4");
+    await page.waitForTimeout(1500);
+    afirmar((await nodosEnLista(page)) === nodos && (await estadoHud()) === "esperando", "Sin «Melki» no debería hacer nada");
+
+    // Con su nombre y los números en palabras: lo hace y lo dice
+    await decir("Hola Melki, inscribe un nodo antena en cuatro punto dos cinco, menos setenta y tres punto tres cero");
+    await page.waitForFunction((n) => document.querySelectorAll("[data-tour=lista-antenas] > li").length === n + 1, nodos, { timeout: 20000 });
+    await page.waitForFunction(() => /inscribí el nodo antena/.test(window.__voz.dicho.join(" ")), null, { timeout: 20000 });
+    await foto("orden-por-voz");
+    await esperarSimulacion(page);
+    await esperarEstado(/^(atento|esperando)$/);
+    await callado();
+
+    // Lo que empieza a oírse mientras Melki habla es su propia voz (eco): no lo toma como pedido
+    await decir("Hola Melki, ¿qué puedes hacer?");
+    await esperarEstado(/^hablando$/);
+    await decir("Hola Melki, inscribe un nodo antena en 4.3, -73.4");
+    await esperarEstado(/^(atento|esperando)$/);
+    await callado();
+    afirmar((await nodosEnLista(page)) === nodos + 1, "No debería tomar como pedido lo que se oyó mientras hablaba");
+    afirmar(/Le dejé el detalle escrito/.test(await dicho()), "La respuesta larga debería ir resumida en voz");
+
+    // Seguir la conversación sin repetir el nombre: «más detalle» y «sí, hazlo» (el botón «Ver los tours guiados»)
+    await decir("más detalle");
+    await page.waitForFunction(() => /para el Chocó/.test(window.__voz.dicho.join(" ")), null, { timeout: 15000 });
+    await esperarEstado(/^atento$/);
+    await callado();
+    await decir("sí, hazlo");
+    const chat = page.getByRole("region", { name: "Conversación con Melki" });
+    await chat.getByText("¿Qué tour quiere hacer?", { exact: false }).last().waitFor({ timeout: 15000 });
+    afirmar((await chat.locator("[title='Dicho por voz']").count()) >= 3, "Los pedidos por voz deberían quedar marcados en la conversación");
+    await foto("conversacion");
+    await page.getByRole("button", { name: "Cerrar conversación" }).click();
+    await esperarEstado(/^(atento|esperando)$/);
+    await callado();
+
+    // Pantalla limpia por voz y de vuelta
+    await decir("Oye Melki, pantalla limpia");
+    await panel.waitFor({ state: "hidden", timeout: 15000 });
+    await page.locator("aside[aria-label=Resultados]").waitFor({ state: "hidden", timeout: 15000 });
+    await callado();
+    await foto("pantalla-limpia");
+    // El navegador corta la escucha: se vuelve a encender sola
+    const inicios = await page.evaluate(() => window.__voz.inicios);
+    await page.evaluate(() => window.__voz.cortar());
+    await page.waitForFunction((n) => window.__voz.inicios > n && window.__voz.activo, inicios, { timeout: 10000 });
+    await esperarEstado(/^(atento|esperando)$/);
+    await decir("Hey Melki, muestra los paneles");
+    await panel.waitFor({ state: "visible", timeout: 15000 });
+    await page.locator("aside[aria-label=Resultados]").waitFor({ state: "visible", timeout: 15000 });
+    await callado();
+
+    // «Deja de escuchar»: se despide y se apaga
+    await decir("Melki, deja de escuchar");
+    await hud.waitFor({ state: "detached", timeout: 15000 });
+    afirmar(/dejo de escuchar/.test(await dicho()), "Debería despedirse");
+    afirmar((await page.getByRole("button", { name: "Activar manos libres" }).first().getAttribute("aria-pressed")) === "false", "El botón de la barra debería quedar apagado");
+    afirmar(!(await page.evaluate(() => window.__voz.activo)), "El micrófono debería quedar apagado");
+  },
+  { preparar: (page) => page.addInitScript(manosLibresDeMentira) },
+);
+
+await flujo(
+  "manos-libres-celular",
+  async (page, foto) => {
+    await page.locator("[data-tour=mapa]").waitFor();
+    await page.waitForTimeout(1500);
+    await page.waitForFunction(() => !document.querySelector("[role=progressbar]"), null, { timeout: 90000 });
+    await page.getByRole("button", { name: "Activar manos libres" }).click();
+    const hud = page.locator("[data-tour=hud-voz]");
+    await hud.waitFor();
+    await page.waitForFunction(() => document.querySelector("[data-tour=hud-voz]")?.getAttribute("data-estado") === "esperando", null, { timeout: 20000 });
+    const ancho = await page.evaluate(() => document.documentElement.scrollWidth);
+    afirmar(ancho <= 390, `La página no debe desbordarse a lo ancho (${ancho})`);
+    const b = await hud.boundingBox();
+    afirmar(b.x >= 0 && b.x + b.width <= 390, "La barra de voz debe caber en la pantalla");
+    await foto("hud");
+    await page.getByRole("button", { name: "Apagar manos libres" }).first().click();
+    await hud.waitFor({ state: "detached" });
+  },
+  { tamano: { width: 390, height: 844 }, preparar: (page) => page.addInitScript(manosLibresDeMentira) },
 );
 
 let fallos = 0;
