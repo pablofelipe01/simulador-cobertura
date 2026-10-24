@@ -1,4 +1,4 @@
-// Constantes del modelo de propagación y de la red Meshtastic (LoRa 915 MHz).
+// Constantes del modelo de propagación y de la red MeshCore de Trama (LoRa 915–928 MHz).
 // El modelo fue calibrado contra simulaciones de Radio Mobile (error típico ≈ 5 dB).
 
 /** Radio terrestre medio (m). */
@@ -24,15 +24,11 @@ export const DISTANCIA_MINIMA_M = 30;
 /** Banda de uso libre reconocida por la ANE (Resolución 000028 de 2026). */
 export const BANDA_LIBRE_MHZ = { min: 915, max: 928 } as const;
 
-export type PresetId =
-  | "SHORT_TURBO"
-  | "SHORT_FAST"
-  | "SHORT_SLOW"
-  | "MEDIUM_FAST"
-  | "MEDIUM_SLOW"
-  | "LONG_FAST"
-  | "LONG_MODERATE"
-  | "LONG_SLOW";
+/**
+ * Ajustes de radio de MeshCore (ancho de banda, factor de dispersión y tasa de código 4/5). Los de 250 kHz son los
+ * de Trama (SF11 para alcance; SF10 y SF9 para capacidad); los de 62,5 kHz son los de la comunidad MeshCore.
+ */
+export type PresetId = "SF11_250" | "SF10_250" | "SF9_250" | "SF7_62" | "SF8_62" | "SF9_62" | "SF10_62";
 
 export type Preset = {
   id: PresetId;
@@ -41,26 +37,32 @@ export type Preset = {
   anchoBandaKhz: number;
   /** Sensibilidad del receptor (dBm) = −174 + 10·log10(BW) + NF(6 dB) + SNR límite. */
   sensibilidadDbm: number;
-  /** Velocidad aproximada de datos (kbps) según la documentación de Meshtastic. */
+  /** Velocidad de datos LoRa (kbps) = SF · BW / 2^SF · 4 / CR. */
   velocidadKbps: number;
-  /** Tasa de código LoRa 4/cr (5 = 4/5, 8 = 4/8), como en el firmware de Meshtastic. */
+  /** Tasa de código LoRa 4/cr (5 = 4/5). */
   cr: number;
+  /** Para qué sirve, en una línea. */
+  uso: string;
 };
 
+const velocidad = (sf: number, bw: number, cr: number) => Math.round(((sf * bw) / 2 ** sf) * (4 / cr) * 1000) / 1000;
+const sensibilidad = (sf: number, bw: number) => Math.round((-174 + 10 * Math.log10(bw * 1000) + 6 - 2.5 * (sf - 4)) * 10) / 10;
+const preset = (id: PresetId, nombre: string, sf: number, bw: number, uso: string, s = sensibilidad(sf, bw)): Preset => ({ id, nombre, sf, anchoBandaKhz: bw, sensibilidadDbm: s, velocidadKbps: velocidad(sf, bw, 5), cr: 5, uso });
+
 export const PRESETS: readonly Preset[] = [
-  { id: "SHORT_TURBO", nombre: "Short Turbo", sf: 7, anchoBandaKhz: 500, sensibilidadDbm: -118.5, velocidadKbps: 21.88, cr: 5 },
-  { id: "SHORT_FAST", nombre: "Short Fast", sf: 7, anchoBandaKhz: 250, sensibilidadDbm: -121.5, velocidadKbps: 10.94, cr: 5 },
-  { id: "SHORT_SLOW", nombre: "Short Slow", sf: 8, anchoBandaKhz: 250, sensibilidadDbm: -124, velocidadKbps: 6.25, cr: 5 },
-  { id: "MEDIUM_FAST", nombre: "Medium Fast", sf: 9, anchoBandaKhz: 250, sensibilidadDbm: -126.5, velocidadKbps: 3.52, cr: 5 },
-  { id: "MEDIUM_SLOW", nombre: "Medium Slow", sf: 10, anchoBandaKhz: 250, sensibilidadDbm: -129, velocidadKbps: 1.95, cr: 5 },
-  // Fórmula: −131,5 dBm; se usa −131 dBm, el mismo valor de las simulaciones de Radio Mobile que calibraron el modelo.
-  { id: "LONG_FAST", nombre: "Long Fast", sf: 11, anchoBandaKhz: 250, sensibilidadDbm: -131, velocidadKbps: 1.07, cr: 5 },
-  { id: "LONG_MODERATE", nombre: "Long Moderate", sf: 11, anchoBandaKhz: 125, sensibilidadDbm: -134.5, velocidadKbps: 0.34, cr: 8 },
-  { id: "LONG_SLOW", nombre: "Long Slow", sf: 12, anchoBandaKhz: 125, sensibilidadDbm: -137, velocidadKbps: 0.18, cr: 8 },
+  // SF11 / 250 kHz da −131,5 dBm por fórmula; se usa −131 dBm, el mismo valor de las simulaciones de Radio Mobile
+  // que calibraron el modelo (mismos ajustes de radio).
+  preset("SF11_250", "Trama SF11 · 250 kHz (alcance)", 11, 250, "El de Trama: 150 usuarios por frecuencia y unos 10 km por repetidor en plano.", -131),
+  preset("SF10_250", "Trama SF10 · 250 kHz", 10, 250, "280 usuarios por frecuencia; el alcance baja a ~80 %.") ,
+  preset("SF9_250", "Trama SF9 · 250 kHz (capacidad)", 9, 250, "500 usuarios por frecuencia; el alcance baja a ~65 %."),
+  preset("SF7_62", "MeshCore SF7 · 62,5 kHz", 7, 62.5, "El recomendado en EE. UU. (allá en 910,525 MHz): rápido, menos alcance."),
+  preset("SF8_62", "MeshCore SF8 · 62,5 kHz", 8, 62.5, "Rápido y un poco más de alcance."),
+  preset("SF9_62", "MeshCore SF9 · 62,5 kHz", 9, 62.5, "El equilibrado de la comunidad MeshCore: buen alcance, canal angosto."),
+  preset("SF10_62", "MeshCore SF10 · 62,5 kHz", 10, 62.5, "Más alcance; cada paquete ocupa el aire mucho más tiempo."),
 ];
 
 export function presetPorId(id: PresetId): Preset {
-  return PRESETS.find((p) => p.id === id) ?? PRESETS[5];
+  return PRESETS.find((p) => p.id === id) ?? PRESETS[0];
 }
 
 export type ClaseId = "buena" | "estable" | "media" | "baja" | "sin";
@@ -99,16 +101,24 @@ export const ENLACES = {
   sin: { minimoDb: -Infinity, nombre: "Sin enlace", color: "#D93A2E" },
 } as const;
 
-/** Límite de saltos por defecto de Meshtastic (hop_limit = 3; máximo 7). */
+/**
+ * Saltos máximos de diseño (enlaces desde el nodo hasta el gateway). MeshCore admite hasta 64 (flood.max), pero
+ * Trama diseña con «uno o dos saltos» de repetidores para que el pago vuelva en segundos.
+ */
 export const LIMITE_SALTOS_DEFECTO = 3;
-export const LIMITE_SALTOS_MAXIMO = 7;
+export const LIMITE_SALTOS_MAXIMO = 64;
 
-export type EquipoId = "nodo-solar-58" | "nodo-3dbi" | "portatil-2dbi" | "personalizado";
+export type EquipoId = "p1-8dbi" | "t114-8dbi" | "xiao" | "t1000" | "personalizado";
 
+/**
+ * Equipos de Trama (catálogo del cotizador). La pérdida de 1,2 dB es la del cable CFD400 de 3 m, el CFD200 de 1 m y
+ * los conectores. La ganancia de los nodos de las personas es una estimación (antena pequeña o interna).
+ */
 export const EQUIPOS: readonly { id: EquipoId; nombre: string; potenciaDbm: number; gananciaDbi: number; perdidaCableDb: number }[] = [
-  { id: "nodo-solar-58", nombre: "Nodo solar + antena de fibra 5,8 dBi", potenciaDbm: 22, gananciaDbi: 5.8, perdidaCableDb: 1 },
-  { id: "nodo-3dbi", nombre: "Nodo con antena de 3 dBi", potenciaDbm: 22, gananciaDbi: 3, perdidaCableDb: 1 },
-  { id: "portatil-2dbi", nombre: "Radio portátil 2 dBi", potenciaDbm: 22, gananciaDbi: 2, perdidaCableDb: 0 },
+  { id: "p1-8dbi", nombre: "Repetidor SenseCAP Solar P1 + antena 8 dBi", potenciaDbm: 22, gananciaDbi: 8, perdidaCableDb: 1.2 },
+  { id: "t114-8dbi", nombre: "Radio del gateway Heltec T114 + antena 8 dBi", potenciaDbm: 22, gananciaDbi: 8, perdidaCableDb: 1.2 },
+  { id: "xiao", nombre: "Billetera XIAO ESP32S3 + Wio-SX1262", potenciaDbm: 22, gananciaDbi: 2, perdidaCableDb: 0 },
+  { id: "t1000", nombre: "Tarjeta SenseCAP T1000-E", potenciaDbm: 22, gananciaDbi: 0, perdidaCableDb: 0 },
   { id: "personalizado", nombre: "Personalizado", potenciaDbm: 22, gananciaDbi: 5.8, perdidaCableDb: 1 },
 ];
 

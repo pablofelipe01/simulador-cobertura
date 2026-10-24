@@ -2,6 +2,8 @@
 import { crearWorker } from "./crear-worker";
 import type { Entrada, Fase, PuntoDestino, Salida } from "./protocolo";
 import type { Ajuste, PedidoAjuste } from "./ajuste";
+import type { CurvaCargaResultado, PedidoCarga, ResultadoCarga } from "./carga";
+import type { PedidoEstres, ResultadoEstres } from "./estres";
 import type { Diseno, PedidoDiseno } from "./diseno";
 import type { PedidoSiembra, Siembra } from "./siembra";
 import type { Inspeccion } from "./simulacion";
@@ -60,6 +62,12 @@ export class MotorCobertura {
       case "ajuste":
         p.resolver(m.ajuste);
         break;
+      case "carga":
+        p.resolver({ carga: m.carga, curva: m.curva });
+        break;
+      case "estres":
+        p.resolver(m.estres);
+        break;
       case "hgt":
         p.resolver({ archivos: m.archivos, errores: m.errores });
         break;
@@ -103,6 +111,16 @@ export class MotorCobertura {
   /** Ajuste inteligente: opciones para dejar la red factible con la mejor relación cobertura–costo. */
   ajustar(pedido: PedidoAjuste, relieve: FuenteRelieve) {
     return this.enviar<Ajuste>({ tipo: "ajustar", pedido, relieve });
+  }
+
+  /** Prueba de carga: N pagos o mensajes al tiempo y, si se pide, la curva hasta que la red se revienta. */
+  carga(pedido: PedidoCarga, curva = false) {
+    return this.enviar<{ carga: ResultadoCarga; curva: CurvaCargaResultado | null }>({ tipo: "carga", pedido, curva });
+  }
+
+  /** Prueba de estrés de la hora pico, repetidor por repetidor (y la rampa hasta que cada zona se revienta). */
+  estres(pedido: PedidoEstres, progreso?: (avance: number) => void) {
+    return this.enviar<ResultadoEstres>({ tipo: "estres", pedido }, [], progreso ? (_f, a) => progreso(a) : undefined);
   }
 
   /** Diseña la malla para cubrir un área (gateway y repetidores) con el relieve real. */

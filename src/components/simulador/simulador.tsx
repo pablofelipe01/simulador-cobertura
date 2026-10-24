@@ -12,8 +12,12 @@ import type { Api, OpcionesAjuste, OpcionesDiseno } from "@/components/melki/ord
 import { avisarMelki, tourPorId, type ApiTour, type IdTour, type Preparacion } from "@/components/melki/tours";
 import { CONFIG } from "@/lib/config";
 import { buscarLugares, cargarReferencia, textoUbicacion } from "@/lib/geo/referencia";
-import { PERMISOS_AJUSTE, type Ajuste, type PedidoAjuste } from "@/lib/radio/ajuste";
-import { EQUIPOS, META_UTIL_ESTUDIO_PCT } from "@/lib/radio/constantes";
+import { PERMISOS_AJUSTE, zonaDeRed, type Ajuste, type PedidoAjuste } from "@/lib/radio/ajuste";
+import { areaM2, margenEnPunto, poligonoCirculo } from "@/lib/radio/area";
+import { BYTES_PAGO, PEDIDO_CARGA_DEFECTO } from "@/lib/radio/carga";
+import { PEDIDO_ESTRES_DEFECTO } from "@/lib/radio/estres";
+import { puntosAlAzar } from "@/lib/radio/poblar";
+import { EQUIPOS, META_UTIL_ESTUDIO_PCT, UMBRAL_SERVICIO_DB } from "@/lib/radio/constantes";
 import { metrosPorGrado } from "@/lib/radio/geo";
 import { MotorCobertura } from "@/lib/radio/cliente";
 import { estadoRed, type EstadoRed } from "@/lib/radio/estado-red";
@@ -45,13 +49,15 @@ import {
   type TipoRelieve,
 } from "./estado";
 import { exportarCsv, exportarJson, exportarKmz } from "./exportar";
-import { Mapa, type AnimacionMensaje, type CapaSembrar, type PuntoMapa, type SolicitudVista } from "./mapa";
+import { Mapa, type AnimacionMensaje, type CapaSembrar, type PuntoMapa, type SolicitudVista, type ZonaMapa } from "./mapa";
 import type { FaseAjuste } from "./panel-ajuste";
 import { PanelAntenas } from "./panel-antenas";
 import { PanelParametros } from "./panel-parametros";
+import { CARGA_DEFECTO, MAX_POBLAR, PoblarPersonas, PruebaCarga, type AreaPoblar, type FaseCarga, type OpcionesCarga, type PedidoPoblar, type ResultadoPoblar } from "./panel-capacidad";
+import { COLOR_ESTADO, ESTRES_DEFECTO, MAX_POBLADAS, MAX_POR_ZONA, PruebaEstres, TEXTO_ESTADO, ZonaRapida, ZonasPopularidad, type CentroZona, type FaseEstres, type OpcionesEstres, type PedidoZonas, type ResultadoZonas } from "./panel-estres";
 import { PanelResultados } from "./panel-resultados";
 import { PanelSembrar, type FaseSiembra, type ViajeVisible } from "./panel-sembrar";
-import { ALTURA_REPETIDOR_DEFECTO, escenarioMalla, nombreLibre, nuevaPieza, piezaDe } from "./piezas";
+import { ALTURA_REPETIDOR_DEFECTO, ALTURAS_REPETIDOR, escenarioMalla, nombreLibre, nuevaPieza, piezaDe } from "./piezas";
 import { PerfilEnlace } from "./perfil-enlace";
 import { PerfilTerrenoPanel } from "./perfil-terreno";
 import { CoordenadasCursor, MenuContextual, TarjetaNodo, TarjetaPunto, type AccionPunto } from "./puntos-mapa";
@@ -61,7 +67,7 @@ import { Interruptor, Segmentado } from "./ui";
 type Pestana = "antenas" | "parametros";
 type Hoja = Pestana | "resultado" | "sembrar" | null;
 
-const TEXTO_FASE: Record<Fase, string> = { relieve: "Obteniendo el relieve", cobertura: "Calculando la cobertura", enlaces: "Analizando la malla" };
+const TEXTO_FASE: Record<Fase, string> = { relieve: "Obteniendo el relieve", cobertura: "Calculando la cobertura", enlaces: "Analizando la malla", estres: "Probando la hora pico" };
 
 function fuenteDe(relieve: TipoRelieve, hgt: string[]): FuenteRelieve {
   if (relieve === "plano") return { tipo: "plano" };
@@ -86,6 +92,54 @@ function areaObjetivoDe(e: Escenario): AreaObjetivo | null {
 }
 
 type ViajeGuardado = ViajeVisible & { firma: string; animacion: AnimacionMensaje };
+
+/** Radio de la «zona alrededor de la red» para poblar personas (km de cada gateway o repetidor). */
+const RADIO_ZONA_POBLAR_KM = 3;
+
+/**
+ * Áreas donde se pueden poblar personas: el área objetivo, las otras áreas de la regla, la zona alrededor de la red
+ * y toda el área de estudio. Las personas pobladas no cuentan para dibujar la zona.
+ */
+function areasPoblar(e: Escenario): AreaPoblar[] {
+  const lista: AreaPoblar[] = [];
+  const km2 = (p: [number, number][]) => areaM2(p) / 1e6;
+  for (const m of e.mediciones ?? []) {
+    if (m.tipo !== "area" || m.puntos.length < 3) continue;
+    lista.push({ id: m.id, nombre: m.objetivo ? `Área objetivo «${m.nombre}»` : `Área «${m.nombre}»`, km2: km2(m.puntos), poligono: m.puntos, objetivo: Boolean(m.objetivo) });
+  }
+  lista.sort((a, b) => Number(b.objetivo) - Number(a.objetivo));
+  const red = e.antenas.filter((a) => !a.poblada);
+  const zona = zonaDeRed(red, RADIO_ZONA_POBLAR_KM);
+  if (zona) lista.push({ id: "zona-red", nombre: `Alrededor de la red (${RADIO_ZONA_POBLAR_KM} km)`, km2: km2(zona), poligono: zona, objetivo: false });
+  const estudio = zonaDeRed(red, e.parametros.radioKm);
+  if (estudio) lista.push({ id: "zona-estudio", nombre: `Área de estudio (${e.parametros.radioKm} km)`, km2: km2(estudio), poligono: estudio, objetivo: false });
+  return lista;
+}
+
+/** Gateways y repetidores activos (centros de zonas de popularidad), con las personas que tiene cada uno alrededor. */
+function centrosDe(antenas: Antena[]): CentroZona[] {
+  const cuenta = new Map<string, number>();
+  for (const a of antenas) if (a.poblada && a.zona) cuenta.set(a.zona, (cuenta.get(a.zona) ?? 0) + 1);
+  return antenas
+    .filter((a) => a.activa && !a.poblada && (a.rol === "REPETIDOR" || a.pasarela))
+    .sort((a, b) => Number(b.pasarela) - Number(a.pasarela))
+    .map((a) => ({ id: a.id, nombre: a.nombre, pieza: a.pasarela ? "gateway" : "repetidor", personas: cuenta.get(a.id) ?? 0 }));
+}
+
+/**
+ * Personas pobladas en lote (cientos o miles): los nombres «Persona N» se reparten de una vez, sin recorrer la lista
+ * entera por cada una.
+ */
+function personasEnLote(puntos: { lat: number; lon: number }[], existentes: Antena[], zona?: string): Antena[] {
+  const usados = new Set(existentes.map((a) => a.nombre));
+  let k = 1;
+  return puntos.map((q) => {
+    while (usados.has(`Persona ${k}`)) k++;
+    const nombre = `Persona ${k}`;
+    usados.add(nombre);
+    return { ...nuevaPieza("persona", q.lat, q.lon, []), nombre, poblada: true, ...(zona ? { zona } : {}) };
+  });
+}
 
 export function Simulador() {
   const [estado, despachar] = useReducer(reductor, undefined, () => ({ ...estadoInicial(), ...(leerGuardado() ?? {}) }));
@@ -118,6 +172,12 @@ export function Simulador() {
   const [siembra, setSiembra] = useState<FaseSiembra>({ fase: "nada" });
   const [viaje, setViaje] = useState<ViajeGuardado | null>(null);
   const [ajuste, setAjuste] = useState<FaseAjuste>({ fase: "nada" });
+  const [carga, setCarga] = useState<FaseCarga>({ fase: "nada" });
+  const [ultimoPoblado, setUltimoPoblado] = useState<ResultadoPoblar | null>(null);
+  const idCarga = useRef(0);
+  const [estres, setEstres] = useState<FaseEstres>({ fase: "nada" });
+  const [ultimoZonas, setUltimoZonas] = useState<ResultadoZonas | null>(null);
+  const idEstres = useRef(0);
   /** Escenario antes de aplicar el último ajuste (para deshacerlo desde el panel). */
   const ajusteAntes = useRef<Escenario | null>(null);
 
@@ -165,16 +225,41 @@ export function Simulador() {
         ? { fase: "nada" }
         : siembra;
   const viajeVisible = viaje && viaje.firma === firma ? viaje : null;
+  // «Poblar personas» y «Prueba de carga»
+  const areas = useMemo(() => areasPoblar(escenario), [escenario.antenas, escenario.mediciones, escenario.parametros.radioKm]); // eslint-disable-line react-hooks/exhaustive-deps
+  const nPobladas = useMemo(() => escenario.antenas.filter((a) => a.poblada && !a.zona).length, [escenario.antenas]);
+  // Zonas de popularidad: cada gateway y repetidor activo, con las personas que tiene alrededor
+  const centros = useMemo(() => centrosDe(escenario.antenas), [escenario.antenas]);
+  // Zonas de la prueba de estrés en el mapa (mientras valga para la red de ahora)
+  const zonasMapa = useMemo<ZonaMapa[] | null>(() => {
+    if (estres.fase !== "listo" || estres.firma !== firma || estres.resultado.motivo) return null;
+    const porId = new Map(escenario.antenas.map((a) => [a.id, a]));
+    return estres.resultado.zonas.flatMap((z) => {
+      const a = porId.get(z.id);
+      if (!a || z.usuarios === 0) return [];
+      const texto = `${z.nombre} · ${TEXTO_ESTADO[z.estado].toLowerCase()} · ${Math.round(z.completosPct)} %`;
+      const titulo = `${z.nombre}: ${z.usuarios} personas, ${Math.round(z.pagosHora)} pagos/h; ${Math.round(z.completosPct)} % completos, el 95 % en ${Math.round(z.p95S)} s, canal ${Math.round(z.canalPct)} %`;
+      return [{ id: z.id, lat: a.lat, lon: a.lon, radioKm: z.radioZonaKm, color: COLOR_ESTADO[z.estado], texto, titulo }];
+    });
+  }, [estres, firma, escenario.antenas]);
+  const remitentes = useMemo(() => {
+    if (!resultado) return 0;
+    const porId = new Map(escenario.antenas.map((a) => [a.id, a]));
+    return resultado.nodos.filter((n) => {
+      const a = porId.get(n.id);
+      return a && a.activa && a.rol !== "REPETIDOR" && !a.pasarela && n.saltos !== null && n.ruta.length >= 2;
+    }).length;
+  }, [resultado, escenario.antenas]);
   // La propuesta de ajuste vale para la red con la que se calculó; el aviso de «aplicado», hasta el siguiente cambio
   const ajusteVisible: FaseAjuste =
     (ajuste.fase === "buscando" || ajuste.fase === "propuesta") && ajuste.firma !== firma ? { fase: "nada" } : ajuste.fase === "aplicada" && ajuste.antenas !== escenario.antenas ? { fase: "nada" } : ajuste;
 
   // Valores actuales para las funciones estables
-  const ultimo = useRef({ estado, fuente, firma, resultado, firmaResultado, inspeccion, perfil, perfilTerreno, red, siembra: siembraVisible, alturaRepetidor, viaje: viajeVisible, ajuste: ajusteVisible });
+  const ultimo = useRef({ estado, fuente, firma, resultado, firmaResultado, inspeccion, perfil, perfilTerreno, red, siembra: siembraVisible, alturaRepetidor, viaje: viajeVisible, ajuste: ajusteVisible, carga, estres });
   /** Nodos insertados desde el último render (dos pedidos seguidos no repiten nombre). */
   const recientes = useRef<Antena[]>([]);
   useEffect(() => {
-    ultimo.current = { estado, fuente, firma, resultado, firmaResultado, inspeccion, perfil, perfilTerreno, red, siembra: siembraVisible, alturaRepetidor, viaje: viajeVisible, ajuste: ajusteVisible };
+    ultimo.current = { estado, fuente, firma, resultado, firmaResultado, inspeccion, perfil, perfilTerreno, red, siembra: siembraVisible, alturaRepetidor, viaje: viajeVisible, ajuste: ajusteVisible, carga, estres };
     recientes.current = [];
   });
   const existentes = () => {
@@ -382,20 +467,46 @@ export function Simulador() {
       setSiembra({ fase: "error", texto: r.gateways.length ? "Espere a que termine el cálculo de la red y vuelva a intentarlo." : "Primero ponga el Gateway + Internet." });
       return Promise.resolve(null);
     }
-    const pedidoSiembra = {
+    const limite = e.escenario.parametros.limiteSaltos;
+    const pedidoCon = (h: number) => ({
       origenes,
       destinos,
-      repetidor: nuevaPieza("repetidor", 0, 0, e.escenario.antenas, altura),
+      repetidor: nuevaPieza("repetidor", 0, 0, e.escenario.antenas, h),
       persona: nuevaPieza("persona", 0, 0, e.escenario.antenas),
       parametros: e.escenario.parametros,
+      saltosOrigen: Object.fromEntries(origenes.map((a) => [a.id, r.porNodo.get(a.id)?.saltos ?? (a.pasarela ? 0 : 1)])),
+      limiteSaltos: limite,
+    });
+    // Saltos de cada destino con la cadena propuesta (desde los saltos que ya tiene cada origen)
+    const saltosDe = (s: Siembra) => {
+      const h = new Map(origenes.map((a) => [a.id, r.porNodo.get(a.id)?.saltos ?? 0]));
+      for (const q of s.puntos) h.set(q.id, (h.get(q.desdeId) ?? 0) + 1);
+      return s.destinos.map((d) => (d.llega && d.desdeId ? (h.get(d.desdeId) ?? 0) + 1 : null));
     };
+    // Como en Trama se siembra con la torre elegida (6 m); si la cadena pasara del límite de saltos, se prueba con torres
+    // más altas (pasos más largos, menos saltos) y se avisa
+    const alturas = [altura, ...ALTURAS_REPETIDOR.filter((h) => h > altura)];
     setSiembra({ fase: "buscando", destinos, firma: fi });
-    return m
-      .sembrar(pedidoSiembra, f)
-      .then((s) => {
-        setSiembra({ fase: "propuesta", destinos, siembra: s, alturaM: altura, firma: fi });
-        return s;
-      })
+    return (async () => {
+      let elegida: { s: Siembra; h: number } | null = null;
+      for (const h of alturas) {
+        const s = await m.sembrar(pedidoCon(h), f);
+        const saltos = s.saltos ?? saltosDe(s);
+        const marcado = { ...s, alturaM: h, alturaPedidaM: altura, saltos };
+        if (!elegida) elegida = { s: marcado, h };
+        const pasa = saltos.some((x) => x !== null && x > limite);
+        const llegaMas = marcado.destinos.filter((d) => d.llega).length > elegida.s.destinos.filter((d) => d.llega).length;
+        if (!pasa) {
+          // Se queda con la más baja que no pasa del límite (y que llega al menos a los mismos destinos)
+          if (h === altura || llegaMas || elegida.s.saltos?.some((x) => x !== null && x > limite)) elegida = { s: marcado, h };
+          break;
+        }
+        if (h === alturas[alturas.length - 1]) break;
+      }
+      const { s, h } = elegida!;
+      setSiembra({ fase: "propuesta", destinos, siembra: s, alturaM: h, firma: fi });
+      return s;
+    })()
       .catch((err: Error) => {
         setSiembra({ fase: "error", texto: err.message });
         return null;
@@ -404,7 +515,11 @@ export function Simulador() {
 
   const conectarFaltantes = useCallback(() => {
     const r = ultimo.current.red;
-    return sembrarHacia(r.sinCobertura.map((a) => ({ lat: a.lat, lon: a.lon, nombre: a.nombre, antena: a })));
+    // Con cientos de personas pobladas se siembra hacia las 40 sin cobertura más cercanas a la red (se repite para el resto)
+    const red = r.gateways.concat(r.repetidores).filter((a) => ["gateway", "conectado"].includes(r.porNodo.get(a.id)?.estado ?? ""));
+    const lejania = (a: Antena) => Math.min(...red.map((b) => (a.lat - b.lat) ** 2 + ((a.lon - b.lon) * Math.cos((a.lat * Math.PI) / 180)) ** 2), Infinity);
+    const faltan = r.sinCobertura.length > 40 ? [...r.sinCobertura].sort((a, b) => lejania(a) - lejania(b)).slice(0, 40) : r.sinCobertura;
+    return sembrarHacia(faltan.map((a) => ({ lat: a.lat, lon: a.lon, nombre: a.nombre, antena: a })));
   }, [sembrarHacia]);
 
   /** Pone los repetidores propuestos (y una persona en el punto elegido, si llega). Devuelve cuántos puso. */
@@ -480,7 +595,8 @@ export function Simulador() {
     const lista = existentes();
     const area = areaObjetivoDe(e.escenario);
     const pedidoAjuste: PedidoAjuste = {
-      antenas: lista.filter((a) => a.activa),
+      // Las personas pobladas al azar son para probar la red: el ajuste trabaja con la infraestructura y las puestas a mano
+      antenas: lista.filter((a) => a.activa && !a.poblada),
       parametros: e.escenario.parametros,
       area,
       metaPct: META_UTIL_ESTUDIO_PCT,
@@ -515,7 +631,7 @@ export function Simulador() {
     const porId = new Map(o.antenas.map((x) => [x.id, x]));
     const nuevas: Antena[] = [];
     for (const orig of lista) {
-      if (!orig.activa) {
+      if (!orig.activa || orig.poblada) {
         nuevas.push(orig);
         continue;
       }
@@ -582,7 +698,208 @@ export function Simulador() {
     [pedirSimulacion],
   );
 
-  /** Envía un mensaje de texto desde un nodo hasta el gateway por la ruta de la malla y lo anima en el mapa. */
+  /**
+   * «Poblar personas»: reparte personas al azar, uniformes sobre el terreno, en el área elegida (por defecto el área
+   * objetivo o la zona alrededor de la red) y simula su conexión. Volver a poblar quita las pobladas antes.
+   */
+  const poblarPersonas = useCallback(
+    (o: PedidoPoblar = {}): ResultadoPoblar => {
+      const { estado: e, resultado: r } = ultimo.current;
+      const areas = areasPoblar(e.escenario);
+      const area = areas.find((a) => a.id === o.areaId) ?? areas[0];
+      if (!area) {
+        const x = { error: "Ponga primero el gateway (y los repetidores): las personas se reparten en la zona de la red." };
+        setUltimoPoblado(x);
+        return x;
+      }
+      const pedidas = Math.max(0, Math.min(MAX_POBLAR, Math.round(o.densidadKm2 !== undefined ? area.km2 * o.densidadKm2 : (o.n ?? 250))));
+      const conSenal = Boolean(o.soloConSenal && r);
+      // Volver a poblar reparte de nuevo las pobladas sueltas; las zonas de popularidad se quedan
+      const viejas = new Set((o.reemplazar ?? true) ? existentes().filter((a) => a.poblada && !a.zona).map((a) => a.id) : []);
+      const puntos = puntosAlAzar(area.poligono, {
+        n: pedidas,
+        semilla: o.semilla ?? Math.floor(Math.random() * 1e6),
+        acepta: conSenal && r ? (lat, lon) => margenEnPunto(r, lat, lon) >= UMBRAL_SERVICIO_DB : undefined,
+      });
+      const nuevas = personasEnLote(puntos, existentes().filter((a) => !viejas.has(a.id)));
+      if (viejas.size) despachar({ tipo: "eliminar-varias", ids: [...viejas] });
+      if (nuevas.length) despachar({ tipo: "insertar-varias", antenas: nuevas });
+      const x: ResultadoPoblar = { puestas: nuevas.length, pedidas, area: area.nombre, km2: area.km2, conSenal, quitadas: viejas.size };
+      setUltimoPoblado(x);
+      setCarga({ fase: "nada" });
+      setEstres({ fase: "nada" });
+      setViaje(null);
+      setPunto(null);
+      if (nuevas.length) {
+        const lons = area.poligono.map((q) => q[0]);
+        const lats = area.poligono.map((q) => q[1]);
+        encuadrarCaja([Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)]);
+      }
+      pedirSimulacion();
+      return x;
+    },
+    [encuadrarCaja, pedirSimulacion],
+  );
+
+  /** Quita las personas pobladas al azar (con `sueltas`, solo las que no son de una zona de popularidad); devuelve cuántas quitó. */
+  const quitarPobladas = useCallback((sueltas = false): number => {
+    const ids = existentes()
+      .filter((a) => a.poblada && (!sueltas || !a.zona))
+      .map((a) => a.id);
+    if (ids.length) {
+      despachar({ tipo: "eliminar-varias", ids });
+      pedirSimulacion();
+    }
+    setUltimoPoblado(null);
+    if (!sueltas) setUltimoZonas(null);
+    setCarga({ fase: "nada" });
+    setEstres({ fase: "nada" });
+    return ids.length;
+  }, [pedirSimulacion]);
+
+  /**
+   * Zonas de popularidad: N personas al azar a la redonda de cada gateway o repetidor pedido (o de todos), para ver
+   * cuánto aguanta cada uno. Volver a poner la zona de un nodo la reparte de nuevo.
+   */
+  const poblarZonas = useCallback(
+    (o: PedidoZonas = {}): ResultadoZonas => {
+      const { resultado: r } = ultimo.current;
+      const todos = existentes();
+      const infra = todos.filter((a) => a.activa && !a.poblada && (a.rol === "REPETIDOR" || a.pasarela));
+      const centrosZona = o.centros?.length ? infra.filter((a) => o.centros!.includes(a.id)) : infra;
+      if (!centrosZona.length) {
+        const x = { error: o.centros?.length ? "Ese nodo no es un gateway ni un repetidor activo." : "Ponga primero el gateway y los repetidores: cada zona de popularidad es gente alrededor de uno de ellos." };
+        setUltimoZonas(x);
+        return x;
+      }
+      const radioKm = Math.max(0.2, Math.min(20, o.radioKm ?? 2));
+      const conSenal = Boolean((o.soloConSenal ?? true) && r);
+      const ids = new Set(centrosZona.map((c) => c.id));
+      const viejas = new Set(todos.filter((a) => a.poblada && a.zona && ids.has(a.zona)).map((a) => a.id));
+      const otras = todos.filter((a) => a.poblada && !viejas.has(a.id)).length;
+      const pedidaPorZona = Math.max(0, Math.min(MAX_POR_ZONA, Math.round(o.n ?? 250)));
+      const porZona = Math.min(pedidaPorZona, Math.floor(Math.max(0, MAX_POBLADAS - otras) / centrosZona.length));
+      const semilla = o.semilla ?? Math.floor(Math.random() * 1e6);
+      const quedan = todos.filter((a) => !viejas.has(a.id));
+      const nuevas: Antena[] = [];
+      const zonas = centrosZona.map((c, k) => {
+        const puntos = puntosAlAzar(poligonoCirculo(c.lat, c.lon, radioKm * 1000, 64), {
+          n: porZona,
+          semilla: semilla + 7919 * k,
+          acepta: conSenal && r ? (lat, lon) => margenEnPunto(r, lat, lon) >= UMBRAL_SERVICIO_DB : undefined,
+        });
+        const lote = personasEnLote(puntos, [...quedan, ...nuevas], c.id);
+        nuevas.push(...lote);
+        return { id: c.id, nombre: c.nombre, puestas: lote.length, pedidas: pedidaPorZona };
+      });
+      if (viejas.size) despachar({ tipo: "eliminar-varias", ids: [...viejas] });
+      if (nuevas.length) despachar({ tipo: "insertar-varias", antenas: nuevas });
+      const x: ResultadoZonas = { zonas, puestas: nuevas.length, pedidas: pedidaPorZona * centrosZona.length, radioKm, conSenal, recortado: porZona < pedidaPorZona, quitadas: viejas.size };
+      setUltimoZonas(x);
+      setCarga({ fase: "nada" });
+      setEstres({ fase: "nada" });
+      setViaje(null);
+      setPunto(null);
+      if (nuevas.length) {
+        const g = metrosPorGrado(centrosZona[0].lat);
+        const dLat = (radioKm * 1000) / g.lat;
+        const dLon = (radioKm * 1000) / g.lon;
+        encuadrarCaja([Math.min(...centrosZona.map((c) => c.lon)) - dLon, Math.min(...centrosZona.map((c) => c.lat)) - dLat, Math.max(...centrosZona.map((c) => c.lon)) + dLon, Math.max(...centrosZona.map((c) => c.lat)) + dLat]);
+      }
+      pedirSimulacion();
+      return x;
+    },
+    [encuadrarCaja, pedirSimulacion],
+  );
+
+  /** Quita las zonas de popularidad (de los nodos pedidos o todas); devuelve cuántas personas quitó. */
+  const quitarZonas = useCallback(
+    (centrosIds?: string[]): number => {
+      const ids = existentes()
+        .filter((a) => a.poblada && a.zona && (!centrosIds?.length || centrosIds.includes(a.zona)))
+        .map((a) => a.id);
+      if (ids.length) {
+        despachar({ tipo: "eliminar-varias", ids });
+        pedirSimulacion();
+      }
+      setUltimoZonas(null);
+      setCarga({ fase: "nada" });
+      setEstres({ fase: "nada" });
+      return ids.length;
+    },
+    [pedirSimulacion],
+  );
+
+  /**
+   * Prueba de estrés de la hora pico: todas las personas pagan a su ritmo y se mide cada gateway y repetidor; con
+   * `rampa`, sube la carga hasta que cada zona se revienta.
+   */
+  const probarEstres = useCallback(
+    async (o: Partial<OpcionesEstres> = {}) => {
+      const m = motor.current;
+      if (!m) return null;
+      const id = ++idEstres.current;
+      const opciones: OpcionesEstres = { ...ESTRES_DEFECTO, ...o };
+      setEstres({ fase: "probando", rampa: opciones.rampa, avance: 0 });
+      let r = ultimo.current.resultado;
+      if (!r || ultimo.current.firma !== ultimo.current.firmaResultado) r = await esperarResultado();
+      if (id !== idEstres.current) return null;
+      if (!r) {
+        setEstres({ fase: "error", texto: "No pude simular la red para hacer la prueba." });
+        return null;
+      }
+      const { estado: e, firma: fi } = ultimo.current;
+      try {
+        const x = await m.estres(
+          { ...PEDIDO_ESTRES_DEFECTO, ...opciones, antenas: e.escenario.antenas.filter((a) => a.activa), enlaces: r.enlaces, nodos: r.nodos, parametros: e.escenario.parametros },
+          (avance) => {
+            if (id === idEstres.current) setEstres({ fase: "probando", rampa: opciones.rampa, avance });
+          },
+        );
+        if (id !== idEstres.current) return null;
+        setEstres({ fase: "listo", resultado: x, firma: fi, opciones });
+        return x;
+      } catch (err) {
+        if (id === idEstres.current) setEstres({ fase: "error", texto: (err as Error).message || "No pude hacer la prueba de estrés." });
+        return null;
+      }
+    },
+    [esperarResultado],
+  );
+
+  /**
+   * Prueba de carga: varios pagos (o mensajes) al tiempo desde las personas con ruta al gateway, paquete por paquete
+   * como en MeshCore; con `curva`, sube la cantidad hasta encontrar dónde se revienta la frecuencia.
+   */
+  const probarCarga = useCallback(
+    async (o: Partial<OpcionesCarga> = {}, curva = false) => {
+      const m = motor.current;
+      if (!m) return null;
+      const id = ++idCarga.current;
+      setCarga({ fase: "probando", curva });
+      let r = ultimo.current.resultado;
+      if (!r || ultimo.current.firma !== ultimo.current.firmaResultado) r = await esperarResultado();
+      if (id !== idCarga.current) return null;
+      if (!r) {
+        setCarga({ fase: "error", texto: "No pude simular la red para hacer la prueba." });
+        return null;
+      }
+      const { estado: e, firma: fi } = ultimo.current;
+      const opciones: OpcionesCarga = { ...CARGA_DEFECTO, ...o };
+      try {
+        const x = await m.carga({ ...PEDIDO_CARGA_DEFECTO, ...opciones, antenas: e.escenario.antenas.filter((a) => a.activa), enlaces: r.enlaces, nodos: r.nodos, parametros: e.escenario.parametros }, curva);
+        if (id !== idCarga.current) return null;
+        setCarga({ fase: "listo", resultado: x.carga, curva: x.curva, firma: fi, opciones });
+        return x;
+      } catch (err) {
+        if (id === idCarga.current) setCarga({ fase: "error", texto: (err as Error).message || "No pude hacer la prueba de carga." });
+        return null;
+      }
+    },
+    [esperarResultado],
+  );
+
+  /** Envía un pago de prueba (la orden firmada de 118 B) desde un nodo hasta el gateway por la ruta de la malla y lo anima en el mapa. */
   const enviarMensaje = useCallback(
     (desdeId: string): ViajeMensaje | null => {
       const { resultado: r, firma: fi, firmaResultado: fr, estado: e } = ultimo.current;
@@ -590,7 +907,7 @@ export function Simulador() {
       const esc = e.escenario;
       const nodo = r.nodos.find((n) => n.id === desdeId);
       const ruta = nodo?.ruta.length ? nodo.ruta : [desdeId];
-      const v = simularMensaje(ruta, esc.antenas, r.enlaces, esc.parametros, 40);
+      const v = simularMensaje(ruta, esc.antenas, r.enlaces, esc.parametros, BYTES_PAGO.orden);
       const porId = new Map(esc.antenas.map((a) => [a.id, a]));
       const puntos = v.ruta.flatMap((id) => {
         const a = porId.get(id);
@@ -828,8 +1145,16 @@ export function Simulador() {
         despachar({ tipo: "duplicar", id });
         pedirSimulacion();
       },
+      areasPoblar: () => areasPoblar(ultimo.current.estado.escenario),
+      poblar: poblarPersonas,
+      quitarPobladas: () => quitarPobladas(),
+      probarCarga,
+      centrosZona: () => centrosDe(ultimo.current.estado.escenario.antenas),
+      poblarZonas,
+      quitarZonas,
+      probarEstres,
     }),
-    [inscribirNodo, pedirSimulacion, simular, centrar, encuadrar, encuadrarCaja, abrirPerfil, inspeccionar, cambiarModo, sembrarHacia, aceptarSiembra, enviarMensaje, disenarArea, aplicarDiseno, esperarResultado, pedirAjuste, aplicarAjuste],
+    [inscribirNodo, pedirSimulacion, simular, centrar, encuadrar, encuadrarCaja, abrirPerfil, inspeccionar, cambiarModo, sembrarHacia, aceptarSiembra, enviarMensaje, disenarArea, aplicarDiseno, esperarResultado, pedirAjuste, aplicarAjuste, poblarPersonas, quitarPobladas, probarCarga, poblarZonas, quitarZonas, probarEstres],
   );
 
   const restaurar = useCallback((e: Escenario) => despachar({ tipo: "cargar", escenario: e }), []);
@@ -847,6 +1172,8 @@ export function Simulador() {
           perfilTerreno: u.perfilTerreno !== null,
           siembra: u.siembra.fase,
           mensaje: u.viaje?.animacion.n ?? 0,
+          carga: u.carga.fase === "listo" ? (u.carga.curva ? "curva" : "listo") : u.carga.fase,
+          estres: u.estres.fase === "listo" ? (u.estres.resultado.rampa ? "rampa" : "listo") : u.estres.fase,
         };
       },
       alDia: () => ultimo.current.resultado !== null && ultimo.current.firma === ultimo.current.firmaResultado,
@@ -1112,6 +1439,38 @@ export function Simulador() {
     </div>
   );
 
+  // La prueba de estrés vale para la red con la que se hizo
+  const estresAlDia = estres.fase === "listo" && estres.firma === firma ? estres.resultado : null;
+  const zonaEstres = (id: string) => estresAlDia?.zonas.find((z) => z.id === id) ?? null;
+  const pruebaEstres = (
+    <PruebaEstres
+      parametros={escenario.parametros}
+      remitentes={remitentes}
+      estres={estres}
+      desactualizado={estres.fase === "listo" && estres.firma !== firma}
+      onProbar={(o) => void probarEstres(o)}
+      onVerZona={(id) => {
+        const a = escenario.antenas.find((x) => x.id === id);
+        if (!a) return;
+        despachar({ tipo: "seleccionar", id });
+        centrar(a.lat, a.lon);
+        if (!esEscritorio()) setHoja(null);
+      }}
+    />
+  );
+  /** Control de la zona de popularidad de un gateway o repetidor (tarjeta del mapa y lista de piezas). */
+  const zonaRapida = (a: Antena) =>
+    !a.poblada && a.activa && (a.rol === "REPETIDOR" || a.pasarela) ? (
+      <ZonaRapida
+        key={a.id}
+        nombre={a.nombre}
+        personas={centros.find((c) => c.id === a.id)?.personas ?? 0}
+        zona={zonaEstres(a.id)}
+        onPoner={(n, radioKm) => void poblarZonas({ centros: [a.id], n, radioKm })}
+        onQuitar={() => void quitarZonas([a.id])}
+      />
+    ) : null;
+
   const panelSembrar = (
     <PanelSembrar
       estado={estado}
@@ -1141,7 +1500,43 @@ export function Simulador() {
       onPiezaElegida={() => {
         if (!esEscritorio()) setHoja(null);
       }}
+      zonaDe={zonaRapida}
     />
+  );
+
+  const capacidad = (
+    <div className="space-y-5">
+      <ZonasPopularidad
+        centros={centros}
+        seleccion={estado.seleccion}
+        hayResultado={resultado !== null}
+        ultimo={ultimoZonas}
+        onPoner={(o) => {
+          poblarZonas(o);
+          if (!esEscritorio()) setHoja(null);
+        }}
+        onQuitar={() => void quitarZonas()}
+      />
+      <PoblarPersonas
+        areas={areas}
+        pobladas={nPobladas}
+        hayResultado={resultado !== null}
+        ultimo={ultimoPoblado}
+        onPoblar={(o) => {
+          poblarPersonas(o);
+          if (!esEscritorio()) setHoja(null);
+        }}
+        onQuitar={() => void quitarPobladas(true)}
+      />
+      {pruebaEstres}
+      <PruebaCarga
+        parametros={escenario.parametros}
+        remitentes={remitentes}
+        carga={carga}
+        desactualizado={carga.fase === "listo" && carga.firma !== firma}
+        onProbar={(o, curva) => void probarCarga(o, curva)}
+      />
+    </div>
   );
 
   const resultados = (
@@ -1162,6 +1557,7 @@ export function Simulador() {
       onDescartarAjuste={() => setAjuste({ fase: "nada" })}
       onDeshacerAjuste={deshacerAjuste}
       onQuitarObjetivo={() => despachar({ tipo: "area-objetivo", id: null })}
+      capacidad={capacidad}
     />
   );
 
@@ -1232,6 +1628,7 @@ export function Simulador() {
             onListo={setMapa}
             sembrar={capaSembrar}
             ajuste={ajusteVisible.fase === "propuesta" ? (ajusteVisible.ajuste.opciones[ajusteVisible.elegida]?.cambios ?? null) : null}
+            estres={zonasMapa}
             onPieza={ponerPieza}
             onDestino={(lat, lon) => {
               despachar({ tipo: "herramienta", herramienta: "mover" });
@@ -1250,6 +1647,7 @@ export function Simulador() {
               nombres={nombres}
               soloSeleccionada={estado.vista.soloSeleccionada}
               sembrar={estado.modo === "sembrar"}
+              extra={zonaRapida(seleccionada)}
               onSolo={(v) => despachar({ tipo: "vista", cambios: { soloSeleccionada: v } })}
               onCerrar={() => despachar({ tipo: "seleccionar", id: null })}
             />

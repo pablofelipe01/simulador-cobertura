@@ -2,13 +2,14 @@
 // los prácticos piden hacer algo (inscribir un nodo, simular, medir…), detectan solos cuando quedó hecho y traen
 // «Hágalo por mí». Los tours prácticos corren sobre un escenario de práctica: al salir, el del usuario vuelve tal cual.
 import { escenarioEjemplo, escenarioVacio, nuevaAntena, type Accion, type Estado, type ModoApp, type Vista } from "@/components/simulador/estado";
+import { escenarioMalla } from "@/components/simulador/piezas";
 import { desplazar, rumbo } from "@/lib/radio/geo";
 import type { Inspeccion } from "@/lib/radio/simulacion";
 import type { Antena, Escenario, Medicion } from "@/lib/radio/tipos";
 
 import type { Api } from "./ordenes";
 
-export type IdTour = "basico" | "sembrar" | "pantalla" | "mesh" | "radiomobile" | "medir" | "melki";
+export type IdTour = "basico" | "sembrar" | "capacidad" | "pantalla" | "mesh" | "radiomobile" | "medir" | "melki";
 
 /** Panel que se abre antes de un paso («mapa» cierra la hoja en el celular para dejar ver el mapa). */
 export type Preparacion = "antenas" | "parametros" | "resultados" | "mapa" | "sembrar" | null;
@@ -23,6 +24,10 @@ export type FotoTour = {
   /** Sembrado automático (modo «Sembrar la malla») y número del último mensaje enviado (0 si ninguno). */
   siembra: "nada" | "buscando" | "propuesta" | "puesta" | "error";
   mensaje: number;
+  /** Prueba de carga: «curva» cuando ya está la curva de «¿hasta cuántos aguanta?». */
+  carga: "nada" | "probando" | "listo" | "curva" | "error";
+  /** Prueba de estrés de la hora pico: «rampa» cuando ya subió la carga hasta reventar cada zona. */
+  estres: "nada" | "probando" | "listo" | "rampa" | "error";
 };
 
 /** Lo que el tour puede hacer en el simulador. */
@@ -138,6 +143,8 @@ const renombrado = (e: Escenario, nombre: string): Escenario => ({ ...e, nombre 
 const piezas = (f: FotoTour, p: "gateway" | "repetidor" | "persona") => antenas(f).filter((a) => (p === "gateway" ? a.pasarela : p === "repetidor" ? !a.pasarela && (a.tipo ?? "antena") === "antena" : (a.tipo ?? "antena") === "nodo"));
 
 const gatewayDe = (t: ApiTour) => piezas(t.foto(), "gateway")[0];
+const pobladas = (f: FotoTour) => antenas(f).filter((a) => a.poblada).length;
+const enZonas = (f: FotoTour) => antenas(f).filter((a) => a.poblada && a.zona).length;
 
 /** Encuadra todas las piezas para que se vea el flujo completo de la malla. */
 function encuadrarMalla(t: ApiTour) {
@@ -198,7 +205,7 @@ const PASOS_PANTALLA: Paso[] = [
   { objetivo: "herramientas", titulo: "Herramientas del mapa", texto: "Mover para navegar y arrastrar nodos, Agregar para ubicarlos, Medir señal para consultar cualquier punto y Regla para medir distancias, trayectos y áreas como en Google Earth.", preparar: "mapa" },
   { objetivo: "modos", titulo: "Tres maneras de ver la cobertura", texto: "Señal muestra el nivel del mejor nodo antena; Mejor antena, cuál atiende cada zona; Respaldo, cuántos nodos antena llegan a cada punto.", preparar: "mapa" },
   { objetivo: "capas", titulo: "Capas", texto: "Cambie el mapa base (OpenTopoMap muestra quebradas y ríos pequeños con su nombre), active límites, ríos, poblados y vías, el rango de alcance y los anillos de distancia. Al final, en «Escala de la señal», elija dBm, µV o dBµV/m y colores por clases, arcoíris o umbral, como en Radio Mobile.", preparar: "mapa" },
-  { objetivo: "tab-parametros", titulo: "Parámetros", texto: "Aquí están el preset de Meshtastic, la frecuencia, el límite de saltos, el receptor y el entorno (vegetación o edificios), el radio de estudio y la fuente del relieve.", preparar: "parametros" },
+  { objetivo: "tab-parametros", titulo: "Parámetros", texto: "Aquí están el ajuste de radio MeshCore (SF11 de Trama por defecto), la frecuencia (las 4 de Trama), el límite de saltos, el receptor y el entorno (vegetación o edificios), el radio de estudio y la fuente del relieve.", preparar: "parametros" },
   {
     objetivo: "propagacion",
     titulo: "Propagación como Radio Mobile",
@@ -300,7 +307,7 @@ export const TOURS: Tour[] = [
   {
     id: "sembrar",
     nombre: "Sembrar la malla",
-    detalle: "Gateway, repetidores y gente, como en Trama, y un mensaje de prueba.",
+    detalle: "Gateway, repetidores y gente, como en Trama, y un pago de prueba.",
     minutos: 4,
     modo: "sembrar",
     practica: { escenario: () => renombrado(escenarioVacio(), "Práctica: sembrar la malla"), autoSimular: true, centro: [CENTRO.lat, CENTRO.lon + 0.12, 10] },
@@ -394,17 +401,100 @@ export const TOURS: Tour[] = [
       {
         objetivo: "enviar-mensaje",
         preparar: "sembrar",
-        titulo: "Envíe un mensaje",
-        texto: "Toque «Enviar»: el mensaje sale de la persona más lejana y salta de nodo en nodo hasta el gateway, como en Meshtastic. Le digo los saltos, el tiempo y qué tan seguro llega.",
+        titulo: "Envíe un pago de prueba",
+        texto: "Toque «Enviar»: la orden firmada (118 bytes) sale de la persona más lejana y la pasan los repetidores hasta el gateway, como en MeshCore. Le digo los saltos, el tiempo y qué tan seguro llega; el comprobante vuelve por la misma ruta.",
         tarea: { hecho: (t, base) => t.foto().mensaje > base.mensaje, hacer: enviarDePrueba },
       },
       {
         objetivo: "melki",
         titulo: "Pregúnteme",
-        texto: "Pregúnteme «¿cómo viaja un mensaje?», «¿por qué Persona 2 está en rojo?» o «¿qué hago ahora?», o pídame «pon un repetidor en 4.25, -73.30 a 20 m» o «lleva la red a Paratebueno».",
+        texto: "Pregúnteme «¿cómo viaja un pago?», «¿por qué Persona 2 está en rojo?» o «¿qué hago ahora?», o pídame «pon un repetidor en 4.25, -73.30 a 12 m», «lleva la red a Paratebueno» o «puebla la zona con 250 personas».",
       },
     ],
-    final: "Ya sabe sembrar la malla: el gateway, los repetidores, la gente, conectar a los que faltan y probar un mensaje.",
+    final: "Ya sabe sembrar la malla: el gateway, los repetidores, la gente, conectar a los que faltan y probar un pago.",
+  },
+  {
+    id: "capacidad",
+    nombre: "¿Cuántos pagos aguanta?",
+    detalle: "Poblar personas, pagos al tiempo, zonas de popularidad y la hora pico hasta que la red se reviente.",
+    minutos: 4,
+    modo: "sembrar",
+    practica: { escenario: () => renombrado(escenarioMalla(), "Práctica: capacidad de la red"), autoSimular: true },
+    pasos: [
+      {
+        titulo: "La red con la gente de verdad",
+        texto: "Una red puede cubrir todo y aun así no aguantar la hora pico del mercado. Vamos a llenar la zona de gente y a mandar pagos al tiempo, paquete por paquete como lo hace MeshCore, hasta ver dónde se revienta. Estamos en un escenario de práctica.",
+      },
+      {
+        objetivo: "poblar",
+        preparar: "resultados",
+        titulo: "1 · Poblar personas",
+        texto: "Elija cuántas (o la densidad de la zona: 0,2 por km² dispersa, 1 media, 5 densa, como en el documento de Trama) y toque «Poblar». Las reparto al azar sobre el terreno, cada una con su billetera a 1,5 m.",
+        tarea: {
+          hecho: (t, base) => pobladas(t.foto()) > pobladas(base),
+          hacer: (t) => void t.melki.poblar({ n: 250, semilla: 7 }),
+          aviso: "Listo: ya están repartidas.",
+        },
+      },
+      {
+        objetivo: ["resumen-pobladas", "nodos-campo"],
+        preparar: "resultados",
+        titulo: "¿Cuántas quedaron conectadas?",
+        texto: "Al simular le digo cuántas llegan al gateway, a cuántos saltos y cuántas quedan sin cobertura (en rojo en el mapa). En el mapa son puntos pequeños: tóquelos para ver su nombre.",
+        tarea: { hecho: (t) => t.alDia() && pobladas(t.foto()) > 0, hacer: (t) => t.melki.simular(), aviso: "Listo: ya calculé quién queda conectado." },
+      },
+      {
+        objetivo: "prueba-carga",
+        preparar: "resultados",
+        titulo: "2 · Pagos al tiempo",
+        texto: "Elija cuántos pagos salen al tiempo (5, 15, 25…) y toque «Probar». Cada pago es la orden (118 B), el comprobante (126 B) y el aviso a quien recibe (126 B), con sus acuses. Con SF11 cada pago ocupa ~9,5 s de aire.",
+        tarea: {
+          hecho: (t, base) => ["listo", "curva"].includes(t.foto().carga) && t.foto().carga !== base.carga,
+          hacer: (t) => void t.melki.probarCarga({ mensajes: 15 }),
+          aviso: "Ahí está el resultado.",
+        },
+      },
+      {
+        objetivo: ["resultado-carga", "prueba-carga"],
+        preparar: "resultados",
+        titulo: "3 · ¿Hasta cuántos aguanta?",
+        texto: "Toque «¿Hasta cuántos aguanta?»: subo la cantidad hasta que menos del 90 % recibe su comprobante. Verde aguanta sin demora, naranja aguanta pero lento (el 95 % tarda más de un minuto) y rojo ya se reventó.",
+        tarea: {
+          hecho: (t) => t.foto().carga === "curva",
+          hacer: (t) => void t.melki.probarCarga({}, true),
+          aviso: "Ahí está la curva.",
+        },
+      },
+      {
+        objetivo: "zonas-popularidad",
+        preparar: "resultados",
+        titulo: "4 · Zonas de popularidad",
+        texto: "Ahora gente alrededor de cada repetidor y del gateway (o solo de uno: también sale al tocar el repetidor en el mapa). Elija cuántas por zona y a cuántos km, y toque «Poner».",
+        tarea: {
+          hecho: (t, base) => enZonas(t.foto()) > enZonas(base),
+          hacer: (t) => void t.melki.poblarZonas({ n: 150, radioKm: 2, semilla: 7 }),
+          aviso: "Listo: ya está la gente en cada zona.",
+        },
+      },
+      {
+        objetivo: "prueba-estres",
+        preparar: "resultados",
+        titulo: "5 · La hora pico, zona por zona",
+        texto: "Toque «¿Hasta dónde aguanta cada repetidor?»: cada persona hace sus pagos del día y una parte cae en la hora pico. Mido cada zona (pagos completos, espera, canal, cuánto transmite, alcance con carga y energía) y subo la carga hasta que cada una se revienta.",
+        tarea: {
+          hecho: (t) => t.foto().estres === "rampa",
+          hacer: (t) => void t.melki.probarEstres({ rampa: true }),
+          aviso: "Ahí está: zona por zona y hasta dónde aguanta.",
+        },
+      },
+      {
+        objetivo: ["resultado-estres", "prueba-estres"],
+        preparar: "resultados",
+        titulo: "Cómo leerlo",
+        texto: "Trama diseña cada frecuencia para 55 pagos por hora con SF11 (el canal al 15 % en la hora pico): 150 usuarios por frecuencia y 600 por sitio de 4 radios. En el mapa cada zona queda verde (aguanta), naranja (lenta) o roja (se revienta). La curva muestra cuántos pagos por hora entrega la red: sube hasta el máximo del canal y después cae. Si se revienta, reparta los repetidores en las 4 frecuencias, baje a SF10 o SF9 (más pagos, menos alcance) o ponga más sitios gateway.",
+      },
+    ],
+    final: "Ya sabe probar la capacidad: poblar la zona, mandar pagos al tiempo, poner zonas de popularidad y ver hasta dónde aguanta cada repetidor en la hora pico.",
   },
   {
     id: "pantalla",

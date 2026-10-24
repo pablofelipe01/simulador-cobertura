@@ -29,9 +29,9 @@ const TEXTO_ESTADO = {
 } as const;
 
 const ROLES: { valor: Rol; texto: string; ayuda: string }[] = [
-  { valor: "ROUTER", texto: "Router", ayuda: "Retransmite; habitual en mástiles fijos." },
-  { valor: "CLIENT", texto: "Cliente", ayuda: "Retransmite los mensajes de otros." },
-  { valor: "CLIENT_MUTE", texto: "Cliente silencioso", ayuda: "No retransmite: no sirve de puente." },
+  { valor: "REPETIDOR", texto: "Repetidor", ayuda: "Pasa los paquetes de los demás: el repetidor solar en su mástil." },
+  { valor: "COMPANION", texto: "Companion", ayuda: "Envía y recibe lo suyo, sin retransmitir: la billetera o la radio del gateway." },
+  { valor: "ROOM_SERVER", texto: "Room server", ayuda: "Guarda los mensajes para quien vuelva a conectarse; no retransmite." },
 ];
 
 type Props = {
@@ -125,7 +125,7 @@ export function PanelAntenas({ estado, despachar, resultado, onCentrar, onPerfil
                       <span className="block truncate text-[12px] text-tenue">
                         {fmt(a.alturaM, a.alturaM % 1 ? 1 : 0)} m · {fmt(a.gananciaDbi)} dBi
                         {esDireccional(a) ? ` ${patronPorId(a.patron).nombre.toLowerCase()} a ${Math.round(a.azimutDeg ?? 0)}°` : ""} ·{" "}
-                        {a.pasarela ? "pasarela" : a.rol === "CLIENT_MUTE" ? "no retransmite" : "retransmite"}
+                        {a.pasarela ? "gateway" : a.rol === "REPETIDOR" ? "retransmite" : "no retransmite"}
                       </span>
                     </span>
                   </button>

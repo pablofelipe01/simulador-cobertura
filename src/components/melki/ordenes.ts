@@ -1,10 +1,10 @@
 // Órdenes para Melki: entiende pedidos en español con coordenadas (decimales o en grados, minutos y segundos)
 // y los ejecuta en el simulador: inscribir, mover, editar o borrar nodos, cambiar parámetros, simular, ir a un lugar,
 // medir distancias, ver perfiles y la señal en un punto. Todo se procesa aquí mismo, sin servicios externos.
-import { EQUIPOS, META_UTIL_ESTUDIO_PCT, PRESETS, presetPorId, type EquipoId, type PresetId } from "@/lib/radio/constantes";
+import { EQUIPOS, LIMITE_SALTOS_MAXIMO, META_UTIL_ESTUDIO_PCT, PRESETS, presetPorId, type EquipoId, type PresetId } from "@/lib/radio/constantes";
 import { entornoPorId, perdidaEntorno } from "@/lib/radio/entorno";
 import { consejoRed, piezaDe, type EstadoRed, type Pieza } from "@/lib/radio/estado-red";
-import type { ViajeMensaje } from "@/lib/radio/mensaje";
+import { INTENTOS, type ViajeMensaje } from "@/lib/radio/mensaje";
 import type { DestinoSiembra, Siembra } from "@/lib/radio/siembra";
 import type { Diseno } from "@/lib/radio/diseno";
 import { resumenCambios, textoCambio, type Ajuste, type PermisosAjuste, type SitioAjuste } from "@/lib/radio/ajuste";
@@ -17,7 +17,15 @@ import type { Antena, AreaObjetivo, EntornoId, Escenario, Medicion, ObjetivoArea
 import { textoNivel, uvADbm, type UnidadId } from "@/lib/radio/unidades";
 import type { Lugar } from "@/lib/geo/referencia";
 
+import type { CurvaCargaResultado, ResultadoCarga } from "@/lib/radio/carga";
+import type { ResultadoEstres } from "@/lib/radio/estres";
+import type { NodoUsuario, SfTrama, TerrenoTrama } from "@/lib/radio/trama";
+
 import type { EscalaSenal, ModoApp, Vista } from "../simulador/estado";
+import { ALTURA_REPETIDOR_DEFECTO } from "../simulador/piezas";
+import type { AreaPoblar, OpcionesCarga, PedidoPoblar, ResultadoPoblar } from "../simulador/panel-capacidad";
+import type { CentroZona, OpcionesEstres, PedidoZonas, ResultadoZonas } from "../simulador/panel-estres";
+import { ejecutarCapacidad, interpretarCapacidad, seguirConZonas } from "./capacidad";
 import type { AccionRespuesta, Respuesta } from "./cerebro";
 
 /** Cambios de la vista que Melki puede pedir (unidad y escala de colores del mapa de señal). */
@@ -106,6 +114,8 @@ export type Orden =
       maxRepetidores: number;
       /** Escenario al que se vuelve antes de diseñar de nuevo (rehacer con otras torres o meta). */
       reemplazar?: Escenario;
+      /** Después del diseño: zonas de popularidad en cada nodo y, si se pidió, la prueba de estrés. */
+      despues?: { zonas: PedidoZonas; estres: Partial<OpcionesEstres> | null };
     }
   | { tipo: "eliminar-varios"; ids: string[]; descripcion: string }
   | { tipo: "editar-varios"; ids: string[]; cambios: Partial<Antena>; descripcion: string }
@@ -120,7 +130,17 @@ export type Orden =
   | { tipo: "ajustar"; aplicar: boolean; opcion: OpcionAjusteId; opciones: OpcionesAjuste; avisos: string[] }
   | { tipo: "aplicar-ajuste"; ajuste: Ajuste; indice: number; base: Escenario }
   | { tipo: "descartar-ajuste" }
-  | { tipo: "area-objetivo"; quitar: boolean; id?: string; metaPct?: number; margenDb?: number };
+  | { tipo: "area-objetivo"; quitar: boolean; id?: string; metaPct?: number; margenDb?: number }
+  /* Gente, capacidad y Trama */
+  | { tipo: "poblar"; pedido: PedidoPoblar }
+  | { tipo: "quitar-pobladas" }
+  | { tipo: "carga"; opciones: Partial<OpcionesCarga>; curva: boolean }
+  /** Zonas de popularidad (N personas a la redonda de cada nodo o de los nombrados) y, si se pidió, la prueba de estrés. */
+  | { tipo: "zonas"; pedido: PedidoZonas; estres: Partial<OpcionesEstres> | null }
+  | { tipo: "quitar-zonas"; centros?: string[] }
+  | { tipo: "estres"; opciones: Partial<OpcionesEstres> }
+  | { tipo: "trama-departamento"; id: string; adopcionPct: number; sf: SfTrama; nodo: NodoUsuario }
+  | { tipo: "trama-dimensionar"; usuarios: number; areaKm2: number | null; terreno: TerrenoTrama; sf: SfTrama; nodo: NodoUsuario };
 
 export type OpcionAjusteId = "economica" | "recomendada" | "maxima";
 
@@ -200,6 +220,23 @@ export type Api = {
   fijarRelieve(v: "teselas" | "plano"): void;
   renombrarEscenario(nombre: string): void;
   duplicar(id: string): void;
+  /* Gente y capacidad */
+  /** Áreas donde se pueden poblar personas (área objetivo, áreas de la regla, zona de la red, área de estudio). */
+  areasPoblar(): AreaPoblar[];
+  /** Reparte personas al azar en un área y simula su conexión. */
+  poblar(o: PedidoPoblar): ResultadoPoblar;
+  /** Quita las personas pobladas al azar; devuelve cuántas. */
+  quitarPobladas(): number;
+  /** Prueba de carga (pagos o mensajes al tiempo) y, con `curva`, hasta cuántos aguanta la frecuencia. */
+  probarCarga(o: Partial<OpcionesCarga>, curva?: boolean): Promise<{ carga: ResultadoCarga; curva: CurvaCargaResultado | null } | null>;
+  /** Gateways y repetidores donde se puede poner una zona de popularidad, con las personas que ya tienen. */
+  centrosZona(): CentroZona[];
+  /** Zonas de popularidad: N personas a la redonda de los nodos pedidos (o de todos). */
+  poblarZonas(o: PedidoZonas): ResultadoZonas;
+  /** Quita las zonas de popularidad (de esos nodos o todas); devuelve cuántas personas. */
+  quitarZonas(centros?: string[]): number;
+  /** Prueba de estrés de la hora pico por repetidor y, con `rampa`, hasta dónde aguanta cada uno. */
+  probarEstres(o: Partial<OpcionesEstres>): Promise<ResultadoEstres | null>;
 };
 
 /** Pedido de ajuste automático que arma Melki (qué puede cambiar, límites y sitios dados). */
@@ -375,12 +412,21 @@ function tipoNodo(tn: string): TipoNodo | null {
   return null;
 }
 
+/**
+ * Ajuste de radio en el texto: «SF9», «SF10 a 250 kHz», «SF9 de 62,5», «el de capacidad», «el de alcance»,
+ * «el de EE. UU.». Sin ancho de banda se entiende el de Trama (250 kHz).
+ */
 function presetEnTexto(tn: string): PresetId | null {
-  const plano = tn.replace(/[\s_-]+/g, "");
-  for (const p of [...PRESETS].sort((a, b) => b.nombre.length - a.nombre.length)) {
-    if (plano.includes(p.nombre.toLowerCase().replace(/\s+/g, "")) || plano.includes(p.id.toLowerCase().replace(/_/g, ""))) return p.id;
-  }
-  return null;
+  if (/\b(de|el|modo|ajuste|radio|preset|velocidad) (de )?(capacidad|mas capacidad)\b/.test(tn)) return "SF9_250";
+  if (/\b(de|el|modo|ajuste|radio|preset) (de )?(alcance|mas alcance|largo alcance)\b/.test(tn)) return "SF11_250";
+  // «usa» es el verbo: Estados Unidos se nombra completo («el ajuste de Estados Unidos», «el de EE. UU.»)
+  if (/\b(estados unidos|ee ?uu|norteamerica\w*)\b/.test(tn) && /\b(preset|ajuste|radio|config\w*|el de)\b/.test(tn)) return "SF7_62";
+  const m = tn.match(/\bsf ?(7|8|9|10|11)\b/);
+  if (!m) return null;
+  const sf = Number(m[1]);
+  const angosto = /\b62(?:[.,]5)?\b|\bangost\w*|\bestrech\w*|\bcomunidad\b/.test(tn);
+  const id = `SF${sf}_${angosto ? "62" : "250"}` as PresetId;
+  return PRESETS.some((p) => p.id === id) ? id : sf >= 9 && sf <= 11 ? (`SF${sf}_250` as PresetId) : (`SF${sf}_62` as PresetId);
 }
 
 /* ───────────── Antenas direccionales, red y vista ───────────── */
@@ -696,8 +742,12 @@ function interpretarAreaObjetivo(texto: string, tn: string, api: Api): Orden | n
   return { tipo: "area-objetivo", quitar: false, id: m?.id, metaPct: pct ? Math.min(100, Math.max(1, leerNumero(pct[1]))) : undefined, margenDb };
 }
 
+/** «Vuélveme a hacerlo», «rehazlo», «hazlo de nuevo», «otra vez»: repetir el diseño (con otra meta o área). */
+const REHACER = /\b(vuelve\w* a hacer\w*|volver a hacer\w*|rehac\w*|rehaz\w*|haz\w* de nuevo|hacerlo de nuevo|de nuevo el diseno|otra vez el diseno)\b/;
+
 function interpretarDiseno(texto: string, tn: string, api: Api, antenas: Antena[]): Orden | null {
-  if (!/\b(cubr\w*|cobertura|abarc\w*|red|malla|repetidor\w*|senal|disen\w*|arm\w*|planific\w*|cuant\w* (repetidores|nodos|antenas))\b/.test(tn)) return null;
+  const rehacer = REHACER.test(tn);
+  if (!rehacer && !/\b(cubr\w*|cobertura|abarc\w*|red|malla|repetidor\w*|senal|disen\w*|arm\w*|planific\w*|cuant\w* (repetidores|nodos|antenas))\b/.test(tn)) return null;
   const bajo = sinTildes(texto);
   const area = areaEnTexto(bajo);
   const verboFuerte = /\b(cubr\w*|abarc\w*|cobertura|disen\w*|arm\w*|planific\w*)\b/.test(tn);
@@ -706,7 +756,7 @@ function interpretarDiseno(texto: string, tn: string, api: Api, antenas: Antena[
   const lado = bajo.match(/cuadrad\w*\s+de\s+(\d+(?:[.,]\d+)?)\s*(km|kilometros?|m|metros?)\s+(?:de lado|por lado)/);
   const medida = (/\b(area|zona|poligono)\b.{0,30}\b(medi|medida|medido|dibuj\w*|marq\w*|traz\w*)\b|\b(area|zona|poligono)\b.{0,20}\bregla\b/.test(tn) || /\bcubr\w* (esta|esa|el|la) (area|zona|poligono)\b(?! de)/.test(tn));
   if (!area && !radio && !(rect && verboFuerte) && !lado && !medida) return null;
-  if (!verboFuerte && !/\b(red|malla|repetidor\w*|cuant\w* (repetidores|nodos|antenas))\b/.test(tn)) return null;
+  if (!verboFuerte && !rehacer && !/\b(red|malla|repetidor\w*|cuant\w* (repetidores|nodos|antenas))\b/.test(tn)) return null;
 
   const metros = (v: string, u?: string) => num(v) * (u && /^k/.test(u) ? 1000 : 1);
   let pedida: AreaPedida | null = null;
@@ -715,7 +765,8 @@ function interpretarDiseno(texto: string, tn: string, api: Api, antenas: Antena[
   const { margenDb, clases } = margenPedido(tn);
   const respaldo = /\b(respaldo|redundan\w*|doble cobertura|dos nodos|dos repetidores por punto)\b/.test(tn);
   const altura = tn.match(/\b(?:repetidor\w*|torres?|mastiles?)\s+(?:de|a|con|en)\s+(\d{1,2}(?:[.,]\d+)?)\s*(?:m|mts?|metros?)\b/) ?? tn.match(/\b(\d{1,2}(?:[.,]\d+)?)\s*(?:m|mts?|metros?)\s+de altura\b/);
-  const alturaM = altura ? Math.min(60, Math.max(3, num(altura[1]))) : 15;
+  // Como en Trama: el repetidor va en un tubo de 6 m salvo que se pida otra altura
+  const alturaM = altura ? Math.min(60, Math.max(3, num(altura[1]))) : ALTURA_REPETIDOR_DEFECTO;
   const maxTxt = tn.match(/\b(?:maximo|max|no mas de|hasta|como mucho)\s+(?:de\s+)?(\d{1,3})\s+(?:repetidores|repetidoras|torres|nodos)\b/);
   const maxRepetidores = maxTxt ? Math.min(200, Math.max(1, Number(maxTxt[1]))) : 60;
 
@@ -724,7 +775,10 @@ function interpretarDiseno(texto: string, tn: string, api: Api, antenas: Antena[
   const tramoGw = tn.match(/\b(?:gateway|getway|internet|starlink)\s+(?:en|ubicad[oa] en|queda en|esta en|sobre)\b/);
   if (tramoGw) gateway = extraerCoordenadas(texto.slice(Math.max(0, (tramoGw.index ?? 0) - 2)));
 
-  if (medida && !area && !radio && !rect && !lado) {
+  // Rehacer sobre el área objetivo que ya está (del mismo tamaño): se diseña sobre ella, no sobre un círculo nuevo
+  const objetivoIgual = rehacer && area ? [...api.mediciones()].reverse().find((x) => x.tipo === "area" && x.objetivo && Math.abs(areaM2(x.puntos) / area.m2 - 1) < 0.08) : undefined;
+  if (objetivoIgual) pedida = { forma: "medicion", id: objetivoIgual.id };
+  else if (medida && !area && !radio && !rect && !lado) {
     const m = [...api.mediciones()].reverse().find((x) => x.tipo === "area");
     if (m) pedida = { forma: "medicion", id: m.id };
     else return { tipo: "disenar", area: { forma: "medicion", id: "" }, margenDb, clases, porcentaje, respaldo, alturaM, gateway, maxRepetidores };
@@ -783,23 +837,25 @@ function interpretarLote(texto: string, tn: string, antenas: Antena[]): Orden | 
   if (/\b(desactiv\w*|exclu\w*|apaga\w*)\b/.test(tn)) return { tipo: "editar-varios", ids, cambios: { activa: false }, descripcion: `${nombre} quedan fuera de la simulación` };
   if (/\b(activ\w*|inclu\w*|enciend\w*|prende\w*)\b/.test(tn)) return { tipo: "editar-varios", ids, cambios: { activa: true }, descripcion: `${nombre} vuelven a la simulación` };
   const rol = rolEnTexto(tn);
-  if (rol) return { tipo: "editar-varios", ids, cambios: { rol }, descripcion: `${nombre} quedan con rol ${rol}` };
+  if (rol) return { tipo: "editar-varios", ids, cambios: { rol }, descripcion: `${nombre} quedan como ${rol === "REPETIDOR" ? "repetidores" : rol === "ROOM_SERVER" ? "room server" : "companion (no retransmiten)"}` };
   return null;
 }
 
+/** Rol MeshCore en el texto («como repetidor», «que no retransmita», «room server»); acepta también los nombres viejos. */
 function rolEnTexto(tn: string): Rol | null {
-  if (!/\b(rol|como|modo|sea|sean|que retransmit\w*)\b/.test(tn)) return null;
-  if (/\b(client ?mute|cliente mudo|mudo|mudos|silencios\w*|no retransmit\w*)\b/.test(tn)) return "CLIENT_MUTE";
-  if (/\b(router|enrutador|retransmisor)\b/.test(tn)) return "ROUTER";
-  if (/\b(client|cliente|clientes)\b/.test(tn)) return "CLIENT";
+  if (!/\b(rol|como|modo|sea|sean|retransmit\w*)\b/.test(tn)) return null;
+  if (/\b(room ?server|servidor de sala|sala de mensajes|tablero)\b/.test(tn)) return "ROOM_SERVER";
+  if (/\b(companion|compania|billetera|client ?mute|cliente mudo|mudo|mudos|silencios\w*|no retransmit\w*|cliente|clientes|client)\b/.test(tn)) return "COMPANION";
+  if (/\b(repetidor|repeater|router|enrutador|retransmisor|retransmit\w*)\b/.test(tn)) return "REPETIDOR";
   return null;
 }
 
 function equipoEnTexto(tn: string): EquipoId | null {
-  if (!/\bequipo\b|\bradio portatil\b|\bnodo solar\b/.test(tn)) return null;
-  if (/\b(portatil|de mano|handy)\b/.test(tn)) return "portatil-2dbi";
-  if (/\b(solar|fibra|5[.,]8)\b/.test(tn)) return "nodo-solar-58";
-  if (/\b3 ?dbi\b|\bantena de 3\b/.test(tn)) return "nodo-3dbi";
+  if (!/\bequipo\b|\bradio portatil\b|\bnodo solar\b|\bp1\b|\bt1000\b|\bt114\b|\bxiao\b|\bbilletera\b|\btarjeta\b/.test(tn)) return null;
+  if (/\b(t1000|tarjeta|sensecap t1000)\b/.test(tn)) return "t1000";
+  if (/\b(xiao|billetera|portatil|de mano|handy)\b/.test(tn)) return "xiao";
+  if (/\b(t114|heltec|radio del gateway)\b/.test(tn)) return "t114-8dbi";
+  if (/\b(p1|solar|fibra|8 ?dbi|repetidor solar)\b/.test(tn)) return "p1-8dbi";
   return null;
 }
 
@@ -947,6 +1003,14 @@ export function interpretarOrden(texto: string, api: Api, pendiente: Pendiente, 
     const m = [...api.mediciones()].reverse().find((x) => x.tipo === "area");
     if (m) return { tipo: "cobertura-area", id: m.id, margenDb: margenPedido(tn).margenDb };
   }
+  const capacidad = interpretarCapacidad(texto, tn, api);
+  // «Rehaz el diseño de las 11.226 ha de manera estable y por cada antena 250 personas»: primero el diseño y
+  // después las zonas de popularidad (y la prueba de estrés, si se pidió)
+  if (capacidad?.tipo === "zonas" && areaEnTexto(sinTildes(texto))) {
+    const d = interpretarDiseno(texto, tn, api, antenas);
+    if (d?.tipo === "disenar") return { ...d, despues: { zonas: capacidad.pedido, estres: capacidad.estres } };
+  }
+  if (capacidad) return capacidad;
   const diseno = interpretarDiseno(texto, tn, api, antenas);
   if (diseno) return diseno;
   const objetivo = interpretarAreaObjetivo(texto, tn, api);
@@ -1026,7 +1090,7 @@ export function interpretarOrden(texto: string, api: Api, pendiente: Pendiente, 
         tipo: "editar",
         id: nodo.id,
         cambios: { rol },
-        descripcion: `queda con rol ${rol}${rol === "ROUTER" ? " (retransmite primero, como un repetidor)" : rol === "CLIENT" ? " (retransmite después de los ROUTER)" : " (no retransmite mensajes de otros)"}`,
+        descripcion: rol === "REPETIDOR" ? "queda como repetidor (pasa los paquetes de los demás)" : rol === "ROOM_SERVER" ? "queda como room server (guarda mensajes; no retransmite)" : "queda como companion (envía y recibe lo suyo; no retransmite)",
       };
     const eq = equipoEnTexto(tn);
     if (eq) {
@@ -1055,9 +1119,11 @@ export function interpretarOrden(texto: string, api: Api, pendiente: Pendiente, 
   if (radio) return { tipo: "parametros", cambios: { radioKm: Math.min(40, Math.max(1, num(radio[1]))) }, descripcion: `el radio de estudio a ${f1(num(radio[1]), 0)} km` };
   const resol = tn.match(/\bresolucion\s*(?:a|en)?\s*(rapida|normal|fina)\b/);
   if (resol) return { tipo: "parametros", cambios: { resolucion: resol[1] as Parametros["resolucion"] }, descripcion: `la resolución a ${resol[1]}` };
-  const saltos = tn.match(/\b(?:limite de saltos|hop ?limit|saltos)\s*(?:a|de|en)?\s*(\d)\b/);
-  if (saltos && /\b(cambia\w*|pon\w*|sube|baja|usa|configura\w*|limite)\b/.test(tn))
-    return { tipo: "parametros", cambios: { limiteSaltos: Math.min(7, Math.max(1, Number(saltos[1]))) }, descripcion: `el límite de saltos a ${saltos[1]}` };
+  const saltos = tn.match(/\b(?:limite de saltos|hop ?limit|flood ?max|saltos)\s*(?:a|de|en)?\s*(\d{1,2})\b/);
+  if (saltos && /\b(cambia\w*|pon\w*|sube|baja|usa|configura\w*|limite)\b/.test(tn)) {
+    const v = Math.min(LIMITE_SALTOS_MAXIMO, Math.max(1, Number(saltos[1])));
+    return { tipo: "parametros", cambios: { limiteSaltos: v }, descripcion: `el límite de saltos del diseño a ${v}` };
+  }
   const frec = texto.match(/(\d{3}(?:[.,]\d+)?)\s*mhz\b/i);
   if (frec && /\b(frecuencia|canal|cambia\w*|pon\w*|usa)\b/.test(tn)) return { tipo: "parametros", cambios: { frecuenciaMhz: num(frec[1]) }, descripcion: `la frecuencia a ${frec[1]} MHz` };
   const rx = texto.match(/receptor.*?(\d{1,2}(?:[.,]\d+)?)\s*(?:m|metros?)\b/i);
@@ -1155,8 +1221,8 @@ function interpretarMalla(texto: string, tn: string, api: Api, coord: Coordenada
     if (/\b(descart\w*|no los pongas|no la quiero|cancela\w*|olvidalo)\b/.test(tn)) return { tipo: "descartar-siembra" };
     if (/\b(acept\w*|ponlos|ponla|ponlo|ponerlos|instalalos|pon los propuestos|confirm\w*|dale|hazlo|si,? pon\w*)\b/.test(tn) || (/\bpropuest\w*/.test(tn) && /\b(pon\w*|instal\w*|deja\w*|usa\w*)\b/.test(tn))) return { tipo: "aceptar-siembra" };
   }
-  // Enviar un mensaje por la malla
-  if (/\b(envi\w*|mand\w*|prueb\w*|simul\w*)\b.*\b(mensaje|mensajes|sms|texto|sos|alerta|chat)\b/.test(tn)) {
+  // Enviar un pago (o un mensaje) de prueba por la malla
+  if (/\b(envi\w*|mand\w*|prueb\w*|simul\w*|haz|hace\w*)\b.*\b(mensaje|mensajes|sms|texto|sos|alerta|chat|pago|pagos|transaccion|transferencia|giro)\b/.test(tn)) {
     const desde = nodosMencionados(tn, antenas)[0] ?? piezaGenerica(tn.replace(/.*\b(desde|de)\b/, " $1 "), antenas, ultimo);
     return { tipo: "mensaje", id: desde?.id };
   }
@@ -1174,6 +1240,8 @@ function interpretarMalla(texto: string, tn: string, api: Api, coord: Coordenada
     }
     if (/\b(siembra|siembrame|siembre|sembrar)\b/.test(tn)) return { tipo: "sembrar", destino: "faltantes" };
   }
+  // «Pon a Persona 1 como repetidor» cambia el rol de un nodo que ya existe: no pone una pieza nueva
+  if (/\bcomo (un |una )?(repetidor\w*|companion|room server|cliente|billetera)\b|\b(rol|retransmit\w*)\b/.test(tn) && nodosMencionados(tn, antenas).length) return null;
   // Poner una pieza: «pon el gateway en…», «agrega un repetidor en… a 20 m», «pon una persona en…»
   const pieza = piezaEnTexto(tn, antenas);
   const moverGateway = pieza === "gateway" && /\b(mueve|mover|muevelo|traslad\w*|cambia\w* .*(sitio|lugar|ubicacion))\b/.test(tn);
@@ -1194,8 +1262,12 @@ function interpretarMalla(texto: string, tn: string, api: Api, coord: Coordenada
 function textoSiembra(s: Siembra, destinos: DestinoSiembra[]): Respuesta {
   const n = s.puntos.length;
   const resultado = s.destinos
-    .map((d, i) => `${destinos[i]?.nombre ?? "El punto"} ${d.llega ? `quedaría con ${f1(d.margenDb, 0)} dB desde ${d.desde}` : `no se alcanza: ${d.motivo}`}`)
+    .map((d, i) => {
+      const saltos = s.saltos?.[i];
+      return `${destinos[i]?.nombre ?? "El punto"} ${d.llega ? `quedaría con ${f1(d.margenDb, 0)} dB desde ${d.desde}${saltos ? `, a ${saltos} ${saltos === 1 ? "salto" : "saltos"} del gateway` : ""}` : `no se alcanza: ${d.motivo}`}`;
+    })
     .join("; ");
+  const subio = s.alturaM !== undefined && s.alturaPedidaM !== undefined && s.alturaM > s.alturaPedidaM;
   if (!n) {
     const algun = s.destinos.some((d) => d.llega);
     return {
@@ -1205,7 +1277,7 @@ function textoSiembra(s: Siembra, destinos: DestinoSiembra[]): Respuesta {
   }
   const lista = s.puntos.map((q, k) => `Propuesto ${k + 1} a ${f1(q.distanciaKm)} km de ${q.desde} (${f1(q.margenDb, 0)} dB, suelo a ${Math.round(q.sueloM)} m)`).join("; ");
   return {
-    texto: `Propongo ${n === 1 ? "un repetidor" : `${n} repetidores`}: ${lista}. ${resultado}. Los ve en el mapa como torres naranjas punteadas; busqué las lomas con enlace sólido (≥ 30 dB). Revise el sitio y el acceso en campo antes de instalar.`,
+    texto: `Propongo ${n === 1 ? "un repetidor" : `${n} repetidores`}${s.alturaM ? ` en torre de ${fn(s.alturaM)} m` : ""}: ${lista}. ${resultado}.${subio ? ` Con torres de ${fn(s.alturaPedidaM!)} m la ruta pasaba del límite de saltos, así que subí a ${fn(s.alturaM!)} m para dar pasos más largos.` : ""} Los ve en el mapa como torres naranjas punteadas; busqué las lomas con enlace sólido (≥ 30 dB). Revise el sitio y el acceso en campo antes de instalar.`,
     acciones: [
       { texto: `Poner ${n === 1 ? "el repetidor" : `los ${n} repetidores`}`, accion: "orden", orden: { tipo: "aceptar-siembra" } },
       { texto: "Descartar", accion: "orden", orden: { tipo: "descartar-siembra" } },
@@ -1630,29 +1702,30 @@ export function ejecutarOrden(o: Orden, api: Api): ResultadoOrden {
       const r = api.red();
       if (!r.alDia) {
         api.simular();
-        return { texto: "Primero calculo la red; pídame el mensaje otra vez en un momento.", esperar: "*" };
+        return { texto: "Primero calculo la red; pídame el pago otra vez en un momento.", esperar: "*" };
       }
       const desde =
         (o.id ? porId.get(o.id) : undefined) ??
         [...r.conectadas, ...r.lejos].sort((a, b) => (r.porNodo.get(b.id)?.saltos ?? 0) - (r.porNodo.get(a.id)?.saltos ?? 0))[0] ??
         r.personas[0] ??
         r.repetidores[0];
-      if (!desde) return { texto: "Ponga al menos una persona para enviar un mensaje al gateway." };
-      if (desde.pasarela) return { texto: `«${desde.nombre}» es el gateway: el mensaje ya está en internet. Elija una persona o un repetidor.` };
+      if (!desde) return { texto: "Ponga al menos una persona para enviar un pago al gateway." };
+      if (desde.pasarela) return { texto: `«${desde.nombre}» es el gateway: el pago ya está en internet. Elija una persona o un repetidor.` };
       api.cambiarModo("sembrar");
       const v = api.enviarMensaje(desde.id);
-      if (!v) return { texto: "Primero calculo la red; pídame el mensaje otra vez en un momento." };
+      if (!v) return { texto: "Primero calculo la red; pídame el pago otra vez en un momento." };
       const nombres = new Map(antenas.map((a) => [a.id, a.nombre]));
       const ruta = v.ruta.map((id) => nombres.get(id) ?? id).join(" → ");
       const tiempoTxt = (ms: number) => (ms < 1000 ? `${Math.round(ms)} ms` : `${f1(ms / 1000)} s`);
       if (!v.llega)
         return {
-          texto: `Envié un mensaje desde «${desde.nombre}» y no llega: ${v.motivo ?? "no tiene ruta"}${v.ruta.length > 1 ? ` (ruta: ${ruta})` : ""}.${r.porNodo.get(desde.id)?.estado === "sin-cobertura" ? " ¿Quiere que siembre un repetidor hacia esa persona?" : ""}`,
+          texto: `Envié un pago de prueba desde «${desde.nombre}» y no llega: ${v.motivo ?? "no tiene ruta"}${v.ruta.length > 1 ? ` (ruta: ${ruta})` : ""}.${r.porNodo.get(desde.id)?.estado === "sin-cobertura" ? " ¿Quiere que siembre un repetidor hacia esa persona?" : ""}`,
           acciones: r.porNodo.get(desde.id)?.estado === "sin-cobertura" ? [{ texto: `Conectar a ${desde.nombre}`, accion: "orden", orden: { tipo: "sembrar", destino: { id: desde.id } } }] : undefined,
         };
       const pct = (p: number) => (p >= 0.999 ? "más de 99,9 %" : `${f1(p * 100, 0)} %`);
       return {
-        texto: `Envié un mensaje de texto de 40 caracteres desde «${desde.nombre}»: llega al gateway en ${v.saltos} ${v.saltos === 1 ? "salto" : "saltos"} (${ruta}), en ≈ ${tiempoTxt(v.totalMs.tipica)}${v.totalMs.max - v.totalMs.min >= 1 ? ` (entre ${tiempoTxt(v.totalMs.min)} y ${tiempoTxt(v.totalMs.max)})` : ""}. Llega al primer intento ${pct(v.probabilidad)} de las veces y ${pct(v.probabilidadReintentos)} con 3 intentos. Con ${v.preset} cada salto ocupa ${tiempoTxt(v.aireMs)} en el aire (${v.bytes} bytes). Cada nodo lo retransmite una sola vez y los repetidores (ROUTER) salen primero; si el paquete pasara de ${v.limiteSaltos} saltos, se descartaría. La IA del gateway le contesta por la misma ruta: ≈ ${tiempoTxt(v.totalMs.tipica)} de vuelta por radio, más lo que tarde en pensar. Lo puede ver en el mapa: el sobre va, la nube «IA» se enciende y la respuesta regresa.`,
+        texto: `Envié un pago de prueba desde «${desde.nombre}»: la orden firmada (${v.bytes} bytes) llega al gateway en ${v.saltos} ${v.saltos === 1 ? "salto" : "saltos"} (${ruta}), en ≈ ${tiempoTxt(v.totalMs.tipica)}${v.totalMs.max - v.totalMs.min >= 1 ? ` (entre ${tiempoTxt(v.totalMs.min)} y ${tiempoTxt(v.totalMs.max)})` : ""}. Llega al primer intento ${pct(v.probabilidad)} de las veces y ${pct(v.probabilidadReintentos)} con los ${INTENTOS} intentos de MeshCore (3 por la ruta y el último por inundación). Con ${v.preset} cada salto ocupa ${tiempoTxt(v.aireMs)} en el aire; va directo por la ruta aprendida y solo los repetidores la pasan, cada uno después de un turno al azar. El gateway verifica el pago con el banco por Starlink y el comprobante vuelve por la misma ruta: ≈ ${tiempoTxt(v.totalMs.tipica)} de radio más lo que tarde el banco. Lo puede ver en el mapa. Para ver muchos pagos a la vez: «envía 15 pagos al tiempo».`,
+        acciones: [{ texto: "15 pagos al tiempo", accion: "orden", orden: { tipo: "carga", opciones: { mensajes: 15 }, curva: false } }],
       };
     }
     case "modo":
@@ -1676,7 +1749,7 @@ export function ejecutarOrden(o: Orden, api: Api): ResultadoOrden {
       const c = consejoRed(r, api.parametros().limiteSaltos);
       const acciones: Respuesta["acciones"] = [];
       if (r.alDia && r.sinCobertura.length) acciones.push({ texto: "Conectar a los que faltan", accion: "orden", orden: { tipo: "sembrar", destino: "faltantes" } });
-      if (r.alDia && r.conectadas.length) acciones.push({ texto: "Enviar un mensaje de prueba", accion: "orden", orden: { tipo: "mensaje" } });
+      if (r.alDia && r.conectadas.length) acciones.push({ texto: "Enviar un pago de prueba", accion: "orden", orden: { tipo: "mensaje" } });
       return { texto: `${c.paso ? `Paso ${c.paso}: ` : ""}${c.titulo}. ${c.texto}`, acciones: acciones.length ? acciones : undefined };
     }
     case "coordenada-sola": {
@@ -1693,6 +1766,15 @@ export function ejecutarOrden(o: Orden, api: Api): ResultadoOrden {
     }
     case "disenar":
       return ejecutarDiseno(o, api, antes);
+    case "poblar":
+    case "quitar-pobladas":
+    case "carga":
+    case "zonas":
+    case "quitar-zonas":
+    case "estres":
+    case "trama-departamento":
+    case "trama-dimensionar":
+      return ejecutarCapacidad(o, api);
     case "ajustar":
       return ejecutarAjuste(o, api, antes);
     case "aplicar-ajuste": {
@@ -2008,10 +2090,14 @@ function ejecutarDiseno(o: Extract<Orden, { tipo: "disenar" }>, api: Api, antes:
     // El área del diseño queda como área objetivo: la factibilidad se mide ahí y con la meta pedida
     if (idArea) api.fijarAreaObjetivo(idArea, { metaPct: o.porcentaje, margenDb: o.margenDb, respaldo: o.respaldo || undefined });
     const r = await api.esperarResultado();
-    return textoDiseno(o, d, puestas, r, poligono, nombreArea || donde, base, api);
+    const hecho = textoDiseno(o, d, puestas, r, poligono, nombreArea || donde, base, api);
+    if (!o.despues) return hecho;
+    // Y luego las zonas de popularidad (y la prueba de estrés) sobre la red recién diseñada
+    const sigue = await seguirConZonas(o.despues.zonas, o.despues.estres, api);
+    return { texto: `${hecho.texto}\n\n${sigue.texto}`, acciones: [...(sigue.acciones ?? []), ...(hecho.acciones ?? [])].slice(0, 5) };
   })();
   return {
-    texto: `Diseño la malla para ${textoArea(area)}${forma ? ` (área ${forma})` : ""} ${donde}: ${meta}. ${dibujar ? "Dibujé el área en el mapa. " : ""}Busco con el relieve real dónde va ${gw || o.gateway ? "cada repetidor" : "el gateway y cada repetidor"} (torres de ${fn(o.alturaM)} m), siempre enlazados a la red. Tardo unos segundos.`,
+    texto: `Diseño la malla para ${textoArea(area)}${forma ? ` (área ${forma})` : ""} ${donde}: ${meta}. ${dibujar ? "Dibujé el área en el mapa. " : ""}Busco con el relieve real dónde va ${gw || o.gateway ? "cada repetidor" : "el gateway y cada repetidor"} (torres de ${fn(o.alturaM)} m), siempre enlazados a la red.${o.despues ? ` Después pongo ${o.despues.zonas.n ?? 250} personas alrededor de cada gateway y repetidor (zonas de popularidad)${o.despues.estres ? " y hago la prueba de estrés de la hora pico para ver si la red se revienta" : ""}.` : ""} Tardo unos segundos.`,
     acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: base }],
     deshacer: base,
     luego,
@@ -2064,7 +2150,7 @@ function textoDiseno(o: Extract<Orden, { tipo: "disenar" }>, d: Diseno, puestas:
       const mas = Math.min(200, Math.max(60, o.maxRepetidores * 3));
       acciones.push({ texto: `Rehacer con hasta ${mas} repetidores`, accion: "orden", orden: conPoligono({ maxRepetidores: mas, reemplazar: base }) });
     }
-    for (const h of [20, 30]) if (h > o.alturaM) acciones.push({ texto: `Rehacer con torres de ${h} m`, accion: "orden", orden: conPoligono({ alturaM: h, reemplazar: base }) });
+    for (const h of [12, 20, 30].filter((x) => x > o.alturaM).slice(0, 2)) acciones.push({ texto: `Rehacer con torres de ${h} m`, accion: "orden", orden: conPoligono({ alturaM: h, reemplazar: base }) });
     if (d.huecos[0]) acciones.push({ texto: "Ver un punto sin cobertura", accion: "orden", orden: { tipo: "ir", coord: { lat: d.huecos[0][1], lon: d.huecos[0][0] } } });
     acciones.push({ texto: "Ajústamelo (alturas, lomas y apoyos)", accion: "orden", orden: { tipo: "ajustar", aplicar: false, opcion: "recomendada", opciones: {}, avisos: [] } });
   } else {

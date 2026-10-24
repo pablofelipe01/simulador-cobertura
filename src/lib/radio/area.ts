@@ -191,3 +191,14 @@ export function porcentajeSobre(c: CoberturaArea, umbralDb: number): number {
   }
   return total > 0 ? (100 * si) / total : 0;
 }
+
+/** Margen del mejor nodo (dB) en un punto, con la celda del mapa calculado (NaN si cae por fuera). */
+export function margenEnPunto(r: Pick<ResultadoSimulacion, "malla" | "mejor">, lat: number, lon: number): number {
+  const { caja, ancho, alto } = r.malla;
+  const x0 = lonAMercator(caja.oeste);
+  const celda = (lonAMercator(caja.este) - x0) / ancho;
+  const i = Math.floor((lonAMercator(lon) - x0) / celda);
+  const j = Math.floor((latAMercator(caja.norte) - latAMercator(lat)) / celda);
+  if (i < 0 || j < 0 || i >= ancho || j >= alto) return NaN;
+  return r.mejor[j * ancho + i];
+}

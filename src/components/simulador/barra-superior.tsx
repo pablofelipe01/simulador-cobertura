@@ -63,7 +63,7 @@ export function BarraSuperior(p: Props) {
         <span className="hidden h-6 w-px bg-linea sm:block" />
         <div className="hidden min-w-0 sm:block">
           <h1 className="font-cond text-[17px] leading-tight font-semibold">Simulador de cobertura</h1>
-          <p className="text-[12px] leading-tight text-tenue">Red mesh Meshtastic · LoRa 915 MHz</p>
+          <p className="text-[12px] leading-tight text-tenue">Red de pagos MeshCore · LoRa 920 MHz</p>
         </div>
       </div>
 

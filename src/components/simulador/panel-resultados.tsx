@@ -3,7 +3,7 @@
 // Resultado de la simulación: factibilidad, cobertura por clase, nodos antena (rango de alcance), nodos de campo,
 // enlaces, recomendaciones y cómo se calculó.
 import { Check, ChevronDown, Route, Target, TriangleAlert, X } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { CLASES, ENLACES, ERROR_MODELO_DB, META_UTIL_ESTUDIO_PCT, presetPorId, UMBRAL_CONFIABLE_DB, UMBRAL_SERVICIO_DB, UMBRAL_UTIL_DB } from "@/lib/radio/constantes";
 import { entornoPorId, perdidaEntorno } from "@/lib/radio/entorno";
@@ -33,6 +33,8 @@ type Props = {
   onDeshacerAjuste: () => void;
   /** Quitar el área objetivo (volver a medir en el área de estudio). */
   onQuitarObjetivo: () => void;
+  /** «Poblar personas» y «Prueba de carga» (van después de la cobertura, también antes de simular). */
+  capacidad?: ReactNode;
 };
 
 /** Porcentaje como lo lee la gente: 99,9 sin redondear a 100 y sin decimales cuando sobran. */
@@ -45,21 +47,33 @@ const NIVELES = [
   { id: "factible", texto: "Factible", color: "#1E7B34" },
 ] as const;
 
-export function PanelResultados({ resultado: r, antenas, parametros, desactualizado, calculando, onPerfil, ajuste, onAjustar, onElegirAjuste, onAplicarAjuste, onDescartarAjuste, onDeshacerAjuste, onQuitarObjetivo }: Props) {
+export function PanelResultados({ resultado: r, antenas, parametros, desactualizado, calculando, onPerfil, ajuste, onAjustar, onElegirAjuste, onAplicarAjuste, onDescartarAjuste, onDeshacerAjuste, onQuitarObjetivo, capacidad }: Props) {
   const [verTodos, setVerTodos] = useState(false);
   if (!r) {
     return (
-      <div className="rounded-lg border border-dashed border-linea p-4 text-[14px] leading-relaxed text-carbon-2">
-        {calculando ? "Calculando la primera simulación…" : "Agregue un nodo antena y pulse Simular para ver la cobertura, el rango de alcance, los enlaces de la malla y la factibilidad."}
+      <div className="space-y-5">
+        <div className="rounded-lg border border-dashed border-linea p-4 text-[14px] leading-relaxed text-carbon-2">
+          {calculando ? "Calculando la primera simulación…" : "Agregue un nodo antena y pulse Simular para ver la cobertura, el rango de alcance, los enlaces de la malla y la factibilidad."}
+        </div>
+        {capacidad}
       </div>
     );
   }
   const porId = new Map(antenas.map((a) => [a.id, a]));
   const cobertura = new Set(r.antenas.map((a) => a.id));
-  const deCampo = r.nodos.filter((n) => !cobertura.has(n.id) && porId.has(n.id));
+  const deCampoTodos = r.nodos.filter((n) => !cobertura.has(n.id) && porId.has(n.id));
+  // Las personas pobladas al azar se resumen (pueden ser cientos); las puestas a mano se listan una por una
+  const deCampo = deCampoTodos.filter((n) => !porId.get(n.id)?.poblada);
+  const pobladas = deCampoTodos.filter((n) => porId.get(n.id)?.poblada);
+  const conectadasPobladas = pobladas.filter((n) => n.saltos !== null && n.saltos <= parametros.limiteSaltos);
+  const lejosPobladas = pobladas.filter((n) => n.saltos !== null && n.saltos > parametros.limiteSaltos).length;
+  const saltosPromedio = conectadasPobladas.length ? conectadasPobladas.reduce((s, n) => s + (n.saltos ?? 0), 0) / conectadasPobladas.length : 0;
   const f = r.factibilidad;
   const nivel = NIVELES.find((n) => n.id === f.nivel)!;
-  const enlacesVisibles = verTodos ? r.enlaces : r.enlaces.filter((e) => e.clase !== "sin").slice(0, 12);
+  const tocaPoblada = (e: { a: string; b: string }) => Boolean(porId.get(e.a)?.poblada || porId.get(e.b)?.poblada);
+  const enlacesLista = r.enlaces.filter((e) => !tocaPoblada(e));
+  const enlacesPoblados = r.enlaces.length - enlacesLista.length;
+  const enlacesVisibles = verTodos ? enlacesLista : enlacesLista.filter((e) => e.clase !== "sin").slice(0, 12);
   const obj = r.areaObjetivo ?? null;
   const porClase = (id: (typeof CLASES)[number]["id"]) => (obj ? obj.porClase[id] : r.areaEstudioKm2 > 0 ? (100 * r.areaPorClase[id]) / r.areaEstudioKm2 : 0);
 
@@ -171,6 +185,8 @@ export function PanelResultados({ resultado: r, antenas, parametros, desactualiz
         </p>
       </section>
 
+      {capacidad}
+
       <section data-tour="antenas-resultado">
         <Titulo>Nodos antena · rango de alcance</Titulo>
         <ul className="space-y-1.5">
@@ -212,9 +228,21 @@ export function PanelResultados({ resultado: r, antenas, parametros, desactualiz
         </ul>
       </section>
 
-      {deCampo.length > 0 && (
+      {deCampoTodos.length > 0 && (
         <section data-tour="nodos-campo">
           <Titulo>Nodos de campo</Titulo>
+          {pobladas.length > 0 && (
+            <div className="mb-1.5 rounded-lg bg-white px-2.5 py-2 text-[13px] ring-1 ring-linea" data-tour="resumen-pobladas">
+              <p className="font-cond text-[15px] font-semibold">
+                {pobladas.length.toLocaleString("es-CO")} personas pobladas: {conectadasPobladas.length.toLocaleString("es-CO")} conectadas ({fmtPct((100 * conectadasPobladas.length) / pobladas.length)} %)
+              </p>
+              <p className="text-[12px] leading-snug text-tenue">
+                {conectadasPobladas.length ? `En promedio a ${fmt(saltosPromedio, 1)} saltos del gateway. ` : ""}
+                {lejosPobladas ? `${lejosPobladas} llegan con más de ${parametros.limiteSaltos} saltos. ` : ""}
+                {pobladas.length - conectadasPobladas.length - lejosPobladas > 0 ? `${pobladas.length - conectadasPobladas.length - lejosPobladas} sin ruta al gateway.` : ""}
+              </p>
+            </div>
+          )}
           <ul className="space-y-1.5">
             {deCampo.map((n) => {
               const a = porId.get(n.id)!;
@@ -242,16 +270,17 @@ export function PanelResultados({ resultado: r, antenas, parametros, desactualiz
       <section data-tour="enlaces">
         <Titulo
           accion={
-            r.enlaces.some((e) => e.clase === "sin") || r.enlaces.length > 12 ? (
+            enlacesLista.some((e) => e.clase === "sin") || enlacesLista.length > 12 ? (
               <button type="button" className="text-[13px] text-salvia-oscura underline-offset-2 hover:underline" onClick={() => setVerTodos((v) => !v)}>
-                {verTodos ? "Ver solo enlaces útiles" : `Ver los ${r.enlaces.length}`}
+                {verTodos ? "Ver solo enlaces útiles" : `Ver los ${enlacesLista.length}`}
               </button>
             ) : undefined
           }
         >
           Enlaces entre nodos
         </Titulo>
-        {r.enlaces.length === 0 ? (
+        {enlacesPoblados > 0 && <p className="mb-1.5 text-[12px] text-tenue">{enlacesPoblados.toLocaleString("es-CO")} enlaces de las personas pobladas no se listan; en el mapa se ve el de su ruta.</p>}
+        {enlacesLista.length === 0 && enlacesPoblados > 0 ? null : r.enlaces.length === 0 ? (
           <p className="text-[13px] text-tenue">Con un solo nodo no hay enlaces que evaluar.</p>
         ) : enlacesVisibles.length === 0 ? (
           <p className="text-[13px] text-tenue">Ninguna pareja de nodos logra enlace (≥ 20 dB).</p>

@@ -49,6 +49,7 @@ export function htmlMarcador(antena: Antena, seleccionada: boolean, estado: Esta
     "torre-marcador",
     campo ? "es-nodo" : "",
     persona ? "es-persona" : "",
+    antena.poblada ? "poblada" : "",
     red ? `red-${red.estado}` : `nodo-${estado}`,
     seleccionada ? "sel" : "",
     antena.activa ? "" : "inactiva",
@@ -100,7 +101,7 @@ const NUBE_IA = `<svg viewBox="0 0 30 20" aria-hidden="true"><path d="M8.6 18.5 
  * Seleccionada, muestra la «×» para quitarla.
  */
 export function htmlPieza(antena: Antena, seleccionada: boolean, marca: MarcaRed, conIa: boolean): string {
-  const clases = ["pieza", `pieza-${marca.pieza}`, `red-${marca.estado}`, seleccionada ? "sel" : "", antena.activa ? "" : "inactiva"].filter(Boolean).join(" ");
+  const clases = ["pieza", `pieza-${marca.pieza}`, `red-${marca.estado}`, antena.poblada ? "poblada" : "", seleccionada ? "sel" : "", antena.activa ? "" : "inactiva"].filter(Boolean).join(" ");
   const nombre = escapar(antena.nombre);
   const saltos = !antena.pasarela && marca.saltos !== null ? `<span class="saltos" title="${marca.saltos} ${marca.saltos === 1 ? "salto" : "saltos"} hasta el gateway">${marca.saltos}</span>` : "";
   const aura = marca.estado === "aislado" ? `<span class="aura" aria-hidden="true"></span>` : "";

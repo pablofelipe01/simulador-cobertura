@@ -2,13 +2,14 @@
 
 // Modo «Sembrar la malla» (como en Trama): primero el Gateway + Internet, después los repetidores según la
 // distancia y por último la gente. El panel guía paso a paso, muestra el estado de la red, propone repetidores
-// automáticamente y deja enviar un mensaje para ver cómo viaja por la malla.
+// automáticamente y deja enviar un pago de prueba para ver cómo viaja por la malla MeshCore.
 import { Check, ChevronDown, CircleAlert, Flag, Gamepad2, LocateFixed, PartyPopper, Send, Sparkles, Trash, Undo2, X } from "lucide-react";
 import { useEffect, useId, useMemo, useState, type Dispatch, type ReactNode } from "react";
 
 import { alcancePlanoKm } from "@/lib/radio/alcance-plano";
 import { consejoRed, type EstadoNodo as EstadoRedNodo, type EstadoRed } from "@/lib/radio/estado-red";
-import type { ViajeMensaje } from "@/lib/radio/mensaje";
+import { INTENTOS, type ViajeMensaje } from "@/lib/radio/mensaje";
+import { TERRENOS_TRAMA } from "@/lib/radio/trama";
 import type { DestinoSiembra, ResultadoDestino, Siembra } from "@/lib/radio/siembra";
 import type { Antena } from "@/lib/radio/tipos";
 
@@ -77,6 +78,8 @@ type Props = {
   onCentrar: (lat: number, lon: number) => void;
   /** Al elegir una pieza (en el celular se cierra la hoja para tocar el mapa). */
   onPiezaElegida?: () => void;
+  /** Zona de popularidad del gateway o repetidor elegido en la lista. */
+  zonaDe?: (a: Antena) => ReactNode;
 };
 
 export function PanelSembrar(props: Props) {
@@ -153,7 +156,7 @@ export function PanelSembrar(props: Props) {
         />
       </div>
 
-      {antenas.length > 0 && <ListaPiezas estado={estado} despachar={despachar} red={red} limite={limite} onCentrar={props.onCentrar} />}
+      {antenas.length > 0 && <ListaPiezas estado={estado} despachar={despachar} red={red} limite={limite} onCentrar={props.onCentrar} zonaDe={props.zonaDe} />}
 
       <SembradoAutomatico {...props} />
 
@@ -181,8 +184,8 @@ function ComoSeJuega({ abiertoAlInicio }: { abiertoAlInicio: boolean }) {
             para llegar lejos, y suelte <b>personas</b> por el campo. Las que quedan en rojo no tienen cobertura: acérqueles un repetidor.
           </p>
           <p>
-            Las líneas turquesa que avanzan muestran por dónde viaja la información hacia el gateway: cada mensaje lo repiten los nodos del camino, normalmente el repetidor más cercano con buen enlace. Cada pieza destella al
-            retransmitir y la nube «IA» del gateway se enciende cuando le llega algo.
+            Las líneas turquesa que avanzan muestran por dónde viajan los pagos hacia el gateway: en MeshCore solo los repetidores pasan los paquetes de los demás (las billeteras no retransmiten), normalmente el más
+            cercano con buen enlace. Cada pieza destella al retransmitir y la nube «IA» del gateway se enciende cuando le llega algo.
           </p>
         </div>
       )}
@@ -215,7 +218,9 @@ function AlcanceDeReferencia({ alturaRepetidor, estado }: { alturaRepetidor: num
         <dt>Repetidor ↔ repetidor (sólido)</dt>
         <dd className="text-right tabular-nums">{km(valores.entreRepetidores)}</dd>
       </dl>
-      <p className="mt-1 text-[11.5px] leading-snug text-tenue">Lomas, árboles y casas lo acortan: el mapa calcula con el relieve real.</p>
+      <p className="mt-1 text-[11.5px] leading-snug text-tenue">
+        Lomas, árboles y casas lo acortan: el mapa calcula con el relieve real. Trama supone por repetidor {TERRENOS_TRAMA.plano.radioKm} km en plano, {TERRENOS_TRAMA.sabana.radioKm} en sabana, {TERRENOS_TRAMA.montana.radioKm} en montaña o ríos y {TERRENOS_TRAMA.selva.radioKm} en selva (SF11).
+      </p>
     </div>
   );
 }
@@ -271,13 +276,45 @@ function EstadoDeLaRed({ red, limite, calculando, avance }: { red: EstadoRed; li
   );
 }
 
-function ListaPiezas({ estado, despachar, red, limite, onCentrar }: { estado: Estado; despachar: Dispatch<Accion>; red: EstadoRed; limite: number; onCentrar: (lat: number, lon: number) => void }) {
+function ListaPiezas({
+  estado,
+  despachar,
+  red,
+  limite,
+  onCentrar,
+  zonaDe,
+}: {
+  estado: Estado;
+  despachar: Dispatch<Accion>;
+  red: EstadoRed;
+  limite: number;
+  onCentrar: (lat: number, lon: number) => void;
+  zonaDe?: (a: Antena) => ReactNode;
+}) {
   const antenas = estado.escenario.antenas;
   const orden: Record<Pieza, number> = { gateway: 0, repetidor: 1, persona: 2 };
-  const lista = [...antenas].sort((a, b) => orden[piezaDe(a)] - orden[piezaDe(b)]);
+  const [verPobladas, setVerPobladas] = useState(false);
+  // Las personas pobladas al azar (pueden ser cientos) van en un solo renglón que se despliega
+  const pobladas = antenas.filter((a) => a.poblada);
+  const conectadasPobladas = pobladas.filter((a) => red.porNodo.get(a.id)?.estado === "conectado").length;
+  const lista = [...antenas].filter((a) => !a.poblada || verPobladas || estado.seleccion === a.id).sort((a, b) => orden[piezaDe(a)] - orden[piezaDe(b)] || Number(Boolean(a.poblada)) - Number(Boolean(b.poblada)));
   return (
     <section data-tour="lista-piezas" aria-label="Lo que ha puesto">
       <Titulo>Lo que ha puesto ({antenas.length})</Titulo>
+      {pobladas.length > 0 && (
+        <button
+          type="button"
+          className="mb-1.5 flex w-full items-center justify-between gap-2 rounded-lg bg-white px-2.5 py-1.5 text-left text-[12.5px] ring-1 ring-linea hover:bg-papel-2"
+          aria-expanded={verPobladas}
+          onClick={() => setVerPobladas((v) => !v)}
+        >
+          <span>
+            <b className="font-cond text-[14px]">{pobladas.length.toLocaleString("es-CO")} personas pobladas al azar</b>
+            {red.alDia ? ` · ${conectadasPobladas.toLocaleString("es-CO")} conectadas` : ""}
+          </span>
+          <span className="shrink-0 text-salvia-oscura">{verPobladas ? "Ocultar" : "Ver"}</span>
+        </button>
+      )}
       <ul className="desplazable max-h-64 divide-y divide-linea overflow-y-auto rounded-lg bg-white ring-1 ring-linea">
         {lista.map((a) => {
           const info = red.porNodo.get(a.id);
@@ -320,6 +357,7 @@ function ListaPiezas({ estado, despachar, red, limite, onCentrar }: { estado: Es
                   </Boton>
                 </div>
               )}
+              {sel && zonaDe && pieza !== "persona" && zonaDe(a) && <div className="bg-papel/60 px-2.5 pb-2.5">{zonaDe(a)}</div>}
             </li>
           );
         })}
@@ -378,13 +416,20 @@ function Propuesta({ siembra, destinos, alturaM, onAceptar, onDescartar }: { sie
   const llegan = siembra.destinos.filter((d) => d.llega).length;
   const resultado = (d: ResultadoDestino, i: number) => {
     const nombre = destinos[i]?.nombre ?? "El punto";
-    return d.llega ? `${nombre}: queda con ${fmt(d.margenDb, 0)} dB desde ${d.desde}` : `${nombre}: ${d.motivo ?? "no se alcanza"}`;
+    const saltos = siembra.saltos?.[i];
+    return d.llega ? `${nombre}: queda con ${fmt(d.margenDb, 0)} dB desde ${d.desde}${saltos ? ` · ${saltos} ${saltos === 1 ? "salto" : "saltos"} al gateway` : ""}` : `${nombre}: ${d.motivo ?? "no se alcanza"}`;
   };
+  const subio = siembra.alturaPedidaM !== undefined && alturaM > siembra.alturaPedidaM;
   return (
     <div className="mt-2 space-y-2 rounded-lg bg-white p-2.5 ring-1 ring-melki/60" data-tour="propuesta">
       <p className="font-cond text-[15px] leading-tight font-semibold">
         {n === 0 ? "No hace falta ningún repetidor" : `Propuesta: ${n} ${n === 1 ? "repetidor" : "repetidores"} en torre de ${alturaM} m`}
       </p>
+      {subio && n > 0 && (
+        <p className="rounded-md bg-melki-clara px-2 py-1 text-[12px] leading-snug text-carbon">
+          Con torres de {siembra.alturaPedidaM} m la ruta pasaba del límite de saltos: propongo torres de {alturaM} m, con pasos más largos.
+        </p>
+      )}
       {n > 0 && (
         <ol className="space-y-0.5 text-[12.5px] leading-snug text-carbon-2">
           {siembra.puntos.map((q, k) => (
@@ -432,10 +477,10 @@ function EnviarMensaje({ red, antenas, viaje, onEnviar, limite }: { red: EstadoR
   const nombres = new Map(antenas.map((a) => [a.id, a.nombre]));
   const v = viaje?.viaje;
   return (
-    <section data-tour="enviar-mensaje" aria-label="Enviar un mensaje">
-      <Titulo>Enviar un mensaje</Titulo>
+    <section data-tour="enviar-mensaje" aria-label="Enviar un pago de prueba">
+      <Titulo>Enviar un pago de prueba</Titulo>
       {candidatos.length === 0 ? (
-        <p className="text-[13px] leading-snug text-tenue">Ponga al menos una persona para enviar un mensaje al gateway.</p>
+        <p className="text-[13px] leading-snug text-tenue">Ponga al menos una persona para enviar un pago al gateway.</p>
       ) : (
         <>
           <div className="flex items-end gap-2">
@@ -460,7 +505,7 @@ function EnviarMensaje({ red, antenas, viaje, onEnviar, limite }: { red: EstadoR
         <div className="mt-2 space-y-1.5 rounded-lg bg-white p-2.5 ring-1 ring-linea" data-tour="viaje-mensaje" role="status">
           <p className={`flex items-center gap-1.5 font-cond text-[15px] font-semibold ${v.llega ? "text-buena" : "text-sin"}`}>
             {v.llega ? <Check size={17} /> : <X size={17} />}
-            {v.llega ? "El mensaje llega al gateway" : "El mensaje no llega"}
+            {v.llega ? "El pago llega al gateway" : "El pago no llega"}
           </p>
           {v.motivo && <p className="text-[12.5px] leading-snug text-carbon-2">{v.motivo}</p>}
           {v.ruta.length > 1 && (
@@ -493,17 +538,18 @@ function EnviarMensaje({ red, antenas, viaje, onEnviar, limite }: { red: EstadoR
                   </dd>
                   <dt className="text-tenue">Llega al primer intento</dt>
                   <dd className="text-right tabular-nums">{pct(v.probabilidad)}</dd>
-                  <dt className="text-tenue">Con 3 intentos</dt>
+                  <dt className="text-tenue">Con los {INTENTOS} intentos</dt>
                   <dd className="text-right tabular-nums">{pct(v.probabilidadReintentos)}</dd>
-                  <dt className="text-tenue">Respuesta de la IA</dt>
+                  <dt className="text-tenue">Comprobante</dt>
                   <dd className="text-right tabular-nums">≈ {tiempo(v.totalMs.tipica)} de vuelta</dd>
                 </>
               )}
             </dl>
           )}
           <p className="text-[11.5px] leading-snug text-tenue">
-            {v.preset} · {v.bytes} bytes · {tiempo(v.aireMs)} en el aire por salto. Cada nodo retransmite el mensaje una vez (inundación); los repetidores (ROUTER) salen primero.
-            {v.llega ? " La IA del gateway contesta por la misma ruta (más lo que tarde en pensar)." : ""}
+            {v.preset} · orden firmada de {v.bytes} bytes · {tiempo(v.aireMs)} en el aire por salto. Con la ruta aprendida va directo: cada repetidor espera un turno al azar y la pasa al siguiente; si no vuelve el acuse, se
+            reintenta (el último intento, por inundación).
+            {v.llega ? " El gateway verifica el pago, lo pasa por Starlink y el comprobante vuelve por la misma ruta (más lo que tarde el banco)." : ""}
           </p>
         </div>
       )}

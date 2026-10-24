@@ -1,6 +1,8 @@
 // Mensajes entre la interfaz y el motor de cálculo (Web Worker).
 import type { Ajuste, PedidoAjuste } from "./ajuste";
+import type { CurvaCargaResultado, PedidoCarga, ResultadoCarga } from "./carga";
 import type { Diseno, PedidoDiseno } from "./diseno";
+import type { PedidoEstres, ResultadoEstres } from "./estres";
 import type { PedidoSiembra, Siembra } from "./siembra";
 import type { Inspeccion } from "./simulacion";
 import type { Antena, AreaObjetivo, FuenteRelieve, Parametros, Perfil, PerfilTerreno, ResultadoSimulacion } from "./tipos";
@@ -15,11 +17,13 @@ export type Entrada =
   | { tipo: "sembrar"; id: number; pedido: PedidoSiembra; relieve: FuenteRelieve }
   | { tipo: "disenar"; id: number; pedido: PedidoDiseno; relieve: FuenteRelieve }
   | { tipo: "ajustar"; id: number; pedido: PedidoAjuste; relieve: FuenteRelieve }
+  | { tipo: "carga"; id: number; pedido: PedidoCarga; curva: boolean }
+  | { tipo: "estres"; id: number; pedido: PedidoEstres }
   | { tipo: "cargar-hgt"; id: number; archivos: { nombre: string; datos: ArrayBuffer }[] }
   | { tipo: "borrar-hgt"; id: number }
   | { tipo: "cancelar" };
 
-export type Fase = "relieve" | "cobertura" | "enlaces";
+export type Fase = "relieve" | "cobertura" | "enlaces" | "estres";
 
 export type Salida =
   | { tipo: "progreso"; id: number; fase: Fase; avance: number }
@@ -31,5 +35,7 @@ export type Salida =
   | { tipo: "siembra"; id: number; siembra: Siembra }
   | { tipo: "diseno"; id: number; diseno: Diseno }
   | { tipo: "ajuste"; id: number; ajuste: Ajuste }
+  | { tipo: "carga"; id: number; carga: ResultadoCarga; curva: CurvaCargaResultado | null }
+  | { tipo: "estres"; id: number; estres: ResultadoEstres }
   | { tipo: "hgt"; id: number; archivos: string[]; errores: string[] }
   | { tipo: "error"; id: number; mensaje: string };

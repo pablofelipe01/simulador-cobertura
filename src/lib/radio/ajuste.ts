@@ -708,7 +708,10 @@ export function ajustar(pedido: PedidoAjuste, relieve: Relieve): Ajuste {
 
   const opciones: OpcionAjuste[] = [];
   const vistas = new Set<string>();
-  for (const el of elegidas) {
+  for (const el0 of elegidas) {
+    // Al optimizar, «la misma cobertura» se mide contra la red de hoy con las celdas del mapa (no con la muestra gruesa)
+    const ahorra = modo === "optimizar" && el0.id !== "maxima";
+    const el = ahorra ? { ...el0, utilMin: Math.min(el0.utilMin, Math.max(meta, resumenInicial.utilPct - 0.5)) } : el0;
     // La poda se hizo con la muestra gruesa: se confirma con las celdas del mapa y, si se pasó, se retrocede
     const sec = el.secuencia;
     let k = sec.length - 1;
@@ -743,10 +746,11 @@ export function ajustar(pedido: PedidoAjuste, relieve: Relieve): Ajuste {
     }
     let cfg = sec[k].cfg;
     // Huecos pequeños que la muestra gruesa no vio: se tapan con el diseño por área (celda por celda)
-    if (med.utilPct < el.utilMin - 1e-6 && area && permisos.apoyos && analizar(cfg).D === 0) {
+    if (med.utilPct < el.utilMin - 1e-6 && area && permisos.apoyos && analizar(cfg).D === 0 && !ahorra) {
       const usados = cfg.filter((n) => n.origen === "apoyo").length;
       if (usados < pedido.maxApoyos) {
-        const h = Math.min(15, alturaMax);
+        // Apoyos como los repetidores de la red (Trama: tubo de 6 m), sin pasar la altura permitida
+        const h = Math.min(Math.max(pedido.plantillaApoyo.alturaM, 6), alturaMax);
         const d = disenar(
           {
             area: area.puntos,
@@ -778,6 +782,8 @@ export function ajustar(pedido: PedidoAjuste, relieve: Relieve): Ajuste {
     const resumen = resumir(cfg, med, an);
     const { cambios, antenas } = cambiosDe(cfg, an);
     if (!cambios.length && modo === "ajustar") continue;
+    // Una opción para ahorrar que no ahorra no se ofrece
+    if (ahorra && costo(cfg) >= inicial.costo - 1e-6) continue;
     const clave = JSON.stringify(cambios);
     if (vistas.has(clave)) continue;
     vistas.add(clave);

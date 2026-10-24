@@ -97,7 +97,7 @@ await flujo("coordenadas", async (page, foto) => {
   afirmar((await nodosEnLista(page)) === 2, "No se agregó el nodo antena");
   await page.waitForTimeout(900);
   await esperarSimulacion(page);
-  await page.getByLabel("Resultados").getByText("Antena de prueba").first().waitFor({ timeout: 90000 });
+  await page.getByLabel("Resultados").getByText("Antena de prueba").filter({ visible: true }).first().waitFor({ timeout: 90000 });
   // Perfil del enlace entre los dos nodos antena
   await page.getByRole("button", { name: /Ver perfil del enlace/ }).first().click();
   await page.getByRole("dialog", { name: /Perfil/ }).getByText(/dB$/).first().waitFor({ timeout: 30000 });
@@ -410,7 +410,8 @@ async function recorrerTour(page, nombre, foto) {
     const siguiente = tour.getByRole("button", { name: /^(Empezar|Siguiente|Terminar)$/ });
     if (await hagalo.isVisible()) {
       // Si el paso se cumple solo justo antes (el cálculo automático), el botón desaparece: se sigue sin esperarlo
-      const pulsado = await hagalo.click({ timeout: 3000 }).then(
+      // Con WebGL por software el hilo principal puede tardar unos segundos en atender el clic
+      const pulsado = await hagalo.click({ timeout: 10000 }).then(
         () => true,
         () => false,
       );
@@ -446,7 +447,7 @@ await flujo(
     await page.getByRole("button", { name: "Sí, muéstreme" }).click();
     const menu = page.getByRole("region", { name: "Conversación con Melki" }).getByRole("group", { name: "Tours guiados" });
     await menu.waitFor();
-    afirmar((await menu.getByRole("button").count()) === 7, "El menú debería tener 7 tours");
+    afirmar((await menu.getByRole("button").count()) === 8, "El menú debería tener 8 tours");
     afirmar(/^Tutorial básico \(recomendado\)/.test(await menu.getByRole("button").first().innerText()), "El tutorial básico debería ir primero");
     await foto("menu");
     await menu.getByRole("button", { name: /^Conocer la pantalla/ }).click();
@@ -610,7 +611,7 @@ await flujo(
     // Flujo animado: rutas vivas hacia el gateway y piezas que destellan al retransmitir
     await page.waitForFunction(() => Number(document.querySelector("[data-rutas-vivas]")?.dataset.rutasVivas) >= 2 && document.querySelector("[data-animacion]")?.dataset.animacion === "si", null, { timeout: 15000 });
     await page.waitForSelector(".pieza.transmite, .pieza-ia.piensa", { state: "attached", timeout: 15000 });
-    await page.locator("[data-tour=alcance-referencia]").getByText(/Repetidor de 15 m → gente/).waitFor();
+    await page.locator("[data-tour=alcance-referencia]").getByText(/Repetidor de 6 m → gente/).waitFor();
     await page.getByRole("button", { name: "Cómo se juega" }).waitFor();
     await page.locator('[aria-label="Persona Persona 3"]').waitFor();
     await page.getByText("Cómo leer el mapa").waitFor();
@@ -703,19 +704,19 @@ await flujo(
     const envio = page.locator("[data-tour=enviar-mensaje]");
     await envio.getByRole("button", { name: "Enviar" }).click();
     const viaje = page.locator("[data-tour=viaje-mensaje]");
-    await viaje.getByText("El mensaje llega al gateway").waitFor();
-    afirmar(/de 3 permitidos/.test(await viaje.innerText()) && /Con 3 intentos/.test(await viaje.innerText()), `Faltan datos del viaje: ${await viaje.innerText()}`);
+    await viaje.getByText("El pago llega al gateway").waitFor();
+    afirmar(/de 3 permitidos/.test(await viaje.innerText()) && /Con los 4 intentos/.test(await viaje.innerText()) && /orden firmada de 13\d bytes/.test(await viaje.innerText()), `Faltan datos del viaje: ${await viaje.innerText()}`);
     await page.locator(".paquete-mensaje").waitFor({ state: "attached" });
     await foto("viajando");
     // Llega al gateway, la IA «piensa» y la respuesta vuelve por la misma ruta
     await page.waitForSelector(".pieza-ia.piensa", { state: "attached", timeout: 20000 });
     await page.waitForSelector(".paquete-mensaje.respuesta", { state: "attached", timeout: 20000 });
     await page.waitForSelector(".paquete-mensaje.entregado", { state: "attached", timeout: 25000 });
-    afirmar(/Respuesta de la IA/.test(await viaje.innerText()), "Falta la respuesta de la IA en el viaje");
+    afirmar(/Comprobante/.test(await viaje.innerText()), "Falta el comprobante en el viaje");
     // Desde la persona sin cobertura no llega
     await envio.getByLabel("Desde").selectOption({ label: "Persona 3" });
     await envio.getByRole("button", { name: "Enviar" }).click();
-    await viaje.getByText("El mensaje no llega").waitFor();
+    await viaje.getByText("El pago no llega").waitFor();
     afirmar(/No tiene ruta/.test(await viaje.innerText()), "Debería decir que no tiene ruta");
     await foto("no-llega");
   },
@@ -770,10 +771,10 @@ await flujo(
     await chat.getByRole("button", { name: /^Poner (el repetidor|los \d repetidores)/ }).click();
     await chat.getByText(/Listo: puse/).waitFor();
     await chat.getByText(/3 de 3 personas conectadas/).waitFor({ timeout: 90000 });
-    await decir("envía un mensaje desde Persona 3");
-    await chat.getByText(/Envié un mensaje de texto de 40 caracteres desde «Persona 3»: llega al gateway/).waitFor();
-    await decir("¿cómo viaja un mensaje?");
-    await chat.getByText(/viaja por inundación/).waitFor();
+    await decir("envía un pago desde Persona 3");
+    await chat.getByText(/Envié un pago de prueba desde «Persona 3»: la orden firmada \(\d+ bytes\) llega al gateway/).waitFor();
+    await decir("¿cómo viaja un pago?");
+    await chat.getByText(/Así viaja un pago en MeshCore/).waitFor();
     await decir("pon una persona en 4.35, -72.9");
     await chat.getByText(/puse la persona/).waitFor();
     await chat.getByText(/no alcanza la red/).waitFor({ timeout: 90000 });
@@ -804,7 +805,7 @@ await flujo(
     // Varias órdenes en un mensaje, con posiciones relativas y referencias («la persona»)
     await decir("pon una persona a 3 km al sur del gateway y envía un mensaje desde la persona");
     await chat.getByText(/^Paso 1 de 2: Listo: puse la persona/).waitFor({ timeout: 30000 });
-    await chat.getByText(/^Paso 2 de 2: Envié un mensaje de texto de 40 caracteres desde «Persona 1»/).waitFor({ timeout: 120000 });
+    await chat.getByText(/^Paso 2 de 2: Envié un pago de prueba desde «Persona 1»/).waitFor({ timeout: 120000 });
     await chat.getByText(/^Listo, hice los 2 pasos/).waitFor({ timeout: 30000 });
     await decir("muestra las vías y quita los ríos");
     await chat.getByText(/^Paso 2 de 2: Listo: el mapa ya no muestra los ríos/).waitFor({ timeout: 30000 });
@@ -919,6 +920,141 @@ await flujo("ajuste-automatico", async (page, foto) => {
   await chat.getByText(/Listo: apliqué la opción/).waitFor({ timeout: 120000 });
   await foto("chat");
 });
+
+// v12: «Poblar personas» y la prueba de carga (pagos al tiempo hasta que la frecuencia se revienta)
+await flujo(
+  "poblar-y-carga",
+  async (page, foto) => {
+    await esperarRed(page);
+    await cargarMalla(page);
+    const resultados = page.locator("aside[aria-label=Resultados]");
+    const poblar = resultados.locator("[data-tour=poblar]");
+    await poblar.getByRole("button", { name: "250", exact: true }).click();
+    const t0 = Date.now();
+    await poblar.getByRole("button", { name: /^Poblar 250 personas/ }).click();
+    await poblar.getByText(/Puse 250 personas en alrededor de la red/).waitFor({ timeout: 15000 });
+    await page.locator("[data-tour=lista-piezas]").getByText("250 personas pobladas al azar").waitFor();
+    afirmar((await page.locator("[data-tour=lista-piezas] li").count()) < 20, "La lista de piezas no debe mostrar las 250 pobladas de una vez");
+    await esperarRed(page);
+    await page.waitForFunction(() => document.querySelectorAll(".pieza.poblada").length === 250, null, { timeout: 30000 });
+    await resultados.locator("[data-tour=resumen-pobladas]").getByText(/250 personas pobladas/).waitFor({ timeout: 90000 });
+    const segPoblar = (Date.now() - t0) / 1000;
+    afirmar(segPoblar < 60, `Poblar y simular 250 personas tardó ${segPoblar.toFixed(1)} s`);
+    afirmar((await page.locator(".pieza.poblada .nombre").first().isVisible()) === false, "Las pobladas no deben mostrar su nombre en el mapa");
+    afirmar((await page.locator(".etiqueta-enlace").count()) < 40, `Demasiadas etiquetas de enlace en el mapa: ${await page.locator(".etiqueta-enlace").count()}`);
+    await foto("pobladas");
+
+    // Prueba de carga: 15 pagos al tiempo
+    const carga = resultados.locator("[data-tour=prueba-carga]");
+    await carga.getByRole("button", { name: "15", exact: true }).click();
+    await carga.getByRole("button", { name: /^Probar 15 al tiempo/ }).click();
+    const res = carga.locator("[data-tour=resultado-carga]");
+    await res.getByText(/% de los 15 pagos con comprobante/).waitFor({ timeout: 60000 });
+    afirmar(/Canal del gateway/.test(await res.innerText()) && /Choques/.test(await res.innerText()), `Faltan cifras de la prueba: ${await res.innerText()}`);
+    afirmar(/Trama con SF11/.test(await carga.innerText()), "Falta la referencia de capacidad de Trama");
+    await res.scrollIntoViewIfNeeded();
+    await foto("carga-15");
+
+    // ¿Hasta cuántos aguanta?
+    await carga.getByRole("button", { name: /Hasta cuántos aguanta/ }).click();
+    await res.getByRole("img", { name: /Pagos completos según cuántos salen al tiempo/ }).waitFor({ timeout: 120000 });
+    afirmar(/Se revienta desde \d+/.test(await res.innerText()) || /No se revienta/.test(await res.innerText()), `La curva no dice dónde se revienta: ${await res.innerText()}`);
+    await res.scrollIntoViewIfNeeded();
+    await foto("curva");
+
+    // Por chat: Melki manda 25 pagos al tiempo y explica el resultado
+    await page.getByRole("button", { name: /Abrir a Melki/ }).click();
+    const chat = page.getByRole("region", { name: "Conversación con Melki" });
+    await chat.getByLabel("Pregunta para Melki").fill("envía 25 pagos al tiempo");
+    await page.keyboard.press("Enter");
+    await chat.getByText(/paquete por paquete como MeshCore/).first().waitFor();
+    await chat.getByText(/Probé 25 pagos al tiempo/).waitFor({ timeout: 120000 });
+    await foto("melki-carga");
+
+    // Quitar las pobladas
+    await poblar.getByRole("button", { name: /^Quitar las 250/ }).click();
+    await page.waitForFunction(() => document.querySelectorAll(".pieza.poblada").length === 0, null, { timeout: 15000 });
+    await esperarRed(page);
+    afirmar((await cifra(page, "conectados de 3")) === "2", "Al quitar las pobladas vuelve la red del ejemplo");
+  },
+  { sembrar: true },
+);
+
+await flujo(
+  "zonas-y-estres",
+  async (page, foto) => {
+    await esperarRed(page);
+    await cargarMalla(page);
+    const resultados = page.locator("aside[aria-label=Resultados]");
+    // Zonas de popularidad: 150 personas en el gateway y en el repetidor (2 zonas)
+    const zonas = resultados.locator("[data-tour=zonas-popularidad]");
+    await zonas.getByRole("button", { name: "150", exact: true }).click();
+    const t0 = Date.now();
+    await zonas.getByRole("button", { name: /^Poner 150 en cada uno \(300\)/ }).click();
+    await zonas.getByText(/Puse \d+ personas/).waitFor({ timeout: 20000 });
+    const puestas = Number((await zonas.getByText(/Puse \d+ personas/).innerText()).match(/Puse (\d+)/)[1]);
+    afirmar(puestas > 150 && puestas <= 300, `Deberían quedar entre 150 y 300 personas en las zonas (${puestas})`);
+    await page.waitForFunction((n) => document.querySelectorAll(".pieza.poblada").length === n, puestas, { timeout: 30000 });
+    await esperarRed(page);
+    afirmar(/Zonas puestas: Gateway \d+ · Repetidor 1 \d+/.test(await zonas.innerText()), `Faltan las zonas puestas: ${await zonas.innerText()}`);
+    const segZonas = (Date.now() - t0) / 1000;
+    await foto("zonas");
+
+    // Prueba de estrés de la hora pico
+    const estres = resultados.locator("[data-tour=prueba-estres]");
+    await estres.getByRole("button", { name: /^Probar la hora pico/ }).click();
+    const res = estres.locator("[data-tour=resultado-estres]");
+    await res.getByText(/% de los pagos de la hora pico con comprobante/).waitFor({ timeout: 90000 });
+    const texto = await res.innerText();
+    afirmar(/Pagos por hora/.test(texto) && /Canal del gateway/.test(texto) && /Ancho de banda útil/.test(texto) && /Zona por zona/.test(texto), `Faltan cifras del estrés: ${texto.slice(0, 300)}`);
+    afirmar(/Gateway/.test(texto) && /Repetidor 1/.test(texto) && /atiende hasta \d/.test(texto) && /energía [\d,]+ de \d+ Wh\/día/.test(texto), `Falta el detalle por zona: ${texto.slice(0, 500)}`);
+    await page.locator(".etiqueta-estres").first().waitFor({ timeout: 10000 });
+    afirmar((await page.locator(".etiqueta-estres").count()) >= 1, "Faltan las zonas pintadas en el mapa");
+    await res.scrollIntoViewIfNeeded();
+    await foto("estres");
+
+    // ¿Hasta dónde aguanta cada repetidor?, comparando ajustes de radio
+    await estres.getByText("Comparar ajustes de radio").click();
+    await estres.getByRole("button", { name: /Hasta dónde aguanta cada repetidor/ }).click();
+    await res.getByRole("img", { name: /Pagos por hora entregados según los pedidos/ }).waitFor({ timeout: 120000 });
+    const rampa = await res.innerText();
+    afirmar(/Toda la malla aguanta sin demora hasta ~[\d.]+ personas|no aguanta ni con lo mínimo/.test(rampa) && /(Aguanta sin demora hasta|Aguanta más de) ~[\d.]+ personas/.test(rampa), `La rampa no dice cuánto aguanta: ${rampa.slice(0, 400)}`);
+    afirmar(/La misma hora pico con otro ajuste de radio/.test(rampa) && /SF9 · 250 kHz/.test(rampa), "Falta la comparación de ajustes de radio");
+    await res.scrollIntoViewIfNeeded();
+    await foto("rampa");
+
+    // Al tocar el repetidor: su zona de popularidad y su resultado
+    await page.locator("[data-tour=lista-piezas]").getByRole("button", { name: /Repetidor 1/ }).first().click();
+    const rapida = page.locator("[data-tour=lista-piezas] [data-tour=zona-rapida]");
+    await rapida.waitFor();
+    afirmar(/Zona de popularidad · \d+ personas/.test(await rapida.innerText()) && /Hora pico:/.test(await rapida.innerText()), `La ficha del repetidor no muestra su zona: ${await rapida.innerText()}`);
+    await page.locator("[data-tour=tarjeta-nodo] [data-tour=zona-rapida]").waitFor();
+    await foto("ficha-repetidor");
+    // Repartir de nuevo solo la del repetidor (500 personas a 3 km)
+    await rapida.getByLabel(/Personas alrededor de Repetidor 1/).selectOption("500");
+    await rapida.getByLabel("Radio de la zona").selectOption("3");
+    await rapida.getByRole("button", { name: "Repartir de nuevo" }).click();
+    await zonas.getByText(/alrededor de Repetidor 1, a 3 km/).waitFor({ timeout: 20000 });
+    await esperarRed(page);
+
+    // Por chat, como lo pidió el Inge
+    await page.getByRole("button", { name: /Abrir a Melki/ }).click();
+    const chat = page.getByRole("region", { name: "Conversación con Melki" });
+    await chat.getByLabel("Pregunta para Melki").fill("Agrégale por cada punto una popularidad de 100 personas y verifica qué tan colapsada estaría la red");
+    await page.keyboard.press("Enter");
+    await chat.getByText(/puse \d+ personas en 2 zonas/).first().waitFor({ timeout: 30000 });
+    await chat.getByText(/Prueba de estrés de la hora pico/).waitFor({ timeout: 150000 });
+    await foto("melki-estres");
+
+    // Quitar las zonas
+    await zonas.getByRole("button", { name: "Quitar las zonas" }).click();
+    await page.waitForFunction(() => document.querySelectorAll(".pieza.poblada").length === 0, null, { timeout: 15000 });
+    await esperarRed(page);
+    afirmar((await cifra(page, "conectados de 3")) === "2", "Al quitar las zonas vuelve la red del ejemplo");
+    afirmar(segZonas < 60, `Poner y simular las zonas tardó ${segZonas.toFixed(1)} s`);
+  },
+  { sembrar: true },
+);
 
 let fallos = 0;
 for (const r of resultados) {

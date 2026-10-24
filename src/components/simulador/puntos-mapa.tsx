@@ -3,7 +3,7 @@
 // Piezas sobre el mapa: coordenadas bajo el cursor, menú del clic derecho, tarjeta de un punto y tarjeta del nodo seleccionado.
 import type { Map as MapaML } from "maplibre-gl";
 import { Copy, Crosshair, Eye, MapPin, Ruler, Signal, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { textoUbicacion } from "@/lib/geo/referencia";
 import { aGMS } from "@/lib/radio/geo";
@@ -129,8 +129,11 @@ export function TarjetaNodo({
   onSolo,
   onCerrar,
   sembrar,
+  extra,
 }: {
   sembrar?: boolean;
+  /** Zona de popularidad del gateway o repetidor (y su resultado en la prueba de estrés). */
+  extra?: ReactNode;
   antena: Antena;
   resumen: ResumenAntena | undefined;
   nodo: NodoMalla | undefined;
@@ -189,6 +192,7 @@ export function TarjetaNodo({
           <Eye size={14} /> {soloSeleccionada ? "Ver la cobertura de todos" : "Ver solo su cobertura"}
         </button>
       )}
+      {extra && <div className="mt-2">{extra}</div>}
     </div>
   );
 }

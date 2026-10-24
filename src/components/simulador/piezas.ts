@@ -21,10 +21,11 @@ export const AYUDA_PIEZA: Record<Pieza, string> = {
   persona: "Suéltelas por el campo: un radio de mano con el celular. Se conectan al repetidor más cercano; en rojo, no tienen cobertura.",
 };
 
-/** Alturas de torre que se ofrecen para los repetidores nuevos (m). */
-export const ALTURAS_REPETIDOR = [6, 10, 15, 20, 30] as const;
-export const ALTURA_REPETIDOR_DEFECTO = 15;
-export const ALTURA_GATEWAY_M = 8;
+/** Alturas que se ofrecen para los repetidores nuevos (m): el de Trama va en un tubo de hierro de 6 m. */
+export const ALTURAS_REPETIDOR = [6, 9, 12, 15, 20, 30] as const;
+export const ALTURA_REPETIDOR_DEFECTO = 6;
+/** El sitio gateway de Trama: torre arriostrada de 12 m con las cuatro antenas separadas en vertical. */
+export const ALTURA_GATEWAY_M = 12;
 export const ALTURA_PERSONA_M = 1.5;
 
 function equipo(id: EquipoId) {
@@ -45,11 +46,12 @@ export function nombreLibre(base: string, existentes: Antena[], primeroSinNumero
 export function plantillaPieza(pieza: Pieza, existentes: Antena[], alturaRepetidorM = ALTURA_REPETIDOR_DEFECTO): Partial<Antena> & { tipo: TipoNodo } {
   switch (pieza) {
     case "gateway":
-      return { tipo: "antena", nombre: nombreLibre("Gateway", existentes, true), alturaM: ALTURA_GATEWAY_M, ...equipo("nodo-solar-58"), rol: "ROUTER", pasarela: true };
+      // La radio de pagos del gateway es un companion USB del mini PC: recibe, pero no retransmite
+      return { tipo: "antena", nombre: nombreLibre("Gateway", existentes, true), alturaM: ALTURA_GATEWAY_M, ...equipo("t114-8dbi"), rol: "COMPANION", pasarela: true };
     case "repetidor":
-      return { tipo: "antena", nombre: nombreLibre("Repetidor", existentes), alturaM: alturaRepetidorM, ...equipo("nodo-solar-58"), rol: "ROUTER", pasarela: false };
+      return { tipo: "antena", nombre: nombreLibre("Repetidor", existentes), alturaM: alturaRepetidorM, ...equipo("p1-8dbi"), rol: "REPETIDOR", pasarela: false };
     case "persona":
-      return { tipo: "nodo", nombre: nombreLibre("Persona", existentes), alturaM: ALTURA_PERSONA_M, ...equipo("portatil-2dbi"), rol: "CLIENT", pasarela: false };
+      return { tipo: "nodo", nombre: nombreLibre("Persona", existentes), alturaM: ALTURA_PERSONA_M, ...equipo("xiao"), rol: "COMPANION", pasarela: false };
   }
 }
 

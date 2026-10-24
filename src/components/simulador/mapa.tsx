@@ -31,7 +31,8 @@ export type PuntoMapa = { lat: number; lon: number; x: number; y: number };
 
 /**
  * Mensaje que se anima por la malla: ids y puntos de la ruta (lon, lat), duración de cada salto, dónde se pierde,
- * quiénes escuchan cada transmisión (la inundación de Meshtastic) y si la IA del gateway responde de vuelta.
+ * quiénes escuchan cada transmisión (todos los vecinos oyen; en MeshCore solo los repetidores de la ruta la pasan) y si el
+ * comprobante vuelve.
  */
 export type AnimacionMensaje = {
   n: number;
@@ -69,7 +70,12 @@ type Props = {
   onDestino?: (lat: number, lon: number) => void;
   /** Propuesta del ajuste automático: antenas de apoyo, nodos que se corren y cambios de torre o antena. */
   ajuste?: CambioAjuste[] | null;
+  /** Prueba de estrés: cada zona (gateway o repetidor) pintada según aguante, vaya lenta o se reviente. */
+  estres?: ZonaMapa[] | null;
 };
+
+/** Zona de la prueba de estrés en el mapa: centro, radio (la persona más lejana que atiende), color y etiqueta. */
+export type ZonaMapa = { id: string; lat: number; lon: number; radioKm: number; color: string; texto: string; titulo: string };
 
 const VACIO: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 const SOBRE = `<svg viewBox="0 0 14 14" aria-hidden="true"><rect x="1.6" y="3.2" width="10.8" height="7.6" rx="1.2"/><path d="M1.9 3.8 L7 7.6 L12.1 3.8"/></svg>`;
@@ -192,7 +198,7 @@ function sincronizarEtiquetas(m: MapaML, vivas: Map<string, Marker>, lista: Etiq
   }
 }
 
-export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar, solicitud, punto, onMenu, onListo, sembrar, onPieza, onDestino, ajuste }: Props) {
+export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar, solicitud, punto, onMenu, onListo, sembrar, onPieza, onDestino, ajuste, estres }: Props) {
   const contenedor = useRef<HTMLDivElement>(null);
   const mapa = useRef<MapaML | null>(null);
   const marcadores = useRef(new Map<string, Marker>());
@@ -233,7 +239,10 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
     m.on("load", () => {
       crearCapasReferencia(m);
       m.addLayer({ id: "capa-etiquetas", type: "raster", source: "etiquetas", layout: { visibility: "none" } });
-      for (const id of ["circulos", "anillos", "alcance", "enlaces", "haces", "propuesta", "ajuste", "ruta-mensaje"]) m.addSource(id, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      for (const id of ["circulos", "anillos", "alcance", "enlaces", "haces", "propuesta", "ajuste", "ruta-mensaje", "estres"]) m.addSource(id, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      // Zonas de la prueba de estrés, debajo de todo lo demás
+      m.addLayer({ id: "estres-relleno", type: "fill", source: "estres", paint: { "fill-color": ["get", "color"], "fill-opacity": 0.2 } });
+      m.addLayer({ id: "estres-borde", type: "line", source: "estres", paint: { "line-color": ["get", "color"], "line-width": 2, "line-opacity": 0.9 } });
       m.addLayer({ id: "haces-relleno", type: "fill", source: "haces", filter: ["==", ["get", "parte"], "abanico"], paint: { "fill-color": "#FFFFFF", "fill-opacity": 0.16 } });
       m.addLayer({
         id: "haces-borde",
@@ -507,8 +516,15 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
     const porId = new Map(antenas.map((a) => [a.id, a]));
     const troncales = new Set<string>();
     for (const n of resultado?.nodos ?? []) for (let i = 0; i + 1 < n.ruta.length; i++) troncales.add([n.ruta[i], n.ruta[i + 1]].sort().join("|"));
+    // Las personas pobladas al azar (cientos) solo muestran el enlace de su ruta, sin etiqueta: el mapa se sigue leyendo
+    const poblado = (e: { a: string; b: string }) => Boolean(porId.get(e.a)?.poblada || porId.get(e.b)?.poblada);
     const visibles = (resultado?.enlaces ?? []).filter(
-      (e) => estado.vista.mostrarEnlaces && porId.has(e.a) && porId.has(e.b) && (e.clase !== "sin" || estado.vista.mostrarSinEnlace),
+      (e) =>
+        estado.vista.mostrarEnlaces &&
+        porId.has(e.a) &&
+        porId.has(e.b) &&
+        (e.clase !== "sin" || estado.vista.mostrarSinEnlace) &&
+        (!poblado(e) || troncales.has([e.a, e.b].sort().join("|"))),
     );
     (m.getSource("enlaces") as GeoJSONSource | undefined)?.setData({
       type: "FeatureCollection",
@@ -523,7 +539,7 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
       }),
     });
     for (const mk of etiquetasEnlace.current) mk.remove();
-    etiquetasEnlace.current = visibles.map((e) => {
+    etiquetasEnlace.current = visibles.filter((e) => !poblado(e)).map((e) => {
       const a = porId.get(e.a)!;
       const b = porId.get(e.b)!;
       const el = document.createElement("div");
@@ -625,6 +641,33 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
     fuente?.setData({ type: "FeatureCollection", features });
   }, [propuesta, antenas, listo]);
 
+  // Zonas de la prueba de estrés: círculo de color por zona y una etiqueta con el resultado
+  const etiquetasEstres = useRef<Marker[]>([]);
+  useEffect(() => {
+    const m = mapa.current;
+    if (!m || !listo) return;
+    for (const mk of etiquetasEstres.current) mk.remove();
+    etiquetasEstres.current = [];
+    const fuente = m.getSource("estres") as GeoJSONSource | undefined;
+    if (!estres?.length) {
+      fuente?.setData(VACIO);
+      return;
+    }
+    fuente?.setData({
+      type: "FeatureCollection",
+      features: estres.map((z) => ({ type: "Feature", properties: { color: z.color }, geometry: { type: "Polygon", coordinates: [circulo(z.lat, z.lon, z.radioKm * 1000, 72)] } })),
+    });
+    for (const z of estres) {
+      const el = document.createElement("div");
+      el.className = "etiqueta-estres";
+      el.style.borderColor = z.color;
+      el.textContent = z.texto;
+      el.title = z.titulo;
+      const g = metrosPorGrado(z.lat);
+      etiquetasEstres.current.push(new maplibregl.Marker({ element: el, anchor: "top" }).setLngLat([z.lon, z.lat - (z.radioKm * 1000) / g.lat]).addTo(m));
+    }
+  }, [estres, listo]);
+
   // Propuesta del ajuste automático: apoyos como torres punteadas, flecha a la loma y etiquetas de cada cambio
   const ajustados = useRef<Marker[]>([]);
   useEffect(() => {
@@ -713,7 +756,7 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
   const mensaje = sembrar?.mensaje ?? null;
 
   // Mensaje de «Enviar un mensaje»: salta de nodo en nodo (cada salto dura su tiempo real, dentro de lo legible).
-  // En cada transmisión se abre una onda y destellan los vecinos que lo escuchan (Meshtastic inunda la red); el
+  // En cada transmisión se abre una onda y destellan los vecinos que lo escuchan (todos los vecinos oyen el paquete); el
   // que sigue en la ruta lo retransmite. Al llegar, la IA del gateway «piensa» y la respuesta vuelve por la ruta.
   useEffect(() => {
     const m = mapa.current;

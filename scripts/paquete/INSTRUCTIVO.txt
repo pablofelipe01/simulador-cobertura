@@ -1,14 +1,19 @@
-SIMULADOR DE COBERTURA · Red mesh LoRa 915 MHz · avance del {{FECHA}}
-=====================================================================
+SIMULADOR DE COBERTURA · Red de pagos MeshCore · LoRa 915–928 MHz · avance del {{FECHA}}
+=====================================================================================
 
-Herramienta para simular nodos Meshtastic ubicados en coordenadas
-específicas: cobertura con la paleta de Radio Mobile, rango de alcance,
-enlaces de la malla, saltos hasta la pasarela y factibilidad de la red.
-Abre en el modo "Sembrar la malla", como en Trama: el Gateway +
+Herramienta para planear la red de pagos por radio de Trama (MeshCore):
+cobertura con la paleta de Radio Mobile sobre el relieve real, alcance
+de cada repetidor, enlaces de la malla, saltos hasta el gateway y
+factibilidad de la red. Con "Poblar personas" se llena la zona de gente,
+con las "Zonas de popularidad" se pone gente alrededor de cada
+repetidor, la "Prueba de estrés" mide la hora pico zona por zona hasta
+que cada repetidor se revienta y la "Prueba de carga" dice cuántos pagos
+al tiempo aguanta cada frecuencia. Abre en el modo "Sembrar la malla": el Gateway +
 Internet, los repetidores y la gente, con guía paso a paso.
-Incluye las funciones de Radio Mobile (parámetros de red, confiabilidad,
-Longley-Rice, antenas direccionales, pérdidas por vegetación y
-edificios, dBm/µV e informe de radioenlace), una regla para medir
+Usa los equipos, precios y supuestos del documento de Trama (repetidor
+SenseCAP Solar Node P1 con antena de 8 dBi en tubo de 6 m, gateway en
+torre de 12 m con 4 radios Heltec T114, billeteras XIAO o T1000-E,
+Starlink) e incluye las funciones de Radio Mobile, una regla para medir
 distancias y áreas, un mapa con departamentos, municipios y ríos, y a
 Melki, el asistente que ejecuta pedidos escritos con sus palabras.
 No hay que instalar nada.
@@ -25,18 +30,20 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
 - Necesita internet para el mapa satelital y el relieve en línea. Sin
   internet funciona con relieve "Plano" o con archivos SRTM .hgt propios.
 - Si ya había usado una versión anterior, el navegador recuerda el
-  escenario guardado; para ver el ejemplo nuevo use "Ejemplo de malla"
-  (al final del panel izquierdo) o "Archivo > Cargar el ejemplo".
+  escenario guardado (los roles viejos se convierten solos a los de
+  MeshCore); para ver el ejemplo nuevo use "Ejemplo de malla" (al final
+  del panel izquierdo) o "Archivo > Cargar el ejemplo".
 
 
-2. QUÉ PROBAR (unos 25 minutos)
+2. QUÉ PROBAR (unos 30 minutos)
 -------------------------------
  a) Sembrar la malla (el modo con que abre; arriba del panel izquierdo
     se cambia a "Modo avanzado"):
-      - Toque una pieza y luego el mapa: "Gateway + Internet" (donde
-        entra el internet, la casa o la finca con Starlink), "Repetidor"
-        (torre o loma; arriba elige la altura de la torre) y "Persona"
-        (la gente, con su radio y el celular). El gateway es uno solo:
+      - Toque una pieza y luego el mapa: "Gateway + Internet" (torre de
+        12 m con mini PC, radios y Starlink, donde entra el internet),
+        "Repetidor" (SenseCAP P1 con antena de 8 dBi; arriba elige la
+        altura: 6 m como en Trama, o más) y "Persona" (la gente, con su
+        billetera a 1,5 m enlazada al celular). El gateway es uno solo:
         ponerlo otra vez lo mueve. Las piezas se arrastran en el mapa.
       - El recuadro de arriba dice qué hacer en cada paso. "Estado de la
         red" muestra cuántas personas quedan conectadas (verde), cuántas
@@ -47,26 +54,84 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
         simulador busca con el relieve real las lomas donde poner
         repetidores y los propone como torres naranjas punteadas;
         "Poner" los agrega y "Deshacer" los quita.
-      - "Enviar un mensaje": el mensaje sale de una persona y salta de
-        nodo en nodo hasta el gateway, como en Meshtastic. Dice los
-        saltos, el tiempo y la probabilidad de que llegue.
+      - "Enviar un pago de prueba": la orden firmada (118 bytes) sale de
+        una persona y la pasan los repetidores hasta el gateway, como en
+        MeshCore (solo los repetidores retransmiten; con la ruta
+        aprendida va directo). Dice los saltos, el tiempo, la
+        probabilidad con los 4 intentos y el comprobante que vuelve.
       - "Ejemplo de malla" carga un gateway, un repetidor y tres
         personas; la más lejana queda sin cobertura para practicar.
-      - La malla está animada, como en Trama: las líneas turquesa
-        avanzan hacia el gateway (por ahí viaja la información), los
-        pulsos saltan de nodo en nodo y cada pieza destella al
-        retransmitir; la nube "IA" del gateway se enciende al recibir.
-        En rojo parpadean las personas sin cobertura. Al enviar un
-        mensaje se ven las ondas de cada transmisión y la respuesta
-        de la IA que vuelve. "Animar el flujo de la información" la
-        apaga. "Cómo se juega" explica el juego y, bajo las piezas,
-        está el alcance de referencia según la altura de la torre.
- b) Tours guiados: toque "Tours" (arriba a la derecha) o pídale a
+      - La malla está animada: las líneas turquesa avanzan hacia el
+        gateway, los pulsos saltan de nodo en nodo y cada pieza destella
+        al retransmitir; la nube "IA" del gateway se enciende al
+        recibir. En rojo parpadean las personas sin cobertura.
+        "Animar el flujo de la información" la apaga. Bajo las piezas
+        está el alcance de referencia en plano y el que supone Trama
+        por terreno (10 km en plano, 8 en sabana, 5 en montaña o ríos,
+        3 en selva).
+ b) Gente y capacidad (panel derecho, "Resultado", debajo de la
+    cobertura):
+      - "Poblar personas": elija cuántas (50, 150, 250, 600 o el número
+        que quiera) o la densidad de Trama (0,2 por km² dispersa, 1
+        media, 5 densa) y dónde (el área objetivo, otra área de la
+        regla, alrededor de la red o toda el área de estudio). Toque
+        "Poblar": las reparte al azar sobre el terreno y simula cuántas
+        quedan conectadas. Con "Solo donde hay señal" las pone donde la
+        última simulación da servicio. En el mapa son puntos pequeños
+        (tóquelos para ver el nombre); en la lista van en un solo
+        renglón. Volver a poblar reparte de nuevo; "Quitar las ..." las
+        borra sin tocar las que puso a mano.
+      - "Zonas de popularidad": gente alrededor de cada repetidor y del
+        gateway (o de uno solo). Elija cuántas por zona (50, 150, 250,
+        500 o el número que quiera, hasta 1.000), a cuántos km (1, 2, 3
+        o 5) y dónde ("En cada gateway y repetidor" o "Solo alrededor
+        de..."). También sale al tocar un repetidor: en su tarjeta del
+        mapa y en la lista de piezas hay "Zona de popularidad · Poblar
+        alrededor". "Quitar las zonas" las borra.
+      - "Prueba de estrés · hora pico": cada persona hace sus pagos del
+        día (2,4 por persona, lo que supone Trama; o 1, 5 o 10) y una
+        parte cae en la hora pico (15 % un día normal, 25 % un día de
+        mercado); "×2, ×5, ×10" multiplica la carga. "Probar la hora
+        pico" mide toda la red (pagos por hora pedidos y entregados,
+        canal del gateway, ancho de banda útil) y cada gateway y
+        repetidor: cuántas personas atiende, % de pagos completos, la
+        espera, el canal ocupado, cuánto transmite (el tope es 50 %),
+        hasta dónde completa con esa carga, la energía del repetidor
+        solar y por qué se revienta. En el mapa cada zona queda verde
+        (aguanta), naranja (lenta) o roja (se revienta).
+      - "¿Hasta dónde aguanta cada repetidor?": sube la carga hasta que
+        cada zona se revienta y dice cuántas personas aguanta cada una
+        y toda la red; la curva muestra los pagos que entrega la red
+        según los que se le piden (sube hasta el máximo del canal y
+        luego cae). Con "Comparar ajustes de radio" repite la hora pico
+        con los otros ajustes (más capacidad con SF9, más alcance con
+        62,5 kHz).
+      - "Prueba de carga": elija Pagos o Mensajes, cuántos salen al
+        tiempo (5, 15, 25, 50…) y en cuánto tiempo (1 s, 10 s o 1 min),
+        o "Por hora" (55, 105, 185, 300 por hora). "Probar" simula el
+        canal paquete por paquete como MeshCore: cada radio escucha
+        antes de hablar, los repetidores esperan un turno al azar, los
+        acuses vuelven y, si no, se reintenta (3 por la ruta y el
+        último por inundación). Dice qué porcentaje recibió su
+        comprobante, la espera típica, el canal ocupado del gateway, los
+        choques y los reintentos, y lo compara con Trama (SF11: ~55
+        pagos por hora por frecuencia, 150 usuarios, 600 por sitio).
+      - "¿Hasta cuántos aguanta?": sube la cantidad y dibuja las barras:
+        verde aguanta, naranja aguanta pero lento (el 95 % tarda más de
+        un minuto) y rojo se revienta (menos del 90 % recibe su
+        comprobante).
+      - Pruebe a cambiar el ajuste de radio en el modo avanzado
+        (Parámetros: SF11, SF10 o SF9 de Trama) y vuelva a probar: SF9
+        aguanta unas 3 veces más pagos, con menos alcance.
+ c) Tours guiados: toque "Tours" (arriba a la derecha) o pídale a
     Melki "hazme un tour". Melki pregunta cuál quiere:
       - Tutorial básico (3 min, recomendado para empezar): su primera
         simulación en 7 pasos, haciéndola usted mismo.
       - Sembrar la malla (4 min): gateway, repetidores, gente,
-        conectar a los que faltan y un mensaje de prueba.
+        conectar a los que faltan y un pago de prueba.
+      - ¿Cuántos pagos aguanta? (4 min): poblar 250 personas, mandar
+        pagos al tiempo, poner zonas de popularidad y ver hasta dónde
+        aguanta cada repetidor en la hora pico.
       - Conocer la pantalla: para qué sirve cada parte.
       - Red mesh completa, Como Radio Mobile, Medir y exportar y
         Hablar con Melki.
@@ -74,146 +139,147 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
     quedó hecho y trae "Hágalo por mí" y "Omitir paso"; "Salir" termina
     cuando quiera. Se practica en un escenario aparte: al terminar, el
     suyo vuelve tal cual.
- c) La demostración trae un nodo antena, "Ejemplo", con su cobertura,
+ d) La demostración trae un nodo antena, "Ejemplo", con su cobertura,
     su rango de alcance (línea naranja: con servicio; verde: confiable)
     y anillos de distancia. En el panel derecho, "Cómo se calculó"
     explica los números paso a paso.
- d) Modo avanzado: dos tipos de nodo, "Nodo antena" (infraestructura en
-    mástil o torre, genera cobertura) y "Nodo" (equipo de campo:
-    portátil, sensor; se revisa si se conecta a la malla). Se eligen en
-    el panel "Nodos" o arriba del mapa al pulsar "Agregar".
- e) Melki (robot abajo a la derecha) hace las cosas por usted. Pruebe:
+ e) Modo avanzado: dos tipos de nodo, "Nodo antena" (infraestructura:
+    repetidor o gateway; genera cobertura) y "Nodo" (la billetera de la
+    persona; se revisa si se conecta a la malla). En la ficha de cada
+    nodo se elige el equipo (P1, T114, XIAO, T1000-E o personalizado) y
+    el rol de MeshCore: Repetidor (pasa los paquetes de los demás),
+    Companion (envía y recibe lo suyo) o Room server.
+ f) Melki (robot abajo a la derecha) hace las cosas por usted. Pruebe:
       - "Pon el gateway en 4.2, -73.37", "agrega un repetidor en
-        4.25, -73.30 a 20 m", "pon una persona en 4.31, -73.22"
+        4.25, -73.30 a 12 m", "pon una persona en 4.31, -73.22"
       - "Conecta a los que faltan", "lleva la red a Paratebueno" y
-        "envía un mensaje desde Persona 1"
-      - "¿Cómo viaja un mensaje?", "¿qué hago ahora?", "¿por qué
-        Persona 3 está en rojo?", "modo avanzado"
+        "envía un pago desde Persona 1"
+      - "Puebla la zona con 250 personas", "reparte 1 persona por km²
+        solo donde haya señal", "envía 25 pagos al tiempo", "manda 15
+        mensajes en 10 segundos", "¿hasta cuántos pagos aguanta?",
+        "simula 55 pagos por hora", "quita las pobladas"
+      - Zonas y hora pico: "por cada antena 250 personas y mira qué tan
+        colapsada queda la red", "pon 300 personas alrededor del
+        Repetidor 1 a 3 km", "¿hasta cuántos usuarios aguanta cada
+        repetidor?", "prueba de estrés en día de mercado", "¿se
+        disminuye el ancho de banda?", "quita las zonas de popularidad"
+      - Trama: "¿cuánto cuesta la red para el Chocó?", "¿y con el 50 %
+        de adopción y SF10?", "¿cuánto cuesta cubrir todo el país?",
+        "dimensiona 5.000 usuarios en 800 km² de sabana", "¿cuánto
+        cuesta un repetidor?", "¿qué lleva cada persona?", "¿cuántos
+        usuarios por frecuencia?", "¿qué frecuencias usa Trama?"
+      - "¿Cómo viaja un pago?", "¿qué hago ahora?", "¿por qué
+        Persona 3 está en rojo?", "¿qué roles hay?", "modo avanzado"
       - "Inscribe una antena en esta coordenada" y luego la coordenada,
         por ejemplo 4°13'30" N 73°21'00" O o 4.225, -73.35
-      - "Inscribe un nodo antena llamado Torre 2 en 4.25, -73.30 a 20 m"
-      - "Distancia entre Ejemplo y Torre 2"   - "Sube Torre 2 a 25 m"
+      - "Distancia entre Ejemplo y Torre 2"   - "Sube Torre 2 a 12 m"
       - "Llévame a Villavicencio"   - "Activa la regla"   - "Deshaz"
-    Cuando inscribe un nodo, simula y le cuenta el alcance. Cada cambio
-    trae su botón "Deshacer".
+    Cada cambio trae su botón "Deshacer".
     Melki también diseña la red completa y entiende varias órdenes:
       - "Ármame una malla que cubra 11.226 hectáreas con señal media o
         mejor en el 99,9 %": dibuja el área, pone el gateway (si falta)
-        y siembra repetidores con el relieve real donde más área nueva
-        cubren, simula y dice cuánto quedó cubierto por clase de señal.
+        y siembra repetidores (de 6 m, como en Trama, salvo que pida
+        otra altura) con el relieve real donde más área nueva cubren,
+        simula y dice cuánto quedó cubierto por clase de señal.
         También: "cubre 5 km a la redonda de Cumaral", "un área cuadrada
         de 2.000 ha", "cubre el área que medí", "con repetidores de
-        20 m", "máximo 15 repetidores", "con respaldo".
+        12 m", "máximo 15 repetidores", "con respaldo".
+        Y todo junto: "vuélveme a hacer las 11.226 hectáreas de manera
+        estable y por cada antena 250 personas para ver si se colapsa":
+        diseña, pone las zonas y hace la prueba de estrés.
       - Varias cosas en un mensaje: "pon el gateway en 4.2, -73.37,
-        luego un repetidor a 10 km al este y envía un mensaje desde la
+        luego un repetidor a 10 km al este y envía un pago desde la
         persona". Al final ofrece "Deshacer todo".
       - Posiciones y lugares: "a 8 km al norte del gateway", "en
-        Villavicencio"; "súbelo a 25 m" va al último nodo que tocó.
-      - En lote: "sube todos los repetidores a 20 m", "borra todas las
-        personas"; y "pon a Repetidor 2 como cliente".
+        Villavicencio"; "súbelo a 9 m" va al último nodo que tocó.
+      - En lote: "sube todos los repetidores a 12 m", "borra todas las
+        personas"; y "que Repetidor 2 no retransmita".
+      - Radio: "usa SF10", "el de capacidad" (SF9), "la frecuencia a
+        921,5 MHz", "el límite de saltos en 4".
       - Mapa: "muestra las vías", "quita los ríos", "pon el mapa
         topográfico", "muestra el respaldo", "muéstrame toda la red",
         "apaga simular al cambiar", "activa tu voz".
- f) Ajústamelo automáticamente: cuando el Resultado dice "No factible
+ g) Ajústamelo automáticamente: cuando el Resultado dice "No factible
     todavía" o "Factible con ajustes", el botón "Ajústamelo
     automáticamente" (debajo de los criterios) busca, con el relieve
     real, la red factible con la mejor relación cobertura-costo:
       - Sube o baja las torres en tramos de 3 m, nunca por encima de
         30 m (más alto exige una torre autosoportada, muy costosa).
       - Corre un nodo a una loma cercana, cambia a antena sectorial
-        hacia donde falta cobertura y sugiere antenas de apoyo: puntos
-        con coordenadas donde conviene poner un nodo.
+        hacia donde falta cobertura y sugiere repetidores de apoyo:
+        puntos con coordenadas donde conviene poner uno.
       - Da hasta tres opciones (Económica, Recomendada con estrella y
         Máxima cobertura), cada una con "Lo que necesita" y su cobertura
-        útil antes y después. En el mapa se ven las antenas de apoyo
-        como torres punteadas y las alturas nuevas en etiquetas
-        naranjas. "Aplicar y simular" la pone; "Deshacer" la quita.
-      - Si la red ya es factible, el botón dice "Optimizar la red": busca
-        la misma cobertura con menos infraestructura.
+        útil antes y después. "Aplicar y simular" la pone; "Deshacer"
+        la quita. Si la red ya es factible, el botón dice "Optimizar la
+        red": la misma cobertura con menos infraestructura.
+    Para comparar usa los precios de Trama (repetidor P1 en su tubo de
+    6 m con instalación y operación, torre de 12 m del gateway). Las
+    personas pobladas al azar no entran en el ajuste.
     También se le puede pedir a Melki, con límites: "ajústamelo",
     "¿qué necesito para que sea factible?", "hazla factible sin pasar
     de 20 m", "máximo 2 antenas de apoyo", "no muevas los nodos",
-    "solo alturas", "la más económica", "optimiza el costo" o "las
-    antenas de apoyo pueden ir en 4.51, -73.12; 4.60, -73.05".
-    La factibilidad ahora pide cobertura útil (señal media o mejor) en
-    el 60 % del área de estudio, o la meta de un área objetivo: mida un
+    "solo alturas", "la más económica" o "optimiza el costo".
+    La factibilidad pide cobertura útil (señal media o mejor) en el
+    60 % del área de estudio, o la meta de un área objetivo: mida un
     área con la regla y dígale a Melki "usa el área que medí como área
-    objetivo con el 95 %" (el diseño por área la deja marcada sola).
- g) Regla (arriba del mapa): Línea (distancia y rumbo), Trayecto (varios
+    objetivo con el 95 %".
+ h) Regla (arriba del mapa): Línea (distancia y rumbo), Trayecto (varios
     puntos) o Área (área y perímetro). Clic en el mapa; doble clic o
     Enter para terminar. Cada medición se puede renombrar, ocultar,
     borrar y editar arrastrando sus puntos; el ícono de montaña muestra
-    el perfil del terreno.
- h) Buscador (arriba): municipio, departamento, nombre de un nodo o
+    el perfil del terreno. Un área medida sirve también para poblar.
+ i) Buscador (arriba): municipio, departamento, nombre de un nodo o
     coordenadas en decimal o en grados, minutos y segundos.
- i) Clic derecho en el mapa: agregar un nodo ahí, ver la señal, medir
-    desde ese punto, marcarlo o copiar sus coordenadas. Abajo del mapa
-    se ven las coordenadas y el municipio bajo el cursor.
- j) Capas: mapa base (Satélite, Topográfico, OpenTopoMap con quebradas y
-    ríos pequeños con nombre, Calles), límites y nombres de departamentos
-    y municipios, ríos y lagos principales, países, poblados y vías, y
-    las capas de la simulación.
- k) Archivo: guardar el escenario (.json, con las mediciones), nodos a
-    Excel (.csv) y cobertura para Google Earth (.kmz) con el rango de
-    alcance y las mediciones.
- l) Dictado por voz: en la conversación con Melki, toque el micrófono
-    (junto al botón de enviar) y hable. El texto aparece en la caja:
-    revíselo, corríjalo si hace falta y envíelo (nunca se envía solo).
-    Toque el micrófono otra vez para terminar. La primera vez pregunta
-    cómo dictar; se cambia en "Ajustes de voz":
-      - Con el navegador: más preciso; el audio lo procesa Edge o Chrome
-        por internet.
-      - Privado, sin internet: el audio no sale del equipo. La primera
-        vez puede descargar el reconocedor (unos 100 MB) y luego funciona
-        sin conexión.
-    El navegador pide permiso para usar el micrófono.
- m) Funciones de Radio Mobile:
-      - Parámetros > Propagación: modelo (Calibrado o Longley-Rice),
-        confiabilidad (Normal, Alta, Muy alta) y, en "Parámetros como
-        en Radio Mobile", clima, polarización, suelo, refractividad y
-        modo estadístico. "Restablecer" vuelve a los de las pruebas.
-      - Parámetros > Receptor: "Entorno de la zona" (cultivos,
-        plantación, bosque, pueblo, ciudad) resta la pérdida de la
-        vegetación o los edificios a los equipos bajos.
-      - Ficha de un nodo: "Tipo de antena" (Yagi, panel, sectorial,
-        parabólica) con azimut, elevación y "Apuntar hacia" otro nodo;
-        en el mapa se dibuja hacia dónde apunta. "Radioenlace" abre el
-        perfil con el informe completo (como "Radio Link"), que se
-        puede copiar o descargar.
-      - Capas > Escala de la señal: margen, dBm, µV o dBµV/m, y colores
-        por clases, arcoíris entre dos niveles o un solo umbral.
-    A Melki también se lo puede pedir: "confiabilidad del 90 %",
-    "clima continental templado", "ponle una Yagi a Ejemplo apuntando
-    a Torre 2", "simula con vegetación densa", "muestra la señal en
-    dBm", "colores arcoíris de -120 a -70 dBm" o "informe del enlace
-    Ejemplo y Torre 2".
+ j) Clic derecho en el mapa: agregar un nodo ahí, ver la señal, medir
+    desde ese punto, marcarlo o copiar sus coordenadas.
+ k) Capas: mapa base (Satélite, Topográfico, OpenTopoMap, Calles),
+    límites y nombres de departamentos y municipios, ríos y lagos,
+    países, poblados y vías, y las capas de la simulación.
+ l) Archivo: guardar el escenario (.json, con las mediciones), nodos a
+    Excel (.csv) y cobertura para Google Earth (.kmz).
+ m) Dictado por voz: en la conversación con Melki, toque el micrófono y
+    hable; el texto aparece en la caja para revisarlo antes de enviarlo.
+    "Con el navegador" (Edge o Chrome por internet) o "Privado, sin
+    internet" (el audio no sale del equipo).
+ n) Funciones de Radio Mobile (modo avanzado): modelo Calibrado o
+    Longley-Rice, confiabilidad, clima, polarización, suelo,
+    refractividad, entorno (vegetación o edificios), antenas
+    direccionales con azimut, escala en dBm, µV o dBµV/m, e informe de
+    radioenlace como "Radio Link".
 
 
 3. BUENO SABER
 --------------
+- El protocolo es MeshCore: solo los repetidores retransmiten; las
+  billeteras y las radios del gateway son companion. El primer paquete
+  hacia un destino se inunda y desde ahí los pagos van directos por la
+  ruta aprendida. El ajuste de radio por defecto es el de Trama: SF11 /
+  250 kHz (un pago ≈ 9,5 s de aire a 2 saltos), en 920 MHz; las otras
+  frecuencias de Trama son 921,5, 924 y 925,5 MHz. La ANE reconoce el
+  uso libre de 915 a 928 MHz: el documento de Trama menciona 902–928
+  MHz, conviene confirmarlo.
 - El modelo recomendado es el calibrado con las simulaciones de Radio
-  Mobile (espacio libre + difracción del obstáculo principal, tierra
-  4/3): se desvía unos 3 dB en los enlaces y 5 dB en el mapa. Si cambia
-  los parámetros de red, se corrige con Longley-Rice (ITM 1.2.2), el
-  modelo de Radio Mobile, que también se puede usar solo. Es una
-  herramienta de planeación: confirme en campo con la prueba de alcance
-  de Meshtastic antes de instalar.
-- Los límites y nombres de departamentos y municipios son del DANE (vía
-  geoBoundaries); los ríos y lagos principales, de Natural Earth. Para
-  quebradas y caños con nombre use el mapa base OpenTopoMap o Topográfico.
+  Mobile: se desvía unos 3 dB en los enlaces y 5 dB en el mapa. Es una
+  herramienta de planeación: confirme en campo antes de instalar (un
+  ping o un trace de MeshCore entre los equipos y el SNR que reporta).
+- La prueba de carga y la de estrés son estimaciones: suponen un aviso
+  de 126 bytes para quien recibe el pago y 1,5 s del banco; entre
+  billeteras estiman quién oye a quién sobre terreno plano; la energía
+  del repetidor solar supone 0,45 W al transmitir, 0,03 W escuchando y
+  ~14 Wh al día del panel de 5 W. La prueba usa una sola frecuencia: el
+  sitio de Trama lleva 4 radios y, repartiendo los repetidores entre
+  ellas, aguanta hasta 4 veces más. La capacidad real se mide en una red
+  piloto.
+- Las cifras de Trama (precios con la TRM del documento, alcance por
+  terreno, capacidad por frecuencia y datos por departamento del DANE)
+  son de planeación y cambian con el proveedor y el sitio.
 - Los escenarios se guardan solo en este navegador. La versión HTML y la
   versión con servidor no comparten datos: use "Archivo > Guardar
   escenario" para pasar un escenario de una a otra.
-- El mapa base (Esri, OpenTopoMap, OpenStreetMap) y el relieve en línea
-  solo reciben la zona que se ve en pantalla; no se envían nodos,
-  mediciones ni resultados.
-- Melki entiende y ejecuta los pedidos aquí mismo, sin internet. El
-  dictado «Con el navegador» sí usa internet (el audio lo procesa Edge o
-  Chrome); el dictado «Privado» no envía el audio a ningún lado.
-- El ajuste automático compara opciones con precios de referencia en
-  Colombia solo por dentro, para decidir; no los muestra. Las antenas
-  de apoyo son sugerencias: revise en campo el acceso, la energía y la
-  línea de vista antes de instalar.
+- El mapa base y el relieve en línea solo reciben la zona que se ve en
+  pantalla; no se envían nodos, mediciones ni resultados. Melki
+  entiende y ejecuta los pedidos aquí mismo, sin internet.
 - La demostración es genérica: no contiene datos de ningún cliente.
 
 
