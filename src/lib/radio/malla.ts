@@ -54,7 +54,7 @@ export function retransmite(a: Antena): boolean {
 
 /**
  * Enlaces entre nodos. Se calcula cada pareja en la que al menos uno retransmite o es el gateway: dos billeteras
- * nunca se pasan los pagos entre sí, así que con cientos de personas no se calculan sus parejas.
+ * nunca se pasan los mensajes entre sí, así que con cientos de personas no se calculan sus parejas.
  */
 export function calcularEnlaces(antenas: Antena[], p: Parametros, relieve: Relieve): Enlace[] {
   const lambda = longitudOnda(p.frecuenciaMhz);
@@ -341,7 +341,7 @@ export function evaluarFactibilidad(d: DatosFactibilidad): Factibilidad {
   }
   for (const a of lejanas) {
     recomendaciones.push(
-      `${a.nombre} está a ${nodo.get(a.id)?.saltos} saltos del gateway y el diseño pide ${p.limiteSaltos} como máximo. MeshCore admite hasta 64, pero cada salto suma tiempo en el aire a cada pago y le quita capacidad a la frecuencia: acerque un repetidor o ponga otro sitio gateway.`,
+      `${a.nombre} está a ${nodo.get(a.id)?.saltos} saltos del gateway y el diseño pide ${p.limiteSaltos} como máximo. MeshCore admite hasta 64, pero cada salto suma tiempo en el aire a cada mensaje y le quita capacidad a la frecuencia: acerque un repetidor o ponga otro sitio gateway.`,
     );
   }
   for (const a of criticos) {
@@ -371,7 +371,7 @@ export function evaluarFactibilidad(d: DatosFactibilidad): Factibilidad {
   else if (criterios.slice(0, 5).every((c) => c.ok)) nivel = "factible";
   else nivel = "ajustes";
   const titulo = { factible: "Factible", ajustes: "Factible con ajustes", "no-factible": "No factible todavía" }[nivel];
-  if (nivel === "factible" && recomendaciones.length === 0) recomendaciones.push("La red cumple los criterios. Valide en campo: un pago de prueba desde cada zona y un recorrido con la billetera mirando la SNR de los repetidores.");
+  if (nivel === "factible" && recomendaciones.length === 0) recomendaciones.push("La red cumple los criterios. Valide en campo: un mensaje de prueba desde cada zona y un recorrido con la billetera mirando la SNR de los repetidores.");
   return { nivel, titulo, puntaje: Math.min(100, Math.max(0, puntaje)), criterios, recomendaciones };
 }
 

@@ -13,6 +13,10 @@ export { responder, noEntendiOrden } from "./src/components/melki/cerebro";
 export { areaM2, poligonoCirculo } from "./src/lib/radio/area";
 export { normalizarDictado, componerTexto, quitarRepeticiones } from "./src/components/melki/dictado";
 export { TOURS } from "./src/components/melki/tours";
+export { pedidoDeTour } from "./src/components/melki/cerebro";
+export { numerosEnPalabras } from "./src/components/melki/numeros";
+export { detectarActivacion, controlDeVoz, limpiarComando, textoParaVoz, pareceEco, AYUDA_VOZ, SALUDO_MANOS_LIBRES } from "./src/components/melki/manos-libres";
+export { paraHablar } from "./src/components/melki/voz";
 export { estadoInicial, reductor } from "./src/components/simulador/estado";
 export { estadoRed } from "./src/lib/radio/estado-red";
 `;
@@ -146,6 +150,8 @@ function crearApi(antenas) {
     fijarRelieve: (v) => llamadas.push(["relieve", v]),
     renombrarEscenario: (nombre) => llamadas.push(["nombre", nombre]),
     duplicar: (id) => llamadas.push(["duplicar", id]),
+    pantalla: "escritorio",
+    paneles: (c) => (llamadas.push(["paneles", c]), api.pantalla),
     disenoFalso: null,
     disenarArea: (o) => {
       llamadas.push(["disenar", o]);
@@ -210,6 +216,18 @@ function crearApi(antenas) {
     probarEstres: (o) => {
       llamadas.push(["estres", o]);
       return Promise.resolve(api.estresFalso);
+    },
+    // Límite de un punto (v12.2)
+    limiteFalso: null,
+    evaluarPunto: (o) => {
+      llamadas.push(["punto", o]);
+      const c = api.centrosZona().find((x) => x.id === o.centro);
+      return Promise.resolve({ nombre: c?.nombre ?? o.centro, zonas: null, estres: api.estresFalso, limite: api.limiteFalso ? { ...api.limiteFalso, id: o.centro, nombre: c?.nombre ?? o.centro, llenado: o.accion === "llenar" ? { personas: 320, estadoPunto: "aguanta", estadoRed: "aguanta", intentos: 1 } : null } : null, error: null });
+    },
+    evaluarPuntos: (o) => {
+      llamadas.push(["puntos", o]);
+      const lista = api.centrosZona().filter((c) => !o.centros?.length || o.centros.includes(c.id));
+      return Promise.resolve({ limites: api.limiteFalso ? lista.map((c) => ({ ...api.limiteFalso, id: c.id, nombre: c.nombre })) : [], zonas: null, error: null });
     },
   };
   return api;
@@ -348,6 +366,7 @@ function crearApi(antenas) {
   caso("Grados, minutos y segundos dictados", m.normalizarDictado("4 grados 13 minutos 30 segundos norte") === `4°13'30" norte`);
   caso("Mayúscula inicial con la caja vacía", m.componerTexto("", "sube ejemplo a 25 metros") === "Sube ejemplo a 25 m");
   caso("Se agrega a lo que ya estaba escrito", m.componerTexto("Inscribe un nodo", "en 4 coma 5 menos 73 coma 1") === "Inscribe un nodo en 4.5 -73.1");
+  caso("Los números dictados en palabras quedan en cifras", m.componerTexto("", "puebla la zona con doscientas cincuenta personas") === "Puebla la zona con 250 personas" && m.componerTexto("", "sube el repetidor uno a veinte metros") === "Sube el repetidor 1 a 20 m");
   caso("Se quitan las frases repetidas del reconocedor privado", m.quitarRepeticiones("no podemos decir que no podemos decir que no podemos decir que") === "no podemos decir que", m.quitarRepeticiones("no podemos decir que no podemos decir que no podemos decir que"));
   caso("No se tocan las palabras repetidas normales", m.quitarRepeticiones("sube la antena a la torre") === "sube la antena a la torre");
   const c = { antenas: [], parametros: PARAMETROS, resultado: null, desactualizado: false, relieve: "teselas" };
@@ -362,11 +381,11 @@ function crearApi(antenas) {
   const c = { antenas: [], parametros: PARAMETROS, resultado: null, desactualizado: false, relieve: "teselas" };
   const menu = m.responder("Hazme un tour", c);
   caso(
-    "«Hazme un tour» → menú con los 8 tours, el básico primero",
-    menu.acciones?.length === 8 && menu.acciones[0].tour === "basico" && /recomendado/.test(menu.acciones[0].texto) && menu.acciones.every((a) => a.accion === "recorrido" && a.detalle),
+    "«Hazme un tour» → menú con los 9 tours, el básico primero",
+    menu.acciones?.length === 9 && menu.acciones[0].tour === "basico" && /recomendado/.test(menu.acciones[0].texto) && menu.acciones.every((a) => a.accion === "recorrido" && a.detalle),
     menu.acciones?.map((a) => a.tour).join(","),
   );
-  caso("«Ayuda» → menú de tours", m.responder("ayuda", c).acciones?.length === 8);
+  caso("«Ayuda» → menú de tours", m.responder("ayuda", c).acciones?.length === 9);
   const pedido = (q) => m.responder(q, c).acciones?.[0]?.tour;
   for (const [q, id] of [
     ["quiero el tutorial", "basico"],
@@ -384,11 +403,11 @@ function crearApi(antenas) {
   caso("«¿Qué puedes hacer?» ofrece los tours", m.responder("¿qué puedes hacer?", c).acciones?.some((a) => a.accion === "tours"));
 
   const ids = m.TOURS.map((x) => x.id);
-  caso("Ocho tours con nombre, detalle e introducción", ids.length === 8 && new Set(ids).size === 8 && m.TOURS.every((x) => x.nombre && x.detalle && x.pasos.length >= 4 && !x.pasos[0].objetivo && !x.pasos[0].tarea));
+  caso("Nueve tours con nombre, detalle e introducción", ids.length === 9 && new Set(ids).size === 9 && m.TOURS.every((x) => x.nombre && x.detalle && x.pasos.length >= 4 && !x.pasos[0].objetivo && !x.pasos[0].tarea));
   caso("El tutorial básico tiene 7 pasos", m.TOURS[0].id === "basico" && m.TOURS[0].pasos.length === 8);
 
   // Cada paso práctico: no está hecho al entrar, «Hágalo por mí» lo hace y se detecta (con un simulador de mentira)
-  const SOLO_PANTALLA = new Set(["medir:A Google Earth"]); // depende del menú «Archivo» en pantalla
+  const SOLO_PANTALLA = new Set(["medir:A Google Earth", "voz:Active manos libres"]); // dependen de botones en pantalla
   for (const tour of m.TOURS.filter((x) => x.practica && x.id !== "melki")) {
     let estado = { ...m.estadoInicial(), escenario: tour.practica.escenario(), autoSimular: tour.practica.autoSimular };
     let alDia = false;
@@ -586,7 +605,7 @@ function crearApi(antenas) {
   const anima = orden("anima la red");
   caso("«Anima la red» enciende el flujo animado", anima?.tipo === "vista" && anima.cambios.animarRed === true);
   caso("Responde qué es la animación (flujo, destellos e IA)", /turquesa/.test(m.responder("¿por qué parpadean y brillan los nodos?", c).texto) && /IA/.test(m.responder("¿qué son las líneas que se mueven?", c).texto));
-  caso("El pago de prueba cuenta el comprobante de vuelta", /comprobante vuelve por la misma ruta/.test(m.ejecutarOrden({ tipo: "mensaje", id: "p1" }, api).texto));
+  caso("El mensaje de prueba cuenta la respuesta de vuelta (comprobante, WhatsApp o IA)", ((x) => /respuesta vuelve por la misma ruta/.test(x) && /comprobante/.test(x) && /WhatsApp/.test(x) && /IA/.test(x))(m.ejecutarOrden({ tipo: "mensaje", id: "p1" }, api).texto));
 }
 
 // 11) Melki agente (v10): diseño por área, varias órdenes, posiciones relativas, lugares, lotes y vista
@@ -909,7 +928,7 @@ function crearApi(antenas) {
   const tz = (await rz.luego).texto;
   caso(
     "Cuenta la hora pico: se revienta, zona por zona, alcance con carga, energía, rampa, ajustes y qué hacer",
-    /Resultado: se revienta/.test(tz) && /Zona por zona/.test(tz) && /• Repetidor 1 \(250 personas, 91 pagos\/h\): se revienta, 18 %/.test(tz) && /completa solo hasta 0,6 km \(atiende gente hasta 2,0 km\)/.test(tz) && /La energía no es el límite/.test(tz) && /aguanta sin demora hasta ~188 personas/.test(tz) && /como máximo ~181 pagos por hora/.test(tz) && /SF9 · 250 kHz: 82 %/.test(tz) && /4 frecuencias/.test(tz) && /aguanta hasta ~63 personas sin demora/.test(tz),
+    /Resultado: se revienta/.test(tz) && /Zona por zona/.test(tz) && /• Repetidor 1 \(250 personas, 91 mensajes\/h\): se revienta, 18 %/.test(tz) && /completa solo hasta 0,6 km \(atiende gente hasta 2,0 km\)/.test(tz) && /La energía no es el límite/.test(tz) && /aguanta sin demora hasta ~188 personas/.test(tz) && /como máximo ~181 mensajes por hora/.test(tz) && /SF9 · 250 kHz: 82 %/.test(tz) && /4 frecuencias/.test(tz) && /aguanta hasta ~63 personas sin demora/.test(tz),
     tz.slice(0, 300).replace(/\n/g, " "),
   );
   caso("El estrés va después de simular las zonas", api.llamadas.findIndex((l) => l[0] === "estres") > api.llamadas.findIndex((l) => l[0] === "zonas"));
@@ -929,6 +948,140 @@ function crearApi(antenas) {
   const c = { antenas: [g, r1], parametros: { ...PARAMETROS, preset: "SF11_250" }, resultado: null, desactualizado: false, relieve: "teselas", modo: "sembrar" };
   caso("«¿Qué es una zona de popularidad?» → explica zonas y estrés", /zonas de popularidad ponen gente alrededor/.test(m.responder("¿qué es una zona de popularidad?", c).texto));
   caso("«¿Cuánto consume cada usuario?» → aire por persona", /segundos de aire en la hora pico/.test(m.responder("¿cuánto consume cada usuario de la red?", c).texto));
+}
+
+// 16) El límite de cada punto (v12.2): la cantidad que se quiera, cuántas aguanta y llenarlo hasta el límite
+{
+  const g = base("g", "Gateway", 4.2, -73.37, { pasarela: true, rol: "COMPANION" });
+  const r1 = base("r1", "Repetidor 1", 4.25, -73.3, { rol: "REPETIDOR" });
+  const r2 = base("r2", "Repetidor 2", 4.15, -73.3, { rol: "REPETIDOR" });
+  const api = crearApi([g, r1, r2]);
+  const orden = (t) => m.interpretarOrden(t, api, null);
+  const l1 = orden("¿cuántas personas aguanta el Repetidor 1?");
+  caso("«¿Cuántas personas aguanta el Repetidor 1?» → límite de ese punto", l1?.tipo === "limite" && JSON.stringify(l1.centros) === '["r1"]' && !l1.llenar, JSON.stringify(l1));
+  const l2 = orden("llena el gateway hasta su límite");
+  caso("«Llena el gateway hasta su límite» → llenar", l2?.tipo === "limite" && JSON.stringify(l2.centros) === '["g"]' && l2.llenar, JSON.stringify(l2));
+  caso("«Pon en el Repetidor 2 la cantidad máxima de personas que soporte» → llenar", ((x) => x?.tipo === "limite" && x.llenar && JSON.stringify(x.centros) === '["r2"]')(orden("pon en el Repetidor 2 la cantidad máxima de personas que soporte")));
+  caso("«Evalúa hasta qué punto soporta el Repetidor 1 con 400 personas a 3 km» → límite con muestra y radio", ((x) => x?.tipo === "limite" && x.n === 400 && x.radioKm === 3 && !x.llenar)(orden("evalúa hasta qué punto soporta el Repetidor 1 con 400 personas a 3 km")));
+  caso("«¿Cuál es el límite de cada punto?» → todos los puntos", ((x) => x?.tipo === "limite" && x.centros === undefined && !x.llenar)(orden("¿cuál es el límite de personas de cada punto?")));
+  caso("«Llena cada repetidor hasta su límite» → todos y llenar", ((x) => x?.tipo === "limite" && x.centros === undefined && x.llenar)(orden("llena cada repetidor hasta su límite de personas")));
+  const z7 = orden("pon 700 personas en el Repetidor 1 y mira la estabilidad de la red");
+  caso("«Pon 700 personas en el Repetidor 1 y mira la estabilidad» → zona de 700 + estrés", z7?.tipo === "zonas" && z7.pedido.n === 700 && JSON.stringify(z7.pedido.centros) === '["r1"]' && z7.estres !== null, JSON.stringify(z7));
+  caso("Hasta 2.000 personas por punto", orden("pon 1.800 personas en el Repetidor 2")?.pedido?.n === 1800 && orden("pon 5000 personas en el Repetidor 2")?.pedido?.n === 2000);
+  caso("«El límite de saltos» sigue siendo el límite de saltos", m.interpretarOrden("pon el límite de saltos del Repetidor 1 en 4", api, null)?.tipo !== "limite");
+  caso("«La altura máxima» no es un límite de personas", orden("pon el Repetidor 1 a la altura máxima")?.tipo !== "limite");
+  caso("«¿Hasta cuántos usuarios aguanta cada repetidor?» sigue siendo el estrés de toda la malla", orden("¿hasta cuántos usuarios aguanta cada repetidor?")?.tipo === "estres");
+
+  // Ejecutar: busca el límite y lo cuenta; el botón lo llena
+  api.limiteFalso = { pieza: "repetidor", personas: 100, deZona: true, puntos: [], personasSeguro: 320, rango: null, personasLento: 350, personasQuiebre: 640, aguantaTodo: false, tope: 2000, mensajesHoraMax: 115, falla: { quien: "punto", nombres: ["Repetidor 1"], limites: ["canal"], estado: "lento" }, redYaFalla: false, motivo: null };
+  api.estresFalso = null;
+  const r = m.ejecutarOrden(l1, api);
+  caso("Avisa qué hace (sube la gente de ese punto con el resto como está) y deja deshacer", /Busco cuántas personas aguanta Repetidor 1/.test(r.texto) && /con el resto de la red como está/.test(r.texto) && /WhatsApp/.test(r.texto) && r.deshacer && r.luego, r.texto.slice(0, 160));
+  const tr = await r.luego;
+  caso(
+    "Cuenta el límite: sin demora, lento, se revienta, qué falla primero y ofrece llenarlo",
+    /aguanta sin demora hasta ~320 personas \(115 mensajes por hora/.test(tr.texto) && /desde ~350 va lento/.test(tr.texto) && /se revienta desde ~640/.test(tr.texto) && /Lo primero que falla es el propio Repetidor 1 \(canal lleno\)/.test(tr.texto) && tr.acciones?.some((a) => a.orden?.tipo === "limite" && a.orden.llenar && a.orden.n === 320),
+    tr.texto.slice(0, 260),
+  );
+  caso("Pide el límite del punto (no de toda la red)", api.llamadas.some((l) => l[0] === "punto" && l[1].centro === "r1" && l[1].accion === "limite"));
+  const tl = await m.ejecutarOrden(l2, api).luego;
+  caso("Llenar: lo llena y cuenta cómo quedó", /Lo llené con 320 personas y simulé la hora pico: el punto estable, la red estable/.test(tl.texto) && api.llamadas.some((l) => l[0] === "punto" && l[1].accion === "llenar"), tl.texto.slice(0, 200));
+  const tc = await m.ejecutarOrden(orden("¿cuál es el límite de personas de cada punto?"), api).luego;
+  caso("Cada punto: un renglón por punto y la advertencia de que juntos comparten el canal", (tc.texto.match(/^• /gm) ?? []).length === 3 && /comparten el canal/.test(tc.texto) && tc.acciones?.some((a) => a.orden?.tipo === "limite" && a.orden.llenar), tc.texto.slice(0, 200));
+  api.limiteFalso = { ...api.limiteFalso, personasSeguro: null, personasLento: null, personasQuiebre: null, mensajesHoraMax: null, redYaFalla: true, falla: { quien: "red", nombres: ["Repetidor 2"], limites: ["canal", "choques"], estado: "revienta" } };
+  const ty = await m.ejecutarOrden(l1, api).luego;
+  caso("Si la red ya está llena por otras zonas, lo dice y no ofrece llenar", /la red no aguanta sin demora: Repetidor 2 ya llena el canal/.test(ty.texto) && !ty.acciones?.some((a) => a.orden?.tipo === "limite"), ty.texto.slice(0, 200));
+  const c = { antenas: [g, r1, r2], parametros: { ...PARAMETROS, preset: "SF11_250" }, resultado: null, desactualizado: false, relieve: "teselas", modo: "sembrar" };
+  caso("El tema de estrés explica «¿Cuántas aguanta?» y «Llenar hasta el límite»", /¿Cuántas aguanta\?/.test(m.responder("¿qué es una zona de popularidad?", c).texto) && /Llenar hasta el límite/.test(m.responder("¿qué es una zona de popularidad?", c).texto));
+}
+
+// ─── 17. Melki manos libres (tipo Jarvis): llamado, controles, números, eco, paneles y la mayor cobertura ───
+{
+  console.log("\n17. Manos libres");
+  const act = (f) => m.detectarActivacion(f);
+  for (const [frase, resto, ingles] of [
+    ["Hola Melki, pon el gateway en Cumaral", "pon el gateway en Cumaral", false],
+    ["oye melki cuántas personas aguanta el Repetidor 1", "cuántas personas aguanta el Repetidor 1", false],
+    ["Hey Melki, simula", "simula", true],
+    ["hello melky what's up", "what's up", true],
+    ["Hola, Mel ki, ¿qué hago ahora?", "¿qué hago ahora?", false],
+    ["Melki por favor conecta a los que faltan", "conecta a los que faltan", false],
+    ["conecta a los que faltan, Melki", "conecta a los que faltan", false],
+    ["Oye Melqui", "", false],
+  ])
+    caso(`Llamado: «${frase}»`, ((a) => a.activado && a.resto === resto && a.ingles === ingles)(act(frase)), JSON.stringify(act(frase)));
+  caso("Sin el nombre no se activa", !act("pon el gateway en Cumaral").activado && !act("hola, ¿cómo estás?").activado && !act("el melón está maduro").activado);
+
+  const ctl = (f) => m.controlDeVoz(f)?.tipo ?? null;
+  caso("Controles: para, repite, más detalle, deja de escuchar, gracias, no, ayuda", ctl("para") === "callar" && ctl("Melki, silencio") === "callar" && ctl("repite") === "repetir" && ctl("¿qué dijiste?") === "repetir" && ctl("más detalle") === "detalle" && ctl("léelo todo") === "detalle" && ctl("deja de escuchar") === "apagar" && ctl("apaga el modo manos libres") === "apagar" && ctl("adiós") === "apagar" && ctl("gracias") === "gracias" && ctl("no, gracias") === "no" && ctl("¿qué te puedo decir?") === "ayuda");
+  caso("«Sí, hazlo», «dale», «la segunda», «la última» usan los botones", m.controlDeVoz("sí, hazlo")?.indice === 0 && m.controlDeVoz("dale")?.indice === 0 && m.controlDeVoz("la segunda")?.indice === 1 && m.controlDeVoz("el tercero")?.indice === 2 && m.controlDeVoz("la última")?.indice === "ultima");
+  caso("Una orden no es un control", ctl("pon el gateway en Cumaral") === null && ctl("no conectes a nadie más") === null && ctl("para el Repetidor 1 usa 12 m") === null);
+
+  const num = (f) => m.numerosEnPalabras(f);
+  for (const [dicho, esperado] of [
+    ["puebla la zona con doscientas cincuenta personas", "puebla la zona con 250 personas"],
+    ["pon el gateway en cuatro punto dos, menos setenta y tres punto tres siete", "pon el gateway en 4.2, -73.37"],
+    ["cubre once mil doscientas veintiséis hectáreas al noventa y nueve punto nueve por ciento", "cubre 11226 hectáreas al 99.9 %"],
+    ["sube el repetidor uno a veinte y cinco metros", "sube el repetidor 1 a 25 metros"],
+    ["envía quince pagos al tiempo", "envía 15 pagos al tiempo"],
+    ["agrega un repetidor y una persona", "agrega un repetidor y una persona"],
+    ["mil quinientas personas", "1500 personas"],
+  ])
+    caso(`Números: «${dicho}»`, num(dicho) === esperado, num(dicho));
+
+  const lim = m.limpiarComando("eh, pon el gateway en cuatro punto dos menos setenta y tres punto tres siete por favor");
+  caso("Lo dicho queda listo para Melki (cifras, sin muletillas, con mayúscula)", lim.startsWith("Pon el gateway en 4.2") && /-73\.37/.test(lim) && !/por favor/.test(lim), lim);
+  {
+    const api = crearApi([]);
+    const o = m.interpretarOrden(m.limpiarComando("pon el gateway en cuatro punto dos, menos setenta y tres punto tres siete"), api, null);
+    caso("Un pedido dicho en palabras se vuelve orden", o?.tipo === "pieza" && o.pieza === "gateway" && cerca(o.coord?.lat, 4.2) && cerca(o.coord?.lon, -73.37), JSON.stringify(o));
+  }
+
+  const largo = "La red cubre el 82 % del área. Llegan 40 de 45 personas. Falta un repetidor al norte. Además conviene subir el gateway.\n• Repetidor 1: 3 saltos.\n• Repetidor 2: sin red.\n• Repetidor 3: bien.";
+  const corto = m.textoParaVoz(largo);
+  caso("La respuesta en voz va resumida y avisa que el detalle quedó escrito", corto.includes("82 %") && !corto.includes("Además conviene") && corto.includes("Repetidor 1") && !corto.includes("Repetidor 3") && /Le dejé el detalle escrito\.$/.test(corto), corto);
+  const completo = m.textoParaVoz(largo, true);
+  caso("Con «más detalle» la lee completa", completo.includes("Además conviene") && completo.includes("Repetidor 3") && !completo.includes("•"));
+  caso("Una respuesta corta se lee tal cual", m.textoParaVoz("Listo, simulé la red.") === "Listo, simulé la red.");
+
+  const voz = m.paraHablar("El enlace tiene 12,5 dB a 3,2 km con SF11; ≈ 1.035.000 pesos y 99,9 % · 250 B");
+  caso("La voz dice unidades y números sin deletrear símbolos", /12 coma 5 decibeles/.test(voz) && /3 coma 2 kilómetros/.test(voz) && /S F 11/.test(voz) && /unos 1035000/.test(voz) && /99 coma 9 por ciento/.test(voz) && /250 bytes/.test(voz) && !/[≈·%]/.test(voz), voz);
+
+  caso("Reconoce el eco de su propia voz", m.pareceEco("diga hola Melki y su pedido", m.SALUDO_MANOS_LIBRES) && m.pareceEco("le dejé el detalle escrito", "La red cubre el 82 %. Le dejé el detalle escrito."));
+  caso("Lo que dice el usuario no es eco", !m.pareceEco("pon el gateway en Cumaral", m.SALUDO_MANOS_LIBRES) && !m.pareceEco("conecta a los que faltan", "Listo, simulé la red: llegan 40 de 45 personas."));
+
+  // Pantalla limpia: los paneles de los lados
+  const api = crearApi([base("g", "Gateway", 4.2, -73.37, { pasarela: true })]);
+  const pan = (t) => m.interpretarOrden(t, api, null);
+  caso("«Pantalla limpia» oculta los dos paneles", ((o) => o?.tipo === "paneles" && o.izquierdo === false && o.derecho === false)(pan("pantalla limpia")) && pan("Deja solo el mapa")?.tipo === "paneles" && pan("oculta los paneles")?.izquierdo === false);
+  caso("«Muestra los paneles» los vuelve a abrir", ((o) => o?.tipo === "paneles" && o.izquierdo === true && o.derecho === true)(pan("muestra los paneles")));
+  caso("«Cierra el panel izquierdo» y «oculta los resultados» van por separado", ((o) => o?.izquierdo === false && o.derecho === undefined)(pan("cierra el panel izquierdo")) && ((o) => o?.derecho === false && o.izquierdo === undefined)(pan("oculta los resultados")) && pan("abre el panel de resultados")?.derecho === true);
+  caso("«Muestra los resultados» (sin panel) no es una orden de paneles", pan("muestra los resultados")?.tipo !== "paneles" && pan("limpia el mapa")?.tipo === "nuevo");
+  const rp = m.ejecutarOrden(pan("pantalla limpia"), api);
+  caso("Ejecuta la pantalla limpia y lo cuenta", /pantalla limpia, solo el mapa/.test(rp.texto) && api.llamadas.some((l) => l[0] === "paneles" && l[1].izquierdo === false && l[1].derecho === false), rp.texto);
+  api.pantalla = "celular";
+  caso("En el celular explica los botones de abajo", /botones de abajo/.test(m.ejecutarOrden(pan("pantalla limpia"), api).texto));
+
+  // La mayor cobertura posible
+  const pide = pan("dame la mayor cobertura posible");
+  caso("«Dame la mayor cobertura posible» → ajuste con la opción de máxima cobertura", pide?.tipo === "ajustar" && pide.opcion === "maxima" && pide.aplicar, JSON.stringify(pide));
+  caso("«Ajústamelo para la mayor cobertura posible» → máxima", ((o) => o?.tipo === "ajustar" && o.opcion === "maxima")(pan("ajústamelo para la mayor cobertura posible")));
+  caso("«¿Cómo dejo la mayor cobertura posible?» no es una orden: pide consejos", pan("¿cómo dejo la mayor cobertura posible?") === null && pan("qué me recomiendas para la mayor cobertura posible") === null);
+  const c = { antenas: api.antenas(), parametros: { ...PARAMETROS, preset: "SF11_250" }, resultado: null, desactualizado: false, relieve: "teselas", modo: "sembrar" };
+  const rc = m.responder("¿cómo dejo la mayor cobertura posible?", c);
+  caso("Melki recomienda cómo dejar la mayor cobertura posible", /mayor cobertura posible/.test(rc.texto) && /loma/.test(rc.texto) && /línea de vista/i.test(rc.texto) && /respaldo/.test(rc.texto) && /SF11/.test(rc.texto) && /ajústamelo para la mayor cobertura posible/.test(rc.texto), rc.texto.slice(0, 120));
+  caso("Con nodos sin simular ofrece simular", rc.acciones?.some((a) => a.accion === "simular"));
+
+  // El tema de manos libres, el tour y el menú
+  const rm = m.responder("¿cómo funciona el modo manos libres?", c);
+  caso("Explica manos libres y ofrece activarlo y el tour", /Hola Melki/.test(rm.texto) && /deja de escuchar/.test(rm.texto) && rm.acciones?.some((a) => a.accion === "manos-libres") && rm.acciones?.some((a) => a.tour === "voz"), rm.texto.slice(0, 100));
+  caso("«Modo Jarvis» y «comandos de voz» llevan al mismo tema", m.responder("modo jarvis", c).acciones?.some((a) => a.accion === "manos-libres") && m.responder("¿qué comandos de voz entiendes?", c).acciones?.some((a) => a.accion === "manos-libres"));
+  caso("Un «Hola Melki» escrito sigue siendo un saludo", !m.responder("Hola Melki", c).acciones?.some((a) => a.accion === "manos-libres"));
+  caso("«¿Qué puedes hacer?» menciona la voz", /Manos libres/.test(m.responder("¿qué puedes hacer?", c).texto));
+  const tv = m.TOURS.find((x) => x.id === "voz");
+  caso("Tour «Melki por voz»: activa, llama por el nombre, pantalla limpia y la mayor cobertura", tv && tv.pasos.some((p) => p.objetivo === "manos-libres" && p.tarea) && tv.pasos.some((p) => [].concat(p.objetivo).includes("plegar-panel")) && tv.pasos.some((p) => /mayor cobertura posible/.test(p.texto)));
+  caso("«Hazme el tour de manos libres» → tour voz", m.pedidoDeTour("hazme el tour de manos libres")?.acciones?.[0]?.tour === "voz" && m.pedidoDeTour("guíame para hablar con Melki y dictarle")?.acciones?.[0]?.tour === "melki");
+  caso("La ayuda por voz trae ejemplos y los controles", /Hola Melki/.test(m.AYUDA_VOZ) && /sí, hazlo/.test(m.AYUDA_VOZ) && /pantalla limpia/.test(m.AYUDA_VOZ) && /mayor cobertura posible/.test(m.AYUDA_VOZ));
 }
 
 console.log(fallos ? `\n✗ ${fallos} prueba(s) fallaron` : "\n✓ Melki verificado");

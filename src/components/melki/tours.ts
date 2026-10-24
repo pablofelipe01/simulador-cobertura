@@ -9,7 +9,7 @@ import type { Antena, Escenario, Medicion } from "@/lib/radio/tipos";
 
 import type { Api } from "./ordenes";
 
-export type IdTour = "basico" | "sembrar" | "capacidad" | "pantalla" | "mesh" | "radiomobile" | "medir" | "melki";
+export type IdTour = "basico" | "sembrar" | "capacidad" | "pantalla" | "mesh" | "radiomobile" | "medir" | "melki" | "voz";
 
 /** Panel que se abre antes de un paso («mapa» cierra la hoja en el celular para dejar ver el mapa). */
 export type Preparacion = "antenas" | "parametros" | "resultados" | "mapa" | "sembrar" | null;
@@ -307,7 +307,7 @@ export const TOURS: Tour[] = [
   {
     id: "sembrar",
     nombre: "Sembrar la malla",
-    detalle: "Gateway, repetidores y gente, como en Trama, y un pago de prueba.",
+    detalle: "Gateway, repetidores y gente, como en Trama, y un mensaje de prueba.",
     minutos: 4,
     modo: "sembrar",
     practica: { escenario: () => renombrado(escenarioVacio(), "Práctica: sembrar la malla"), autoSimular: true, centro: [CENTRO.lat, CENTRO.lon + 0.12, 10] },
@@ -401,29 +401,29 @@ export const TOURS: Tour[] = [
       {
         objetivo: "enviar-mensaje",
         preparar: "sembrar",
-        titulo: "Envíe un pago de prueba",
-        texto: "Toque «Enviar»: la orden firmada (118 bytes) sale de la persona más lejana y la pasan los repetidores hasta el gateway, como en MeshCore. Le digo los saltos, el tiempo y qué tan seguro llega; el comprobante vuelve por la misma ruta.",
+        titulo: "Envíe un mensaje de prueba",
+        texto: "Toque «Enviar»: un mensaje del tamaño de un pago (la orden firmada, 118 bytes) sale de la persona más lejana y lo pasan los repetidores hasta el gateway, como en MeshCore; un WhatsApp o una consulta a la IA viajan igual. Le digo los saltos, el tiempo y qué tan seguro llega; la respuesta vuelve por la misma ruta.",
         tarea: { hecho: (t, base) => t.foto().mensaje > base.mensaje, hacer: enviarDePrueba },
       },
       {
         objetivo: "melki",
         titulo: "Pregúnteme",
-        texto: "Pregúnteme «¿cómo viaja un pago?», «¿por qué Persona 2 está en rojo?» o «¿qué hago ahora?», o pídame «pon un repetidor en 4.25, -73.30 a 12 m», «lleva la red a Paratebueno» o «puebla la zona con 250 personas».",
+        texto: "Pregúnteme «¿cómo viaja un mensaje?», «¿por qué Persona 2 está en rojo?» o «¿qué hago ahora?», o pídame «pon un repetidor en 4.25, -73.30 a 12 m», «lleva la red a Paratebueno» o «puebla la zona con 250 personas».",
       },
     ],
-    final: "Ya sabe sembrar la malla: el gateway, los repetidores, la gente, conectar a los que faltan y probar un pago.",
+    final: "Ya sabe sembrar la malla: el gateway, los repetidores, la gente, conectar a los que faltan y probar un mensaje.",
   },
   {
     id: "capacidad",
-    nombre: "¿Cuántos pagos aguanta?",
-    detalle: "Poblar personas, pagos al tiempo, zonas de popularidad y la hora pico hasta que la red se reviente.",
+    nombre: "¿Cuánto tráfico aguanta?",
+    detalle: "Poblar personas, pagos y mensajes al tiempo, zonas de popularidad y la hora pico hasta que la red se reviente.",
     minutos: 4,
     modo: "sembrar",
     practica: { escenario: () => renombrado(escenarioMalla(), "Práctica: capacidad de la red"), autoSimular: true },
     pasos: [
       {
         titulo: "La red con la gente de verdad",
-        texto: "Una red puede cubrir todo y aun así no aguantar la hora pico del mercado. Vamos a llenar la zona de gente y a mandar pagos al tiempo, paquete por paquete como lo hace MeshCore, hasta ver dónde se revienta. Estamos en un escenario de práctica.",
+        texto: "Una red puede cubrir todo y aun así no aguantar la hora pico del mercado. Por ella van pagos, mensajes de WhatsApp y consultas a la IA, y todos comparten el mismo canal. Vamos a llenar la zona de gente y a mandar mensajes al tiempo, paquete por paquete como lo hace MeshCore, hasta ver dónde se revienta. Estamos en un escenario de práctica.",
       },
       {
         objetivo: "poblar",
@@ -446,8 +446,8 @@ export const TOURS: Tour[] = [
       {
         objetivo: "prueba-carga",
         preparar: "resultados",
-        titulo: "2 · Pagos al tiempo",
-        texto: "Elija cuántos pagos salen al tiempo (5, 15, 25…) y toque «Probar». Cada pago es la orden (118 B), el comprobante (126 B) y el aviso a quien recibe (126 B), con sus acuses. Con SF11 cada pago ocupa ~9,5 s de aire.",
+        titulo: "2 · Mensajes al tiempo",
+        texto: "Elija qué se manda —pagos, o mensajes de texto de WhatsApp y consultas a la IA— y cuántos salen al tiempo (5, 15, 25…), y toque «Probar». Cada pago es la orden (118 B), el comprobante (126 B) y el aviso a quien recibe (126 B), con sus acuses: con SF11 ocupa ~9,5 s de aire.",
         tarea: {
           hecho: (t, base) => ["listo", "curva"].includes(t.foto().carga) && t.foto().carga !== base.carga,
           hacer: (t) => void t.melki.probarCarga({ mensajes: 15 }),
@@ -458,7 +458,7 @@ export const TOURS: Tour[] = [
         objetivo: ["resultado-carga", "prueba-carga"],
         preparar: "resultados",
         titulo: "3 · ¿Hasta cuántos aguanta?",
-        texto: "Toque «¿Hasta cuántos aguanta?»: subo la cantidad hasta que menos del 90 % recibe su comprobante. Verde aguanta sin demora, naranja aguanta pero lento (el 95 % tarda más de un minuto) y rojo ya se reventó.",
+        texto: "Toque «¿Hasta cuántos aguanta?»: subo la cantidad hasta que menos del 90 % recibe su respuesta. Verde aguanta sin demora, naranja aguanta pero lento (el 95 % tarda más de un minuto) y rojo ya se reventó.",
         tarea: {
           hecho: (t) => t.foto().carga === "curva",
           hacer: (t) => void t.melki.probarCarga({}, true),
@@ -469,7 +469,7 @@ export const TOURS: Tour[] = [
         objetivo: "zonas-popularidad",
         preparar: "resultados",
         titulo: "4 · Zonas de popularidad",
-        texto: "Ahora gente alrededor de cada repetidor y del gateway (o solo de uno: también sale al tocar el repetidor en el mapa). Elija cuántas por zona y a cuántos km, y toque «Poner».",
+        texto: "Ahora gente alrededor de cada repetidor y del gateway (o solo de uno: también sale al tocar el repetidor en el mapa). Escriba cuántas personas quiera por zona y a cuántos km, y toque «Poner». En cada punto, «Poner y probar» simula de una vez la hora pico y «¿Cuántas aguanta?» busca su límite.",
         tarea: {
           hecho: (t, base) => enZonas(t.foto()) > enZonas(base),
           hacer: (t) => void t.melki.poblarZonas({ n: 150, radioKm: 2, semilla: 7 }),
@@ -480,7 +480,7 @@ export const TOURS: Tour[] = [
         objetivo: "prueba-estres",
         preparar: "resultados",
         titulo: "5 · La hora pico, zona por zona",
-        texto: "Toque «¿Hasta dónde aguanta cada repetidor?»: cada persona hace sus pagos del día y una parte cae en la hora pico. Mido cada zona (pagos completos, espera, canal, cuánto transmite, alcance con carga y energía) y subo la carga hasta que cada una se revienta.",
+        texto: "Toque «¿Hasta dónde aguanta cada repetidor?»: cada persona manda sus mensajes del día (pagos, WhatsApp y consultas a la IA) y una parte cae en la hora pico. Mido cada zona (mensajes completos, espera, canal, cuánto transmite, alcance con carga y energía) y subo la carga hasta que cada una se revienta.",
         tarea: {
           hecho: (t) => t.foto().estres === "rampa",
           hacer: (t) => void t.melki.probarEstres({ rampa: true }),
@@ -491,10 +491,10 @@ export const TOURS: Tour[] = [
         objetivo: ["resultado-estres", "prueba-estres"],
         preparar: "resultados",
         titulo: "Cómo leerlo",
-        texto: "Trama diseña cada frecuencia para 55 pagos por hora con SF11 (el canal al 15 % en la hora pico): 150 usuarios por frecuencia y 600 por sitio de 4 radios. En el mapa cada zona queda verde (aguanta), naranja (lenta) o roja (se revienta). La curva muestra cuántos pagos por hora entrega la red: sube hasta el máximo del canal y después cae. Si se revienta, reparta los repetidores en las 4 frecuencias, baje a SF10 o SF9 (más pagos, menos alcance) o ponga más sitios gateway.",
+        texto: "Trama diseña cada frecuencia para 55 pagos por hora con SF11 (el canal al 15 % en la hora pico): 150 usuarios por frecuencia y 600 por sitio de 4 radios, y esa capacidad la comparten con los WhatsApp y las consultas a la IA. En el mapa cada zona queda verde (aguanta), naranja (lenta) o roja (se revienta). La curva muestra cuántos mensajes por hora entrega la red: sube hasta el máximo del canal y después cae. Si se revienta, reparta los repetidores en las 4 frecuencias, baje a SF10 o SF9 (más mensajes, menos alcance) o ponga más sitios gateway.",
       },
     ],
-    final: "Ya sabe probar la capacidad: poblar la zona, mandar pagos al tiempo, poner zonas de popularidad y ver hasta dónde aguanta cada repetidor en la hora pico.",
+    final: "Ya sabe probar la capacidad: poblar la zona, mandar pagos y mensajes al tiempo, poner zonas de popularidad y ver hasta dónde aguanta cada repetidor en la hora pico.",
   },
   {
     id: "pantalla",
@@ -739,7 +739,7 @@ export const TOURS: Tour[] = [
         objetivo: "microfono",
         lado: "izquierda",
         titulo: "Dícteme",
-        texto: "También puede tocar el micrófono y hablarme: lo que dice aparece en la caja para revisarlo y corregirlo, y solo se envía cuando usted quiera. Puede dictar con el navegador o en modo privado, sin internet.",
+        texto: "También puede tocar el micrófono y hablarme: lo que dice aparece en la caja para revisarlo y corregirlo, y solo se envía cuando usted quiera. Puede dictar con el navegador o en modo privado, sin internet. Y con «Manos libres» le escucho sin tocar nada: diga «Hola Melki» y su pedido (lo enseño en el tour «Melki por voz»).",
         asegurar: () => avisarMelki("abrir"),
       },
       {
@@ -769,6 +769,56 @@ export const TOURS: Tour[] = [
       },
     ],
     final: "Ya sabe pedirme cosas por escrito o por voz, hasta una red completa, y deshacerlas. Aquí sigo cuando me necesite.",
+  },
+  {
+    id: "voz",
+    nombre: "Melki por voz (manos libres)",
+    detalle: "Hablarme sin tocar nada: «Hola Melki» y su pedido, conversar, pantalla limpia y la mayor cobertura posible.",
+    minutos: 3,
+    modo: "sembrar",
+    practica: { escenario: () => renombrado(escenarioMalla(), "Práctica: Melki por voz"), autoSimular: true },
+    pasos: [
+      {
+        titulo: "Melki manos libres",
+        texto: "Puedo escucharle todo el tiempo, como un asistente de voz: usted me llama por mi nombre y me da la orden, yo la hago y le contesto en voz alta. Así puede trabajar con las manos libres, con la pantalla limpia y solo el mapa. Estamos en un escenario de práctica.",
+      },
+      {
+        objetivo: "manos-libres",
+        titulo: "Active manos libres",
+        texto: "Toque «Manos libres» en la barra de arriba (o escríbame «activa manos libres»). La primera vez el navegador le pide permiso para usar el micrófono: permítalo. Funciona mejor en Edge o Chrome.",
+        tarea: {
+          hecho: () => elemento('[data-tour="manos-libres"][aria-pressed="true"]') !== null,
+          hacer: () => elemento('[data-tour="manos-libres"][aria-pressed="false"]')?.click(),
+          aviso: "¡Listo! Ya le escucho.",
+        },
+      },
+      {
+        objetivo: ["hud-voz", "manos-libres"],
+        titulo: "Llámeme por mi nombre",
+        texto: "Diga «Hola Melki» y su pedido, de corrido: «Hola Melki, ¿cómo está la red?» o «Oye Melki, conecta a los que faltan». También entiendo «Hey Melki» y «Hello Melki». Sin mi nombre no hago nada, por si alguien habla cerca. En esta barra ve lo que le entiendo y lo que le contesto.",
+      },
+      {
+        objetivo: ["hud-voz", "manos-libres"],
+        titulo: "Converse sin repetir mi nombre",
+        texto: "Después de responder me quedo atento unos segundos: siga hablando sin decir «Melki». Para usar mis botones diga «sí, hazlo» o «la segunda»; «repite» y «más detalle» para oír todo; «para» me calla y «deshaz» revierte lo último. Los números y las coordenadas se pueden decir en palabras.",
+      },
+      {
+        objetivo: ["plegar-panel", "alternar-panel", "hud-voz"],
+        titulo: "Pantalla limpia",
+        texto: "Con este botón se pliega el panel de la izquierda (y con el de la barra de arriba, los resultados). O dígame «pantalla limpia» y dejo solo el mapa mientras trabajamos por voz; «muestra los paneles» los vuelve a abrir.",
+      },
+      {
+        objetivo: ["hud-voz", "manos-libres"],
+        titulo: "La mayor cobertura posible",
+        texto: "Pregúnteme «¿cómo dejo la mayor cobertura posible?» y le doy las recomendaciones para esta red: los sitios altos primero, la línea de vista, repartir la malla con respaldo, el gateway al centro y la radio. Si me dice «ajústamelo para la mayor cobertura posible», comparo lomas, alturas, antenas y repetidores de apoyo y le propongo la opción de máxima cobertura con su costo.",
+      },
+      {
+        objetivo: ["hud-voz", "manos-libres"],
+        titulo: "Para terminar",
+        texto: "Diga «Melki, deja de escuchar» o toque la X de esta barra. Consejos: hable de corrido justo después de mi nombre, con el micrófono cerca; con parlantes a todo volumen, baje un poco el volumen o use audífonos para que no me oiga a mí mismo.",
+      },
+    ],
+    final: "Ya sabe trabajar conmigo por voz: llamarme por mi nombre, conversar sin repetirlo, usar mis botones con «sí, hazlo», dejar la pantalla limpia y pedirme la mayor cobertura posible.",
   },
 ];
 

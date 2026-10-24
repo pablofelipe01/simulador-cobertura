@@ -17,8 +17,8 @@ export const NOMBRE_PIEZA: Record<Pieza, string> = { gateway: "Gateway + Interne
 
 export const AYUDA_PIEZA: Record<Pieza, string> = {
   gateway: "Donde haya luz y señal —la cabecera, una finca—: es la única pieza con conexión a internet (el router va a su lado) y lleva la IA. Desde ahí sale la malla.",
-  repetidor: "Riéguelos por las lomas para llegar lejos: pasan los mensajes y deben alcanzar al gateway o a otro repetidor conectado.",
-  persona: "Suéltelas por el campo: un radio de mano con el celular. Se conectan al repetidor más cercano; en rojo, no tienen cobertura.",
+  repetidor: "Ubíquelos en las lomas para llegar lejos: pasan los mensajes de los demás y deben alcanzar al gateway o a otro repetidor conectado.",
+  persona: "Ubíquelas en el campo: cada una lleva un radio enlazado al celular para pagar, escribir por WhatsApp o consultar a la IA. Se conectan al repetidor más cercano; en rojo, no tienen cobertura.",
 };
 
 /** Alturas que se ofrecen para los repetidores nuevos (m): el de Trama va en un tubo de hierro de 6 m. */
@@ -46,7 +46,7 @@ export function nombreLibre(base: string, existentes: Antena[], primeroSinNumero
 export function plantillaPieza(pieza: Pieza, existentes: Antena[], alturaRepetidorM = ALTURA_REPETIDOR_DEFECTO): Partial<Antena> & { tipo: TipoNodo } {
   switch (pieza) {
     case "gateway":
-      // La radio de pagos del gateway es un companion USB del mini PC: recibe, pero no retransmite
+      // La radio del gateway (pagos, WhatsApp y consultas a la IA) es un companion USB del mini PC: recibe, pero no retransmite
       return { tipo: "antena", nombre: nombreLibre("Gateway", existentes, true), alturaM: ALTURA_GATEWAY_M, ...equipo("t114-8dbi"), rol: "COMPANION", pasarela: true };
     case "repetidor":
       return { tipo: "antena", nombre: nombreLibre("Repetidor", existentes), alturaM: alturaRepetidorM, ...equipo("p1-8dbi"), rol: "REPETIDOR", pasarela: false };

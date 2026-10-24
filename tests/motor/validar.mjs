@@ -20,7 +20,7 @@ export { dbmAUv, dbmADbuvm, desdeDbm, aDbm } from "./src/lib/radio/unidades";
 export { textoInforme } from "./src/lib/radio/informe";
 export { tiempoEnAireMs, simularMensaje, probabilidadEnlace, esperaRetransmision, esperaAcuseMs, snrLimite, preambuloSimbolos, airePagoMs, bytesDatos, INTENTOS } from "./src/lib/radio/mensaje";
 export { simularCarga, curvaCarga, PEDIDO_CARGA_DEFECTO } from "./src/lib/radio/carga";
-export { estresMalla, PEDIDO_ESTRES_DEFECTO, PAGOS_PERSONA_DIA_TRAMA } from "./src/lib/radio/estres";
+export { estresMalla, PEDIDO_ESTRES_DEFECTO, PAGOS_PERSONA_DIA_TRAMA, TOPE_PERSONAS_PUNTO } from "./src/lib/radio/estres";
 export { analizarMalla } from "./src/lib/radio/malla";
 export { puntosAlAzar, personasPorDensidad, generador } from "./src/lib/radio/poblar";
 export { dimensionarTrama, dimensionarDepartamento, DEPARTAMENTOS_TRAMA, PRECIOS, pesosTrama } from "./src/lib/radio/trama";
@@ -335,6 +335,26 @@ caso("Sin D, todas conectadas", sinD.nodos.every((n) => n.saltos !== null));
   const sf11 = e2.ajustes?.find((a) => a.actual);
   caso("Estrés: con SF9 caben más pagos que con SF11", sf9 && sf11 && sf9.completosPct > sf11.completosPct && e2.ajustes.length === 7, `SF9 ${sf9?.completosPct.toFixed(0)} % · SF11 ${sf11?.completosPct.toFixed(0)} %`);
   caso("Estrés: sin personas lo dice", Boolean(m.estresMalla(pedido(lista, await m.simular(22, lista, pT, { tipo: "plano" }, ctx))).motivo));
+
+  // Límite de un punto: sube solo la gente de ese repetidor (su ritmo de mensajes), con el resto de la red como está
+  const t3 = performance.now();
+  const l1 = m.estresMalla(pedido(pocas, rPocas, { foco: "R1" })).limite;
+  const tLim = performance.now() - t3;
+  caso(
+    "Límite de un punto: Repetidor 1 aguanta más de sus 40 personas y dice desde cuántas va lento y se revienta",
+    l1 && !l1.motivo && l1.deZona && l1.personas === 40 && l1.personasSeguro > 40 && l1.personasSeguro < m.TOPE_PERSONAS_PUNTO && l1.personasQuiebre > l1.personasSeguro && (l1.personasLento === null || (l1.personasLento > l1.personasSeguro && l1.personasLento < l1.personasQuiebre)) && l1.falla !== null && l1.puntos.length >= 4 && tLim < 15000,
+    `aguanta ~${l1?.personasSeguro} · lento ~${l1?.personasLento} · se revienta ~${l1?.personasQuiebre} · ${l1?.puntos.length} pruebas en ${tLim.toFixed(0)} ms`,
+  );
+  caso("Límite de un punto: los mensajes por hora del límite son personas × ritmo de la hora pico", l1 && Math.abs(l1.mensajesHoraMax - l1.personasSeguro * m.PEDIDO_ESTRES_DEFECTO.pagosPersonaDia * 0.15) < 1e-6);
+  const l2 = m.estresMalla(pedido(muchas, rMuchas, { foco: "R1" })).limite;
+  caso("Límite de un punto: si las otras zonas ya llenan la red, lo dice (y no inventa un límite)", l2 && l2.redYaFalla && l2.personasSeguro === null && l2.personasQuiebre === null && l2.falla?.quien === "red" && l2.falla.nombres.length > 0, JSON.stringify(l2?.falla));
+  const pT9 = { ...pT, preset: "SF9_250" };
+  const r9 = await m.simular(23, pocas, pT9, { tipo: "plano" }, ctx);
+  const l9 = m.estresMalla({ ...pedido(pocas, r9, { foco: "R1" }), parametros: pT9 }).limite;
+  caso("Límite de un punto: con SF9 el mismo punto aguanta más gente", l9 && l1 && l9.personasSeguro > l1.personasSeguro, `SF9 ~${l9?.personasSeguro} · SF11 ~${l1?.personasSeguro}`);
+  const lG = m.estresMalla(pedido(pocas, rPocas, { foco: "G" })).limite;
+  caso("Límite de un punto: también el gateway", lG && !lG.motivo && lG.pieza === "gateway" && lG.personasSeguro > 40, `~${lG?.personasSeguro} personas; falla primero ${lG?.falla?.nombres.join(", ")}`);
+  caso("Límite de un punto: una persona no es un punto", Boolean(m.estresMalla(pedido(pocas, rPocas, { foco: "R1-p0" })).limite?.motivo));
 }
 
 // Sembrado automático: cadena de repetidores sobre terreno plano hacia un punto a 30 km

@@ -186,7 +186,7 @@ export function simularMensaje(ruta: string[], antenas: Antena[], enlaces: Enlac
   const noRepite = ruta.slice(1, -1).map((id) => porId.get(id)).find((x) => x && x.rol !== "REPETIDOR");
   let motivo: string | null = null;
   if (noRepite) motivo = `${noRepite.nombre} no es repetidor: en MeshCore solo los repetidores pasan los paquetes de otros.`;
-  else if (saltos > p.limiteSaltos) motivo = `Necesita ${saltos} saltos y el diseño permite ${p.limiteSaltos}: el pago tardaría demasiado y le quitaría capacidad a la frecuencia.`;
+  else if (saltos > p.limiteSaltos) motivo = `Necesita ${saltos} saltos y el diseño permite ${p.limiteSaltos}: cada mensaje tardaría demasiado y le quitaría capacidad a la frecuencia.`;
   else if (sinEnlace) motivo = `El tramo ${porId.get(sinEnlace.de)?.nombre ?? "?"} → ${porId.get(sinEnlace.a)?.nombre ?? "?"} no tiene enlace (${sinEnlace.margenDb.toFixed(1).replace(".", ",")} dB; se necesitan 20 dB).`;
   return {
     ...base,

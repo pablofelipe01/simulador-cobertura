@@ -26,7 +26,7 @@ export type Antena = {
   perdidaCableDb: number;
   equipo: EquipoId;
   rol: Rol;
-  /** Pasarela (gateway): la radio conectada al mini PC con internet (Starlink) que recibe los pagos. */
+  /** Pasarela (gateway): la radio conectada al mini PC con internet (Starlink) que recibe los pagos, los WhatsApp y las consultas a la IA. */
   pasarela: boolean;
   /** Persona puesta con «Poblar personas» (prueba de densidad): no cuenta en los criterios de la infraestructura. */
   poblada?: boolean;
