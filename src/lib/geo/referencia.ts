@@ -4,8 +4,10 @@
 // 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
 
 // Datos de referencia (departamentos, municipios, ríos, países) cargados bajo demanda y consultas sobre ellos:
-// en qué municipio cae un punto y búsqueda de lugares por nombre. Todo local, sin servicios externos.
+// en qué municipio cae un punto, búsqueda de lugares por nombre y reconocimiento de lugares dichos por voz (aunque el
+// dictado los escriba mal). Todo local, sin servicios externos.
 import type { FeatureCollection, MultiPolygon, Polygon } from "geojson";
+import { claveFonetica, parecidoFonetico } from "./fonetica";
 
 export type PropsMunicipio = { n: string; d: string };
 export type Lugares = {
@@ -168,8 +170,196 @@ export function buscarLugares(texto: string, max = 8): Lugar[] {
     const p = puntaje(n, "pais");
     if (p) resultados.push({ l: { tipo: "pais", nombre: n, detalle: "País", lat, lon }, p: p - 5 });
   }
+  // Nada escrito así: lo que suena parecido («barranco vía meta» → Barranca de Upía)
+  if (!resultados.length && qc.length >= 5) {
+    for (const c of reconocerLugares(texto, { max }))
+      if (c.puntaje >= 0.7) resultados.push({ l: c.lugar, p: 20 * c.puntaje });
+  }
   return resultados
     .sort((a, b) => b.p - a.p || a.l.nombre.localeCompare(b.l.nombre))
     .slice(0, max)
     .map((r) => r.l);
+}
+
+/* ───────────── Lugares dichos por voz (aunque el dictado los escriba mal) ───────────── */
+
+/** Nombres que conviene que el reconocimiento de voz entienda bien: los departamentos y los municipios del que se ve. */
+export function nombresParaVoz(departamento?: string | null): string[] {
+  if (!datos) return [];
+  const deps = datos.lugares.departamentos.map((d) => d[0]);
+  const muns = departamento ? datos.lugares.municipios.filter((m) => m[1] === departamento).map((m) => m[0]) : [];
+  return [...new Set([...deps, ...muns])];
+}
+
+/** Un lugar que puede ser el que se dijo, con cuánto se parece (0 a 1) y su puntaje con el contexto. */
+export type CandidatoLugar = {
+  lugar: Lugar;
+  /** Parecido de cómo suena lo dicho con el nombre (1 = igual). */
+  parecido: number;
+  /** El parecido con el departamento dicho, el exacto y el contexto (para ordenar y decidir). */
+  puntaje: number;
+  /** Escrito igual (sin tildes ni artículos). */
+  exacto: boolean;
+  /** El departamento que se dijo con el nombre («…, Meta»), si se dijo. */
+  departamentoDicho: string | null;
+  /** Queda en el departamento que se está viendo en el mapa. */
+  enVista?: boolean;
+};
+
+type Entrada = { lugar: Lugar; compacto: string; clave: string; departamento: string };
+let indice: Entrada[] | null = null;
+
+/** Otros nombres con que se dice un departamento. */
+const ALIAS_DEPARTAMENTO: Record<string, string[]> = {
+  "Bogotá, D. C.": ["Bogotá", "Distrito Capital"],
+  "San Andrés y Providencia": ["San Andrés"],
+};
+
+function indiceLugares(): Entrada[] {
+  if (indice) return indice;
+  if (!datos) return [];
+  const lista: Entrada[] = [];
+  const agregar = (lugar: Lugar, nombre: string, departamento: string) => {
+    const compacto = nombreCompacto(nombre);
+    lista.push({ lugar, compacto, clave: claveFonetica(compacto), departamento });
+  };
+  for (const [n, lon, lat, o, s, e, nn] of datos.lugares.departamentos) {
+    const lugar: Lugar = { tipo: "departamento", nombre: n, detalle: "Departamento", lat, lon, caja: [o, s, e, nn] };
+    agregar(lugar, n, n);
+    for (const a of ALIAS_DEPARTAMENTO[n] ?? []) agregar(lugar, a, n);
+  }
+  for (const [n, d, lon, lat, o, s, e, nn] of datos.lugares.municipios) agregar({ tipo: "municipio", nombre: n, detalle: d, lat, lon, caja: [o, s, e, nn] }, n, d);
+  indice = lista;
+  return lista;
+}
+
+const CONECTOR_FINAL = /^(en|el|la|del|de|departamento|depto|dpto|y)$/;
+
+/** El departamento dicho al final («…, Meta», «… del Meta», «… departamento del Casanare») y lo que queda antes. */
+function departamentoAlFinal(palabras: string[]): { resto: string[]; departamento: string } | null {
+  const deps = indiceLugares().filter((e) => e.lugar.tipo === "departamento");
+  for (let k = Math.min(3, palabras.length - 1); k >= 1; k--) {
+    const compacto = nombreCompacto(palabras.slice(palabras.length - k).join(" "));
+    if (compacto.length < 3) continue;
+    const clave = claveFonetica(compacto);
+    let mejor: { e: Entrada; p: number } | null = null;
+    for (const e of deps) {
+      const p = e.compacto === compacto ? 1 : e.clave.length >= 5 ? parecidoFonetico(clave, e.clave) : 0;
+      if (p >= 0.86 && (!mejor || p > mejor.p)) mejor = { e, p };
+    }
+    if (!mejor) continue;
+    let resto = palabras.slice(0, palabras.length - k);
+    while (resto.length && CONECTOR_FINAL.test(resto[resto.length - 1])) resto = resto.slice(0, -1);
+    if (resto.length) return { resto, departamento: mejor.e.departamento };
+  }
+  return null;
+}
+
+/**
+ * Los municipios y departamentos que pueden ser lo dicho, del más probable al menos: compara cómo suena (no cómo se
+ * escribe) y tiene en cuenta el departamento dicho al final («barranco vía meta») y el departamento que se está
+ * viendo en el mapa (`departamento`), para desempatar nombres repetidos («Granada» hay en el Meta, Antioquia y
+ * Cundinamarca).
+ */
+export function reconocerLugares(texto: string, o: { departamento?: string | null; max?: number } = {}): CandidatoLugar[] {
+  const lista = indiceLugares();
+  if (!lista.length) return [];
+  const palabras = normal(texto)
+    .replace(/^(el|la|los|las)\s+/, "")
+    .replace(/^(municipio|ciudad|pueblo|vereda|corregimiento|departamento)\s+(de|del)?\s*/, "")
+    .split(" ")
+    .filter(Boolean);
+  if (!palabras.length) return [];
+  const lecturas: { palabras: string[]; departamento: string | null }[] = [{ palabras, departamento: null }];
+  const conDep = departamentoAlFinal(palabras);
+  if (conDep) lecturas.push({ palabras: conDep.resto, departamento: conDep.departamento });
+  const mejores = new Map<Entrada, CandidatoLugar>();
+  for (const lec of lecturas) {
+    const compacto = nombreCompacto(lec.palabras.join(" "));
+    if (compacto.length < 3) continue;
+    const clave = claveFonetica(compacto);
+    for (const e of lista) {
+      // Con el departamento dicho se busca el municipio
+      if (lec.departamento && e.lugar.tipo === "departamento") continue;
+      const exacto = e.compacto === compacto;
+      let parecido = 1;
+      if (!exacto) {
+        // Los nombres cortos («Une», «Meta») solo valen escritos igual
+        if (e.clave.length < 5 || clave.length < 4) continue;
+        if (Math.abs(e.clave.length - clave.length) > Math.max(3, e.clave.length * 0.4)) continue;
+        parecido = e.clave === clave ? 0.98 : parecidoFonetico(clave, e.clave);
+        if (parecido < 0.6) continue;
+      }
+      let puntaje = parecido + (exacto ? 0.08 : 0);
+      if (lec.departamento) puntaje += e.departamento === lec.departamento ? 0.06 : -0.15;
+      if (o.departamento && e.departamento === o.departamento) puntaje += 0.03;
+      if (e.lugar.tipo === "departamento") puntaje -= 0.01;
+      const previo = mejores.get(e);
+      if (!previo || puntaje > previo.puntaje) mejores.set(e, { lugar: e.lugar, parecido, puntaje, exacto, departamentoDicho: lec.departamento, enVista: Boolean(o.departamento && e.departamento === o.departamento) });
+    }
+  }
+  // Un mismo lugar puede entrar por su nombre y por un alias: se deja el mejor
+  const unicos = new Map<string, CandidatoLugar>();
+  for (const c of mejores.values()) {
+    const clave = `${c.lugar.tipo}|${c.lugar.nombre}|${c.lugar.detalle}`;
+    const previo = unicos.get(clave);
+    if (!previo || c.puntaje > previo.puntaje) unicos.set(clave, c);
+  }
+  return [...unicos.values()].sort((a, b) => b.puntaje - a.puntaje || a.lugar.nombre.localeCompare(b.lugar.nombre)).slice(0, o.max ?? 5);
+}
+
+export type DecisionLugar =
+  /** Claro: es ese lugar. */
+  | { tipo: "seguro"; candidato: CandidatoLugar; opciones: CandidatoLugar[] }
+  /** Puede ser uno de estos: conviene preguntar «¿se refiere a…?». */
+  | { tipo: "dudoso"; opciones: CandidatoLugar[] }
+  /** Nada se parece lo suficiente (opciones lejanas, por si sirven de pista). */
+  | { tipo: "ninguno"; opciones: CandidatoLugar[] };
+
+/**
+ * ¿Lo dicho es claramente un lugar, puede ser uno de varios o ninguno? Los nombres largos aceptan más diferencias
+ * que los cortos; si dos se parecen casi igual (o el nombre está repetido en varios departamentos), es dudoso.
+ */
+export function decidirLugar(candidatos: CandidatoLugar[]): DecisionLugar {
+  const [a, b] = candidatos;
+  if (!a) return { tipo: "ninguno", opciones: [] };
+  const largo = claveFonetica(nombreCompacto(a.lugar.nombre)).length;
+  const umbral = largo >= 9 ? 0.84 : largo >= 6 ? 0.88 : 0.95;
+  const margen = b ? a.puntaje - b.puntaje : 1;
+  const separado = margen >= 0.05 || (a.exacto && (!b?.exacto || margen >= 0.02));
+  // Un nombre parecido (no igual), sin departamento dicho y lejos de lo que se ve en el mapa, se confirma antes
+  const confirmar = !a.exacto && !a.departamentoDicho && !a.enVista && a.parecido < 0.95;
+  if (a.puntaje >= umbral && separado && !confirmar) return { tipo: "seguro", candidato: a, opciones: candidatos };
+  if (a.puntaje >= umbral - 0.14) return { tipo: "dudoso", opciones: candidatos.filter((x) => x.puntaje >= Math.max(umbral - 0.2, a.puntaje - 0.12)).slice(0, 4) };
+  return { tipo: "ninguno", opciones: candidatos.filter((x) => x.puntaje >= 0.62).slice(0, 3) };
+}
+
+/** «Barranca de Upía (Meta)», «el Meta». */
+export const nombreLugar = (l: Lugar) =>
+  l.tipo === "municipio" ? `${l.nombre} (${l.detalle})` : l.tipo === "departamento" ? (l.nombre.startsWith("Bogotá") ? l.nombre : `el departamento de ${l.nombre}`) : l.nombre;
+
+const areaGrados = (r: number[][]) => {
+  let s = 0;
+  for (let i = 0, j = r.length - 1; i < r.length; j = i++) s += (r[j][0] - r[i][0]) * (r[j][1] + r[i][1]);
+  return Math.abs(s / 2);
+};
+
+/**
+ * El contorno de un municipio o un departamento ([lon, lat], sin repetir el primer punto), para cubrirlo entero con
+ * la malla. Si el lugar tiene varias partes (islas), es la más grande.
+ */
+export function contornoLugar(l: Lugar): [number, number][] | null {
+  if (!datos) return null;
+  let g: Polygon | MultiPolygon | undefined;
+  if (l.tipo === "municipio") {
+    const i = datos.lugares.municipios.findIndex((x) => x[0] === l.nombre && x[1] === l.detalle);
+    g = i >= 0 ? datos.municipios.features[i]?.geometry : undefined;
+  } else if (l.tipo === "departamento") g = datos.departamentos.features.find((f) => f.properties.n === l.nombre)?.geometry;
+  if (!g) return null;
+  const anillos = g.type === "Polygon" ? [g.coordinates[0]] : g.coordinates.map((p) => p[0]);
+  const mayor = anillos.reduce((x, y) => (areaGrados(y) > areaGrados(x) ? y : x));
+  const puntos = mayor.map((p) => [p[0], p[1]] as [number, number]);
+  const [p0, pn] = [puntos[0], puntos[puntos.length - 1]];
+  if (puntos.length > 3 && p0[0] === pn[0] && p0[1] === pn[1]) puntos.pop();
+  return puntos.length >= 3 ? puntos : null;
 }
