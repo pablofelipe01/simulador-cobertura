@@ -14,14 +14,15 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const entrada = `
 export { interpretarOrden, ejecutarOrden, extraerCoordenadas, extraerVariasCoordenadas, dividirEnPasos, leerNumero, areaEnTexto } from "./src/components/melki/ordenes";
-export { responder, noEntendiOrden } from "./src/components/melki/cerebro";
-export { areaM2, poligonoCirculo } from "./src/lib/radio/area";
+export { responder, noEntendiOrden, respuestaNoEntendi } from "./src/components/melki/cerebro";
+export { areaM2, poligonoCirculo, recortarPoligono } from "./src/lib/radio/area";
+export { claveFonetica, parecidoFonetico } from "./src/lib/geo/fonetica";
 export { normalizarDictado, componerTexto, quitarRepeticiones, corregirPalabras } from "./src/components/melki/dictado";
 export { TOURS } from "./src/components/melki/tours";
 export { pedidoDeTour } from "./src/components/melki/cerebro";
 export { numerosEnPalabras } from "./src/components/melki/numeros";
 export { detectarActivacion, controlDeVoz, limpiarComando, textoParaVoz, pareceEco, AYUDA_VOZ, SALUDO_MANOS_LIBRES, esNombre, frases, elegirAlternativa } from "./src/components/melki/manos-libres";
-export { buscarLugares, cargarReferencia, pareceNombre } from "./src/lib/geo/referencia";
+export { buscarLugares, cargarReferencia, pareceNombre, reconocerLugares, decidirLugar, contornoLugar, nombresParaVoz, textoUbicacion } from "./src/lib/geo/referencia";
 export { costoRedTrama } from "./src/lib/radio/trama";
 export { paraHablar, puntajeVoz } from "./src/components/melki/voz";
 export { estadoInicial, reductor } from "./src/components/simulador/estado";
@@ -1216,6 +1217,128 @@ function crearApi(antenas) {
   caso("Las frases del reposo y del micrófono", /Quedo en reposo: cuando me necesite, diga «Hola Melki»/.test(fz.reposo) && /Apago el micrófono/.test(fz.microfono) && /aunque esta barra esté cerrada/.test(fz.bienvenida(true)));
   caso("La ayuda por voz cuenta el reposo y el micrófono", /reposo/.test(m.AYUDA_VOZ) && /apaga el micrófono/.test(m.AYUDA_VOZ));
   caso("«¿Qué es el Asistente Melki?» cuenta el reposo tipo Siri y la barra que se mueve", ((r) => /como Siri/.test(r.texto) && /se arrastra/.test(r.texto) && /fuera del simulador|se sale del simulador/.test(r.texto))(m.responder("¿qué es el asistente Melki?", cR)));
+}
+
+// ─── 19. v12.7: entender lugares mal dichos, preguntar con criterio, la red de todo un municipio y hasta dónde aguanta ───
+{
+  await m.cargarReferencia();
+  // Cómo suena: los errores del dictado al hablar rápido siguen sonando como Barranca de Upía
+  const suena = (a, b) => m.parecidoFonetico(m.claveFonetica(a.replace(/\b(de|del|la)\b/g, "")), m.claveFonetica(b.replace(/\b(de|del|la)\b/g, "")));
+  caso("Fonética del español: b y v, s y z, ll y y, h muda suenan igual", m.claveFonetica("Villavicencio") === m.claveFonetica("biyabisensio") && m.claveFonetica("Yopal") === m.claveFonetica("Llopal") && m.claveFonetica("Acacías") === m.claveFonetica("acasias") && m.claveFonetica("Guerra") !== m.claveFonetica("jerra"));
+  caso("«barranca de UPA», «barranco vía», «arranca de upyía» suenan como Barranca de Upía (≥ 0,86)", ["barranca de upa", "barranco via", "arranca de upyia"].every((t) => suena(t, "Barranca de Upia") >= 0.86), ["barranca de upa", "barranco via", "arranca de upyia"].map((t) => suena(t, "Barranca de Upia").toFixed(2)).join(" "));
+  caso("…y las palabras comunes no suenan como municipios", suena("cumaral", "cumaribo") < 0.8 && suena("la loma", "la jagua") < 0.6);
+
+  const reconoce = (t, departamento = null) => m.decidirLugar(m.reconocerLugares(t, { departamento }));
+  const seguro = (t, nombre, dep = null) => ((d) => d.tipo === "seguro" && d.candidato.lugar.nombre === nombre)(reconoce(t, dep));
+  caso("Con el departamento dicho al final, los tres errores del dictado son Barranca de Upía (Meta)", ["barranca de upa meta", "barranco vía meta", "arranca de upyía meta", "barranca de UPA, Meta"].every((t) => seguro(t, "Barranca de Upía")));
+  const sinDep = reconoce("barranco vía");
+  caso("Sin el departamento, «barranco vía» queda en duda, con Barranca de Upía primero", sinDep.tipo === "dudoso" && sinDep.opciones[0].lugar.nombre === "Barranca de Upía" && sinDep.opciones.length >= 2, sinDep.opciones.map((c) => c.lugar.nombre).join(", "));
+  const granada = reconoce("granada");
+  caso("Un nombre repetido (Granada: Meta, Antioquia, Cundinamarca) queda en duda…", granada.tipo === "dudoso" && granada.opciones.filter((c) => c.lugar.nombre === "Granada").length === 3);
+  caso("…salvo que se diga el departamento o se esté viendo el Meta", seguro("granada meta", "Granada") && reconoce("granada meta").candidato.lugar.detalle === "Meta" && seguro("granada", "Granada", "Meta") && reconoce("granada", "Meta").candidato.lugar.detalle === "Meta");
+  caso("«Puerto Boyacá» es el municipio (no «Puerto» en Boyacá); «el Meta» es el departamento", seguro("puerto boyaca", "Puerto Boyacá") && ((d) => d.tipo === "seguro" && d.candidato.lugar.tipo === "departamento")(reconoce("el meta")));
+  caso("Lo que no es un lugar no se confunde («señal media», «la loma», «mejor»)", ["senal media", "la loma", "mejor"].every((t) => reconoce(t).tipo === "ninguno"));
+  caso("Un nombre parecido lejos del departamento que se ve se confirma antes («barrancoloco» → ¿Barranco de Loba?)", reconoce("barrancoloco", "Meta").tipo === "dudoso");
+  const contorno = m.contornoLugar({ tipo: "municipio", nombre: "Barranca de Upía", detalle: "Meta", lat: 4.5149, lon: -73.0024 });
+  caso("El contorno de Barranca de Upía mide unos 409 km²", contorno && cerca(m.areaM2(contorno) / 1e6, 409, 5), contorno ? (m.areaM2(contorno) / 1e6).toFixed(1) : "sin contorno");
+  const norte = m.recortarPoligono(contorno, "norte");
+  const noreste = m.recortarPoligono(contorno, "noreste");
+  caso("La zona norte es una parte del municipio, y el cuarto noreste es menor", m.areaM2(norte) > 0.2 * m.areaM2(contorno) && m.areaM2(norte) < 0.8 * m.areaM2(contorno) && m.areaM2(noreste) < m.areaM2(norte) && norte.every(([, la]) => la >= 4.5534 - 1e-6), `${(m.areaM2(norte) / 1e6).toFixed(0)} y ${(m.areaM2(noreste) / 1e6).toFixed(0)} km²`);
+  caso("El reconocimiento de voz recibe los departamentos y los municipios del que se ve", ((x) => x.includes("Meta") && x.includes("Barranca de Upía") && x.includes("Puerto Gaitán") && !x.includes("Medellín"))(m.nombresParaVoz("Meta")));
+
+  // Órdenes con el reconocimiento de lugares del simulador
+  const crear = (dep = "Meta") => {
+    const a = crearApi([]);
+    a.buscarLugar = (t) => m.buscarLugares(t, 5);
+    a.reconocerLugar = (t) => m.reconocerLugares(t, { departamento: dep });
+    a.contornoLugar = (l) => m.contornoLugar(l);
+    a.ubicacion = (lat, lon) => m.textoUbicacion(lat, lon);
+    a.centro = { lat: 4.2, lon: -73.37 };
+    a.cajaMapa = () => [-73.5, 4.1, -73.2, 4.3];
+    return a;
+  };
+  const apiL = crear();
+  let pend = null;
+  let ultimoLugar = null;
+  const hablar = (t, a = apiL) => {
+    const o = m.interpretarOrden(t, a, pend, { ultimoLugar });
+    const r = o ? m.ejecutarOrden(o, a) : null;
+    pend = r?.pendiente ?? null;
+    if (r?.lugar) ultimoLugar = r.lugar;
+    return { o, r };
+  };
+  let x = hablar("ubícame en barranca de UPA meta");
+  caso("«Ubícame en barranca de UPA meta» → lo lleva a Barranca de Upía (Meta), marca el municipio y dice su tamaño", x.o?.tipo === "ir" && x.o.lugar?.nombre === "Barranca de Upía" && /^Lo llevé a Barranca de Upía \(Meta\), un municipio de 40\.9\d\d ha/.test(x.r.texto) && apiL.llamadas.some((l) => l[0] === "marcar"), x.r?.texto.slice(0, 90));
+  const red = x.r.acciones?.find((a) => /todo el municipio/.test(a.texto))?.orden;
+  caso("…y ofrece la red sostenible de todo el municipio (y probar hasta dónde aguanta)", red?.tipo === "disenar" && red.area.forma === "poligono" && red.sostenible && cerca(m.areaM2(red.area.puntos) / 1e6, 409, 5) && x.r.acciones.some((a) => a.orden?.despues?.estres?.rampa));
+  for (const t of ["llévame a barranco vía meta", "ubícame en arranca de upyía meta"]) caso(`«${t}» también`, ((y) => y.o?.tipo === "ir" && y.o.lugar?.nombre === "Barranca de Upía")(hablar(t)));
+  x = hablar("ubícame en barranco vía");
+  caso("«Ubícame en barranco vía» → «¿Se refiere a Barranca de Upía (Meta), …?» con un botón por lugar", x.o?.tipo === "elegir" && /^No estoy seguro de haber entendido «barranco via»\. ¿Se refiere a Barranca de Upía \(Meta\)/.test(x.r.texto) && x.r.acciones[0].orden?.tipo === "ir" && x.r.acciones.at(-1).texto === "Ninguno de esos" && pend?.tipo === "elegir", x.r?.texto.slice(0, 120));
+  x = hablar("sí");
+  caso("…«sí» lo lleva a la primera", x.o?.tipo === "ir" && x.o.lugar?.nombre === "Barranca de Upía");
+  const apiSin = crear(null);
+  x = hablar("llévame a granada", apiSin);
+  caso("«Llévame a Granada» sin contexto → «Hay 3 lugares llamados Granada. ¿Cuál…?»", x.o?.tipo === "elegir" && /^Hay 3 lugares llamados Granada\. ¿Cuál: /.test(x.r.texto), x.r?.texto);
+  x = hablar("el del meta", apiSin);
+  caso("…«el del Meta» elige Granada (Meta)", x.o?.tipo === "ir" && x.o.lugar?.detalle === "Meta");
+  hablar("llévame a granada", apiSin);
+  x = hablar("la segunda", apiSin);
+  caso("…«la segunda» elige la segunda opción", x.o?.tipo === "ir" && x.o.lugar?.nombre === "Granada");
+  hablar("llévame a granada", apiSin);
+  x = hablar("ninguno de esos", apiSin);
+  caso("…«ninguno de esos» → «Entendido. ¿Me dice entonces el municipio y el departamento…?»", /^Entendido\. ¿Me dice entonces el municipio y el departamento/.test(x.r?.texto ?? "") && pend?.tipo === "lugar");
+  x = hablar("Barranca de Upía, Meta", apiSin);
+  caso("…y la respuesta «Barranca de Upía, Meta» completa la orden", x.o?.tipo === "ir" && x.o.lugar?.nombre === "Barranca de Upía");
+  x = hablar("ubícame en xyzabc");
+  caso("Un lugar que no existe → «Discúlpeme, no reconocí el lugar… ¿Me repite el municipio y el departamento?»", x.o?.tipo === "pedir-lugar" && /^Discúlpeme, no reconocí el lugar «xyzabc»\. ¿Me repite el municipio y el departamento, por favor\?/.test(x.r.texto) && pend?.tipo === "lugar");
+  x = hablar("es barranca de upía en el meta, por favor");
+  caso("…y la respuesta, aunque traiga más palabras, completa la orden", x.o?.tipo === "ir" && x.o.lugar?.nombre === "Barranca de Upía");
+
+  // La red de todo un municipio, de una zona, de lo que se ve o «ahí»
+  pend = null;
+  ultimoLugar = null;
+  x = hablar("ármame una red media estable que cubra todo el municipio de barranca de upía meta");
+  caso("«Una red media estable que cubra todo el municipio de Barranca de Upía, Meta» → el contorno del municipio, señal media o mejor", x.o?.tipo === "disenar" && x.o.area.forma === "poligono" && x.o.area.nombre === "en todo el municipio de Barranca de Upía (Meta)" && x.o.margenDb === 30 && /^Diseño la malla para 40\.9\d\d ha \(409,\d km²\) en todo el municipio de Barranca de Upía \(Meta\)/.test(x.r.texto), x.r?.texto.slice(0, 120));
+  caso("…dibuja el área con el nombre del municipio", apiL.llamadas.some((l) => l[0] === "medir" && /Área objetivo · Barranca de Upía \(Meta\)/.test(l[1].nombre)));
+  x = hablar(
+    "ármame una red que cubra todo el municipio teniendo en cuenta calidad, economía y cobertura, y con puntos de popularidad mira hasta qué punto aguantaría la red antes de quebrarse",
+  );
+  caso("«…todo el municipio (el de la conversación), calidad, economía y cobertura, puntos de popularidad y hasta qué punto aguantaría antes de quebrarse» → diseño sostenible, 250 personas por punto y la rampa", x.o?.tipo === "disenar" && x.o.area.forma === "poligono" && /Barranca de Upía/.test(x.o.area.nombre) && x.o.sostenible && x.o.despues?.zonas?.n === 250 && x.o.despues?.estres?.rampa === true && /subiendo la carga hasta ver dónde se quiebra cada uno/.test(x.r.texto), JSON.stringify(x.o?.despues));
+  x = hablar("ármame una red que cubra la zona norte del municipio");
+  caso("«La zona norte del municipio» → la mitad norte de Barranca de Upía", x.o?.tipo === "disenar" && x.o.area.forma === "poligono" && x.o.area.nombre === "en la zona norte del municipio de Barranca de Upía (Meta)" && m.areaM2(x.o.area.puntos) < 0.8 * 409e6);
+  x = hablar("ármame una red estable de 3000 hectáreas ahí");
+  caso("«Una red estable de 3.000 hectáreas ahí» → en el último lugar, con señal estable", x.o?.tipo === "disenar" && x.o.area.centro?.coord && cerca(x.o.area.centro.coord.lat, 4.5149, 1e-3) && x.o.margenDb === 37 && cerca(x.o.area.areaM2, 3e7, 1));
+  x = hablar("ármame una red en lo que estoy viendo");
+  caso("«Una red en lo que estoy viendo» → el rectángulo del mapa", x.o?.tipo === "disenar" && x.o.area.forma === "poligono" && x.o.area.puntos.length === 4 && x.o.area.nombre === "en la zona que está viendo en el mapa");
+  x = hablar("ármame una red que cubra todo el departamento del Meta");
+  caso("«Todo el departamento del Meta» es demasiado: lo dice y propone partes", x.o?.tipo === "aviso" && /mide 8\.\d{3}\.\d{3} ha \(85\.\d{3} km²\): es demasiado/.test(x.r.texto), x.r?.texto.slice(0, 120));
+  x = hablar("arma una red mesh en 4.5149, -73.0024");
+  caso("«Arma una red mesh en 4.5149, -73.0024» → pregunta el área y ofrece todo el municipio de Barranca de Upía", x.o?.tipo === "pedir-diseno" && x.r.acciones?.[0]?.texto === "Todo el municipio de Barranca de Upía" && x.r.acciones[0].orden?.area?.forma === "poligono" && /o «todo el municipio»/.test(x.r.texto));
+  x = hablar("todo el municipio");
+  caso("…«todo el municipio» lo arma sobre el contorno", x.o?.tipo === "disenar" && x.o.area.forma === "poligono" && /Barranca de Upía/.test(x.o.area.nombre));
+  pend = null;
+  x = hablar("ármame una red de 3.000 hectáreas en barranco via meta");
+  caso("Al diseñar dice lo que entendió de un lugar mal dicho («Entendí «Barranca de Upía (Meta)».»)", x.o?.tipo === "disenar" && /^Entendí «Barranca de Upía \(Meta\)»\. Diseño la malla para 3\.000 ha/.test(x.r.texto), x.r?.texto.slice(0, 80));
+  x = hablar("ármame una red de 3.000 hectáreas en barrancoloco");
+  caso("…y si se parece a uno lejano, lo confirma («¿Se refiere a Barranco de Loba (Bolívar)?»)", x.o?.tipo === "elegir" && /¿Se refiere a Barranco de Loba \(Bolívar\)\?/.test(x.r.texto) && x.r.acciones[0].texto === "Sí, Barranco de Loba (Bolívar)");
+  pend = null;
+  caso("Una red «estable» (dicho justo después de «red») pide 37 dB", m.interpretarOrden("ármame una red estable que dé cobertura a 3000 hectáreas en Cumaral", apiL, null)?.margenDb === 37);
+
+  // Hablar rápido
+  caso("Correcciones al hablar rápido: «red mechen tal punto», «mediantales», «ubícameen»", m.corregirPalabras("arma una red mechen tal punto") === "arma una red mesh en tal punto" && m.corregirPalabras("una red mediantales coordenadas") === "una red mesh en tales coordenadas" && m.corregirPalabras("ubícameen Barranca") === "ubícame en Barranca");
+  caso("«Heymelki» pegado también lo llama", ((a) => a.activado && a.resto === "ubícame en Cumaral")(m.detectarActivacion("heymelki ubícame en Cumaral")));
+  caso("Las muletillas del comienzo se quitan («o sea, eh, ubícame…»)", m.limpiarComando("o sea, eh, ubícame en Cumaral") === "Ubícame en Cumaral");
+  caso("Entre las versiones del reconocimiento gana la que el simulador entiende como orden", m.elegirAlternativa(["ubícame en barranco loco xyz", "ubícame en Barranca de Upía Meta"], (p) => (/Barranca de Upía/.test(p) ? 3 : 0)) === "ubícame en Barranca de Upía Meta");
+
+  // Conversación
+  const cV = { antenas: [], parametros: PARAMETROS, resultado: null, desactualizado: false, relieve: "teselas", modo: "sembrar", porVoz: true, vista: "Cumaral (Meta)" };
+  const ruido = m.responder("barranco loco xyz pla", cV);
+  caso("Por voz, lo que no se entiende → «Discúlpeme, señor, no le entendí bien. ¿Me lo repite, por favor? Escuché: «…»»", /^Discúlpeme, señor, no le entendí bien\. ¿Me lo repite, por favor\? Escuché: «barranco loco xyz pla»/.test(ruido.texto), ruido.texto.slice(0, 100));
+  caso("…por escrito, lo que no es del simulador sigue con el mayordomo", /fui diseñado/.test(m.responder("barranco loco xyz pla", { ...cV, porVoz: false }).texto));
+  caso("…y un pedido por voz que no se pudo convertir en orden también se disculpa", /^Discúlpeme, señor, no le entendí bien: entendí que quiere que haga algo/.test(m.responder("arma una red rarísima de gatos", cV).texto));
+  caso("«¿Me escuchas?» → «Sí, señor, le escucho perfectamente»", /^Sí, señor, le escucho perfectamente/.test(m.responder("¿me escuchas?", cV).texto) && /^Sí, señor/.test(m.responder("Melki, ¿estás ahí?", cV).texto));
+  caso("«¿Dónde estamos?» → el municipio que se ve", /^Estamos viendo Cumaral \(Meta\)/.test(m.responder("¿dónde estamos?", cV).texto) && /^Estamos viendo/.test(m.responder("¿qué municipio es este?", cV).texto));
+  caso("«Excelente, Melki» → agradece y sigue", /^Muchas gracias, señor/.test(m.responder("excelente melki", cV).texto));
 }
 
 console.log(fallos ? `\n✗ ${fallos} prueba(s) fallaron` : "\n✓ Melki verificado");
