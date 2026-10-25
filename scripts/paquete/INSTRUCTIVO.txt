@@ -330,6 +330,20 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
     ofrece la prueba de la hora pico. "¿Cuánto cuesta la red?" da el
     presupuesto de la red del mapa. Una red lejos de la que ya está en
     el mapa (más de 20 km) lleva su propio gateway.
+    Lugares mal oídos: si al hablar rápido el dictado escribe
+    "barranca de UPA meta" o "barranco vía meta", Melki entiende
+    Barranca de Upía (Meta) por cómo suena y por el departamento. Si
+    duda, pregunta "¿Se refiere a...?" (conteste "sí", "la segunda",
+    "el del Meta" o "ninguno de esos"); si no reconoce el lugar, le
+    pide el municipio y el departamento. Si no le entiende, le pide con
+    cortesía que se lo repita.
+    Recuerda el lugar: "Hola Melki, ubícame en Barranca de Upía, Meta"
+    y luego "ármame una red que cubra todo el municipio" (sobre el
+    contorno del municipio), "la zona norte del municipio", "3.000
+    hectáreas ahí" o "lo que estoy viendo". Con "puntos de popularidad
+    para ver hasta qué punto aguanta antes de quebrarse", después del
+    diseño pone 250 personas por punto y hace la prueba de estrés
+    subiendo la carga. "¿Dónde estamos?" dice el municipio que se ve.
     Consejos: Edge o Chrome actualizados, el micrófono cerca o
     audífonos (con parlantes a todo volumen Melki se puede oír a sí
     mismo), y hablar de corrido justo después de "Melki".
