@@ -140,6 +140,21 @@ está en rojo, qué hacer ahora) y da tours guiados.
   palabras del simulador o números; corrige lo que suele escribir mal («red mes» → red mesh, «geitwey» → gateway,
   «hectarias» → hectáreas, «estar link» → Starlink, «guasap» → WhatsApp) y encuentra los municipios aunque se digan
   pegados o con una letra cambiada («barrancaupía», «Barranca de Opia», «villavicensio»)
+- **Entiende los lugares aunque se oigan mal** (v12.7): compara cómo suenan los nombres (b y v, s, z y c, ll y y, h
+  muda, vocales que se confunden al hablar rápido) y usa el departamento dicho al final o el que se ve en el mapa:
+  «ubícame en barranca de UPA meta», «barranco vía meta» o «arranca de upyía meta» lo llevan a Barranca de Upía (Meta),
+  con su tamaño, y le ofrece la red de todo el municipio. Si duda entre varios («barranco vía»: Barranca de Upía,
+  Barranquilla, Barranco Mina…) o el nombre está repetido («Granada»), pregunta «¿Se refiere a…?» con un botón por
+  lugar («sí», «la segunda», «el del Meta» o «ninguno de esos»); si no reconoce el lugar, pide con cortesía el
+  municipio y el departamento y completa la orden con la respuesta. Al diseñar en un lugar mal dicho, dice lo que
+  entendió («Entendí «Barranca de Upía (Meta)».»)
+- **Conversa** (v12.7): por voz, lo que no entiende lo pide de nuevo («Discúlpeme, señor, no le entendí bien. ¿Me lo
+  repite, por favor? Escuché: «…»»); contesta «¿me escuchas?», «¿dónde estamos?» (el municipio que se ve, con la red
+  de todo el municipio a un «sí») y los elogios. Recuerda el lugar del que se habló: «ármame una red que cubra todo el
+  municipio», «la zona norte del municipio», «3.000 hectáreas ahí» o «lo que estoy viendo». Al hablar rápido: de las
+  versiones que propone el reconocimiento elige la que el simulador entiende como orden, espera más si la frase quedó
+  a medias («ubícame en…») o si se sigue hablando, corrige «red mechen» → red mesh en, separa «heymelki» y quita las
+  muletillas («o sea», «eh»)
 - **Red sostenible y viable** (v12.6): «hazme una red sostenible económica y técnicamente viable en Barranca de Upía
   de 11.226 hectáreas» diseña la malla en el municipio (señal media o mejor en el 95 % del área) y la presenta con su
   viabilidad técnica (factibilidad, cobertura, enlaces y saltos), la inversión y la operación mensual con los precios
@@ -212,7 +227,8 @@ src/
                             voz y eco; numeros.ts: números en palabras → cifras; hud-voz.tsx: la barra del asistente)
   datos/geo/                límites, nombres y ríos de referencia (ver LEEME.md: fuentes y licencias)
   lib/autoria.ts            autoría, titulares y licencia (los usan «Acerca del simulador», Melki y la versión HTML)
-  lib/geo/                  consultas locales: municipio de un punto, búsqueda de lugares
+  lib/geo/                  consultas locales: municipio de un punto, búsqueda de lugares, contorno de un municipio
+                            y reconocimiento de lugares dichos (fonetica.ts: cómo suena el español y cuánto se parecen)
   lib/radio/                motor: modelo, relieve, perfil, cobertura, malla, factibilidad, worker;
                             estado-red (piezas y guía), siembra (repetidores automáticos), mensaje (viaje de un paquete
                             MeshCore), carga (prueba de carga por eventos), estres (hora pico por zona y rampa),
@@ -348,6 +364,13 @@ la cobertura útil, la confiable (≥ 37 dB), la que tiene servicio (≥ 20 dB) 
   del mapa, así que la meta estimada coincide con la simulada. «Respaldo» exige dos nodos con ese margen en cada
   punto. Al terminar Melki pone los nodos, simula y cuenta la cobertura real por clase; si no llega, ofrece más
   repetidores, torres más altas o ver un punto sin cobertura.
+- **Todo un municipio** (v12.7): «ármame una red media estable que cubra todo el municipio de Barranca de Upía, Meta»
+  diseña sobre el contorno del municipio (de los límites del DANE empaquetados; Barranca de Upía: 40.919 ha); también
+  «la zona norte, sur, oriental u occidental del municipio» (la mitad desde el centro de su caja; o un cuarto, como
+  «la zona nororiental») y «lo que estoy viendo» (el rectángulo del mapa). El área queda dibujada como «Área objetivo ·
+  Barranca de Upía (Meta)». Un departamento entero pasa del tope (300.000 ha) y se pide por partes. Con «puntos de
+  popularidad… hasta qué punto aguanta antes de quebrarse», después del diseño pone 250 personas por punto y hace la
+  prueba de estrés subiendo la carga (la rampa).
 - **Red de otro municipio:** al diseño solo entran los nodos que alcanzan el área (dentro de ella o a menos de 20 km
   de su borde, unos dos saltos de repetidor; `sirveAlArea`). Una malla pedida lejos de la red del mapa lleva su propio
   gateway, sin encadenar repetidores por el campo ni bajar el relieve de todo el camino, y su presupuesto cuenta solo
