@@ -123,6 +123,29 @@ está en rojo, qué hacer ahora) y da tours guiados.
   lo avisa), seguir la conversación, leer las respuestas completas y el sonido al activarse, y el permiso del micrófono
   («Dar acceso» para que el navegador no vuelva a preguntar). Usa el mismo modo del dictado («navegador» o «privado»);
   si el navegador corta la escucha, se vuelve a encender sola
+- **En reposo, como Siri o el asistente de Google** (v12.6): con el micrófono permitido una vez, mientras la página
+  está abierta Melki queda en reposo (sin barra; un oído verde en su botón) y se activa solo al oír «Hola Melki», «Hey
+  Melki», «Hello Melki» u «Oye Melki», con el pedido de corrido o solo el llamado; sin su nombre no hace nada. «Melki,
+  deja de escuchar» (o la X de la barra) lo devuelve al reposo y los paneles vuelven; «Melki, apaga el micrófono» lo
+  apaga del todo hasta volver a tocar «Asistente Melki». Se puede quitar en Ajustes de voz («Escucharme siempre en
+  esta página»). Mientras dicta en el chat, el reposo se pausa y vuelve después
+- **Barra del asistente que no estorba**: se arrastra a cualquier lugar del mapa (queda guardado; doble clic la
+  devuelve a su sitio), se achica a una píldora con el botón de achicar y, cuando está esperando sin nada que mostrar,
+  se achica sola a los 5 s y vuelve a crecer al hablarle
+- **Mayordomo dentro de su oficio**: a lo que no es del simulador («cuéntame un chiste», «¿quién ganó el partido?»,
+  «hazme el café») responde con respeto «Mi señor, fui diseñado y creado para cumplir órdenes y procesos dentro de este
+  simulador…», con ejemplos y los botones «¿Qué hago ahora?» y «Ver los tours guiados»; a «¿cómo estás?» contesta con
+  cortesía y queda a sus órdenes
+- **Mejor oído**: pide al reconocimiento varias alternativas de cada frase y elige la que tiene el nombre de Melki,
+  palabras del simulador o números; corrige lo que suele escribir mal («red mes» → red mesh, «geitwey» → gateway,
+  «hectarias» → hectáreas, «estar link» → Starlink, «guasap» → WhatsApp) y encuentra los municipios aunque se digan
+  pegados o con una letra cambiada («barrancaupía», «Barranca de Opia», «villavicensio»)
+- **Red sostenible y viable** (v12.6): «hazme una red sostenible económica y técnicamente viable en Barranca de Upía
+  de 11.226 hectáreas» diseña la malla en el municipio (señal media o mejor en el 95 % del área) y la presenta con su
+  viabilidad técnica (factibilidad, cobertura, enlaces y saltos), la inversión y la operación mensual con los precios
+  del documento de Trama y la logística del departamento, y que todo funciona con energía solar; ofrece probar la hora
+  pico con 250 personas por punto. Si falta el lugar o el tamaño, lo pregunta con un ejemplo listo. «¿Cuánto cuesta la
+  red?» da el presupuesto de la red que esté en el mapa
 - **Panel izquierdo plegable**: el botón junto a «Modo avanzado» lo oculta y el de la barra de arriba lo devuelve (como
   el de Resultados); con los dos ocultos queda solo el mapa, ideal para trabajar por voz
 - **Ajuste inteligente** («Ajústamelo automáticamente» en el Resultado, o pidiéndoselo a Melki): cuando la red sale
@@ -325,6 +348,10 @@ la cobertura útil, la confiable (≥ 37 dB), la que tiene servicio (≥ 20 dB) 
   del mapa, así que la meta estimada coincide con la simulada. «Respaldo» exige dos nodos con ese margen en cada
   punto. Al terminar Melki pone los nodos, simula y cuenta la cobertura real por clase; si no llega, ofrece más
   repetidores, torres más altas o ver un punto sin cobertura.
+- **Red de otro municipio:** al diseño solo entran los nodos que alcanzan el área (dentro de ella o a menos de 20 km
+  de su borde, unos dos saltos de repetidor; `sirveAlArea`). Una malla pedida lejos de la red del mapa lleva su propio
+  gateway, sin encadenar repetidores por el campo ni bajar el relieve de todo el camino, y su presupuesto cuenta solo
+  esa red.
 
 ### Ajuste inteligente (cobertura–costo)
 
@@ -387,9 +414,11 @@ mapas y de relieve solo reciben las teselas de la zona visible; no se envían no
 entiende y ejecuta los pedidos con un cerebro local, sin servicios externos; los límites, nombres y ríos de referencia
 vienen empaquetados con la aplicación. Dictado por voz: en el modo «navegador», Edge o Chrome procesan el audio en sus
 servidores; en el modo «privado» el audio no sale del equipo (solo se descargan una vez la biblioteca, el motor y el
-modelo, que quedan guardados en el navegador). El Asistente Melki usa el mismo modo: con «navegador», mientras está activo el
-audio del micrófono va de forma continua al servicio de Edge o Chrome; con «privado», no sale del equipo. Se apaga con
-el botón, con la X de la barra de voz o diciendo «Melki, deja de escuchar».
+modelo, que quedan guardados en el navegador). El Asistente Melki usa el mismo modo: con «navegador», mientras está activo o en reposo el
+audio del micrófono va de forma continua al servicio de Edge o Chrome; con «privado», no sale del equipo. El reposo
+solo arranca si el micrófono ya está permitido (nunca pide permiso por sorpresa) y se ve con el oído verde en el botón
+de Melki; «Melki, apaga el micrófono» lo apaga del todo y en Ajustes de voz se quita («Escucharme siempre en esta
+página»). «Melki, deja de escuchar» o la X de la barra lo devuelven al reposo.
 
 ## Autoría y licencia
 

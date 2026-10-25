@@ -300,9 +300,9 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
     resultado se ve mejor en un panel, pregunta si se lo muestra ("sí"
     lo abre); la barra sobre el mapa muestra lo que entiende, lo que
     dice y los botones "Mostrar resultados", "Mostrar herramientas",
-    "¿Qué hago ahora?" y "¿Qué puedo decir?"; con la X se apaga y los
-    paneles vuelven. En Ajustes de voz (la tuerca de la conversación):
-    cómo le habla (señor, señora o sin tratamiento), la voz (elige la
+    "¿Qué hago ahora?" y "¿Qué puedo decir?"; con la X vuelve al
+    reposo y los paneles vuelven. En Ajustes de voz (la tuerca de la
+    conversación): cómo le habla (señor, señora o sin tratamiento), la voz (elige la
     más natural; en Edge hay voces neuronales como Salomé de Colombia,
     con "Probar" para oírla), dejar el mapa libre, "Activarme al abrir
     el simulador" (con el micrófono permitido, saluda solo al entrar;
@@ -310,6 +310,26 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
     para oír mi voz"), seguir la conversación, leer las respuestas
     completas, el sonido al activarse y "Dar acceso" al micrófono para
     que el navegador no vuelva a preguntar.
+    En reposo, como Siri: con el micrófono permitido una vez, mientras
+    la página esté abierta Melki queda en reposo (sin barra; un oído
+    verde en su botón) y se activa solo al decir "Hola Melki", "Hey
+    Melki" o "Hello Melki", sin tocar ningún botón. "Melki, deja de
+    escuchar" lo devuelve al reposo; "Melki, apaga el micrófono" lo
+    apaga del todo (para volver, toque "Asistente Melki"). Se quita en
+    Ajustes de voz: "Escucharme siempre en esta página".
+    La barra no estorba: arrástrela a donde quiera (doble clic la
+    devuelve a su sitio); el botón de achicar la deja como una píldora
+    y, cuando espera sin nada que mostrar, se achica sola.
+    Fuera del simulador: a "cuéntame un chiste" o "¿quién ganó el
+    partido?" responde con respeto que fue diseñado para cumplir
+    órdenes y procesos del simulador, y propone qué hacer.
+    Red sostenible: "Hola Melki, hazme una red sostenible económica y
+    técnicamente viable en Barranca de Upía de 11.226 hectáreas" diseña
+    la malla en el municipio y dice su viabilidad técnica, la inversión
+    y la operación mensual (precios de Trama) y que es solar; luego
+    ofrece la prueba de la hora pico. "¿Cuánto cuesta la red?" da el
+    presupuesto de la red del mapa. Una red lejos de la que ya está en
+    el mapa (más de 20 km) lleva su propio gateway.
     Consejos: Edge o Chrome actualizados, el micrófono cerca o
     audífonos (con parlantes a todo volumen Melki se puede oír a sí
     mismo), y hablar de corrido justo después de "Melki".

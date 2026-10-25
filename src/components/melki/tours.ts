@@ -820,7 +820,7 @@ export const TOURS: Tour[] = [
       {
         objetivo: ["hud-voz", "manos-libres"],
         titulo: "Para terminar",
-        texto: "Diga «Melki, deja de escuchar» o toque la X de esta barra. En Ajustes de voz elige cómo le hablo, la voz y si me activo solo al abrir el simulador. Consejos: hable de corrido justo después de mi nombre, con el micrófono cerca; con parlantes a todo volumen, baje un poco el volumen o use audífonos para que no me oiga a mí mismo.",
+        texto: "Diga «Melki, deja de escuchar» o toque la X de esta barra: quedo en reposo, atento solo a mi nombre, y con «Hey Melki» vuelvo sin tocar nada; «apaga el micrófono» me apaga del todo. La barra se arrastra a donde no estorbe y se achica sola mientras espero. En Ajustes de voz elige cómo le hablo, la voz, si le escucho siempre en reposo y si me activo solo al abrir el simulador. Consejos: hable de corrido justo después de mi nombre, con el micrófono cerca; con parlantes a todo volumen, baje un poco el volumen o use audífonos para que no me oiga a mí mismo.",
       },
     ],
     final: "Ya sabe trabajar conmigo por voz: llamarme por mi nombre, conversar sin repetirlo, usar mis botones con «sí, hazlo», trabajar con el mapa libre y pedirme la mayor cobertura posible. A su servicio.",

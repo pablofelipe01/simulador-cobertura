@@ -16,11 +16,13 @@ const entrada = `
 export { interpretarOrden, ejecutarOrden, extraerCoordenadas, extraerVariasCoordenadas, dividirEnPasos, leerNumero, areaEnTexto } from "./src/components/melki/ordenes";
 export { responder, noEntendiOrden } from "./src/components/melki/cerebro";
 export { areaM2, poligonoCirculo } from "./src/lib/radio/area";
-export { normalizarDictado, componerTexto, quitarRepeticiones } from "./src/components/melki/dictado";
+export { normalizarDictado, componerTexto, quitarRepeticiones, corregirPalabras } from "./src/components/melki/dictado";
 export { TOURS } from "./src/components/melki/tours";
 export { pedidoDeTour } from "./src/components/melki/cerebro";
 export { numerosEnPalabras } from "./src/components/melki/numeros";
-export { detectarActivacion, controlDeVoz, limpiarComando, textoParaVoz, pareceEco, AYUDA_VOZ, SALUDO_MANOS_LIBRES, esNombre, frases } from "./src/components/melki/manos-libres";
+export { detectarActivacion, controlDeVoz, limpiarComando, textoParaVoz, pareceEco, AYUDA_VOZ, SALUDO_MANOS_LIBRES, esNombre, frases, elegirAlternativa } from "./src/components/melki/manos-libres";
+export { buscarLugares, cargarReferencia, pareceNombre } from "./src/lib/geo/referencia";
+export { costoRedTrama } from "./src/lib/radio/trama";
 export { paraHablar, puntajeVoz } from "./src/components/melki/voz";
 export { estadoInicial, reductor } from "./src/components/simulador/estado";
 export { estadoRed } from "./src/lib/radio/estado-red";
@@ -730,7 +732,8 @@ function crearApi(antenas) {
   const c = { antenas, parametros: PARAMETROS, resultado: null, desactualizado: false, relieve: "teselas", modo: "sembrar" };
   caso("Explica cómo pedir el diseño por área", /cubra 11\.226 hectáreas/.test(m.responder("¿cómo diseño la red para cubrir un área?", c).texto));
   caso("«¿Qué puedes hacer?» incluye diseñar y varias órdenes", /Diseñar una red/.test(m.responder("¿qué puedes hacer?", c).texto) && /Varias órdenes/.test(m.responder("¿qué puedes hacer?", c).texto));
-  caso("Un pedido que no entiende no se responde con un tema al azar", /no logré convertirlo en una orden/.test(m.responder("hazme el café por favor", c).texto));
+  caso("Un pedido del simulador que no entiende no se responde con un tema al azar", /no logré convertirlo en una orden/.test(m.responder("agrega un dron a la malla", c).texto));
+  caso("Un pedido fuera del simulador («hazme el café») se responde con respeto y retoma el trabajo", /fui diseñado y creado para cumplir órdenes/.test(m.responder("hazme el café por favor", c).texto));
 }
 
 // 12) Ajuste inteligente (v11): «ajústamelo», límites, sitios dados, área objetivo y la propuesta con sus opciones
@@ -1120,6 +1123,99 @@ function crearApi(antenas) {
   caso("Tour «Asistente Melki por voz»: activa, llama por el nombre, el mapa libre con sugerencias y la mayor cobertura", tv && tv.nombre === "Asistente Melki por voz" && tv.pasos.some((p) => p.objetivo === "manos-libres" && p.tarea) && tv.pasos.some((p) => [].concat(p.objetivo).includes("hud-sugerencias")) && tv.pasos.some((p) => /mayor cobertura posible/.test(p.texto)));
   caso("«Hazme el tour de manos libres» → tour voz", m.pedidoDeTour("hazme el tour de manos libres")?.acciones?.[0]?.tour === "voz" && m.pedidoDeTour("guíame para hablar con Melki y dictarle")?.acciones?.[0]?.tour === "melki");
   caso("La ayuda por voz trae ejemplos y los controles", /Hola Melki/.test(m.AYUDA_VOZ) && /sí, hazlo/.test(m.AYUDA_VOZ) && /pantalla limpia/.test(m.AYUDA_VOZ) && /mayor cobertura posible/.test(m.AYUDA_VOZ));
+}
+
+// ─── 18. v12.6: entender mejor, fuera del simulador, la red sostenible y viable, su costo y la escucha en reposo ───
+{
+  console.log("\n18. Red sostenible, lugares, fuera de tema y reposo");
+  // Lo que el dictado escribe mal
+  const cp = m.corregirPalabras;
+  caso("Correcciones del dictado: mesh, gateway, hectáreas, SF, Starlink, WhatsApp", cp("construye una red mes") === "construye una red mesh" && cp("pon el geitwey") === "pon el gateway" && cp("11226 hectarias") === "11226 hectáreas" && cp("usa ese efe 11") === "usa SF11" && cp("con estar link") === "con Starlink" && cp("manda un guasap") === "manda un WhatsApp" && cp("mes core") === "MeshCore");
+  caso("Las correcciones no tocan lo demás («el mes de octubre»)", cp("el mes de octubre") === "el mes de octubre" && cp("la red de Trama") === "la red de Trama");
+  caso("Entre las versiones del reconocimiento elige la que trae el nombre y palabras del simulador", m.elegirAlternativa(["hola mel quien pon el gateway", "hola melki pon el gateway"]) === "hola melki pon el gateway" && m.elegirAlternativa(["pon el gateway en Cumaral", "pon el get way en Cumaral"]) === "pon el gateway en Cumaral");
+  caso("Por voz, «red mes… once mil… hectarias» llega bien", m.limpiarComando("construye una red mes en barranca de upia de once mil doscientas veintiseis hectarias") === "Construye una red mesh en barranca de upia de 11226 hectáreas");
+
+  // Lugares con el nombre pegado o una letra distinta (datos reales del DANE)
+  await m.cargarReferencia();
+  const lugar = (t) => m.buscarLugares(t, 3)[0]?.nombre;
+  caso("Encuentra «Barranca de Upía» escrito de varias formas", ["barrancaupia", "barranca de upia", "Barranca de Opia", "barranca upía", "Barranca de Upía"].every((t) => lugar(t) === "Barranca de Upía"), ["barrancaupia", "barranca de opia", "barranca upía"].map(lugar).join(" | "));
+  caso("Y no confunde lugares con palabras comunes", m.buscarLugares("mejor", 3).every((l) => l.nombre !== "Barranca de Upía") && !m.pareceNombre("barranca", "Barrancabermeja") && m.pareceNombre("villavicensio", "Villavicencio"));
+
+  const antenasR = [];
+  const apiR = crearApi(antenasR);
+  apiR.buscarLugar = (t) => m.buscarLugares(t, 5);
+  const ord = (t, p = null) => m.interpretarOrden(t, apiR, p);
+  const pedido = ord("hazme una red que sea sostenible tanto económica como viable técnicamente en Barranca de Upía en un rango de 11226 hectáreas");
+  caso("«Una red sostenible… en Barranca de Upía en un rango de 11.226 ha» → diseño sostenible centrado en el municipio", pedido?.tipo === "disenar" && pedido.sostenible === true && pedido.area.centro?.tipo === "coord" && /Barranca de Upía/.test(pedido.area.centro.nombre) && cerca(pedido.area.areaM2, 112260000, 1) && pedido.porcentaje === 95 && pedido.margenDb === 30, JSON.stringify(pedido).slice(0, 160));
+  const pegado = ord("hazme una red sostenible en barrancaupía de 11226 hectáreas");
+  caso("«…en barrancaupía…» también", pegado?.tipo === "disenar" && /Barranca de Upía/.test(pegado.area.centro?.nombre ?? ""));
+  const sinLugar = ord("Construye una red mesh que cumpla con todos los parámetros establecidos dentro del marco de sostenibilidad y viabilidad técnica");
+  caso("Sin lugar ni tamaño: pregunta dónde y de qué tamaño", sinLugar?.tipo === "pedir-diseno" && sinLugar.sostenible && !sinLugar.lugar);
+  const rp = m.ejecutarOrden(sinLugar, apiR);
+  caso("…con un ejemplo listo (Barranca de Upía, 11.226 ha) y queda esperando la respuesta", /¿Dónde y de qué tamaño\?/.test(rp.texto) && rp.pendiente?.tipo === "disenar" && rp.acciones?.some((a) => a.orden?.tipo === "disenar" && a.orden.sostenible));
+  const completa = ord("en Barranca de Upía, 11.226 hectáreas", rp.pendiente);
+  caso("La respuesta «en Barranca de Upía, 11.226 hectáreas» completa el diseño sostenible", completa?.tipo === "disenar" && completa.sostenible && /Barranca de Upía/.test(completa.area.centro?.nombre ?? "") && cerca(completa.area.areaM2, 112260000, 1), JSON.stringify(completa).slice(0, 120));
+  const soloLugar = ord("hazme una red en barranca de opia");
+  caso("Con el lugar pero sin tamaño: pregunta el área y recuerda el lugar", soloLugar?.tipo === "pedir-diseno" && /Barranca de Upía/.test(soloLugar.lugar?.nombre ?? "") && /¿Qué área cubro\?/.test(m.ejecutarOrden(soloLugar, apiR).texto));
+  const conTamano = ord("de 11.226 hectáreas", m.ejecutarOrden(soloLugar, apiR).pendiente);
+  caso("…y «de 11.226 hectáreas» la arma ahí", conTamano?.tipo === "disenar" && cerca(conTamano.area.centro?.coord?.lat ?? 0, 4.5149, 1e-3));
+
+  // El diseño sostenible cuenta su viabilidad técnica y su costo
+  apiR.disenoFalso = {
+    nodos: [
+      { id: "diseno-g", pieza: "gateway", lat: 4.51, lon: -73.0, sueloM: 260, desdeId: null, enlaceDb: null, saltos: 0, coberturaPct: 70 },
+      { id: "diseno-1", pieza: "repetidor", lat: 4.55, lon: -73.03, sueloM: 300, desdeId: "diseno-g", enlaceDb: 36, saltos: 1, coberturaPct: 96 },
+    ],
+    areaKm2: 112.26, muestras: 1000, inicialPct: 70, coberturaPct: 96, objetivoPct: 95, margenObjetivoDb: 30, respaldo: false, alcanzado: true, motivo: null, huecos: [],
+  };
+  apiR.ubicacion = () => "Barranca de Upía (Meta)";
+  const poli = m.poligonoCirculo(4.5149, -73.0024, 6000);
+  const lo = poli.map((q) => q[0]);
+  const la = poli.map((q) => q[1]);
+  apiR.resultadoFalso = {
+    malla: { caja: { oeste: Math.min(...lo) - 0.05, este: Math.max(...lo) + 0.05, sur: Math.min(...la) - 0.05, norte: Math.max(...la) + 0.05 }, ancho: 60, alto: 60, celdaM: 300 },
+    mejor: new Float32Array(3600).fill(40),
+    segundo: new Float32Array(3600).fill(25),
+    nodos: [{ id: "d0", saltos: 0 }, { id: "d1", saltos: 1 }],
+    factibilidad: { titulo: "Factible", puntaje: 92, nivel: "factible", recomendaciones: [] },
+  };
+  // Una red de otro municipio en el mapa (cerca de Villavicencio, a ~50 km) no entra ni al diseño ni al presupuesto
+  antenasR.push(base("lejos-g", "Gateway Villavicencio", 4.2, -73.37, { pasarela: true }), base("lejos-1", "Repetidor V1", 4.25, -73.3), base("lejos-2", "Repetidor V2", 4.3, -73.25));
+  const inicioSostenible = m.ejecutarOrden(pedido, apiR);
+  caso("Con otra red lejos en el mapa, la de Barranca de Upía lleva su propio gateway", /Busco con el relieve real dónde va el gateway y cada repetidor/.test(inicioSostenible.texto), inicioSostenible.texto.slice(0, 200));
+  const fin = await inicioSostenible.luego;
+  caso("…y su presupuesto cuenta solo la red de esa área (1 gateway y 1 repetidor)", /Inversión: unos \$[^:]*: el sitio del gateway [^;]*; 1 repetidor solar/.test(fin.texto), (fin.texto.match(/• Inversión[^\n]*/) ?? [""])[0].slice(0, 200));
+  caso("La red sostenible dice su viabilidad técnica, la inversión, la operación y que es solar", /Viabilidad de la red:/.test(fin.texto) && /Técnica: factible \(92\/100\)/.test(fin.texto) && /enlaces de al menos 36 dB \(firmes\)/.test(fin.texto) && /Inversión: unos \$/.test(fin.texto) && /al mes/.test(fin.texto) && /logística de Meta/.test(fin.texto) && /energía solar/.test(fin.texto), fin.texto.split("Viabilidad")[1]?.slice(0, 200).replace(/\n/g, " "));
+  caso("…y ofrece probar la hora pico con 250 personas por punto", fin.acciones?.some((a) => a.orden?.tipo === "zonas" && a.orden.pedido?.n === 250 && a.orden.estres));
+
+  // El costo de la red del mapa
+  const conRed = [base("g", "Gateway", 4.2, -73.37, { pasarela: true }), base("r1", "Repetidor 1", 4.25, -73.3), base("r2", "Repetidor 2", 4.3, -73.25), base("p1", "Persona 1", 4.27, -73.28, { tipo: "nodo", alturaM: 1.5 })];
+  const apiC = crearApi(conRed);
+  caso("«¿Cuánto cuesta la red?» con nodos → el costo de la red del mapa", m.interpretarOrden("¿cuánto cuesta la red?", apiC, null)?.tipo === "costo-red" && m.interpretarOrden("¿cuál es el presupuesto de la malla?", apiC, null)?.tipo === "costo-red");
+  caso("«¿Cuánto cuesta la red para el Chocó?» sigue siendo el departamento", m.interpretarOrden("¿cuánto cuesta la red para el Chocó?", apiC, null)?.tipo === "trama-departamento");
+  const costo = m.ejecutarOrden({ tipo: "costo-red" }, apiC);
+  caso("Cuenta gateway, repetidores y personas con su inversión y su operación", /1 gateway, 2 repetidores y 1 persona/.test(costo.texto) && /Inversión: unos \$/.test(costo.texto) && /Operación: unos \$/.test(costo.texto) && /5 años/.test(costo.texto), costo.texto.slice(0, 160).replace(/\n/g, " "));
+  const c5 = m.costoRedTrama(1, 5);
+  const c10 = m.costoRedTrama(1, 10);
+  caso("Más repetidores cuestan más; el Starlink del gateway es $300.000 al mes", c10.inversion.total > c5.inversion.total && c5.mensual.internet === 300000 && c5.totalMes > c5.mensual.total && m.costoRedTrama(1, 5, 0, "xiao", 1.3).inversion.instalacion > c5.inversion.instalacion);
+
+  // Fuera del simulador: con respeto, y retoma el trabajo
+  const cR = { antenas: [], parametros: PARAMETROS, resultado: null, desactualizado: false, relieve: "teselas", modo: "sembrar" };
+  for (const q of ["¿quién ganó el partido de ayer?", "cuéntame un chiste", "¿qué hora es?", "¿cómo está el clima hoy?", "¿cuál es la capital de Francia?", "escríbeme un poema"]) {
+    const r = m.responder(q, cR);
+    caso(`Fuera del simulador: «${q}»`, /^Mi señor, fui diseñado y creado para cumplir órdenes y procesos dentro de este simulador/.test(r.texto) && /Barranca de Upía/.test(r.texto), r.texto.slice(0, 70));
+  }
+  caso("Con «señora» y sin tratamiento", /^Mi señora, fui/.test(m.responder("cuéntame un chiste", { ...cR, trato: "senora" }).texto) && /^Fui diseñado/.test(m.responder("cuéntame un chiste", { ...cR, trato: "ninguno" }).texto));
+  caso("Lo del simulador no es fuera de tema («el clima en Radio Mobile», «¿cómo está la red?»)", !/fui diseñado/.test(m.responder("¿qué es el clima en Radio Mobile?", cR).texto) && !/fui diseñado/.test(m.responder("¿cómo está la red?", cR).texto) && !/fui diseñado/.test(m.responder("¿qué es la malla?", cR).texto));
+  caso("«¿Cómo estás, Melki?» → cortesía y a sus órdenes (no el estado de la red)", /^Muy bien, señor, gracias por preguntar/.test(m.responder("¿Cómo estás, Melki?", cR).texto) && /^Muy bien/.test(m.responder("hola, ¿qué tal?", cR).texto));
+
+  // Reposo y micrófono
+  const ctl = (f) => m.controlDeVoz(f)?.tipo ?? null;
+  caso("«Apaga el micrófono» apaga del todo; «deja de escuchar» vuelve al reposo", ctl("apaga el micrófono") === "microfono" && ctl("no me escuches más") === "microfono" && ctl("deja de escucharme del todo") === "microfono" && ctl("deja de escuchar") === "apagar" && ctl("apaga el asistente") === "apagar");
+  const fz = m.frases("senor");
+  caso("Las frases del reposo y del micrófono", /Quedo en reposo: cuando me necesite, diga «Hola Melki»/.test(fz.reposo) && /Apago el micrófono/.test(fz.microfono) && /aunque esta barra esté cerrada/.test(fz.bienvenida(true)));
+  caso("La ayuda por voz cuenta el reposo y el micrófono", /reposo/.test(m.AYUDA_VOZ) && /apaga el micrófono/.test(m.AYUDA_VOZ));
+  caso("«¿Qué es el Asistente Melki?» cuenta el reposo tipo Siri y la barra que se mueve", ((r) => /como Siri/.test(r.texto) && /se arrastra/.test(r.texto) && /fuera del simulador|se sale del simulador/.test(r.texto))(m.responder("¿qué es el asistente Melki?", cR)));
 }
 
 console.log(fallos ? `\n✗ ${fallos} prueba(s) fallaron` : "\n✓ Melki verificado");

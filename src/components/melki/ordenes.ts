@@ -13,18 +13,18 @@ import { INTENTOS, type ViajeMensaje } from "@/lib/radio/mensaje";
 import type { DestinoSiembra, Siembra } from "@/lib/radio/siembra";
 import type { Diseno } from "@/lib/radio/diseno";
 import { resumenCambios, textoCambio, type Ajuste, type PermisosAjuste, type SitioAjuste } from "@/lib/radio/ajuste";
-import { areaM2, cajaPoligono, conArea, coberturaEnArea, poligonoCirculo, poligonoRectangulo, porcentajeSobre, radioDeArea, type Poligono } from "@/lib/radio/area";
+import { areaM2, cajaPoligono, conArea, coberturaEnArea, poligonoCirculo, poligonoRectangulo, porcentajeSobre, radioDeArea, sirveAlArea, type Poligono } from "@/lib/radio/area";
 import { aDecimal, aGMS, desplazar, distanciaM, formatoDistancia, leerCoordenada, puntoCardinal, rumbo, rumboTexto } from "@/lib/radio/geo";
 import type { ClimaItm } from "@/lib/radio/itm";
 import { anchosHaz, esDireccional, patronPorId } from "@/lib/radio/patron";
 import { CLIMAS, CONFIABILIDADES, RED_REFERENCIA, SUELOS, VARIABILIDADES } from "@/lib/radio/red";
 import type { Antena, AreaObjetivo, EntornoId, Escenario, Medicion, ObjetivoArea, Parametros, PatronId, ResultadoSimulacion, Rol, SueloId, TipoNodo, VariabilidadId } from "@/lib/radio/tipos";
 import { textoNivel, uvADbm, type UnidadId } from "@/lib/radio/unidades";
-import type { Lugar } from "@/lib/geo/referencia";
+import { pareceNombre, type Lugar } from "@/lib/geo/referencia";
 
 import type { CurvaCargaResultado, ResultadoCarga } from "@/lib/radio/carga";
 import type { ResultadoEstres, LimitePunto } from "@/lib/radio/estres";
-import type { NodoUsuario, SfTrama, TerrenoTrama } from "@/lib/radio/trama";
+import { costoRedTrama, DEPARTAMENTOS_TRAMA, pesosTrama, type CostoRed, type NodoUsuario, type SfTrama, type TerrenoTrama } from "@/lib/radio/trama";
 
 import type { EscalaSenal, ModoApp, Vista } from "../simulador/estado";
 import { ALTURA_REPETIDOR_DEFECTO } from "../simulador/piezas";
@@ -121,7 +121,13 @@ export type Orden =
       reemplazar?: Escenario;
       /** Después del diseño: zonas de popularidad en cada nodo y, si se pidió, la prueba de estrés. */
       despues?: { zonas: PedidoZonas; estres: Partial<OpcionesEstres> | null };
+      /** «Una red sostenible y viable»: el diseño cuenta además su viabilidad técnica y su costo con los precios de Trama. */
+      sostenible?: boolean;
     }
+  /** Falta dónde o de qué tamaño hacer la red («hazme una red sostenible»): lo pregunta y queda esperando la respuesta. */
+  | { tipo: "pedir-diseno"; lugar?: LugarPedido; sostenible: boolean }
+  /** «¿Cuánto cuesta la red?»: la inversión y la operación de la red del mapa con los precios de Trama. */
+  | { tipo: "costo-red" }
   | { tipo: "eliminar-varios"; ids: string[]; descripcion: string }
   | { tipo: "editar-varios"; ids: string[]; cambios: Partial<Antena>; descripcion: string }
   | { tipo: "auto"; valor: boolean }
@@ -155,7 +161,16 @@ export type OpcionAjusteId = "economica" | "recomendada" | "maxima";
 
 export type Referencia = { tipo: "nodo"; id: string } | { tipo: "coord"; coord: Coordenada };
 
-export type Pendiente = { tipo: "agregar"; datos: DatosNodo } | { tipo: "mover"; id: string } | { tipo: "pieza"; pieza: Pieza; datos: DatosNodo } | null;
+/** Un lugar ya ubicado (municipio o coordenada) para centrar el diseño. */
+export type LugarPedido = { lat: number; lon: number; nombre: string };
+
+export type Pendiente =
+  | { tipo: "agregar"; datos: DatosNodo }
+  | { tipo: "mover"; id: string }
+  | { tipo: "pieza"; pieza: Pieza; datos: DatosNodo }
+  /** Una red por diseñar a la que le falta el lugar o el tamaño. */
+  | { tipo: "disenar"; lugar?: LugarPedido; sostenible: boolean }
+  | null;
 
 export type Api = {
   antenas(): Antena[];
@@ -585,14 +600,24 @@ export function textoArea(m2: number): string {
 }
 
 /** Lugar de Colombia nombrado en el texto («en Cumaral», «cerca de Puerto López», «en el Meta»). */
+/**
+ * Un municipio, departamento o país nombrado después de «en», «cerca de», «del municipio de»…: prueba las palabras que
+ * siguen, de la frase más larga a la más corta («en Barranca de Upía en un rango de…» → «Barranca de Upía»), y acepta el
+ * nombre pegado o con una o dos letras distintas, como a veces lo escribe el dictado («barrancaupía»).
+ */
 function lugarEnTexto(tn: string, api: Api): Lugar | null {
-  const re = /\b(?:en|alrededor de|cerca de|junto a|sobre|por|del municipio de|municipio de|de)\s+(?:el municipio de |el pueblo de |la ciudad de |el departamento del? |el )?([a-z][a-z ]{2,48})/g;
+  const re = /\b(?:en|alrededor de|cerca de|junto a|sobre|por|del municipio de|municipio de|de|para)\s+(?:el municipio de |el pueblo de |la ciudad de |el departamento del? |el )?([a-z][a-z ]{2,60})/g;
+  const vacio = /^(la|las|los|un|una|mi|su|este|esta|ese|esa|area|zona|mapa|campo|loma|lomas|casa|finca|punto|centro|red|malla|torre|altura|metros|km|rango|radio|total|todo|toda|forma|manera|marco|base|cada|que)\b/;
   for (const m of tn.matchAll(re)) {
-    const frase = m[1].split(/\s+(?:a|con|que|y|para|al|hacia|cubr\w*|con)\s+|\s+\d/)[0].trim();
-    if (frase.length < 3 || /^(la|las|los|un|una|mi|su|este|esta|ese|esa|area|zona|mapa|campo|loma|lomas|casa|finca|punto|centro|red|malla|torre|altura|metros|km)\b/.test(frase)) continue;
-    for (const l of api.buscarLugar(frase).slice(0, 6)) {
-      const nombre = n(l.nombre);
-      if (nombre.length >= 4 && new RegExp(`(^|[^a-z])${nombre.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^a-z])`).test(tn)) return l;
+    const palabras = m[1].split(/\s+\d/)[0].trim().split(/\s+/).slice(0, 5);
+    for (let k = palabras.length; k >= 1; k--) {
+      const frase = palabras.slice(0, k).join(" ");
+      if (frase.length < 3 || vacio.test(frase) || /\b(que|con|para|hacia|cubr\w*)$/.test(frase)) continue;
+      for (const l of api.buscarLugar(frase).slice(0, 6)) {
+        const nombre = n(l.nombre);
+        const exacto = nombre.length >= 4 && new RegExp(`(^|[^a-z])${nombre.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^a-z])`).test(tn);
+        if (exacto || pareceNombre(frase, l.nombre)) return l;
+      }
     }
   }
   return null;
@@ -826,7 +851,49 @@ function interpretarDiseno(texto: string, tn: string, api: Api, antenas: Antena[
     }
   }
   if (!pedida) return null;
-  return { tipo: "disenar", area: pedida, margenDb, clases, porcentaje, respaldo, alturaM, gateway, maxRepetidores };
+  return { tipo: "disenar", area: pedida, margenDb, clases, porcentaje, respaldo, alturaM, gateway, maxRepetidores, ...(SOSTENIBLE.test(tn) ? { sostenible: true } : {}) };
+}
+
+/** «Sostenible», «viable», «económica y técnicamente», «que funcione de la mejor manera»: la red se diseña y se evalúa con su costo. */
+const SOSTENIBLE =
+  /\b(sostenib\w*|sustentab\w*|viab\w*|rentab\w*|economic\w* y tecnic\w*|tecnic\w* y economic\w*|costo[- ]?eficien\w*|eficiente|que funcione (de la mejor manera|lo mejor posible|muy bien|bien))\b/;
+/** «Construye / hazme / ármame / diseña una red (o malla)». */
+const CONSTRUIR_RED = /\b(constru\w*|hazme|haz|hacer|hagamos|arm\w*|disen\w*|crea\w*|planific\w*|mont\w*|levant\w*|propon\w*|necesito|quiero)\b.{0,50}\b(red|redes|malla)\b/;
+
+/**
+ * «Hazme una red sostenible» sin área, o «una red en Barranca de Upía» sin tamaño: Melki pregunta lo que falta y la
+ * siguiente respuesta («en Barranca de Upía, 11.226 hectáreas») completa el diseño.
+ */
+function interpretarPedidoDeRed(texto: string, tn: string, api: Api, antenas: Antena[]): Orden | null {
+  if (!CONSTRUIR_RED.test(tn)) return null;
+  const sostenible = SOSTENIBLE.test(tn);
+  const u = ubicacionEnTexto(texto, tn, api, antenas, true);
+  const lugar: LugarPedido | undefined = u ? { lat: u.lat, lon: u.lon, nombre: u.desde ?? `en ${aDecimal(u.lat)}, ${aDecimal(u.lon)}` } : undefined;
+  if (!sostenible && !lugar) return null;
+  return { tipo: "pedir-diseno", lugar, sostenible };
+}
+
+/** Completa el diseño que esperaba el lugar o el tamaño. */
+function completarDiseno(texto: string, tn: string, api: Api, antenas: Antena[], p: Extract<NonNullable<Pendiente>, { tipo: "disenar" }>): Orden | null {
+  const bajo = sinTildes(texto);
+  const u = ubicacionEnTexto(texto, tn, api, antenas, true);
+  const lugar: LugarPedido | undefined = u ? { lat: u.lat, lon: u.lon, nombre: u.desde ?? `en ${aDecimal(u.lat)}, ${aDecimal(u.lon)}` } : p.lugar;
+  const conTamano = areaEnTexto(bajo) || /\b\d+(?:[.,]\d+)?\s*(km|kilometros?|m|metros?)\b/.test(bajo);
+  if (!conTamano) return u ? { tipo: "pedir-diseno", lugar, sostenible: p.sostenible } : null;
+  const d = interpretarDiseno(`diseña una red ${p.sostenible ? "sostenible " : ""}que cubra ${texto}`, `disena una red ${p.sostenible ? "sostenible " : ""}que cubra ${tn}`, api, antenas);
+  if (d?.tipo !== "disenar") return null;
+  if (lugar && "centro" in d.area && d.area.centro.tipo !== "coord") d.area = { ...d.area, centro: { tipo: "coord", coord: { lat: lugar.lat, lon: lugar.lon }, nombre: lugar.nombre } };
+  return p.sostenible ? { ...d, sostenible: true } : d;
+}
+
+/** «¿Cuánto cuesta la red?», «el presupuesto de la malla», «¿qué inversión necesito?» (la red del mapa, no un departamento). */
+function interpretarCosto(tn: string, antenas: Antena[]): Orden | null {
+  if (!antenas.some((a) => a.activa)) return null;
+  if (/\b(optimiz\w*|ajust\w*|reduc\w*|baj\w*|menor costo|menos costo|abarat\w*)\b/.test(tn)) return null;
+  if (!/\b(cuanto (cuesta|vale|costaria|sale|saldria|valdria|necesito)|que (costo|precio|valor|inversion) tiene|cual es el (costo|precio|valor|presupuesto)|costo|presupuesto|inversion|precio)\b/.test(tn)) return null;
+  if (!/\b(red|malla|esto|todo|diseno|montaje|proyecto|obra|instalar\w*|montar\w*|construir\w*)\b/.test(tn)) return null;
+  if (/\b(departamento|pais|colombia|por (persona|usuario)|de un repetidor|un gateway|una persona|cada repetidor|starlink)\b/.test(tn)) return null;
+  return { tipo: "costo-red" };
 }
 
 /* ───────────── Órdenes en lote, capas del mapa y otras de la pantalla ───────────── */
@@ -1047,6 +1114,11 @@ export function interpretarOrden(texto: string, api: Api, pendiente: Pendiente, 
     const m = [...api.mediciones()].reverse().find((x) => x.tipo === "area");
     if (m) return { tipo: "cobertura-area", id: m.id, margenDb: margenPedido(tn).margenDb };
   }
+  // Completar una red que esperaba el lugar o el tamaño («en Barranca de Upía, 11.226 hectáreas»)
+  if (pendiente?.tipo === "disenar") {
+    const d = completarDiseno(texto, tn, api, antenas, pendiente);
+    if (d) return d;
+  }
   const capacidad = interpretarCapacidad(texto, tn, api);
   // «Rehaz el diseño de las 11.226 ha de manera estable y por cada antena 250 personas»: primero el diseño y
   // después las zonas de popularidad (y la prueba de estrés, si se pidió)
@@ -1057,10 +1129,14 @@ export function interpretarOrden(texto: string, api: Api, pendiente: Pendiente, 
   if (capacidad) return capacidad;
   const diseno = interpretarDiseno(texto, tn, api, antenas);
   if (diseno) return diseno;
+  const pedidoRed = interpretarPedidoDeRed(texto, tn, api, antenas);
+  if (pedidoRed) return pedidoRed;
   const objetivo = interpretarAreaObjetivo(texto, tn, api);
   if (objetivo) return objetivo;
   const ajuste = interpretarAjuste(texto, tn, antenas);
   if (ajuste) return ajuste;
+  const costo = interpretarCosto(tn, antenas);
+  if (costo) return costo;
   const lote = interpretarLote(texto, tn, antenas);
   if (lote) return lote;
   const pantalla = interpretarPantalla(tn);
@@ -1808,6 +1884,47 @@ export function ejecutarOrden(o: Orden, api: Api): ResultadoOrden {
         ],
       };
     }
+    case "pedir-diseno": {
+      const pendiente: Pendiente = { tipo: "disenar", lugar: o.lugar, sostenible: o.sostenible };
+      const ejemplo: Orden = {
+        tipo: "disenar",
+        area: { forma: "circulo", areaM2: 11226 * 10000, centro: { tipo: "coord", coord: { lat: 4.5149, lon: -73.0024 }, nombre: "en Barranca de Upía (Meta)" } },
+        margenDb: 30,
+        clases: "señal media o mejor (buena, estable o media; ≥ 30 dB)",
+        porcentaje: 95,
+        respaldo: false,
+        alturaM: ALTURA_REPETIDOR_DEFECTO,
+        gateway: null,
+        maxRepetidores: 60,
+        sostenible: o.sostenible,
+      };
+      if (o.lugar)
+        return {
+          texto: `Con gusto: armo la red ${o.lugar.nombre}${o.sostenible ? ", sostenible y viable" : ""}. ¿Qué área cubro? Dígame, por ejemplo, «11.226 hectáreas» o «un radio de 6 km».`,
+          pendiente,
+        };
+      const acciones: AccionRespuesta[] = [{ texto: "Barranca de Upía, 11.226 ha", accion: "orden", orden: ejemplo }];
+      if (antenas.some((a) => a.activa)) acciones.push({ texto: "Mejorar la red del mapa (costo y cobertura)", accion: "orden", orden: { tipo: "ajustar", aplicar: false, opcion: "recomendada", opciones: {}, avisos: [] } });
+      return {
+        texto: `Con gusto armo una red ${o.sostenible ? "sostenible, económica y técnicamente viable" : "MeshCore"}: busco con el relieve real dónde va el gateway y cada repetidor solar, con enlaces firmes, y le digo cuánto cuesta con los precios de Trama. ¿Dónde y de qué tamaño? Por ejemplo: «en Barranca de Upía, 11.226 hectáreas».`,
+        acciones,
+        pendiente,
+      };
+    }
+    case "costo-red": {
+      const activas = antenas.filter((a) => a.activa);
+      const gateways = activas.filter((a) => a.pasarela).length;
+      const repetidores = activas.filter((a) => !a.pasarela && (a.tipo ?? "antena") === "antena").length;
+      const personas = activas.filter((a) => a.tipo === "nodo" && !a.poblada).length;
+      const centro = activas.find((a) => a.pasarela) ?? activas[0];
+      const { logistica, departamento } = logisticaEn(api, centro.lat, centro.lon);
+      const c = costoRedTrama(gateways, repetidores, personas, "xiao", logistica);
+      const que = [gateways ? `${gateways} ${gateways === 1 ? "gateway" : "gateways"}` : "", repetidores ? `${repetidores} ${repetidores === 1 ? "repetidor" : "repetidores"}` : "", personas ? `${personas} ${personas === 1 ? "persona" : "personas"}` : ""].filter(Boolean);
+      return {
+        texto: [`La red del mapa (${que.join(", ").replace(/, ([^,]*)$/, " y $1") || "sin nodos activos"}) con los precios del documento de Trama:`, ...lineasCosto(c, departamento), gateways ? "" : "• Ojo: no hay gateway; sin él la red no sale a internet. Sume uno (el sitio con Starlink) antes de presupuestar."].filter(Boolean).join("\n"),
+        acciones: [{ texto: "Optimizar el costo (misma cobertura)", accion: "orden", orden: { tipo: "ajustar", aplicar: false, opcion: "recomendada", opciones: {}, avisos: [] } }],
+      };
+    }
     case "disenar":
       return ejecutarDiseno(o, api, antes);
     case "poblar":
@@ -2129,7 +2246,8 @@ function ejecutarDiseno(o: Extract<Orden, { tipo: "disenar" }>, api: Api, antes:
   }
   const area = areaM2(poligono);
   if (area > 3e9) return { texto: "Esa área es muy grande para diseñarla de una vez (más de 300.000 ha). Divídala en zonas y pídamelas por partes." };
-  const gw = antenas.find((x) => x.pasarela && x.activa);
+  // El gateway que ya hay solo cuenta si alcanza el área; en otro municipio la malla lleva su propio gateway
+  const gw = antenas.find((x) => x.pasarela && x.activa && sirveAlArea(poligono, x.lat, x.lon));
   if (o.gateway && gw) api.editar(gw.id, { lat: Number(o.gateway.lat.toFixed(6)), lon: Number(o.gateway.lon.toFixed(6)), activa: true });
   const forma = o.area.forma === "cuadrado" ? "cuadrada" : o.area.forma === "rectangulo" ? "rectangular" : "";
   if (dibujar) {
@@ -2161,6 +2279,56 @@ function ejecutarDiseno(o: Extract<Orden, { tipo: "disenar" }>, api: Api, antes:
     deshacer: base,
     luego,
   };
+}
+
+const PRUEBA_HORA_PICO = "pon 250 personas alrededor de cada gateway y repetidor y haz la prueba de estrés";
+
+/** Recargo de logística del departamento donde queda el punto (según el documento de Trama; 1 si no se sabe). */
+function logisticaEn(api: Api, lat: number, lon: number): { logistica: number; departamento: string | null } {
+  const u = api.ubicacion(lat, lon);
+  const dep = u?.match(/\(([^)]+)\)\s*$/)?.[1] ?? u;
+  const d = dep ? DEPARTAMENTOS_TRAMA.find((x) => n(x.nombre) === n(dep)) : undefined;
+  return { logistica: d?.logistica ?? 1, departamento: d?.nombre ?? null };
+}
+
+/** La inversión y la operación de una red, en viñetas. */
+function lineasCosto(c: CostoRed, departamento: string | null): string[] {
+  const partes = [
+    c.gateways ? `${c.gateways === 1 ? "el sitio del gateway" : `${c.gateways} sitios de gateway`} (torre de 12 m, mini PC, radio, Starlink y energía solar) ${pesosTrama(c.inversion.sitios)}` : "",
+    c.repetidores ? `${c.repetidores === 1 ? "1 repetidor solar" : `${c.repetidores} repetidores solares`} (P1 con antena de 8 dBi en tubo de 6 m) ${pesosTrama(c.inversion.repetidores)}` : "",
+    c.personas ? `${c.personas === 1 ? "1 billetera" : `${c.personas} billeteras`} ${pesosTrama(c.inversion.personas)}` : "",
+    `instalación y transporte ${pesosTrama(c.inversion.instalacion + c.inversion.transporte)}${departamento && c.logistica !== 1 ? ` (con la logística de ${departamento})` : ""}`,
+  ].filter(Boolean);
+  return [
+    `• Inversión: unos ${pesosTrama(c.inversion.total)}: ${partes.join("; ")}.`,
+    `• Operación: unos ${pesosTrama(c.mensual.total)} al mes (internet${c.gateways ? " del Starlink" : ""}, mantenimiento${c.repetidores ? ", baterías y visitas a los repetidores" : ""}${c.personas ? " y soporte" : ""}). Con la inversión repartida en 5 años, la red cuesta unos ${pesosTrama(c.totalMes)} al mes.`,
+  ];
+}
+
+/** Viabilidad técnica y económica de la red recién diseñada («sostenible»). */
+function viabilidadDiseno(o: Extract<Orden, { tipo: "disenar" }>, puestas: Antena[], r: ResultadoSimulacion | null, pct: number, enlaces: number[], maxSaltos: number, poligono: Poligono, api: Api): string[] {
+  // Se presupuesta la red de esta área (la de otro municipio que ya esté en el mapa no entra)
+  const todas = api.antenas().filter((a) => a.activa && sirveAlArea(poligono, a.lat, a.lon));
+  const gateways = todas.filter((a) => a.pasarela).length;
+  const repetidores = todas.filter((a) => !a.pasarela && (a.tipo ?? "antena") === "antena").length;
+  const centro = puestas.find((a) => a.pasarela) ?? todas.find((a) => a.pasarela) ?? puestas[0];
+  const { logistica, departamento } = centro ? logisticaEn(api, centro.lat, centro.lon) : { logistica: 1, departamento: null };
+  const c = costoRedTrama(gateways, repetidores, 0, "xiao", logistica);
+  const limite = api.parametros().limiteSaltos;
+  const firme = enlaces.length ? Math.min(...enlaces) : null;
+  const tecnica = [
+    r ? `${r.factibilidad.titulo.toLowerCase()} (${r.factibilidad.puntaje}/100)` : "",
+    `${fp(pct)} % del área con ${o.clases.replace(/ \(.*\)$/, "")}`,
+    firme !== null ? `enlaces de al menos ${f1(firme, 0)} dB${firme >= 30 ? " (firmes)" : " (alguno débil: conviene un apoyo)"}` : "",
+    `máximo ${maxSaltos} ${maxSaltos === 1 ? "salto" : "saltos"} al gateway (límite ${limite})`,
+  ].filter(Boolean);
+  return [
+    "",
+    "Viabilidad de la red:",
+    `• Técnica: ${tecnica.join(", ")}.`,
+    ...lineasCosto(c, departamento),
+    "• Sostenible: todo funciona con energía solar (los repetidores P1 traen su panel y el gateway su kit solar), sin depender de la red eléctrica, y con la menor cantidad de repetidores que cumple la meta.",
+  ];
 }
 
 function textoDiseno(o: Extract<Orden, { tipo: "disenar" }>, d: Diseno, puestas: Antena[], r: ResultadoSimulacion | null, poligono: Poligono, nombreArea: string, base: Escenario, api: Api): Respuesta {
@@ -2201,6 +2369,7 @@ function textoDiseno(o: Extract<Orden, { tipo: "disenar" }>, d: Diseno, puestas:
     if (a95 >= 0 && a99 > a95 + 1) partes.push(`Con ${a95 + 1} ${a95 === 0 ? "repetidor" : "repetidores"} ya se llegaba al 95 % y con ${a99 + 1} al 99 %; los demás tapan huecos pequeños detrás de lomas y en hondonadas.`);
   }
   if (!ok && d.motivo) partes.push(d.motivo);
+  if (o.sostenible) partes.push(...viabilidadDiseno(o, puestas, r, pct, enlaces, maxSaltos, poligono, api));
   partes.push(ok ? "Antes de instalar, revise en campo el acceso, la energía y que nada tape las antenas." : "Puedo probar con torres más altas, o puede aceptar este resultado.");
   const conPoligono = (cambios: Partial<Extract<Orden, { tipo: "disenar" }>>): Orden => ({ ...o, area: { forma: "poligono", puntos: poligono, nombre: `en el área «${nombreArea}»`, dibujar: Boolean(cambios.reemplazar) }, ...cambios });
   const acciones: Respuesta["acciones"] = [{ texto: "Deshacer", accion: "deshacer", escenario: base }];
@@ -2213,6 +2382,9 @@ function textoDiseno(o: Extract<Orden, { tipo: "disenar" }>, d: Diseno, puestas:
     if (d.huecos[0]) acciones.push({ texto: "Ver un punto sin cobertura", accion: "orden", orden: { tipo: "ir", coord: { lat: d.huecos[0][1], lon: d.huecos[0][0] } } });
     acciones.push({ texto: "Ajústamelo (alturas, lomas y apoyos)", accion: "orden", orden: { tipo: "ajustar", aplicar: false, opcion: "recomendada", opciones: {}, avisos: [] } });
   } else {
+    // Una red sostenible también tiene que aguantar a la gente: la hora pico con 250 personas por punto
+    const hora = o.sostenible ? interpretarCapacidad(PRUEBA_HORA_PICO, n(PRUEBA_HORA_PICO), api) : null;
+    if (hora) acciones.push({ texto: "Probar la hora pico (250 personas por punto)", accion: "orden", orden: hora });
     acciones.push({ texto: "Optimizar el costo (misma cobertura)", accion: "orden", orden: { tipo: "ajustar", aplicar: false, opcion: "recomendada", opciones: {}, avisos: [] } });
     if (!o.respaldo) acciones.push({ texto: "Agregar respaldo (dos nodos por punto)", accion: "orden", orden: conPoligono({ respaldo: true }) });
     if (o.porcentaje < 99.9) acciones.push({ texto: "Subir la meta a 99,9 %", accion: "orden", orden: conPoligono({ porcentaje: 99.9 }) });

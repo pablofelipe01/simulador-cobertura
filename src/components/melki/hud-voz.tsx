@@ -6,16 +6,19 @@
 "use client";
 
 // Barra del Asistente Melki sobre el mapa: el orbe animado según lo que hace (esperando su nombre, escuchando,
-// pensando, hablando), lo que va oyendo, lo que está diciendo (subtítulos), las sugerencias del momento (mostrar los
-// paneles que ocultó al activarse, «¿Qué hago ahora?») y los botones para callarlo y apagarlo.
-import { CircleHelp, PanelLeft, PanelRight, Sparkles, Square, Volume2, X } from "lucide-react";
-import type { CSSProperties, ReactNode } from "react";
+// pensando, hablando), lo que va oyendo, lo que está diciendo (subtítulos) y las sugerencias del momento. Para no
+// estorbar: se arrastra a cualquier parte del mapa (y recuerda dónde quedó; doble clic la devuelve a su sitio), se
+// encoge sola a una píldora mientras espera su nombre y crece cuando lo llaman; también se puede dejar siempre pequeña.
+// En reposo («dormido») no se muestra: Melki solo escucha su nombre.
+import { CircleHelp, Maximize2, Minimize2, PanelLeft, PanelRight, Sparkles, Square, Volume2, X } from "lucide-react";
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent as EventoRaton, type PointerEvent as EventoPuntero, type ReactNode } from "react";
 
 import type { EstadoManosLibres } from "./manos-libres";
 
 /** Lo que muestra la etiqueta de estado. */
 const ESTADO: Record<EstadoManosLibres, string> = {
   apagado: "Apagado",
+  dormido: "En reposo",
   preparando: "Preparando el micrófono",
   esperando: "Diga «Hola Melki»",
   atento: "Le escucho",
@@ -26,6 +29,7 @@ const ESTADO: Record<EstadoManosLibres, string> = {
 /** Colores del orbe por estado: tres tonos para el anillo y el del centro. */
 const COLORES: Record<EstadoManosLibres, [string, string, string]> = {
   apagado: ["#6e8f78", "#8fb39b", "#4f6d59"],
+  dormido: ["#6e8f78", "#8fb39b", "#4f6d59"],
   preparando: ["#6e8f78", "#a9c4b0", "#4f6d59"],
   esperando: ["#6e8f78", "#9cc7b0", "#e07a3f"],
   atento: ["#e07a3f", "#ffb27a", "#f5d33b"],
@@ -35,16 +39,39 @@ const COLORES: Record<EstadoManosLibres, [string, string, string]> = {
 
 export type SugerenciaHud = "resultados" | "herramientas" | "que-hago" | "ayuda";
 
-function Orbe({ estado }: { estado: EstadoManosLibres }) {
+/** Dónde quedó la barra y si se dejó pequeña (por persona, en este navegador). */
+const CLAVE_HUD = "simulador-cobertura-melki-hud";
+type Posicion = { x: number; y: number } | null;
+function leerHud(): { pos: Posicion; mini: boolean } {
+  try {
+    const t = window.localStorage.getItem(CLAVE_HUD);
+    if (t) {
+      const v = JSON.parse(t) as { pos?: Posicion; mini?: boolean };
+      return { pos: v.pos && Number.isFinite(v.pos.x) && Number.isFinite(v.pos.y) ? v.pos : null, mini: Boolean(v.mini) };
+    }
+  } catch {
+    // Sin almacenamiento: la barra vuelve a su sitio
+  }
+  return { pos: null, mini: false };
+}
+function guardarHud(v: { pos: Posicion; mini: boolean }) {
+  try {
+    window.localStorage.setItem(CLAVE_HUD, JSON.stringify(v));
+  } catch {
+    // Sin almacenamiento: se recuerda solo mientras la página esté abierta
+  }
+}
+
+function Orbe({ estado, pequeno }: { estado: EstadoManosLibres; pequeno?: boolean }) {
   const [a, b, c] = COLORES[estado];
   const estilo = { "--orbe-a": a, "--orbe-b": b, "--orbe-c": c } as CSSProperties;
   const barras = estado === "hablando" || estado === "atento";
   return (
-    <span className="orbe-voz relative grid h-12 w-12 shrink-0 place-items-center" data-estado={estado} style={estilo} aria-hidden="true">
+    <span className={`orbe-voz relative grid shrink-0 place-items-center ${pequeno ? "h-8 w-8" : "h-10 w-10"}`} data-estado={estado} style={estilo} aria-hidden="true">
       <span className="orbe-aura absolute -inset-1 rounded-full blur-md" />
       <span className="orbe-anillo absolute inset-0 rounded-full" />
-      <span className="orbe-centro absolute inset-[3px] flex items-center justify-center gap-[3px] rounded-full">
-        {[0, 1, 2, 3, 4].map((k) => (
+      <span className={`orbe-centro absolute inset-[3px] flex items-center justify-center rounded-full ${pequeno ? "gap-[2px]" : "gap-[3px]"}`}>
+        {[0, 1, 2, 3, 4].slice(0, pequeno ? 3 : 5).map((k) => (
           <i key={k} className={`barra-voz block w-[3px] rounded-full bg-white/95 ${barras ? "activa" : ""}`} style={{ animationDelay: `${k * 0.11}s` }} />
         ))}
       </span>
@@ -57,12 +84,26 @@ function Chip({ icono, texto, resaltado, onClick }: { icono: ReactNode; texto: s
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[12.5px] font-medium whitespace-nowrap transition-colors ${
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium whitespace-nowrap transition-colors ${
         resaltado ? "chip-resaltado bg-[#ffd68c] text-carbon hover:bg-[#ffe2a8]" : "bg-white/10 text-white/90 ring-1 ring-white/10 hover:bg-white/20"
       }`}
     >
       {icono}
       {texto}
+    </button>
+  );
+}
+
+function Boton({ etiqueta, titulo, onClick, children, fondo }: { etiqueta: string; titulo?: string; onClick: () => void; children: ReactNode; fondo?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${fondo ? "bg-white/10 hover:bg-white/20" : "text-white/80 hover:bg-white/15 hover:text-white"}`}
+      aria-label={etiqueta}
+      title={titulo ?? etiqueta}
+    >
+      {children}
     </button>
   );
 }
@@ -100,7 +141,40 @@ export function HudVoz({
   onOirme: () => void;
   onApagar: () => void;
 }) {
-  if (estado === "apagado") return null;
+  const [pos, setPos] = useState<Posicion>(() => leerHud().pos);
+  const [mini, setMini] = useState(() => leerHud().mini);
+  /** Esperando su nombre desde hace unos segundos: la barra se encoge sola. */
+  const [reposo, setReposo] = useState(false);
+  const caja = useRef<HTMLDivElement>(null);
+  const arrastre = useRef<{ dx: number; dy: number; px: number; py: number; pw: number; ph: number; w: number; h: number; movio: boolean } | null>(null);
+  const ultima = useRef<Posicion>(pos);
+
+  const quieto = estado === "esperando" && !aviso && !bloqueada && !resaltado;
+  useEffect(() => {
+    const t = window.setTimeout(() => setReposo(quieto), quieto ? 5000 : 0);
+    return () => window.clearTimeout(t);
+  }, [quieto, estado]);
+
+  // Si la ventana se achica, la barra no queda por fuera del mapa
+  useEffect(() => {
+    const ajustar = () => {
+      const el = caja.current;
+      const padre = el?.offsetParent as HTMLElement | null;
+      if (!el || !padre || !ultima.current) return;
+      const x = Math.max(4, Math.min(ultima.current.x, padre.clientWidth - el.offsetWidth - 4));
+      const y = Math.max(4, Math.min(ultima.current.y, padre.clientHeight - el.offsetHeight - 4));
+      if (x !== ultima.current.x || y !== ultima.current.y) {
+        ultima.current = { x, y };
+        setPos({ x, y });
+      }
+    };
+    window.addEventListener("resize", ajustar);
+    return () => window.removeEventListener("resize", ajustar);
+  }, []);
+
+  if (estado === "apagado" || estado === "dormido") return null;
+
+  const pequena = mini || (reposo && quieto);
   const linea =
     aviso ??
     (estado === "hablando"
@@ -112,54 +186,135 @@ export function HudVoz({
         : estado === "esperando"
           ? subtitulo || "Por ejemplo: «Hola Melki, ¿qué hago ahora?»"
           : "Un momento, por favor…");
+  const etiquetaPequena = aviso ?? (estado === "esperando" ? "Diga «Hola Melki»" : estado === "hablando" ? subtitulo || "Hablando" : estado === "atento" ? (escuchado ? `«${escuchado}»` : "Le escucho…") : ESTADO[estado]);
+
+  const empezar = (e: EventoPuntero<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest("button") || e.button !== 0) return;
+    const el = caja.current;
+    const padre = el?.offsetParent as HTMLElement | null;
+    if (!el || !padre) return;
+    const r = el.getBoundingClientRect();
+    const p = padre.getBoundingClientRect();
+    arrastre.current = { dx: e.clientX - r.left, dy: e.clientY - r.top, px: p.left, py: p.top, pw: p.width, ph: p.height, w: r.width, h: r.height, movio: false };
+    el.setPointerCapture?.(e.pointerId);
+  };
+  const mover = (e: EventoPuntero<HTMLDivElement>) => {
+    const a = arrastre.current;
+    if (!a) return;
+    const x = Math.max(4, Math.min(e.clientX - a.px - a.dx, a.pw - a.w - 4));
+    const y = Math.max(4, Math.min(e.clientY - a.py - a.dy, a.ph - a.h - 4));
+    if (!a.movio && ultima.current && Math.abs(x - ultima.current.x) + Math.abs(y - ultima.current.y) < 3) return;
+    a.movio = true;
+    ultima.current = { x: Math.round(x), y: Math.round(y) };
+    setPos(ultima.current);
+  };
+  const soltar = () => {
+    const a = arrastre.current;
+    arrastre.current = null;
+    if (a?.movio) guardarHud({ pos: ultima.current, mini });
+  };
+  const volver = (e: EventoRaton) => {
+    if ((e.target as HTMLElement).closest("button")) return;
+    ultima.current = null;
+    setPos(null);
+    guardarHud({ pos: null, mini });
+  };
+  const fijarMini = (v: boolean) => {
+    setMini(v);
+    setReposo(false);
+    guardarHud({ pos: ultima.current, mini: v });
+  };
+
+  const lugar = pos ? "" : "top-[88px] left-1/2 -translate-x-1/2 lg:top-16";
+  const comunes = {
+    ref: caja,
+    role: "status",
+    "aria-live": "polite" as const,
+    "aria-label": "Asistente Melki",
+    "data-tour": "hud-voz",
+    "data-estado": estado,
+    "data-forma": pequena ? "pequena" : "completa",
+    style: pos ? { left: pos.x, top: pos.y } : undefined,
+    onPointerDown: empezar,
+    onPointerMove: mover,
+    onPointerUp: soltar,
+    onPointerCancel: soltar,
+    onDoubleClick: volver,
+    title: "Arrastre para moverla; doble clic la devuelve a su sitio",
+  };
+
+  if (pequena)
+    return (
+      <div
+        {...comunes}
+        className={`hud-asistente pointer-events-auto absolute z-20 flex max-w-[calc(100%-24px)] cursor-grab touch-none items-center gap-2 rounded-full py-1 pr-1 pl-1 text-white shadow-[0_10px_30px_-10px_rgba(0,0,0,0.6)] ring-1 ring-white/15 backdrop-blur-xl select-none active:cursor-grabbing ${lugar}`}
+      >
+        <Orbe estado={estado} pequeno />
+        <span className="max-w-[240px] min-w-0 truncate pr-1 text-[12.5px] text-white/90">{etiquetaPequena}</span>
+        {estado === "hablando" && (
+          <Boton etiqueta="Callar a Melki" titulo="Callar (o diga «Melki, para»)" onClick={onCallar} fondo>
+            <Square size={12} fill="currentColor" />
+          </Boton>
+        )}
+        <Boton etiqueta="Agrandar la barra del asistente" onClick={() => fijarMini(false)}>
+          <Maximize2 size={14} />
+        </Boton>
+        <Boton etiqueta="Apagar el Asistente Melki" titulo="Apagar el asistente (o diga «Melki, deja de escuchar»)" onClick={onApagar}>
+          <X size={16} />
+        </Boton>
+      </div>
+    );
+
+  const hayPaneles = paneles && (!paneles.derecho || !paneles.izquierdo);
   return (
     <div
-      className="hud-asistente pointer-events-auto absolute top-[88px] left-1/2 z-20 w-[min(600px,calc(100%-24px))] -translate-x-1/2 overflow-hidden rounded-[22px] text-white shadow-[0_18px_48px_-14px_rgba(0,0,0,0.6)] ring-1 ring-white/15 backdrop-blur-xl lg:top-16"
-      role="status"
-      aria-live="polite"
-      aria-label="Asistente Melki"
-      data-tour="hud-voz"
-      data-estado={estado}
+      {...comunes}
+      className={`hud-asistente pointer-events-auto absolute z-20 w-[min(500px,calc(100%-24px))] cursor-grab touch-none overflow-hidden rounded-[20px] text-white shadow-[0_18px_48px_-14px_rgba(0,0,0,0.6)] ring-1 ring-white/15 backdrop-blur-xl select-none active:cursor-grabbing ${lugar}`}
     >
-      <div className="flex items-center gap-3 px-3.5 pt-3 pb-2">
+      <div className="flex items-center gap-2.5 px-3 pt-2.5 pb-2">
         <Orbe estado={estado} />
         <div className="min-w-0 flex-1">
           <p className="flex min-w-0 items-center gap-2">
-            <span className="shrink-0 font-cond text-[15.5px] leading-none font-semibold tracking-wide">Asistente Melki</span>
-            <span className={`inline-flex min-w-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ${estado === "atento" ? "bg-melki/25 text-[#ffd2b8]" : "bg-white/10 text-white/75"}`}>
+            <span className="shrink-0 font-cond text-[14.5px] leading-none font-semibold tracking-wide">Asistente Melki</span>
+            <span
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${estado === "atento" ? "bg-melki/25 text-[#ffd2b8]" : "bg-white/10 text-white/75"}`}
+              title={motor ? `Escucho ${motor}` : undefined}
+            >
               <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${estado === "atento" ? "animate-pulse bg-melki" : estado === "hablando" ? "bg-[#4fd1b5]" : estado === "pensando" ? "animate-pulse bg-[#8fb3ff]" : "bg-salvia"}`} />
-              <span className="truncate">{ESTADO[estado]}</span>
+              <span>{ESTADO[estado]}</span>
             </span>
-            <span className="hidden shrink-0 text-[11px] text-white/40 sm:inline">{motor}</span>
           </p>
-          <p className={`mt-1 line-clamp-2 text-[14.5px] leading-snug ${aviso ? "text-[#ffd2b8]" : estado === "atento" || estado === "pensando" ? "text-white italic" : "text-white/95"}`}>{linea}</p>
+          <p className={`mt-1 line-clamp-2 text-[13.5px] leading-snug ${aviso ? "text-[#ffd2b8]" : estado === "atento" || estado === "pensando" ? "text-white italic" : "text-white/95"}`}>{linea}</p>
         </div>
         {estado === "hablando" && (
-          <button type="button" onClick={onCallar} className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/10 hover:bg-white/20" aria-label="Callar a Melki" title="Callar (o diga «Melki, para»)">
-            <Square size={13} fill="currentColor" />
-          </button>
+          <Boton etiqueta="Callar a Melki" titulo="Callar (o diga «Melki, para»)" onClick={onCallar} fondo>
+            <Square size={12} fill="currentColor" />
+          </Boton>
         )}
-        <button
-          type="button"
-          onClick={onApagar}
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-full hover:bg-white/15"
-          aria-label="Apagar el Asistente Melki"
-          title="Apagar el asistente (o diga «Melki, deja de escuchar»)"
-        >
-          <X size={18} />
-        </button>
+        <Boton etiqueta="¿Qué hago ahora?" onClick={() => onSugerencia("que-hago")}>
+          <Sparkles size={15} />
+        </Boton>
+        <Boton etiqueta="¿Qué puedo decir?" onClick={() => onSugerencia("ayuda")}>
+          <CircleHelp size={16} />
+        </Boton>
+        <Boton etiqueta="Achicar la barra del asistente" titulo="Dejarla pequeña" onClick={() => fijarMini(true)}>
+          <Minimize2 size={14} />
+        </Boton>
+        <Boton etiqueta="Apagar el Asistente Melki" titulo="Apagar el asistente (o diga «Melki, deja de escuchar»)" onClick={onApagar}>
+          <X size={16} />
+        </Boton>
       </div>
       {bloqueada && (
-        <button type="button" onClick={onOirme} className="mx-3.5 mb-2 flex w-[calc(100%-28px)] items-center justify-center gap-2 rounded-xl bg-[#ffd68c] px-3 py-1.5 text-[13px] font-medium text-carbon hover:bg-[#ffe2a8]">
+        <button type="button" onClick={onOirme} className="mx-3 mb-2 flex w-[calc(100%-24px)] items-center justify-center gap-2 rounded-xl bg-[#ffd68c] px-3 py-1.5 text-[13px] font-medium text-carbon hover:bg-[#ffe2a8]">
           <Volume2 size={15} aria-hidden="true" /> Toque aquí para oír mi voz
         </button>
       )}
-      <div className="desplazable flex gap-1.5 overflow-x-auto px-3.5 pb-3 sm:flex-wrap sm:overflow-visible" role="group" aria-label="Sugerencias del asistente" data-tour="hud-sugerencias">
-        {paneles && !paneles.derecho && <Chip icono={<PanelRight size={14} aria-hidden="true" />} texto="Mostrar resultados" resaltado={resaltado === "derecho"} onClick={() => onSugerencia("resultados")} />}
-        {paneles && !paneles.izquierdo && <Chip icono={<PanelLeft size={14} aria-hidden="true" />} texto="Mostrar herramientas" resaltado={resaltado === "izquierdo"} onClick={() => onSugerencia("herramientas")} />}
-        <Chip icono={<Sparkles size={14} aria-hidden="true" />} texto="¿Qué hago ahora?" onClick={() => onSugerencia("que-hago")} />
-        <Chip icono={<CircleHelp size={14} aria-hidden="true" />} texto="¿Qué puedo decir?" onClick={() => onSugerencia("ayuda")} />
-      </div>
+      {hayPaneles && (
+        <div className="desplazable flex gap-1.5 overflow-x-auto px-3 pb-2.5 sm:flex-wrap sm:overflow-visible" role="group" aria-label="Sugerencias del asistente" data-tour="hud-sugerencias">
+          {!paneles.derecho && <Chip icono={<PanelRight size={13} aria-hidden="true" />} texto="Mostrar resultados" resaltado={resaltado === "derecho"} onClick={() => onSugerencia("resultados")} />}
+          {!paneles.izquierdo && <Chip icono={<PanelLeft size={13} aria-hidden="true" />} texto="Mostrar herramientas" resaltado={resaltado === "izquierdo"} onClick={() => onSugerencia("herramientas")} />}
+        </div>
+      )}
     </div>
   );
 }

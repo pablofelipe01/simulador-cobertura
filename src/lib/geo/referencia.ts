@@ -105,11 +105,40 @@ export type Lugar = {
   caja?: [number, number, number, number];
 };
 
-/** Busca municipios, departamentos y países por nombre (sin tildes, por prefijo o contenido). */
+/** El nombre sin espacios ni artículos: «Barranca de Upía» → «barrancaupia» (así lo escribe a veces el dictado). */
+export const nombreCompacto = (t: string) => normal(t).replace(/\b(de|del|la|las|los|el|y)\b/g, " ").replace(/\s+/g, "");
+
+/** Distancia de edición (letras de más, de menos o cambiadas) entre dos nombres. */
+export function distanciaNombres(a: string, b: string): number {
+  if (Math.abs(a.length - b.length) > 3) return 99;
+  let previa = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const fila = [i];
+    for (let j = 1; j <= b.length; j++) fila[j] = Math.min(previa[j] + 1, fila[j - 1] + 1, previa[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    previa = fila;
+  }
+  return previa[b.length];
+}
+
+/** ¿Lo dicho es ese nombre, aunque el dictado lo haya escrito pegado o con una o dos letras distintas? */
+export function pareceNombre(dicho: string, nombre: string): boolean {
+  const a = nombreCompacto(dicho);
+  const b = nombreCompacto(nombre);
+  if (a.length < 4 || b.length < 4) return a === b;
+  if (a === b) return true;
+  const tolerancia = b.length >= 11 ? 2 : b.length >= 6 ? 1 : 0;
+  return tolerancia > 0 && distanciaNombres(a, b) <= tolerancia;
+}
+
+/**
+ * Busca municipios, departamentos y países por nombre (sin tildes, por prefijo o contenido). Si no hay nada así,
+ * acepta el nombre pegado o con una o dos letras distintas («barrancaupia», «barranca de opia» → Barranca de Upía).
+ */
 export function buscarLugares(texto: string, max = 8): Lugar[] {
   if (!datos) return [];
   const q = normal(texto);
   if (q.length < 2) return [];
+  const qc = nombreCompacto(texto);
   const resultados: { l: Lugar; p: number }[] = [];
   const puntaje = (nombre: string, extra = "") => {
     const n = normal(nombre);
@@ -119,6 +148,12 @@ export function buscarLugares(texto: string, max = 8): Lugar[] {
     if (completo.startsWith(q)) return 70;
     if (n.split(" ").some((w) => w.startsWith(q))) return 60;
     if (completo.includes(q)) return 40;
+    if (qc.length >= 5) {
+      const nc = nombreCompacto(nombre);
+      if (nc === qc) return 90;
+      if (qc.length >= 6 && nc.startsWith(qc)) return 50;
+      if (pareceNombre(texto, nombre)) return 35;
+    }
     return 0;
   };
   for (const [n, lon, lat, o, s, e, nn] of datos.lugares.departamentos) {

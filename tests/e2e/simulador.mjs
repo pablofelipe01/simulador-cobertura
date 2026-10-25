@@ -834,7 +834,22 @@ await flujo(
     await decir("borra todas las personas");
     await chat.getByText(/^Borré 1 nodo \(todas las personas\): Persona 1/).waitFor({ timeout: 30000 });
     await decir("hazme el café por favor");
+    await chat.getByText(/fui diseñado y creado para cumplir órdenes y procesos dentro de este simulador/).waitFor({ timeout: 10000 });
+    await decir("agrega un dron a la malla");
     await chat.getByText(/no logré convertirlo en una orden/).waitFor({ timeout: 10000 });
+    // Una red sostenible y viable en un municipio, con su costo (los precios de Trama)
+    await decir("hazme una red sostenible económica y técnicamente viable en Barranca de Upía de 3.000 hectáreas");
+    await chat.getByText(/^Diseño la malla para 3\.000 ha \(30 km²\) en Barranca de Upía/).waitFor({ timeout: 20000 });
+    await chat.getByText(/Viabilidad de la red:/).waitFor({ timeout: 240000 });
+    const sostenible = await chat.locator("[data-mensaje]").last().innerText();
+    // La red que ya había (11.226 ha en otro sitio) no entra: la de Barranca de Upía lleva su propio gateway
+    afirmar(
+      /^Listo: la malla cubre el [\d,]+ % de las 3\.000 ha/.test(sostenible) && /Puse el gateway «[^»]+» en [\d.,-]+, [\d.,-]+, en Barranca de Upía/.test(sostenible) && /Técnica: /.test(sostenible) && /Inversión: unos \$[^:]*: el sitio del gateway /.test(sostenible) && /energía solar/.test(sostenible),
+      `Red sostenible: ${sostenible.slice(0, 400)}`,
+    );
+    await decir("¿cuánto cuesta la red?");
+    await chat.getByText(/^La red del mapa \(/).waitFor({ timeout: 10000 });
+    await foto("sostenible");
     await foto("chat");
   },
   { sembrar: true },
@@ -1282,6 +1297,9 @@ await flujo(
     await esperarEstado(/^(atento|esperando)$/);
     await callado();
 
+    // Mientras espera su nombre la barra se achica sola: se agranda con su botón
+    const agrandar = hud.getByRole("button", { name: "Agrandar la barra del asistente" });
+    if (await agrandar.count()) await agrandar.click();
     // La sugerencia de la barra muestra el panel de resultados y lo confirma
     await hud.getByRole("button", { name: "Mostrar resultados" }).click();
     await resultados.waitFor({ state: "visible", timeout: 10000 });
@@ -1308,14 +1326,21 @@ await flujo(
     await resultados.waitFor({ state: "hidden", timeout: 15000 });
     await callado();
 
-    // «Deja de escuchar»: se despide, se apaga y devuelve los paneles que estaban abiertos
+    // «Deja de escuchar»: se despide, queda en reposo (atento solo a su nombre) y devuelve los paneles que estaban abiertos
     await decir("Melki, deja de escuchar");
     await hud.waitFor({ state: "detached", timeout: 15000 });
-    afirmar(/Con su permiso, señor, dejo de escuchar/.test(await dicho()), "Debería despedirse");
+    afirmar(/Con su permiso, señor\. Quedo en reposo/.test(await dicho()), "Debería despedirse y quedar en reposo");
     afirmar((await page.getByRole("button", { name: "Activar el Asistente Melki" }).first().getAttribute("aria-pressed")) === "false", "El botón de la barra debería quedar apagado");
-    afirmar(!(await page.evaluate(() => window.__voz.activo)), "El micrófono debería quedar apagado");
+    afirmar(await page.evaluate(() => Boolean(window.__voz.activo)), "En reposo el micrófono sigue escuchando su nombre");
+    await page.locator("[data-tour=melki-reposo]").waitFor({ timeout: 5000 });
     await panel.waitFor({ state: "visible", timeout: 5000 });
     await resultados.waitFor({ state: "visible", timeout: 5000 });
+    // «Apaga el micrófono»: deja de escuchar del todo
+    await page.waitForTimeout(1200);
+    await decir("Melki, apaga el micrófono");
+    await page.waitForFunction(() => /Apago el micrófono/.test(window.__voz.dicho.join(" ")) && !window.__voz.activo, null, { timeout: 15000 });
+    await page.locator("[data-tour=melki-reposo]").waitFor({ state: "detached", timeout: 5000 });
+    await hud.waitFor({ state: "detached", timeout: 15000 });
   },
   { preparar: (page) => page.addInitScript(manosLibresDeMentira) },
 );
@@ -1341,6 +1366,81 @@ await flujo(
     await hud.waitFor({ state: "detached" });
   },
   { tamano: { width: 390, height: 844 }, preparar: (page) => page.addInitScript(manosLibresDeMentira) },
+);
+
+// Escucha en reposo, como Siri: con el micrófono ya permitido, Melki oye su nombre sin tocar el botón; la barra se mueve
+// y se achica; lo que se sale del simulador lo dice con respeto; «deja de escuchar» vuelve al reposo.
+await flujo(
+  "asistente-en-reposo",
+  async (page, foto) => {
+    await esperarSimulacion(page);
+    const hud = page.locator("[data-tour=hud-voz]");
+    const panel = page.locator("[data-tour=panel-izquierdo]");
+    const decir = async (texto) => afirmar(await page.evaluate((x) => window.__voz.decir(x), texto), `El micrófono no estaba escuchando al decir «${texto}»`);
+    const dicho = () => page.evaluate(() => window.__voz.dicho.join(" | "));
+    const callado = async () => {
+      await page.waitForFunction(() => !window.speechSynthesis.speaking, null, { timeout: 20000 });
+      await page.waitForTimeout(900);
+    };
+    // Al abrir queda en reposo: escucha, sin barra y con los paneles como estaban
+    await page.locator("[data-tour=melki-reposo]").waitFor({ timeout: 15000 });
+    afirmar(await page.evaluate(() => Boolean(window.__voz.activo)), "En reposo debería estar escuchando");
+    afirmar((await hud.count()) === 0 && (await panel.isVisible()), "En reposo no hay barra y los paneles siguen igual");
+    // Sin su nombre no pasa nada
+    await decir("pon un repetidor en el norte");
+    await page.waitForTimeout(1500);
+    afirmar((await hud.count()) === 0, "Sin su nombre no se activa");
+    // «Hey Melki, …»: se activa solo (sin tocar el botón) y hace el pedido
+    await decir("Hey Melki, llévame a Villavicencio");
+    await hud.waitFor({ timeout: 10000 });
+    await page.waitForFunction(() => /Villavicencio/.test(window.__voz.dicho.join(" ")), null, { timeout: 15000 });
+    afirmar((await page.getByRole("button", { name: "Apagar el Asistente Melki" }).first().getAttribute("aria-pressed")) === "true", "El botón de arriba debería quedar encendido");
+    await panel.waitFor({ state: "hidden", timeout: 5000 });
+    await callado();
+    await foto("despierto");
+    // La barra se arrastra a otra parte del mapa, se achica y se agranda
+    const antes = await hud.boundingBox();
+    await page.mouse.move(antes.x + 70, antes.y + 16);
+    await page.mouse.down();
+    await page.mouse.move(antes.x - 200, antes.y + 260, { steps: 8 });
+    await page.mouse.up();
+    const despues = await hud.boundingBox();
+    afirmar(Math.abs(despues.x - (antes.x - 270)) < 12 && Math.abs(despues.y - (antes.y + 244)) < 12, `La barra debería moverse (de ${Math.round(antes.x)},${Math.round(antes.y)} a ${Math.round(despues.x)},${Math.round(despues.y)})`);
+    afirmar(await page.evaluate(() => Boolean(JSON.parse(localStorage.getItem("simulador-cobertura-melki-hud") ?? "{}").pos)), "Debería recordar dónde quedó");
+    await hud.getByRole("button", { name: "Achicar la barra del asistente" }).click();
+    afirmar((await hud.getAttribute("data-forma")) === "pequena", "Debería quedar pequeña");
+    await foto("pequena");
+    await hud.getByRole("button", { name: "Agrandar la barra del asistente" }).click();
+    afirmar((await hud.getAttribute("data-forma")) === "completa", "Debería volver a su tamaño");
+    // Lo que se sale del simulador lo dice con respeto y retoma el trabajo
+    await decir("Melki, ¿quién ganó el partido de fútbol?");
+    await page.waitForFunction(() => /fui diseñado y creado para cumplir órdenes y procesos dentro de este simulador/.test(window.__voz.dicho.join(" ")), null, { timeout: 15000 });
+    await callado();
+    // «Deja de escuchar»: vuelve al reposo, devuelve los paneles y sigue atento a su nombre
+    await decir("Melki, deja de escuchar");
+    await hud.waitFor({ state: "detached", timeout: 15000 });
+    await panel.waitFor({ state: "visible", timeout: 5000 });
+    afirmar(/Quedo en reposo/.test(await dicho()) && (await page.evaluate(() => Boolean(window.__voz.activo))), "Debería quedar en reposo escuchando");
+    await page.waitForTimeout(1500);
+    // Solo su nombre: se activa y contesta como un mayordomo
+    await decir("Hola Melki");
+    await hud.waitFor({ timeout: 10000 });
+    await page.waitForFunction(() => /Hola, mi señor\. Le escucho; estoy atento y presto a seguir sus órdenes/.test(window.__voz.dicho.join(" ")), null, { timeout: 15000 });
+    await callado();
+    await foto("llamado");
+    await hud.getByRole("button", { name: "Apagar el Asistente Melki" }).first().click();
+    await hud.waitFor({ state: "detached", timeout: 10000 });
+    afirmar(await page.evaluate(() => Boolean(window.__voz.activo)), "La X lo deja en reposo");
+  },
+  {
+    preparar: async (page) => {
+      await page.addInitScript(manosLibresDeMentira);
+      await page.addInitScript(() => {
+        const consultar = navigator.permissions.query.bind(navigator.permissions);
+        navigator.permissions.query = (d) => (d.name === "microphone" ? Promise.resolve({ state: "granted" }) : consultar(d));
+      });
+    },
+  },
 );
 
 // «Activarme al abrir el simulador»: con el micrófono permitido se activa solo; el navegador no deja hablar hasta el
