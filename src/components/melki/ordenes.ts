@@ -13,14 +13,14 @@ import { INTENTOS, type ViajeMensaje } from "@/lib/radio/mensaje";
 import type { DestinoSiembra, Siembra } from "@/lib/radio/siembra";
 import type { Diseno } from "@/lib/radio/diseno";
 import { resumenCambios, textoCambio, type Ajuste, type PermisosAjuste, type SitioAjuste } from "@/lib/radio/ajuste";
-import { areaM2, cajaPoligono, conArea, coberturaEnArea, poligonoCirculo, poligonoRectangulo, porcentajeSobre, radioDeArea, sirveAlArea, type Poligono } from "@/lib/radio/area";
+import { areaM2, cajaPoligono, conArea, coberturaEnArea, poligonoCaja, poligonoCirculo, poligonoRectangulo, porcentajeSobre, radioDeArea, recortarPoligono, sirveAlArea, type Poligono, type Rumbo } from "@/lib/radio/area";
 import { aDecimal, aGMS, desplazar, distanciaM, formatoDistancia, leerCoordenada, puntoCardinal, rumbo, rumboTexto } from "@/lib/radio/geo";
 import type { ClimaItm } from "@/lib/radio/itm";
 import { anchosHaz, esDireccional, patronPorId } from "@/lib/radio/patron";
 import { CLIMAS, CONFIABILIDADES, RED_REFERENCIA, SUELOS, VARIABILIDADES } from "@/lib/radio/red";
 import type { Antena, AreaObjetivo, EntornoId, Escenario, Medicion, ObjetivoArea, Parametros, PatronId, ResultadoSimulacion, Rol, SueloId, TipoNodo, VariabilidadId } from "@/lib/radio/tipos";
 import { textoNivel, uvADbm, type UnidadId } from "@/lib/radio/unidades";
-import { pareceNombre, type Lugar } from "@/lib/geo/referencia";
+import { decidirLugar, nombreLugar, pareceNombre, type CandidatoLugar, type Lugar } from "@/lib/geo/referencia";
 
 import type { CurvaCargaResultado, ResultadoCarga } from "@/lib/radio/carga";
 import type { ResultadoEstres, LimitePunto } from "@/lib/radio/estres";
@@ -67,14 +67,26 @@ export type CentroArea = { tipo: "coord"; coord: Coordenada; nombre?: string } |
 export type AreaPedida =
   | { forma: "circulo" | "cuadrado" | "rectangulo"; areaM2: number; anchoM?: number; altoM?: number; centro: CentroArea }
   | { forma: "medicion"; id: string }
-  /** Un polígono ya conocido (para rehacer o ampliar un diseño); `dibujar` lo vuelve a poner como medición. */
-  | { forma: "poligono"; puntos: Poligono; nombre: string; dibujar: boolean };
+  /**
+   * Un polígono ya conocido (para rehacer o ampliar un diseño, o todo un municipio); `dibujar` lo vuelve a poner como
+   * medición, con `etiqueta` en su nombre («Área objetivo · Barranca de Upía (Meta)»).
+   */
+  | { forma: "poligono"; puntos: Poligono; nombre: string; dibujar: boolean; etiqueta?: string };
 
 export type Coordenada = { lat: number; lon: number; corregido?: boolean };
 
 type DatosNodo = Partial<Pick<Antena, "nombre" | "alturaM" | "gananciaDbi" | "potenciaDbm" | "pasarela" | "tipo" | "patron" | "azimutDeg" | "elevacionDeg" | "equipo">>;
 
-export type Orden =
+/** Lo que se pregunta al dudar de un lugar: cada opción es la orden completa con ese lugar. */
+export type OpcionLugar = { texto: string; orden: Orden; lugar?: Lugar };
+
+/**
+ * Lo que se sabe además de la orden: `nota`, lo que entendió de un lugar mal dicho («Entendí «Barranca de Upía
+ * (Meta)».»), y `lugarUsado`, el lugar de la orden (para «ahí», «ese municipio» en la siguiente).
+ */
+export type Orden = OrdenSola & { nota?: string; lugarUsado?: Lugar };
+
+type OrdenSola =
   | { tipo: "agregar"; coord?: Coordenada; datos: DatosNodo }
   | { tipo: "mover"; id: string; coord?: Coordenada }
   | { tipo: "eliminar"; id: string }
@@ -120,12 +132,20 @@ export type Orden =
       /** Escenario al que se vuelve antes de diseñar de nuevo (rehacer con otras torres o meta). */
       reemplazar?: Escenario;
       /** Después del diseño: zonas de popularidad en cada nodo y, si se pidió, la prueba de estrés. */
-      despues?: { zonas: PedidoZonas; estres: Partial<OpcionesEstres> | null };
+      despues?: DespuesDiseno;
       /** «Una red sostenible y viable»: el diseño cuenta además su viabilidad técnica y su costo con los precios de Trama. */
       sostenible?: boolean;
     }
   /** Falta dónde o de qué tamaño hacer la red («hazme una red sostenible»): lo pregunta y queda esperando la respuesta. */
-  | { tipo: "pedir-diseno"; lugar?: LugarPedido; sostenible: boolean }
+  | { tipo: "pedir-diseno"; lugar?: LugarPedido; sostenible: boolean; despues?: DespuesDiseno }
+  /** «¿Se refiere a Barranca de Upía (Meta)?»: el lugar dicho puede ser varios; cada opción es la orden con ese lugar. */
+  | { tipo: "elegir"; pregunta: string; opciones: OpcionLugar[]; dicho: string; original: string }
+  /** No reconoció el lugar: lo pide de nuevo («¿me repite el municipio y el departamento?»). */
+  | { tipo: "pedir-lugar"; dicho: string; original: string; sugerencias: Lugar[]; rechazo?: boolean }
+  /** Una respuesta sin cambios en el mapa (un área muy grande, un lugar sin contorno…). */
+  | { tipo: "aviso"; texto: string; acciones?: AccionRespuesta[] }
+  /** La red de todo el municipio que se está viendo (el botón de «¿dónde estamos?»). */
+  | { tipo: "red-municipio"; sostenible: boolean }
   /** «¿Cuánto cuesta la red?»: la inversión y la operación de la red del mapa con los precios de Trama. */
   | { tipo: "costo-red" }
   | { tipo: "eliminar-varios"; ids: string[]; descripcion: string }
@@ -162,14 +182,21 @@ export type OpcionAjusteId = "economica" | "recomendada" | "maxima";
 export type Referencia = { tipo: "nodo"; id: string } | { tipo: "coord"; coord: Coordenada };
 
 /** Un lugar ya ubicado (municipio o coordenada) para centrar el diseño. */
-export type LugarPedido = { lat: number; lon: number; nombre: string };
+export type LugarPedido = { lat: number; lon: number; nombre: string; lugar?: Lugar };
+
+/** Lo que se hace después de diseñar: zonas de popularidad en cada nodo y, si se pidió, la prueba de estrés. */
+export type DespuesDiseno = { zonas: PedidoZonas; estres: Partial<OpcionesEstres> | null };
 
 export type Pendiente =
   | { tipo: "agregar"; datos: DatosNodo }
   | { tipo: "mover"; id: string }
   | { tipo: "pieza"; pieza: Pieza; datos: DatosNodo }
   /** Una red por diseñar a la que le falta el lugar o el tamaño. */
-  | { tipo: "disenar"; lugar?: LugarPedido; sostenible: boolean }
+  | { tipo: "disenar"; lugar?: LugarPedido; sostenible: boolean; despues?: DespuesDiseno }
+  /** Melki preguntó «¿se refiere a…?»: «sí», «la segunda» o el nombre eligen. */
+  | { tipo: "elegir"; opciones: OpcionLugar[]; dicho: string; original: string }
+  /** Melki pidió el lugar de nuevo: la respuesta es el lugar que faltaba en la orden original. */
+  | { tipo: "lugar"; dicho: string; original: string }
   | null;
 
 export type Api = {
@@ -185,7 +212,8 @@ export type Api = {
   simular(): void;
   centrar(lat: number, lon: number, zoom?: number): void;
   encuadrarCaja(caja: [number, number, number, number]): void;
-  marcar(lat: number, lon: number, titulo: string): void;
+  /** Marca un punto en el mapa; con `tarjeta` = false, sin la tarjeta de acciones (solo el marcador con su nombre). */
+  marcar(lat: number, lon: number, titulo: string, tarjeta?: boolean): void;
   /** Dibuja una medición; con `seleccionar` = false no abre el panel de la regla (el área de un diseño). */
   medir(m: Medicion, seleccionar?: boolean): void;
   perfil(a: Antena, b: Antena | { lat: number; lon: number }, informe?: boolean): void;
@@ -198,6 +226,12 @@ export type Api = {
   borrarMediciones(): void;
   ubicacion(lat: number, lon: number): string | null;
   buscarLugar(texto: string): Lugar[];
+  /** Lugares que pueden ser lo dicho (compara cómo suena, con el departamento dicho), del más probable al menos. */
+  reconocerLugar?(texto: string): CandidatoLugar[];
+  /** Contorno de un municipio o departamento ([lon, lat]), para cubrirlo entero. */
+  contornoLugar?(l: Lugar): Poligono | null;
+  /** Lo que se ve del mapa: [oeste, sur, este, norte]. */
+  cajaMapa?(): [number, number, number, number] | null;
   /* Modo «Sembrar la malla» */
   modo(): ModoApp;
   cambiarModo(m: ModoApp): void;
@@ -596,31 +630,132 @@ export function textoArea(m2: number): string {
   const ha = m2 / 1e4;
   const haTxt = ha >= 100 ? Math.round(ha).toLocaleString("es-CO") : f1(ha, ha < 10 ? 1 : 0);
   const km2 = m2 / 1e6;
-  return m2 >= 1e6 ? `${haTxt} ha (${f1(km2, km2 >= 100 ? 1 : 2).replace(/,0+$/, "")} km²)` : `${haTxt} ha`;
+  const kmTxt = km2 >= 1000 ? Math.round(km2).toLocaleString("es-CO") : f1(km2, km2 >= 100 ? 1 : 2).replace(/,0+$/, "");
+  return m2 >= 1e6 ? `${haTxt} ha (${kmTxt} km²)` : `${haTxt} ha`;
 }
 
-/** Lugar de Colombia nombrado en el texto («en Cumaral», «cerca de Puerto López», «en el Meta»). */
+/* ───────────── Lugares dichos (aunque el dictado los escriba mal) ───────────── */
+
+/** Un lugar dicho que puede ser varios («barranco vía» → ¿Barranca de Upía, Barranquilla o Barranco Mina?). */
+type DudaLugar = { dicho: string; opciones: CandidatoLugar[] };
+
+/**
+ * Lo que se vio de los lugares mientras se interpreta una orden: las dudas (para preguntar «¿se refiere a…?»), los
+ * lugares usados (para recordarlos en la conversación), los corregidos (para decir qué entendió) y el lugar elegido
+ * para lo dicho cuando ya se resolvió la duda.
+ */
+let sesionLugares: { dudas: DudaLugar[]; intentos: DudaLugar[]; usados: Lugar[]; corregidos: { dicho: string; lugar: Lugar }[]; forzar?: { dicho: string; lugar: Lugar } } | null = null;
+
+function usarLugar(l: Lugar, c?: CandidatoLugar, dicho?: string) {
+  if (!sesionLugares) return;
+  sesionLugares.usados.push(l);
+  if (c && !c.exacto && dicho) sesionLugares.corregidos.push({ dicho, lugar: l });
+}
+
+function registrarDuda(d: DudaLugar) {
+  if (sesionLugares && !sesionLugares.dudas.some((x) => x.dicho === d.dicho)) sesionLugares.dudas.push(d);
+}
+
+const escRe = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Los lugares que pueden ser lo dicho: por cómo suena (si el simulador lo ofrece) o con el buscador. */
+function candidatosLugar(frase: string, api: Api): CandidatoLugar[] {
+  if (api.reconocerLugar) return api.reconocerLugar(frase);
+  const tn = n(frase);
+  return api
+    .buscarLugar(frase)
+    .slice(0, 6)
+    .flatMap((l): CandidatoLugar[] => {
+      const nombre = n(l.nombre);
+      if (nombre.length >= 4 && new RegExp(`(^|[^a-z])${escRe(nombre)}($|[^a-z])`).test(tn)) return [{ lugar: l, parecido: 1, puntaje: 1.08, exacto: true, departamentoDicho: null }];
+      // Pegado o con una letra distinta («barrancaupía», «barranca de opia»): se acepta como antes, sin preguntar
+      if (pareceNombre(frase, l.nombre)) return [{ lugar: l, parecido: 0.96, puntaje: 0.96, exacto: false, departamentoDicho: null }];
+      return [];
+    });
+}
+
+/** Palabras que siguen a «en», «de»… y no son un lugar («en la loma», «de señal media», «en todo el municipio»). */
+const NO_ES_LUGAR =
+  /^(un|una|unos|unas|mi|su|sus|este|esta|estos|estas|ese|esa|esos|esas|aquel|aquella|area|zona|zonas|mapa|campo|loma|lomas|casa|finca|punto|puntos|centro|red|malla|torre|torres|altura|metros|km|rango|radio|total|todo|toda|todos|todas|forma|manera|marco|base|cada|que|senal|cobertura|calidad|buena|buenas|media|medias|estable|estables|baja|bajas|hectareas?|ha|personas?|gente|repetidor\w*|gateway|nodos?|antenas?|popularidad|hora|dia|pagos?|mensajes?|parte|mitad|sector|lado|costado|region|norte(?! de santander)|sur|oeste|oriente|occidente|nororiente|noroccidente|suroriente|suroccidente|pantalla|vista|ahi|alli|alla|nuevo|nueva|cuenta|serio|general|promedio|verdad|realidad|lugar|sitio|municipio|pueblo|departamento|ciudad|vereda|tal|tales|sabana|sabanas|llano|llanos|monte|montes|montana|montanas|selva|rio|rios|quebrada|quebradas|veredas?|fincas?|hacienda|haciendas|potreros?|cerros?|valles?|caserios?|parques?|carretera|via|vias|rural|rurales|urbana|urbano|casco|plaza|colegio|escuela|hospital|cuenta|serio|general|promedio|vivo|directo|linea|favor|economia|economica|economico|costos?|precios?|dinero|plata|inversion|presupuesto|energia|solar|internet|starlink|capacidad|estres|carga|trafico|whatsapp|usuarios?|billeteras?|quiebre|quebrarse|maximo|minimo|limite|aguante|ver|saber|probar|mirar|medir|calcular|hacer|tener|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|quince|veinte|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa|cien|ciento|cientos|mil|millon|millones|por ciento|porciento|nada|algo|ella|el|ellos|siguiente|siguientes|anterior|misma|mismo|otra|otro|nueva|nuevo|manera|modo|momento|tiempo|caso|vez|veces)\b/;
+
 /**
  * Un municipio, departamento o país nombrado después de «en», «cerca de», «del municipio de»…: prueba las palabras que
- * siguen, de la frase más larga a la más corta («en Barranca de Upía en un rango de…» → «Barranca de Upía»), y acepta el
- * nombre pegado o con una o dos letras distintas, como a veces lo escribe el dictado («barrancaupía»).
+ * siguen, de la frase más larga a la más corta («en Barranca de Upía en un rango de…» → «Barranca de Upía»), y se queda
+ * con el lugar que mejor suena como lo dicho, aunque el dictado lo haya escrito mal («barranco vía meta» → Barranca de
+ * Upía, Meta). Si puede ser varios, deja la duda para preguntar «¿se refiere a…?» (con `estricto`, solo si se parecen
+ * bastante: en una frase larga cualquier palabra podría parecerse a algún municipio).
  */
-function lugarEnTexto(tn: string, api: Api): Lugar | null {
+function lugarEnTexto(tn: string, api: Api, estricto = true): Lugar | null {
   const re = /\b(?:en|alrededor de|cerca de|junto a|sobre|por|del municipio de|municipio de|de|para)\s+(?:el municipio de |el pueblo de |la ciudad de |el departamento del? |el )?([a-z][a-z ]{2,60})/g;
-  const vacio = /^(la|las|los|un|una|mi|su|este|esta|ese|esa|area|zona|mapa|campo|loma|lomas|casa|finca|punto|centro|red|malla|torre|altura|metros|km|rango|radio|total|todo|toda|forma|manera|marco|base|cada|que)\b/;
+  let duda: DudaLugar | null = null;
+  let intento: DudaLugar | null = null;
   for (const m of tn.matchAll(re)) {
-    const palabras = m[1].split(/\s+\d/)[0].trim().split(/\s+/).slice(0, 5);
+    const palabras = m[1].split(/\s+\d/)[0].trim().split(/\s+/).slice(0, 6);
+    let mejor: { c: CandidatoLugar; frase: string } | null = null;
+    let primera: DudaLugar | null = null;
     for (let k = palabras.length; k >= 1; k--) {
       const frase = palabras.slice(0, k).join(" ");
-      if (frase.length < 3 || vacio.test(frase) || /\b(que|con|para|hacia|cubr\w*)$/.test(frase)) continue;
-      for (const l of api.buscarLugar(frase).slice(0, 6)) {
-        const nombre = n(l.nombre);
-        const exacto = nombre.length >= 4 && new RegExp(`(^|[^a-z])${nombre.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^a-z])`).test(tn);
-        if (exacto || pareceNombre(frase, l.nombre)) return l;
+      // «La Macarena» sí; «la loma», «la zona» no
+      const sinArticulo = frase.replace(/^(la|las|los|el)\s+/, "");
+      if (sinArticulo.length < 3 || /^(la|las|los|el)$/.test(sinArticulo) || NO_ES_LUGAR.test(sinArticulo) || /\b(que|con|para|hacia|cubr\w*|y|o|de|del|en|el|la|los|las|a|al)$/.test(frase)) continue;
+      const forzado = sesionLugares?.forzar;
+      if (forzado && forzado.dicho === frase) {
+        usarLugar(forzado.lugar);
+        return forzado.lugar;
       }
+      const d = decidirLugar(candidatosLugar(frase, api));
+      // La frase más larga que parecía un nombre (por si no se reconoce ninguna: «en xyz» → «no reconocí xyz»)
+      if (!primera && nombreCompacto(sinArticulo).length >= 6 && !frase.split(" ").some((w) => NO_ES_LUGAR.test(w))) primera = { dicho: frase, opciones: d.opciones.filter((c) => c.puntaje >= 0.66) };
+      if (d.tipo === "seguro") {
+        if (!mejor || d.candidato.puntaje > mejor.c.puntaje + 1e-9) mejor = { c: d.candidato, frase };
+      } else if (d.tipo === "dudoso" && !duda && d.opciones[0] && (d.opciones[0].puntaje >= (estricto ? 0.78 : 0.7) || d.opciones[0].exacto)) duda = { dicho: frase, opciones: d.opciones };
     }
+    if (mejor) {
+      usarLugar(mejor.c.lugar, mejor.c, mejor.frase);
+      return mejor.c.lugar;
+    }
+    intento ??= primera;
   }
+  if (duda) {
+    registrarDuda(duda);
+    return duda.opciones[0].lugar;
+  }
+  if (intento && sesionLugares && !sesionLugares.intentos.some((x) => x.dicho === intento.dicho)) sesionLugares.intentos.push(intento);
   return null;
+}
+
+/** «Barranca de Upía» → «barrancaupia» (como lo compara el reconocimiento de lugares). */
+const nombreCompacto = (t: string) => n(t).replace(/[^a-z ]/g, " ").replace(/\b(de|del|la|las|los|el|y)\b/g, " ").replace(/\s+/g, "");
+
+/** «Ubícame en barranca de upa meta»: el lugar de lo que sigue al verbo (o null, con las pistas para preguntar). */
+function lugarDeConsulta(consulta: string, api: Api): { lugar: Lugar | null; sugerencias: Lugar[] } {
+  const forzado = sesionLugares?.forzar;
+  if (forzado && forzado.dicho === consulta) {
+    usarLugar(forzado.lugar);
+    return { lugar: forzado.lugar, sugerencias: [] };
+  }
+  // Primero lo dicho completo; si no, sus partes («barranca de upía meta rápido» → «barranca de upía meta»)
+  const d = decidirLugar(candidatosLugar(consulta, api));
+  if (d.tipo === "seguro") {
+    usarLugar(d.candidato.lugar, d.candidato, consulta);
+    return { lugar: d.candidato.lugar, sugerencias: [] };
+  }
+  const parte = lugarEnTexto(`en ${consulta}`, api, false);
+  if (parte) return { lugar: parte, sugerencias: [] };
+  if (d.tipo === "dudoso") {
+    registrarDuda({ dicho: consulta, opciones: d.opciones });
+    return { lugar: d.opciones[0].lugar, sugerencias: [] };
+  }
+  return { lugar: null, sugerencias: d.opciones.map((c) => c.lugar) };
+}
+
+/** «¿Se refiere a…?» con las opciones (nombres repetidos: «Hay tres municipios llamados Granada. ¿Cuál…?»). */
+function preguntaLugar(opciones: OpcionLugar[], dicho: string): string {
+  const lista = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(", ")} o ${xs[xs.length - 1]}` : (xs[0] ?? ""));
+  const lugares = opciones.flatMap((o) => (o.lugar ? [o.lugar] : []));
+  const mismos = lugares.length > 1 && new Set(lugares.map((l) => n(l.nombre))).size === 1;
+  if (mismos) return `Hay ${lugares.length === 2 ? "dos lugares" : `${lugares.length} lugares`} llamados ${lugares[0].nombre}. ¿Cuál: ${lista(lugares.map(nombreLugar))}?`;
+  return `No estoy seguro de haber entendido «${dicho}». ¿Se refiere a ${lista(lugares.map(nombreLugar))}?`;
 }
 
 const RUMBOS = "norte|sur|este|oeste|oriente|occidente|noreste|noroeste|sureste|suroeste|nororiente|noroccidente|suroriente|suroccidente|sudeste|sudoeste";
@@ -683,14 +818,130 @@ function piezaGenerica(frase: string, antenas: Antena[], ultimo?: Antena): Anten
 }
 
 /** Coordenada del pedido: relativa («a 10 km al norte del gateway»), escrita, o el centro de un lugar nombrado. */
-function ubicacionEnTexto(texto: string, tn: string, api: Api, antenas: Antena[], conLugar: boolean): (Coordenada & { desde?: string }) | null {
+function ubicacionEnTexto(texto: string, tn: string, api: Api, antenas: Antena[], conLugar: boolean): (Coordenada & { desde?: string; lugar?: Lugar }) | null {
   const rel = relativaEnTexto(texto, tn, api, antenas);
   if (rel) return rel;
   const c = extraerCoordenadas(texto);
   if (c) return c;
   if (!conLugar) return null;
   const l = lugarEnTexto(tn, api);
-  return l ? { lat: l.lat, lon: l.lon, desde: `en ${l.nombre}${l.tipo === "municipio" ? ` (${l.detalle})` : ""}` } : null;
+  return l ? { lat: l.lat, lon: l.lon, desde: `en ${l.nombre}${l.tipo === "municipio" ? ` (${l.detalle})` : ""}`, lugar: l } : null;
+}
+
+/* ───────────── Zonas para el diseño: un municipio entero, una parte, lo que se ve ───────────── */
+
+/** «Todo el municipio», «el municipio completo», «cubre el municipio de…» (sin un tamaño). */
+const MUNICIPIO_ENTERO =
+  /\b(?:tod[oa]s?\s+(?:el\s+|la\s+)?(?:municipio|territorio|jurisdiccion|area\s+(?:del|de este|de ese)\s+municipio|pueblo)|(?:municipio|territorio)\s+(?:complet[oa]|enter[oa])|(?:cubr\w*|abarc\w*|cobertura\s+(?:a|en|para|de)|de\s+cobertura\s+a)\s+(?:a\s+)?(?:todo\s+)?el\s+municipio)\b/;
+const DEPARTAMENTO_ENTERO = /\b(?:tod[oa]\s+el\s+departamento|el\s+departamento\s+(?:complet[oa]|enter[oa])|(?:cubr\w*|abarc\w*)\s+(?:todo\s+)?el\s+departamento)\b/;
+/** «Cubre todo Barranca de Upía», «dale cobertura a todo Cumaral». */
+const TODO_LUGAR = /\b(?:cubr\w*|abarc\w*|cobertura\s+(?:a|en|para|de)|a)\s+tod[oa]\s+(?!el\b|la\b|lo\b|los\b|las\b|esto\b|eso\b|esta\b|esa\b|este\b|ese\b|mi\b|su\b)([a-z][a-z ]{2,60})/;
+/** «La zona norte», «la mitad sur», «el oriente del municipio». */
+const ZONA_RUMBO =
+  /\b(?:zona|parte|mitad|sector|lado|costado|region|area)\s+(norte|sur|oriental|occidental|este|oeste|oriente|occidente|nororiental|noroccidental|suroriental|suroccidental|noreste|noroeste|sureste|suroeste|nororiente|noroccidente|suroriente|suroccidente)\b|\b(?:al|el|en el)\s+(norte|sur|oriente|occidente|este|oeste|noreste|noroeste|sureste|suroeste|nororiente|noroccidente|suroriente|suroccidente)\s+(?:del?|de la)\s+(?:municipio|sector|pueblo|territorio)\b/;
+/** «Lo que estoy viendo», «la zona que se ve», «toda la pantalla». */
+const VISTA_MAPA =
+  /\b(?:lo que (?:estoy viendo|veo|se ve|muestra el mapa|tengo en (?:la )?pantalla)|(?:la |esta |esa |toda la )?(?:zona|area|parte|region) que (?:estoy viendo|veo|se ve|tengo en (?:la )?pantalla)|toda la pantalla|la vista actual|(?:el|este) mapa que (?:estoy viendo|veo))\b/;
+/** «Ese sector», «ese municipio», «ahí»: el último lugar del que se habló. */
+const ESE_LUGAR = /\b(?:ese|este|aquel|el mismo) (?:sector|lugar|sitio|municipio|pueblo|territorio)\b|\b(?:esa|esta|aquella|la misma) (?:zona|region)\b|\b(?:ahi|alli|alla)\b/;
+
+const RUMBO_DE: Record<string, Rumbo> = {
+  norte: "norte",
+  sur: "sur",
+  oriental: "este",
+  este: "este",
+  oriente: "este",
+  occidental: "oeste",
+  oeste: "oeste",
+  occidente: "oeste",
+  nororiental: "noreste",
+  noreste: "noreste",
+  nororiente: "noreste",
+  noroccidental: "noroeste",
+  noroeste: "noroeste",
+  noroccidente: "noroeste",
+  suroriental: "sureste",
+  sureste: "sureste",
+  suroriente: "sureste",
+  suroccidental: "suroeste",
+  suroeste: "suroeste",
+  suroccidente: "suroeste",
+};
+const ADJETIVO_RUMBO: Record<Rumbo, string> = { norte: "norte", sur: "sur", este: "oriental", oeste: "occidental", noreste: "nororiental", noroeste: "noroccidental", sureste: "suroriental", suroeste: "suroccidental" };
+
+type ZonaDiseno = { puntos: Poligono; nombre: string; etiqueta: string; lugar?: Lugar } | { aviso: string };
+
+/** El municipio que se está viendo en el mapa (por el nombre que da el mapa en su centro). */
+function lugarDeLaVista(api: Api): Lugar | null {
+  const c = api.centroMapa();
+  const u = c ? api.ubicacion(c.lat, c.lon) : null;
+  if (!u) return null;
+  const d = decidirLugar(candidatosLugar(u.replace(/[()]/g, " "), api));
+  return d.tipo === "seguro" ? d.candidato.lugar : null;
+}
+
+/**
+ * El área del diseño cuando no se dio un tamaño: todo un municipio (o un departamento), su zona norte, sur, oriental u
+ * occidental, lo que se ve en el mapa o «ese sector» (el último lugar del que se habló). El lugar se toma de lo dicho,
+ * de la conversación o del mapa.
+ */
+function zonaDeDiseno(tn: string, api: Api, contexto: ContextoOrden): ZonaDiseno | null {
+  const rumboTxt = tn.match(ZONA_RUMBO);
+  const rumbo = rumboTxt ? RUMBO_DE[rumboTxt[1] ?? rumboTxt[2]] : undefined;
+  const departamento = DEPARTAMENTO_ENTERO.test(tn);
+  const todoLugar = tn.match(TODO_LUGAR);
+  const entero = MUNICIPIO_ENTERO.test(tn) || departamento || Boolean(todoLugar);
+  const ese = ESE_LUGAR.test(tn);
+  if (VISTA_MAPA.test(tn)) {
+    const caja = api.cajaMapa?.();
+    if (!caja) return null;
+    const puntos = poligonoCaja(caja);
+    return { puntos, nombre: "en la zona que está viendo en el mapa", etiqueta: "Lo que se ve del mapa" };
+  }
+  if (!rumbo && !entero && !(ese && contexto.ultimoLugar)) return null;
+  let lugar = (todoLugar ? lugarEnTexto(`en ${todoLugar[1]}`, api) : null) ?? lugarEnTexto(tn, api);
+  if (!lugar && contexto.ultimoLugar) {
+    lugar = contexto.ultimoLugar;
+    usarLugar(lugar);
+  }
+  lugar ??= lugarDeLaVista(api);
+  if (!lugar) return { aviso: "¿Qué municipio cubro? Dígame el nombre y el departamento, por ejemplo «todo el municipio de Barranca de Upía, Meta»." };
+  if (departamento && lugar.tipo === "municipio") {
+    const d = candidatosLugar(lugar.detalle, api).find((c) => c.lugar.tipo === "departamento" && c.exacto);
+    if (d) lugar = d.lugar;
+  }
+  if (lugar.tipo === "pais") return { aviso: "Un país entero es demasiado para diseñarlo de una vez. Dígame un municipio, por ejemplo «todo el municipio de Barranca de Upía, Meta»." };
+  const contorno = api.contornoLugar?.(lugar);
+  if (!contorno) return { aviso: `No tengo el contorno de ${nombreLugar(lugar)} para cubrirlo entero. Dígame un tamaño, por ejemplo «11.226 hectáreas en ${lugar.nombre}».` };
+  const puntos = rumbo ? recortarPoligono(contorno, rumbo) : contorno;
+  const area = areaM2(puntos);
+  const quien = lugar.tipo === "municipio" ? `el municipio de ${lugar.nombre} (${lugar.detalle})` : nombreLugar(lugar);
+  const deQuien = quien.replace(/^el /, "del ");
+  if (area > 3e9)
+    return { aviso: `${quien.charAt(0).toUpperCase()}${quien.slice(1)}${rumbo ? `, en su zona ${ADJETIVO_RUMBO[rumbo]},` : ""} mide ${textoArea(area)}: es demasiado para diseñarlo de una vez (el tope es 300.000 ha). Pídamelo por partes: un municipio o una zona («la zona norte del municipio de …»).` };
+  return {
+    puntos,
+    nombre: rumbo ? `en la zona ${ADJETIVO_RUMBO[rumbo]} ${deQuien.startsWith("del ") ? deQuien : `de ${deQuien}`}` : `en todo ${quien}`,
+    etiqueta: `${lugar.nombre}${lugar.tipo === "municipio" ? ` (${lugar.detalle})` : ""}${rumbo ? ` · zona ${ADJETIVO_RUMBO[rumbo]}` : ""}`,
+    lugar,
+  };
+}
+
+/** El diseño de todo un municipio (o su zona), sostenible: señal media o mejor en el 95 % (lo que ofrecen los botones). */
+function disenoDeZona(z: Extract<ZonaDiseno, { puntos: Poligono }>, sostenible = true): Orden {
+  return {
+    tipo: "disenar",
+    area: { forma: "poligono", puntos: z.puntos, nombre: z.nombre, dibujar: true, etiqueta: z.etiqueta },
+    margenDb: 30,
+    clases: "señal media o mejor (buena, estable o media; ≥ 30 dB)",
+    porcentaje: 95,
+    respaldo: false,
+    alturaM: ALTURA_REPETIDOR_DEFECTO,
+    gateway: null,
+    maxRepetidores: 60,
+    ...(sostenible ? { sostenible: true } : {}),
+    ...(z.lugar ? { lugarUsado: z.lugar } : {}),
+  };
 }
 
 /* ───────────── Diseño de la malla por área ───────────── */
@@ -713,7 +964,9 @@ function margenPedido(tn: string): { margenDb: number; clases: string } {
     const v = Math.min(60, Math.max(10, Number(db[1])));
     return { margenDb: v, clases: `margen de al menos ${v} dB` };
   }
-  const halladas = UMBRALES_SENAL.filter(([re]) => re.test(zona)).map(([, v]) => v);
+  // También lo dicho justo después de «red» o «malla»: «una red media estable», «una malla estable»
+  const pegado = tn.match(/\b(?:red|redes|malla|mallas)\s+((?:(?:de\s+)?(?:senal\s+)?(?:buenas?|estables?|medias?|bajas?|confiables?)\s*(?:y|o|,)?\s*){1,3})/)?.[1] ?? "";
+  const halladas = UMBRALES_SENAL.filter(([re]) => re.test(zona) || re.test(pegado)).map(([, v]) => v);
   const m = halladas.length ? Math.min(...halladas) : 30;
   const clases = m >= 45 ? "señal buena (≥ 45 dB)" : m >= 37 ? "señal estable o mejor (≥ 37 dB)" : m >= 30 ? "señal media o mejor (buena, estable o media; ≥ 30 dB)" : "servicio (≥ 20 dB)";
   return { margenDb: m, clases };
@@ -791,7 +1044,7 @@ function interpretarAreaObjetivo(texto: string, tn: string, api: Api): Orden | n
 /** «Vuélveme a hacerlo», «rehazlo», «hazlo de nuevo», «otra vez»: repetir el diseño (con otra meta o área). */
 const REHACER = /\b(vuelve\w* a hacer\w*|volver a hacer\w*|rehac\w*|rehaz\w*|haz\w* de nuevo|hacerlo de nuevo|de nuevo el diseno|otra vez el diseno)\b/;
 
-function interpretarDiseno(texto: string, tn: string, api: Api, antenas: Antena[]): Orden | null {
+function interpretarDiseno(texto: string, tn: string, api: Api, antenas: Antena[], contexto: ContextoOrden = {}): Orden | null {
   const rehacer = REHACER.test(tn);
   if (!rehacer && !/\b(cubr\w*|cobertura|abarc\w*|red|malla|repetidor\w*|senal|disen\w*|arm\w*|planific\w*|cuant\w* (repetidores|nodos|antenas))\b/.test(tn)) return null;
   const bajo = sinTildes(texto);
@@ -801,7 +1054,10 @@ function interpretarDiseno(texto: string, tn: string, api: Api, antenas: Antena[
   const rect = bajo.match(/(\d+(?:[.,]\d+)?)\s*(km|kilometros?|m|metros?)?\s*(?:por|x)\s*(\d+(?:[.,]\d+)?)\s*(km|kilometros?|m|metros?)\b/);
   const lado = bajo.match(/cuadrad\w*\s+de\s+(\d+(?:[.,]\d+)?)\s*(km|kilometros?|m|metros?)\s+(?:de lado|por lado)/);
   const medida = (/\b(area|zona|poligono)\b.{0,30}\b(medi|medida|medido|dibuj\w*|marq\w*|traz\w*)\b|\b(area|zona|poligono)\b.{0,20}\bregla\b/.test(tn) || /\bcubr\w* (esta|esa|el|la) (area|zona|poligono)\b(?! de)/.test(tn));
-  if (!area && !radio && !(rect && verboFuerte) && !lado && !medida) return null;
+  // Sin tamaño: todo el municipio, una zona de él, lo que se ve en el mapa o «ese sector»
+  const zona = !area && !radio && !lado && !(rect && verboFuerte) && (verboFuerte || /\b(red|malla)\b/.test(tn)) ? zonaDeDiseno(tn, api, contexto) : null;
+  if (zona && "aviso" in zona && !medida) return { tipo: "aviso", texto: zona.aviso };
+  if (!area && !radio && !(rect && verboFuerte) && !lado && !medida && !zona) return null;
   if (!verboFuerte && !rehacer && !/\b(red|malla|repetidor\w*|cuant\w* (repetidores|nodos|antenas))\b/.test(tn)) return null;
 
   const metros = (v: string, u?: string) => num(v) * (u && /^k/.test(u) ? 1000 : 1);
@@ -827,11 +1083,27 @@ function interpretarDiseno(texto: string, tn: string, api: Api, antenas: Antena[
   else if (medida && !area && !radio && !rect && !lado) {
     const m = [...api.mediciones()].reverse().find((x) => x.tipo === "area");
     if (m) pedida = { forma: "medicion", id: m.id };
+    else if (zona && "puntos" in zona) pedida = { forma: "poligono", puntos: zona.puntos, nombre: zona.nombre, dibujar: true, etiqueta: zona.etiqueta };
     else return { tipo: "disenar", area: { forma: "medicion", id: "" }, margenDb, clases, porcentaje, respaldo, alturaM, gateway, maxRepetidores };
+  } else if (zona && "puntos" in zona) {
+    pedida = { forma: "poligono", puntos: zona.puntos, nombre: zona.nombre, dibujar: true, etiqueta: zona.etiqueta };
   } else {
-    // Centro del área
+    // Centro del área: el punto o el lugar dicho («en la zona norte de Barranca de Upía»: el centro de esa zona), o
+    // «ahí» / «ese municipio» (el último lugar del que se habló)
     let centro: CentroArea;
-    const u: (Coordenada & { desde?: string }) | null = gateway ? { ...gateway, desde: "alrededor del gateway" } : ubicacionEnTexto(texto, tn, api, antenas, true);
+    let u: (Coordenada & { desde?: string; lugar?: Lugar }) | null = gateway ? { ...gateway, desde: "alrededor del gateway" } : ubicacionEnTexto(texto, tn, api, antenas, true);
+    if (!u && contexto.ultimoLugar && ESE_LUGAR.test(tn)) {
+      const l = contexto.ultimoLugar;
+      usarLugar(l);
+      u = { lat: l.lat, lon: l.lon, desde: `en ${nombreLugar(l)}`, lugar: l };
+    }
+    const rumboTxt = u?.lugar ? tn.match(ZONA_RUMBO) : null;
+    const contorno = u?.lugar && rumboTxt ? api.contornoLugar?.(u.lugar) : null;
+    if (u && u.lugar && rumboTxt && contorno) {
+      const r = RUMBO_DE[rumboTxt[1] ?? rumboTxt[2]];
+      const b = cajaPoligono(recortarPoligono(contorno, r));
+      u = { lat: (b.sur + b.norte) / 2, lon: (b.oeste + b.este) / 2, desde: `en la zona ${ADJETIVO_RUMBO[r]} de ${nombreLugar(u.lugar)}`, lugar: u.lugar };
+    }
     if (u) centro = { tipo: "coord", coord: { lat: u.lat, lon: u.lon }, nombre: u.desde };
     else if (antenas.some((a) => a.pasarela && a.activa)) centro = { tipo: "gateway" };
     else centro = { tipo: "mapa" };
@@ -856,7 +1128,7 @@ function interpretarDiseno(texto: string, tn: string, api: Api, antenas: Antena[
 
 /** «Sostenible», «viable», «económica y técnicamente», «que funcione de la mejor manera»: la red se diseña y se evalúa con su costo. */
 const SOSTENIBLE =
-  /\b(sostenib\w*|sustentab\w*|viab\w*|rentab\w*|economic\w* y tecnic\w*|tecnic\w* y economic\w*|costo[- ]?eficien\w*|eficiente|que funcione (de la mejor manera|lo mejor posible|muy bien|bien))\b/;
+  /\b(sostenib\w*|sustentab\w*|viab\w*|rentab\w*|economic\w* y tecnic\w*|tecnic\w* y economic\w*|costo[- ]?eficien\w*|eficiente|que funcione (de la mejor manera|lo mejor posible|muy bien|bien)|equilibr\w*|balance\w*|relacion (calidad|costo|cobertura)[- ]\w+|(calidad|economi\w*|costos?)\b.{0,40}\b(cobertura|calidad|economi\w*)|mejor (relacion|equilibrio))\b/;
 /** «Construye / hazme / ármame / diseña una red (o malla)». */
 const CONSTRUIR_RED = /\b(constru\w*|hazme|haz|hacer|hagamos|arm\w*|disen\w*|crea\w*|planific\w*|mont\w*|levant\w*|propon\w*|necesito|quiero)\b.{0,50}\b(red|redes|malla)\b/;
 
@@ -864,26 +1136,46 @@ const CONSTRUIR_RED = /\b(constru\w*|hazme|haz|hacer|hagamos|arm\w*|disen\w*|cre
  * «Hazme una red sostenible» sin área, o «una red en Barranca de Upía» sin tamaño: Melki pregunta lo que falta y la
  * siguiente respuesta («en Barranca de Upía, 11.226 hectáreas») completa el diseño.
  */
-function interpretarPedidoDeRed(texto: string, tn: string, api: Api, antenas: Antena[]): Orden | null {
+function interpretarPedidoDeRed(texto: string, tn: string, api: Api, antenas: Antena[], contexto: ContextoOrden = {}): Orden | null {
   if (!CONSTRUIR_RED.test(tn)) return null;
   const sostenible = SOSTENIBLE.test(tn);
-  const u = ubicacionEnTexto(texto, tn, api, antenas, true);
-  const lugar: LugarPedido | undefined = u ? { lat: u.lat, lon: u.lon, nombre: u.desde ?? `en ${aDecimal(u.lat)}, ${aDecimal(u.lon)}` } : undefined;
+  let u = ubicacionEnTexto(texto, tn, api, antenas, true);
+  if (!u && contexto.ultimoLugar && ESE_LUGAR.test(tn)) {
+    const l = contexto.ultimoLugar;
+    usarLugar(l);
+    u = { lat: l.lat, lon: l.lon, desde: `en ${nombreLugar(l)}`, lugar: l };
+  }
+  const lugar: LugarPedido | undefined = u ? { lat: u.lat, lon: u.lon, nombre: u.desde ?? `en ${aDecimal(u.lat)}, ${aDecimal(u.lon)}`, ...(u.lugar ? { lugar: u.lugar } : {}) } : undefined;
   if (!sostenible && !lugar) return null;
   return { tipo: "pedir-diseno", lugar, sostenible };
 }
 
+/** El municipio donde cae un punto (para ofrecer «todo el municipio» cuando la red se pide en unas coordenadas). */
+function lugarDePunto(api: Api, lat: number, lon: number): Lugar | null {
+  const u = api.ubicacion(lat, lon);
+  if (!u) return null;
+  const d = decidirLugar(candidatosLugar(u.replace(/[()]/g, " "), api));
+  return d.tipo === "seguro" ? d.candidato.lugar : null;
+}
+
 /** Completa el diseño que esperaba el lugar o el tamaño. */
-function completarDiseno(texto: string, tn: string, api: Api, antenas: Antena[], p: Extract<NonNullable<Pendiente>, { tipo: "disenar" }>): Orden | null {
+function completarDiseno(texto: string, tn: string, api: Api, antenas: Antena[], p: Extract<NonNullable<Pendiente>, { tipo: "disenar" }>, contexto: ContextoOrden = {}): Orden | null {
   const bajo = sinTildes(texto);
   const u = ubicacionEnTexto(texto, tn, api, antenas, true);
-  const lugar: LugarPedido | undefined = u ? { lat: u.lat, lon: u.lon, nombre: u.desde ?? `en ${aDecimal(u.lat)}, ${aDecimal(u.lon)}` } : p.lugar;
-  const conTamano = areaEnTexto(bajo) || /\b\d+(?:[.,]\d+)?\s*(km|kilometros?|m|metros?)\b/.test(bajo);
-  if (!conTamano) return u ? { tipo: "pedir-diseno", lugar, sostenible: p.sostenible } : null;
-  const d = interpretarDiseno(`diseña una red ${p.sostenible ? "sostenible " : ""}que cubra ${texto}`, `disena una red ${p.sostenible ? "sostenible " : ""}que cubra ${tn}`, api, antenas);
+  const lugar: LugarPedido | undefined = u ? { lat: u.lat, lon: u.lon, nombre: u.desde ?? `en ${aDecimal(u.lat)}, ${aDecimal(u.lon)}`, ...(u.lugar ? { lugar: u.lugar } : {}) } : p.lugar;
+  // «Todo», «el municipio completo», «la zona norte»: el municipio del lugar pedido (o donde caen sus coordenadas)
+  const soloTodo = /^(tod[oa]|tod[oa] el municipio|el municipio( completo| entero)?|complet[oa]|enter[oa]|tod[oa] completo)$/.test(tn.replace(/[.,!]/g, "").trim());
+  const zonaDicha = soloTodo || MUNICIPIO_ENTERO.test(tn) || ZONA_RUMBO.test(tn) || TODO_LUGAR.test(tn) || VISTA_MAPA.test(tn);
+  const conTamano = areaEnTexto(bajo) || /\b\d+(?:[.,]\d+)?\s*(km|kilometros?|m|metros?)\b/.test(bajo) || zonaDicha;
+  if (!conTamano) return u ? { tipo: "pedir-diseno", lugar, sostenible: p.sostenible, despues: p.despues } : null;
+  const frase = soloTodo ? "todo el municipio" : texto;
+  const fraseN = soloTodo ? "todo el municipio" : tn;
+  const ultimoLugar = lugar?.lugar ?? (lugar ? lugarDePunto(api, lugar.lat, lugar.lon) : null) ?? contexto.ultimoLugar;
+  const d = interpretarDiseno(`diseña una red ${p.sostenible ? "sostenible " : ""}que cubra ${frase}`, `disena una red ${p.sostenible ? "sostenible " : ""}que cubra ${fraseN}`, api, antenas, { ...contexto, ultimoLugar });
+  if (d?.tipo === "aviso") return d;
   if (d?.tipo !== "disenar") return null;
   if (lugar && "centro" in d.area && d.area.centro.tipo !== "coord") d.area = { ...d.area, centro: { tipo: "coord", coord: { lat: lugar.lat, lon: lugar.lon }, nombre: lugar.nombre } };
-  return p.sostenible ? { ...d, sostenible: true } : d;
+  return { ...d, ...(p.sostenible ? { sostenible: true } : {}), ...(p.despues ? { despues: p.despues } : {}) };
 }
 
 /** «¿Cuánto cuesta la red?», «el presupuesto de la malla», «¿qué inversión necesito?» (la red del mapa, no un departamento). */
@@ -1070,15 +1362,141 @@ export function dividirEnPasos(texto: string): string[] {
 const VERBO_AGREGAR = /\b(inscrib\w*|registr\w*|agreg\w*|anad\w*|adicion\w*|ingres\w*|instal\w*|coloc\w*|crea|crear|creame|crealo|pon|poner|ponme|monta\w*|ubica (?:una|un|otra|otro)|ubicar (?:una|un|otra|otro)|nuev[oa]|mete|meter|incorpor\w*)\b/;
 const OBJETO = /\b(antena|antenas|nodo|nodos|torre|repetidor|pasarela|router|sensor|equipo)\b/;
 
-/** Contexto de la conversación: el último nodo que Melki puso o cambió («súbelo a 20 m»). */
-export type ContextoOrden = { ultimoNodo?: string | null };
+/**
+ * Contexto de la conversación: el último nodo que Melki puso o cambió («súbelo a 20 m»), el último lugar del que se
+ * habló («arma la red de todo ese municipio», «ahí») y, al elegir entre lugares parecidos, el lugar elegido para lo dicho.
+ */
+export type ContextoOrden = { ultimoNodo?: string | null; ultimoLugar?: Lugar | null; forzarLugar?: { dicho: string; lugar: Lugar } };
 
 const CLITICO =
   /\b(subelo|subela|bajalo|bajala|muevelo|muevela|borralo|borrala|eliminalo|eliminala|quitalo|quitala|renombralo|renombrala|llamalo|llamala|apuntalo|apuntala|conviertelo|conviertela|activalo|activala|desactivalo|desactivala|ponle|dale|cambiale|subele|bajale|quitale|agregale|dejalo|dejala|elevalo|elevala|trasladalo|trasladala|reubicalo|reubicala|giralo|girala|inclinalo|inclinala|ese (nodo|repetidor|gateway|equipo)|este (nodo|repetidor|gateway|equipo)|esa (persona|antena|torre)|esta (persona|antena|torre))\b/;
 
+/**
+ * Interpreta la orden y, si un lugar dicho puede ser varios («barranco vía» → Barranca de Upía, Barranquilla…), la
+ * convierte en la pregunta «¿se refiere a…?» con la orden completa para cada opción. Recuerda el lugar de la orden
+ * (`lugarUsado`) y lo que entendió de un lugar mal dicho (`nota`).
+ */
 export function interpretarOrden(texto: string, api: Api, pendiente: Pendiente, contexto: ContextoOrden = {}): Orden | null {
+  const previa = sesionLugares;
+  sesionLugares = { dudas: [], intentos: [], usados: [], corregidos: [], forzar: contexto.forzarLugar };
+  try {
+    const o = interpretarOrdenBase(texto, api, pendiente, contexto);
+    if (!o) return null;
+    const sesion = sesionLugares;
+    const duda = sesion.dudas[0];
+    if (duda && !contexto.forzarLugar && o.tipo !== "elegir" && o.tipo !== "pedir-lugar" && o.tipo !== "aviso") {
+      const opciones = opcionesDeLugar(texto, api, pendiente, contexto, duda.dicho, duda.opciones.map((c) => c.lugar));
+      if (opciones.length === 1) opciones[0] = { ...opciones[0], texto: `Sí, ${opciones[0].texto}` };
+      if (opciones.length) return { tipo: "elegir", pregunta: preguntaLugar(opciones, duda.dicho), opciones, dicho: duda.dicho, original: texto };
+    }
+    // Una red pedida «en» un lugar que no se reconoció iría al centro del mapa: mejor preguntar
+    const intento = sesion.intentos[0];
+    if (!duda && intento?.opciones.length && !contexto.forzarLugar && o.tipo === "disenar" && "centro" in o.area && o.area.centro.tipo !== "coord") {
+      const opciones = opcionesDeLugar(texto, api, pendiente, contexto, intento.dicho, intento.opciones.map((c) => c.lugar));
+      const sugerido = opciones.map((x) => x.texto);
+      opciones.push({ texto: "En el centro del mapa", orden: o });
+      return {
+        tipo: "elegir",
+        pregunta: `No reconocí «${intento.dicho}» como un municipio. ¿Se refiere a ${sugerido.length > 1 ? `${sugerido.slice(0, -1).join(", ")} o ${sugerido[sugerido.length - 1]}` : (sugerido[0] ?? "otro lugar")}? Si no, dígame el municipio y el departamento, o la armo en el centro del mapa.`,
+        opciones,
+        dicho: intento.dicho,
+        original: texto,
+      };
+    }
+    const lugar = o.lugarUsado ?? sesion.usados[sesion.usados.length - 1];
+    const corregido = sesion.corregidos[0];
+    return { ...o, ...(lugar ? { lugarUsado: lugar } : {}), ...(corregido && !o.nota ? { nota: `Entendí «${nombreLugar(corregido.lugar)}».` } : {}) };
+  } finally {
+    sesionLugares = previa;
+  }
+}
+
+/** La orden original con cada lugar posible (para «¿se refiere a…?»). */
+function opcionesDeLugar(original: string, api: Api, pendiente: Pendiente, contexto: ContextoOrden, dicho: string, lugares: Lugar[]): OpcionLugar[] {
+  const opciones: OpcionLugar[] = [];
+  for (const l of lugares.slice(0, 4)) {
+    const alt = interpretarOrden(original, api, pendiente, { ...contexto, forzarLugar: { dicho, lugar: l } });
+    if (alt && alt.tipo !== "elegir" && alt.tipo !== "pedir-lugar" && alt.tipo !== "aviso") opciones.push({ texto: nombreLugar(l), orden: alt, lugar: l });
+  }
+  return opciones;
+}
+
+const SI_ELEGIR = /^(si|claro|correcto|exacto|eso|ese|esa|ese mismo|esa misma|ese es|esa es|afirmativo|dale|hazlo|listo|ok|okey|vale|de acuerdo|perfecto|asi es|por supuesto|efectivamente|si senor|si senora|si ese|si esa)\b/;
+const NO_ELEGIR = /^(no|ninguno|ninguna|ningun|otro|otra|tampoco|negativo|para nada)\b/;
+const ORDINALES: [RegExp, number | "ultima"][] = [
+  [/\b(primer[oa]?|uno|1)\b/, 0],
+  [/\b(segund[oa]|dos|2)\b/, 1],
+  [/\b(tercer[oa]?|tres|3)\b/, 2],
+  [/\b(cuart[oa]|cuatro|4)\b/, 3],
+  [/\b(ultim[oa])\b/, "ultima"],
+];
+
+/** La respuesta a «¿se refiere a…?»: «sí», «la segunda», «Granada, Meta», «el del Meta» o «no, ninguno». */
+function eleccionDe(tn: string, p: Extract<NonNullable<Pendiente>, { tipo: "elegir" }>): Orden | null {
+  const t = tn.replace(/[.,;:!¡¿?]/g, " ").replace(/\s+/g, " ").trim();
+  const corto = t.split(" ").length <= 6;
+  const con = (x: string) => new RegExp(`(^|[^a-z])${escRe(n(x))}($|[^a-z])`).test(t);
+  const conNombre = p.opciones.filter((o) => o.lugar && con(o.lugar.nombre));
+  const conDepto = p.opciones.filter((o) => o.lugar?.tipo === "municipio" && con(o.lugar.detalle));
+  const ambos = conNombre.filter((o) => conDepto.includes(o));
+  const elegida = ambos.length === 1 ? ambos[0] : conDepto.length === 1 && corto ? conDepto[0] : conNombre.length === 1 ? conNombre[0] : null;
+  if (elegida) return elegida.orden;
+  if (corto)
+    for (const [re, i] of ORDINALES) {
+      if (!re.test(t)) continue;
+      const k = i === "ultima" ? p.opciones.length - 1 : i;
+      if (p.opciones[k]) return p.opciones[k].orden;
+    }
+  // Solo «no», «ninguno», «ninguno de esos»: lo pide de nuevo (si dice otro lugar, se toma ese)
+  if (NO_ELEGIR.test(t) && /^(no|ninguno|ninguna|ningun|otro|otra|tampoco|negativo|para nada)( (es|era|ninguno|ninguna|de esos|de esas|de ellos|gracias|senor|senora|ese|esa))*$/.test(t)) return { tipo: "pedir-lugar", dicho: p.dicho, original: p.original, sugerencias: [], rechazo: true };
+  if (SI_ELEGIR.test(t) && corto) return p.opciones[0].orden;
+  return null;
+}
+
+/** Verbos de una orden nueva: si la respuesta trae uno, no es el lugar que se pidió sino otra orden. */
+const VERBO_ORDEN_NUEVA = /\b(pon\w*|agreg\w*|arm\w*|disen\w*|simul\w*|borr\w*|quit\w*|muestr\w*|elimin\w*|crea\w*|sube|baja|cambi\w*|mueve|haz\w*|puebla\w*|envia\w*|manda\w*|activa\w*|apaga\w*)\b/;
+
+/** La respuesta a «¿me repite el municipio?»: el lugar que faltaba en la orden original. */
+function lugarPendiente(tn: string, api: Api, p: Extract<NonNullable<Pendiente>, { tipo: "lugar" }>, contexto: ContextoOrden): Orden | null {
+  const consulta = tn.replace(/^(?:es|seria|me refiero a|quise decir|quiero decir|dije|en|a|al|el municipio de|el pueblo de)\s+/, "").replace(/\b(por favor|porfa|porfavor|gracias)\b/g, " ").replace(/\s+/g, " ").trim();
+  if (consulta.length < 3) return null;
+  let d = decidirLugar(candidatosLugar(consulta, api));
+  if (d.tipo !== "seguro") {
+    // Puede venir con más palabras («es barranca de upía en el meta, por favor»)
+    const previa = sesionLugares;
+    sesionLugares = { dudas: [], intentos: [], usados: [], corregidos: [] };
+    try {
+      const parte = lugarEnTexto(`en ${consulta}`, api, false);
+      if (parte && !sesionLugares.dudas.length) d = { tipo: "seguro", candidato: { lugar: parte, parecido: 1, puntaje: 1, exacto: true, departamentoDicho: null }, opciones: [] };
+    } finally {
+      sesionLugares = previa;
+    }
+  }
+  if (d.tipo === "seguro") return interpretarOrden(p.original, api, null, { ...contexto, forzarLugar: { dicho: p.dicho, lugar: d.candidato.lugar } });
+  if (d.tipo === "dudoso") {
+    const opciones = opcionesDeLugar(p.original, api, null, contexto, p.dicho, d.opciones.map((c) => c.lugar));
+    if (opciones.length) return { tipo: "elegir", pregunta: preguntaLugar(opciones, consulta), opciones, dicho: p.dicho, original: p.original };
+  }
+  return { tipo: "pedir-lugar", dicho: p.dicho, original: p.original, sugerencias: d.opciones.map((c) => c.lugar) };
+}
+
+function interpretarOrdenBase(texto: string, api: Api, pendiente: Pendiente, contexto: ContextoOrden = {}): Orden | null {
   const tn = n(texto);
   if (!tn) return null;
+  // Respuestas a lo que Melki acaba de preguntar: «¿se refiere a…?» y «¿me repite el municipio?»
+  if (pendiente?.tipo === "elegir") {
+    const e = eleccionDe(tn, pendiente);
+    if (e) return e;
+    // Otro lugar en vez de las opciones («no, Barranca de Upía, Meta»)
+    if (!VERBO_ORDEN_NUEVA.test(tn)) {
+      const l = lugarPendiente(tn.replace(/^no\b[\s,]*/, ""), api, { tipo: "lugar", dicho: pendiente.dicho, original: pendiente.original }, contexto);
+      if (l && l.tipo !== "pedir-lugar") return l;
+    }
+  }
+  if (pendiente?.tipo === "lugar" && !VERBO_ORDEN_NUEVA.test(tn)) {
+    const l = lugarPendiente(tn, api, pendiente, contexto);
+    if (l) return l;
+  }
   const antenas = api.antenas();
   const ultimo = contexto.ultimoNodo ? antenas.find((x) => x.id === contexto.ultimoNodo) : undefined;
   // «Mueve Repetidor 1 2 km al sur»: la distancia se cuenta desde ese mismo nodo
@@ -1114,22 +1532,29 @@ export function interpretarOrden(texto: string, api: Api, pendiente: Pendiente, 
     const m = [...api.mediciones()].reverse().find((x) => x.tipo === "area");
     if (m) return { tipo: "cobertura-area", id: m.id, margenDb: margenPedido(tn).margenDb };
   }
-  // Completar una red que esperaba el lugar o el tamaño («en Barranca de Upía, 11.226 hectáreas»)
+  // Completar una red que esperaba el lugar o el tamaño («en Barranca de Upía, 11.226 hectáreas», «todo el municipio»)
   if (pendiente?.tipo === "disenar") {
-    const d = completarDiseno(texto, tn, api, antenas, pendiente);
+    const d = completarDiseno(texto, tn, api, antenas, pendiente, contexto);
     if (d) return d;
   }
   const capacidad = interpretarCapacidad(texto, tn, api);
-  // «Rehaz el diseño de las 11.226 ha de manera estable y por cada antena 250 personas»: primero el diseño y
-  // después las zonas de popularidad (y la prueba de estrés, si se pidió)
-  if (capacidad?.tipo === "zonas" && areaEnTexto(sinTildes(texto))) {
-    const d = interpretarDiseno(texto, tn, api, antenas);
-    if (d?.tipo === "disenar") return { ...d, despues: { zonas: capacidad.pedido, estres: capacidad.estres } };
+  // «Ármame una red que cubra todo el municipio y con puntos de popularidad mira hasta dónde aguanta antes de
+  // quebrarse»: primero el diseño y después las zonas de popularidad y la prueba de estrés (o la rampa)
+  if ((capacidad?.tipo === "zonas" || capacidad?.tipo === "estres") && (areaEnTexto(sinTildes(texto)) || CONSTRUIR_RED.test(tn) || MUNICIPIO_ENTERO.test(tn) || TODO_LUGAR.test(tn))) {
+    const despues: DespuesDiseno = capacidad.tipo === "zonas" ? { zonas: capacidad.pedido, estres: capacidad.estres } : { zonas: { n: 250 }, estres: capacidad.opciones };
+    const d = interpretarDiseno(texto, tn, api, antenas, contexto);
+    if (d?.tipo === "disenar") return { ...d, despues };
+    if (d?.tipo === "aviso") return d;
+    // Sin tamaño ni zona («arma una red en Barranca de Upía con puntos de popularidad»): pregunta el área y lo recuerda
+    if (/\b(arm\w*|disen\w*|constru\w*|planific\w*|levant\w*|mont\w*|(hazme|haz|crea\w*) (una|la|otra) (red|malla))\b/.test(tn)) {
+      const p = interpretarPedidoDeRed(texto, tn, api, antenas, contexto);
+      if (p?.tipo === "pedir-diseno") return { ...p, despues };
+    }
   }
   if (capacidad) return capacidad;
-  const diseno = interpretarDiseno(texto, tn, api, antenas);
+  const diseno = interpretarDiseno(texto, tn, api, antenas, contexto);
   if (diseno) return diseno;
-  const pedidoRed = interpretarPedidoDeRed(texto, tn, api, antenas);
+  const pedidoRed = interpretarPedidoDeRed(texto, tn, api, antenas, contexto);
   if (pedidoRed) return pedidoRed;
   const objetivo = interpretarAreaObjetivo(texto, tn, api);
   if (objetivo) return objetivo;
@@ -1282,8 +1707,13 @@ export function interpretarOrden(texto: string, api: Api, pendiente: Pendiente, 
       .replace(/\s+/g, " ")
       .trim();
     if (consulta.length >= 3) {
-      const lugar = api.buscarLugar(consulta)[0];
-      return lugar ? { tipo: "ir", lugar } : { tipo: "ir", consulta };
+      // «Ahí», «ese municipio»: el último lugar del que se habló
+      if (ESE_LUGAR.test(consulta) && contexto.ultimoLugar) {
+        usarLugar(contexto.ultimoLugar);
+        return { tipo: "ir", lugar: contexto.ultimoLugar };
+      }
+      const { lugar, sugerencias } = lugarDeConsulta(consulta, api);
+      return lugar ? { tipo: "ir", lugar } : { tipo: "pedir-lugar", dicho: consulta, original: texto, sugerencias };
     }
   }
 
@@ -1355,7 +1785,7 @@ function interpretarMalla(texto: string, tn: string, api: Api, coord: Coordenada
     if (persona) return { tipo: "sembrar", destino: { id: persona.id } };
     const consulta = tn.replace(/.*\b(hacia|hasta|a)\b\s+/, "").replace(/\b(el|la|los|las|municipio de|por favor|porfa)\b/g, " ").replace(/\s+/g, " ").trim();
     if (consulta.length >= 3) {
-      const lugar = api.buscarLugar(consulta)[0];
+      const { lugar } = lugarDeConsulta(consulta, api);
       if (lugar) return { tipo: "sembrar", destino: { coord: { lat: lugar.lat, lon: lugar.lon }, nombre: lugar.nombre } };
     }
     if (/\b(siembra|siembrame|siembre|sembrar)\b/.test(tn)) return { tipo: "sembrar", destino: "faltantes" };
@@ -1539,6 +1969,8 @@ export type ResultadoOrden = Respuesta & {
   luego?: Promise<Respuesta>;
   /** Nodo que puso o cambió la orden (para «súbelo», «muévelo»… en la siguiente). */
   nodo?: string;
+  /** Lugar de la orden (para «ahí», «ese municipio», «todo el municipio» en la siguiente). */
+  lugar?: Lugar;
 };
 
 function textoCoord(c: { lat: number; lon: number }) {
@@ -1547,7 +1979,15 @@ function textoCoord(c: { lat: number; lon: number }) {
 
 const EJEMPLO_COORD = "4.5123, -73.1234 o 4°30'44\" N, 73°07'24\" O";
 
+/** Ejecuta la orden; si entendió un lugar mal dicho, lo dice primero («Entendí «Barranca de Upía (Meta)».»). */
 export function ejecutarOrden(o: Orden, api: Api): ResultadoOrden {
+  const r = ejecutarOrdenBase(o, api);
+  // Al ir a un lugar la respuesta ya dice su nombre: no hace falta «Entendí…»
+  const nota = o.nota && o.tipo !== "ir" ? o.nota : "";
+  return { ...r, ...(nota ? { texto: `${nota} ${r.texto}` } : {}), ...(o.lugarUsado && !r.lugar ? { lugar: o.lugarUsado } : {}) };
+}
+
+function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
   const antenas = api.antenas();
   const porId = new Map(antenas.map((a) => [a.id, a]));
   const antes = api.instantanea();
@@ -1680,9 +2120,25 @@ export function ejecutarOrden(o: Orden, api: Api): ResultadoOrden {
         }
       }
       if (o.lugar) {
-        if (o.lugar.caja) api.encuadrarCaja(o.lugar.caja);
-        else api.centrar(o.lugar.lat, o.lugar.lon, 8);
-        return { texto: `Lo llevé a ${o.lugar.nombre}${o.lugar.tipo === "municipio" ? ` (${o.lugar.detalle})` : ""}.` };
+        const l = o.lugar;
+        if (l.caja) api.encuadrarCaja(l.caja);
+        else api.centrar(l.lat, l.lon, 8);
+        // Solo el marcador con el nombre: la respuesta ya trae qué hacer ahí (y la tarjeta taparía la barra del asistente)
+        if (l.tipo === "municipio") api.marcar(l.lat, l.lon, `${l.nombre}, ${l.detalle}`, false);
+        // Con el contorno del municipio: su tamaño y la red para cubrirlo entero, a un toque (o con «sí»)
+        const contorno = l.tipo === "municipio" ? api.contornoLugar?.(l) : null;
+        const area = contorno ? areaM2(contorno) : 0;
+        const zona = contorno && area <= 3e9 ? ({ puntos: contorno, nombre: `en todo el municipio de ${l.nombre} (${l.detalle})`, etiqueta: `${l.nombre} (${l.detalle})`, lugar: l } as const) : null;
+        return {
+          texto: `Lo llevé a ${nombreLugar(l)}${area ? `, un municipio de ${textoArea(area)}` : ""}.${zona ? " ¿Le armo una red sostenible que cubra todo el municipio, con su viabilidad y su costo?" : ""}`,
+          acciones: zona
+            ? [
+                { texto: "Sí, la red de todo el municipio", accion: "orden", orden: disenoDeZona(zona) },
+                { texto: "Y probar hasta dónde aguanta", accion: "orden", orden: { ...disenoDeZona(zona), despues: { zonas: { n: 250 }, estres: { rampa: true } } } as Orden },
+              ]
+            : undefined,
+          lugar: l,
+        };
       }
       return { texto: `No encontré «${o.consulta}». Pruebe con el nombre de un municipio o departamento de Colombia, o con coordenadas como ${EJEMPLO_COORD}.` };
     }
@@ -1884,8 +2340,40 @@ export function ejecutarOrden(o: Orden, api: Api): ResultadoOrden {
         ],
       };
     }
+    case "elegir":
+      return {
+        texto: o.pregunta,
+        acciones: [
+          ...o.opciones.map((x): AccionRespuesta => ({ texto: x.texto, accion: "orden", orden: x.orden })),
+          { texto: "Ninguno de esos", accion: "orden", orden: { tipo: "pedir-lugar", dicho: o.dicho, original: o.original, sugerencias: [], rechazo: true } },
+        ],
+        pendiente: { tipo: "elegir", opciones: o.opciones, dicho: o.dicho, original: o.original },
+      };
+    case "pedir-lugar": {
+      const opciones = o.sugerencias.length ? opcionesDeLugar(o.original, api, null, {}, o.dicho, o.sugerencias.slice(0, 3)) : [];
+      const lista = opciones.map((x) => x.texto);
+      const ejemplo = "Por ejemplo: «Barranca de Upía, Meta».";
+      if (opciones.length)
+        return {
+          texto: `Discúlpeme, no reconocí «${o.dicho}». ¿Se refiere a ${lista.length > 1 ? `${lista.slice(0, -1).join(", ")} o ${lista[lista.length - 1]}` : lista[0]}? Si no, dígame el municipio y el departamento. ${ejemplo}`,
+          acciones: opciones.map((x): AccionRespuesta => ({ texto: x.texto, accion: "orden", orden: x.orden })),
+          pendiente: { tipo: "elegir", opciones, dicho: o.dicho, original: o.original },
+        };
+      return {
+        texto: o.rechazo ? `Entendido. ¿Me dice entonces el municipio y el departamento, por favor? ${ejemplo}` : `Discúlpeme, no reconocí el lugar «${o.dicho}». ¿Me repite el municipio y el departamento, por favor? ${ejemplo}`,
+        pendiente: { tipo: "lugar", dicho: o.dicho, original: o.original },
+      };
+    }
+    case "aviso":
+      return { texto: o.texto, acciones: o.acciones };
+    case "red-municipio": {
+      const z = zonaDeDiseno("todo el municipio", api, {});
+      if (!z) return { texto: "¿Qué municipio cubro? Dígame el nombre y el departamento, por ejemplo «todo el municipio de Barranca de Upía, Meta»." };
+      if ("aviso" in z) return { texto: z.aviso };
+      return { ...ejecutarOrdenBase(disenoDeZona(z, o.sostenible), api), ...(z.lugar ? { lugar: z.lugar } : {}) };
+    }
     case "pedir-diseno": {
-      const pendiente: Pendiente = { tipo: "disenar", lugar: o.lugar, sostenible: o.sostenible };
+      const pendiente: Pendiente = { tipo: "disenar", lugar: o.lugar, sostenible: o.sostenible, despues: o.despues };
       const ejemplo: Orden = {
         tipo: "disenar",
         area: { forma: "circulo", areaM2: 11226 * 10000, centro: { tipo: "coord", coord: { lat: 4.5149, lon: -73.0024 }, nombre: "en Barranca de Upía (Meta)" } },
@@ -1898,11 +2386,34 @@ export function ejecutarOrden(o: Orden, api: Api): ResultadoOrden {
         maxRepetidores: 60,
         sostenible: o.sostenible,
       };
-      if (o.lugar)
+      if (o.lugar) {
+        // El municipio del lugar pedido (o donde caen sus coordenadas): se ofrece cubrirlo entero
+        const l = o.lugar.lugar?.tipo === "municipio" ? o.lugar.lugar : lugarDePunto(api, o.lugar.lat, o.lugar.lon);
+        const contorno = l ? api.contornoLugar?.(l) : null;
+        const zona = l && contorno && areaM2(contorno) <= 3e9 ? ({ puntos: contorno, nombre: `en todo el municipio de ${l.nombre} (${l.detalle})`, etiqueta: `${l.nombre} (${l.detalle})`, lugar: l } as const) : null;
+        const conDespues = (x: Orden): Orden => (o.despues && x.tipo === "disenar" ? { ...x, despues: o.despues } : x);
+        const alrededor = (ha: number): Orden =>
+          conDespues({
+            tipo: "disenar",
+            area: { forma: "circulo", areaM2: ha * 1e4, centro: { tipo: "coord", coord: { lat: o.lugar!.lat, lon: o.lugar!.lon }, nombre: o.lugar!.nombre } },
+            margenDb: 30,
+            clases: "señal media o mejor (buena, estable o media; ≥ 30 dB)",
+            porcentaje: 95,
+            respaldo: false,
+            alturaM: ALTURA_REPETIDOR_DEFECTO,
+            gateway: null,
+            maxRepetidores: 60,
+            ...(o.sostenible ? { sostenible: true } : {}),
+          });
+        const acciones: AccionRespuesta[] = [];
+        if (zona) acciones.push({ texto: `Todo el municipio de ${l!.nombre}`, accion: "orden", orden: conDespues(disenoDeZona(zona, o.sostenible)) });
+        acciones.push({ texto: "1.000 ha alrededor", accion: "orden", orden: alrededor(1000) }, { texto: "5.000 ha alrededor", accion: "orden", orden: alrededor(5000) });
         return {
-          texto: `Con gusto: armo la red ${o.lugar.nombre}${o.sostenible ? ", sostenible y viable" : ""}. ¿Qué área cubro? Dígame, por ejemplo, «11.226 hectáreas» o «un radio de 6 km».`,
+          texto: `Con gusto: armo la red ${o.lugar.nombre}${o.sostenible ? ", sostenible y viable" : ""}. ¿Qué área cubro? Dígame, por ejemplo, «11.226 hectáreas», «un radio de 6 km»${zona ? ` o «todo el municipio»` : ""}.`,
+          acciones,
           pendiente,
         };
+      }
       const acciones: AccionRespuesta[] = [{ texto: "Barranca de Upía, 11.226 ha", accion: "orden", orden: ejemplo }];
       if (antenas.some((a) => a.activa)) acciones.push({ texto: "Mejorar la red del mapa (costo y cobertura)", accion: "orden", orden: { tipo: "ajustar", aplicar: false, opcion: "recomendada", opciones: {}, avisos: [] } });
       return {
@@ -2251,7 +2762,7 @@ function ejecutarDiseno(o: Extract<Orden, { tipo: "disenar" }>, api: Api, antes:
   if (o.gateway && gw) api.editar(gw.id, { lat: Number(o.gateway.lat.toFixed(6)), lon: Number(o.gateway.lon.toFixed(6)), activa: true });
   const forma = o.area.forma === "cuadrado" ? "cuadrada" : o.area.forma === "rectangulo" ? "rectangular" : "";
   if (dibujar) {
-    nombreArea = `Área objetivo · ${textoArea(area)}`;
+    nombreArea = `Área objetivo · ${o.area.forma === "poligono" && o.area.etiqueta ? o.area.etiqueta : textoArea(area)}`;
     idArea = `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
     api.medir({ id: idArea, nombre: nombreArea, tipo: "area", puntos: poligono, visible: true }, false);
   } else {
@@ -2274,7 +2785,7 @@ function ejecutarDiseno(o: Extract<Orden, { tipo: "disenar" }>, api: Api, antes:
     return { texto: `${hecho.texto}\n\n${sigue.texto}`, acciones: [...(sigue.acciones ?? []), ...(hecho.acciones ?? [])].slice(0, 5) };
   })();
   return {
-    texto: `Diseño la malla para ${textoArea(area)}${forma ? ` (área ${forma})` : ""} ${donde}: ${meta}. ${dibujar ? "Dibujé el área en el mapa. " : ""}Busco con el relieve real dónde va ${gw || o.gateway ? "cada repetidor" : "el gateway y cada repetidor"} (torres de ${fn(o.alturaM)} m), siempre enlazados a la red.${o.despues ? ` Después pongo ${o.despues.zonas.n ?? 250} personas alrededor de cada gateway y repetidor (zonas de popularidad)${o.despues.estres ? " y hago la prueba de estrés de la hora pico para ver si la red se revienta" : ""}.` : ""} Tardo unos segundos.`,
+    texto: `Diseño la malla para ${textoArea(area)}${forma ? ` (área ${forma})` : ""} ${donde}: ${meta}. ${dibujar ? "Dibujé el área en el mapa. " : ""}Busco con el relieve real dónde va ${gw || o.gateway ? "cada repetidor" : "el gateway y cada repetidor"} (torres de ${fn(o.alturaM)} m), siempre enlazados a la red.${o.despues ? ` Después pongo ${o.despues.zonas.n ?? 250} personas alrededor de cada gateway y repetidor (zonas de popularidad)${o.despues.estres ? (o.despues.estres.rampa ? " y hago la prueba de estrés de la hora pico, subiendo la carga hasta ver dónde se quiebra cada uno" : " y hago la prueba de estrés de la hora pico para ver si la red se revienta") : ""}.` : ""} ${area > 2e8 ? "Es un área grande: tardo un poco más." : "Tardo unos segundos."}`,
     acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: base }],
     deshacer: base,
     luego,

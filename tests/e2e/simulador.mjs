@@ -1443,6 +1443,71 @@ await flujo(
   },
 );
 
+// v12.7: entiende lugares mal dichos («barranca de UPA meta»), pregunta «¿se refiere a…?» cuando duda, pide repetir lo
+// que no entendió, recuerda el lugar de la conversación y arma la red de todo el municipio.
+await flujo(
+  "asistente-conversacion",
+  async (page, foto) => {
+    await esperarSimulacion(page);
+    const hud = page.locator("[data-tour=hud-voz]");
+    const decir = async (texto) => afirmar(await page.evaluate((x) => window.__voz.decir(x), texto), `El micrófono no estaba escuchando al decir «${texto}»`);
+    const oido = async (re, timeout = 20000) => {
+      try {
+        await page.waitForFunction((r) => new RegExp(r).test(window.__voz.dicho.join(" | ")), re.source, { timeout });
+      } catch {
+        throw new Error(`No dijo ${re} · dijo: ${(await page.evaluate(() => window.__voz.dicho.slice(-3).join(" | "))).slice(0, 500)}`);
+      }
+    };
+    const callado = async () => {
+      await page.waitForFunction(() => !window.speechSynthesis.speaking, null, { timeout: 30000 });
+      await page.waitForTimeout(900);
+    };
+    await page.locator("[data-tour=melki-reposo]").waitFor({ timeout: 15000 });
+    // Un lugar mal escrito por el dictado: lo entiende, lo lleva y ofrece la red de todo el municipio
+    await decir("Hey Melki, ubícame en barranca de UPA meta");
+    await hud.waitFor({ timeout: 10000 });
+    // (lo dicho en voz alta: «40919 hectáreas», sin las comillas)
+    await oido(/Lo llevé a Barranca de Upía \(Meta\), un municipio de 409\d\d hectáreas/);
+    await callado();
+    await foto("lugar");
+    // Si duda, pregunta; «sí» elige la primera opción
+    await decir("Melki, ubícame en barranco vía");
+    await oido(/No estoy seguro de haber entendido barranco via\. ¿Se refiere a Barranca de Upía \(Meta\)/);
+    await callado();
+    await decir("Melki, sí");
+    await page.waitForFunction(() => window.__voz.dicho.filter((x) => /Lo llevé a Barranca de Upía/.test(x)).length >= 2, null, { timeout: 15000 });
+    await callado();
+    // Lo que no entiende lo pide de nuevo, con lo que oyó
+    await decir("Melki, barranco loco pla xyz");
+    await oido(/Discúlpeme, señor, no le entendí bien\. ¿Me lo repite, por favor\?/);
+    await callado();
+    // «¿Dónde estamos?»: el municipio que se ve
+    await decir("Melki, ¿dónde estamos?");
+    await oido(/Estamos viendo Barranca de Upía \(Meta\)/);
+    await callado();
+    // La red de todo el municipio de la conversación (sin repetir el nombre)
+    await decir("Melki, ármame una red que cubra todo el municipio");
+    await oido(/Diseño la malla para 409\d\d hectáreas \(409 coma \d kilómetros cuadrados\) en todo el municipio de Barranca de Upía \(Meta\)/);
+    const chat = page.getByRole("region", { name: "Conversación con Melki" });
+    await page.getByRole("button", { name: /^Abrir a Melki/ }).click();
+    await chat.getByText(/^(Listo: la malla cubre|Llegué al)/).waitFor({ timeout: 420000 });
+    const final = await chat.locator("[data-mensaje]").filter({ hasText: /Listo: la malla cubre|Llegué al/ }).last().innerText();
+    afirmar(/de las 40\.9\d\d ha/.test(final), `Diseño del municipio: ${final.slice(0, 200)}`);
+    // El área del diseño lleva el nombre del municipio
+    afirmar(await page.evaluate(() => JSON.stringify(localStorage)).then((t) => /Área objetivo · Barranca de Upía \(Meta\)/.test(t)), "El área objetivo debería llamarse como el municipio");
+    await foto("municipio");
+  },
+  {
+    preparar: async (page) => {
+      await page.addInitScript(manosLibresDeMentira);
+      await page.addInitScript(() => {
+        const consultar = navigator.permissions.query.bind(navigator.permissions);
+        navigator.permissions.query = (d) => (d.name === "microphone" ? Promise.resolve({ state: "granted" }) : consultar(d));
+      });
+    },
+  },
+);
+
 // «Activarme al abrir el simulador»: con el micrófono permitido se activa solo; el navegador no deja hablar hasta el
 // primer toque, y entonces saluda «Hola, señor. Bienvenido».
 await flujo(

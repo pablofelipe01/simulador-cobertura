@@ -16,7 +16,7 @@ import type { AccionMelki } from "@/components/melki/cerebro";
 import type { Api, OpcionesAjuste, OpcionesDiseno } from "@/components/melki/ordenes";
 import { avisarMelki, tourPorId, type ApiTour, type IdTour, type Preparacion } from "@/components/melki/tours";
 import { CONFIG } from "@/lib/config";
-import { buscarLugares, cargarReferencia, textoUbicacion } from "@/lib/geo/referencia";
+import { buscarLugares, cargarReferencia, contornoLugar, reconocerLugares, textoUbicacion, ubicarMunicipio } from "@/lib/geo/referencia";
 import { PERMISOS_AJUSTE, zonaDeRed, type Ajuste, type PedidoAjuste } from "@/lib/radio/ajuste";
 import { areaM2, margenEnPunto, poligonoCirculo, sirveAlArea } from "@/lib/radio/area";
 import { BYTES_PAGO, PEDIDO_CARGA_DEFECTO } from "@/lib/radio/carga";
@@ -91,7 +91,8 @@ function cajaRadio(lat: number, lon: number, radioM: number): [number, number, n
   return [lon - radioM / g.lon, lat - radioM / g.lat, lon + radioM / g.lon, lat + radioM / g.lat];
 }
 
-type PuntoMarcado = { lat: number; lon: number; titulo: string };
+/** Un punto marcado en el mapa; sin `tarjeta` solo queda el marcador (Melki ya ofrece qué hacer ahí). */
+type PuntoMarcado = { lat: number; lon: number; titulo: string; tarjeta?: boolean };
 
 /** Área objetivo del escenario (un área de la regla marcada con su meta), como la recibe el motor. */
 function areaObjetivoDe(e: Escenario): AreaObjetivo | null {
@@ -1186,7 +1187,7 @@ export function Simulador() {
       simular,
       centrar,
       encuadrarCaja,
-      marcar: (lat, lon, titulo) => setPunto({ lat, lon, titulo }),
+      marcar: (lat, lon, titulo, tarjeta = true) => setPunto({ lat, lon, titulo, tarjeta }),
       medir: (m, seleccionar = true) => {
         despachar({ tipo: "medicion-agregar", medicion: m });
         if (!seleccionar) despachar({ tipo: "medicion-seleccionar", id: null });
@@ -1228,6 +1229,16 @@ export function Simulador() {
       borrarMediciones: () => despachar({ tipo: "mediciones-borrar" }),
       ubicacion: textoUbicacion,
       buscarLugar: (t) => buscarLugares(t, 5),
+      // Lo dicho por voz, aunque el dictado lo escriba mal; el departamento que se está viendo desempata
+      reconocerLugar: (t) => {
+        const c = mapaRef.current?.getCenter();
+        return reconocerLugares(t, { departamento: c ? (ubicarMunicipio(c.lat, c.lng)?.departamento ?? null) : null });
+      },
+      contornoLugar,
+      cajaMapa: () => {
+        const b = mapaRef.current?.getBounds();
+        return b ? [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()] : null;
+      },
       modo: () => ultimo.current.estado.modo,
       cambiarModo,
       ponerPieza: (pieza, lat, lon, datos) => {
@@ -1856,7 +1867,7 @@ export function Simulador() {
               onCerrar={() => despachar({ tipo: "seleccionar", id: null })}
             />
           )}
-          {punto && (
+          {punto && punto.tarjeta !== false && (
             <TarjetaPunto
               lat={punto.lat}
               lon={punto.lon}

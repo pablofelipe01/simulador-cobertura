@@ -15,6 +15,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } fro
 
 import { consejoRed, estadoRed, piezaDe } from "@/lib/radio/estado-red";
 import type { Escenario, ResultadoSimulacion } from "@/lib/radio/tipos";
+import { nombresParaVoz, type Lugar } from "@/lib/geo/referencia";
 
 import { MelkiAvatar } from "./avatar";
 import { HudVoz, type SugerenciaHud } from "./hud-voz";
@@ -33,11 +34,14 @@ import {
   type EstadoDictado,
   type ModoDictado,
 } from "./dictado";
-import { accionAjuste, dividirEnPasos, ejecutarOrden, interpretarOrden, textoCoberturaUtil, textoRed, type Api, type Orden, type Pendiente } from "./ordenes";
+import { accionAjuste, dividirEnPasos, ejecutarOrden, interpretarOrden, textoCoberturaUtil, textoRed, type Api, type ContextoOrden, type Orden, type Pendiente } from "./ordenes";
 import type { IdTour } from "./tours";
 import { alCargarVoces, callar, fijarVozPreferida, hablar, puntajeVoz, sonando, vocesEspanol, vozDisponible } from "./voz";
 
 type Mensaje = { id: number; de: "melki" | "usuario"; texto: string; acciones?: AccionRespuesta[]; voz?: boolean };
+
+/** Un pedido dicho que quedó a medias («ubícame en…», «arma una red de…»): se espera un poco más a que termine. */
+const COLGANDO = /\b(en|de|del|a|al|y|o|para|con|que|la|el|los|las|un|una|hasta|por|sobre|entre|cerca|ubicame|llevame|muestrame|pon|ponme|arma|armame|disena|disename|hazme|crea|creame|agrega|busca|vamos|cubre|cubra|municipio|departamento|coordenadas)$/;
 
 const CLAVE = "simulador-cobertura-melki-v1";
 const f1 = (x: number, d = 1) => x.toFixed(d).replace(".", ",");
@@ -262,6 +266,9 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   const esperando = useRef<string | null>(null);
   /** Último nodo que Melki puso o cambió: «súbelo a 20 m», «muévelo 2 km al norte». */
   const ultimoNodo = useRef<string | null>(null);
+  /** El último lugar del que se habló («ahí», «ese municipio», «todo el municipio» en la siguiente orden). */
+  const ultimoLugar = useRef<Lugar | null>(null);
+  const contextoOrden = (): ContextoOrden => ({ ultimoNodo: ultimoNodo.current, ultimoLugar: ultimoLugar.current });
   const ultimoDeshacer = useRef<Escenario | null>(null);
   // Asistente Melki
   const [estadoVoz, setEstadoVoz] = useState<EstadoManosLibres>("apagado");
@@ -636,6 +643,9 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     const ultimo = m.recientes.at(-1);
     if (!ultimo || desde > 2000) return false;
     const cola = ultimo.texto.split(/\s+/).slice(-25).join(" ");
+    // Si empieza con su nombre y Melki no lo acaba de decir, es la persona («Melki, ármame una red…» justo después de
+    // que Melki sugirió esas mismas palabras)
+    if (detectarActivacion(frase).activado && /^\s*\S*\s*\S*\s*(melk|melq|mel k)/i.test(frase) && !/melk/i.test(cola)) return false;
     return pareceEco(frase, cola) && (frase.trim().split(/\s+/).length > 1 || desde < 1200);
   };
 
@@ -668,7 +678,14 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
           m.pendienteDespertar = { via: "parcial", resto: a.resto };
           onManosLibres(true);
         }
-      } else if (m.estado === "atento" || m.comando) setEscuchado(`${m.comando ? `${m.comando} ` : ""}${parcial}`.trim());
+      } else if (m.estado === "atento" || m.comando) {
+        setEscuchado(`${m.comando ? `${m.comando} ` : ""}${parcial}`.trim());
+        // Sigue hablando: no se corta el pedido (cuando llegue lo que falta, se espera la pausa normal)
+        if (m.comando) {
+          window.clearTimeout(m.espera);
+          m.espera = window.setTimeout(() => vozRef.current.ejecutarVoz(), 1800);
+        }
+      }
       else if (m.estado === "esperando" && detectarActivacion(parcial).activado) {
         // Ya se oyó su nombre: responde enseguida, sin esperar a que termine la frase
         if (actual.current.manos.sonido) tono(true);
@@ -731,7 +748,9 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     window.clearTimeout(m.atento);
     window.clearTimeout(m.espera);
     fijarEstadoVoz("atento");
-    m.espera = window.setTimeout(() => vozRef.current.ejecutarVoz(), 700);
+    // Si la frase quedó a medias («ubícame en…», «arma una red de…»), espera un poco más a que termine
+    const aMedias = COLGANDO.test(m.comando.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[.,;:!?¿¡]+$/g, "").trim());
+    m.espera = window.setTimeout(() => vozRef.current.ejecutarVoz(), aMedias ? 1800 : 700);
   };
 
   const ejecutarVoz = () => {
@@ -809,6 +828,24 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     vozRef.current.preguntar(texto, true);
   };
 
+  /** Cuánto entiende el simulador lo dicho: una orden con todo vale más que una pregunta por el lugar. */
+  const puntosComprension = (pedido: string): number => {
+    try {
+      const o = interpretarOrden(pedido, api, pendiente.current, contextoOrden());
+      if (!o || o.tipo === "aviso") return 0;
+      return o.tipo === "pedir-lugar" ? 0.5 : o.tipo === "elegir" ? 1.5 : 3;
+    } catch {
+      return 0;
+    }
+  };
+
+  /** El departamento que se ve en el centro del mapa (para sugerirle al reconocimiento sus municipios). */
+  const departamentoVista = (): string | null => {
+    const c = api.centroMapa();
+    const u = c ? api.ubicacion(c.lat, c.lon) : null;
+    return u?.match(/\(([^)]+)\)\s*$/)?.[1] ?? u ?? null;
+  };
+
   const ejecutarVozComo = (dicho: string) => {
     ml.current.comando = dicho;
     ejecutarVoz();
@@ -826,9 +863,10 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
         {
           onTexto: (final, parcial) => !c.cancelado && vozRef.current.oirTexto(final, parcial),
           onInicioFrase: () => !c.cancelado && vozRef.current.inicioFrase(),
-          // Entre las versiones que propone el reconocimiento, la que trae su nombre y palabras del simulador
-          elegir: elegirAlternativa,
-          frases: FRASES_RECONOCIMIENTO,
+          // Entre las versiones que propone el reconocimiento, la que trae su nombre y la que el simulador entiende
+          // como orden (con un lugar que existe); y los nombres de los municipios que se ven, para entenderlos mejor
+          elegir: (alternativas) => elegirAlternativa(alternativas, (pedido) => vozRef.current.puntosComprension(pedido)),
+          frases: [...FRASES_RECONOCIMIENTO, ...nombresParaVoz(departamentoVista())],
           onEstado: (e, detalle) => {
             if (c.cancelado) return;
             if (e === "preparando" && detalle) setAvisoVoz(detalle);
@@ -1177,6 +1215,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     const res = ejecutarOrden(orden, api);
     pendiente.current = res.pendiente ?? null;
     if (res.nodo) ultimoNodo.current = res.nodo;
+    if (res.lugar) ultimoLugar.current = res.lugar;
     if (res.deshacer) ultimoDeshacer.current = res.deshacer;
     if (res.esperar) esperando.current = res.esperar;
     agregarMelki(res);
@@ -1207,8 +1246,8 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       // «Pon el gateway en X, un repetidor a 10 km al este»: el paso que empieza sin verbo usa el del anterior
       const sinVerbo = /^(un|una|otro|otra|el|la|los|las|\d)/i.test(pasos[i].trim());
       if (i > 0 && sinVerbo && verboPlan) pasos[i] = `${verboPlan} ${pasos[i]}`;
-      let orden = i === 0 ? primera : interpretarOrden(pasos[i], api, pendiente.current, { ultimoNodo: ultimoNodo.current });
-      if (!orden && i > 0 && verboPlan && !pasos[i].startsWith(verboPlan)) orden = interpretarOrden(`${verboPlan} ${pasos[i]}`, api, pendiente.current, { ultimoNodo: ultimoNodo.current });
+      let orden = i === 0 ? primera : interpretarOrden(pasos[i], api, pendiente.current, contextoOrden());
+      if (!orden && i > 0 && verboPlan && !pasos[i].startsWith(verboPlan)) orden = interpretarOrden(`${verboPlan} ${pasos[i]}`, api, pendiente.current, contextoOrden());
       if (!sinVerbo) verboPlan = pasos[i].trim().split(/\s+/)[0];
       if (!orden) {
         agregarMelki({ texto: `Paso ${i + 1} de ${total}: no entendí «${pasos[i]}». ${hechos ? "Hice los anteriores; d" : "D"}ígamelo de otra forma.` });
@@ -1218,6 +1257,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       const res = ejecutarOrden(orden, api);
       pendiente.current = res.pendiente ?? null;
       if (res.nodo) ultimoNodo.current = res.nodo;
+      if (res.lugar) ultimoLugar.current = res.lugar;
       if (res.deshacer) conCambios = true;
       // Solo el último paso cuenta el resultado de la simulación
       if (res.esperar && i === total - 1) esperando.current = res.esperar;
@@ -1309,19 +1349,22 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     }
     // Varias órdenes en un mismo mensaje
     const pasos = dividirEnPasos(pregunta);
-    if (pasos.length > 1 && interpretarOrden(pregunta, api, pendiente.current, { ultimoNodo: ultimoNodo.current })?.tipo !== "disenar") {
-      const primera = interpretarOrden(pasos[0], api, pendiente.current, { ultimoNodo: ultimoNodo.current });
+    // Un diseño (con lo que se hace después) o una pregunta por el lugar es una sola orden aunque traiga «y luego»
+    const entera = interpretarOrden(pregunta, api, pendiente.current, contextoOrden());
+    if (pasos.length > 1 && !(entera && ["disenar", "elegir", "pedir-diseno", "pedir-lugar", "aviso"].includes(entera.tipo))) {
+      const primera = interpretarOrden(pasos[0], api, pendiente.current, contextoOrden());
       if (primera) {
         void ejecutarPlan(pasos, primera);
         return;
       }
     }
-    const orden = interpretarOrden(pregunta, api, pendiente.current, { ultimoNodo: ultimoNodo.current });
-    if (orden) {
-      ejecutar(orden);
+    if (entera) {
+      ejecutar(entera);
       return;
     }
-    agregarMelki(responder(pregunta, { ...contexto, trato: actual.current.manos.trato }));
+    // Sin orden: el cerebro responde (por voz, si no entendió, pide que se lo repita)
+    const c = api.centroMapa();
+    agregarMelki(responder(pregunta, { ...contexto, trato: actual.current.manos.trato, porVoz: deVoz, vista: c ? api.ubicacion(c.lat, c.lon) : null }));
   };
 
   /** Muestra el menú de tours (sin repetirlo si es lo último que dijo). */
@@ -1368,9 +1411,9 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     avisos.current = { preguntar, mostrarTours, cerrarOferta, oferta };
   });
   // Lo que llama el reconocimiento de voz siempre usa la versión de ahora (con el escenario de ahora)
-  const vozRef = useRef({ oirTexto, inicioFrase, ejecutarVoz, preguntar, pulsarAccion, arrancarEscucha, reanudar, listoParaEscuchar, bloqueoVoz, desbloquearVoz, iniciarPasiva, apagarTodo });
+  const vozRef = useRef({ oirTexto, inicioFrase, ejecutarVoz, preguntar, pulsarAccion, arrancarEscucha, reanudar, listoParaEscuchar, bloqueoVoz, desbloquearVoz, iniciarPasiva, apagarTodo, puntosComprension });
   useEffect(() => {
-    vozRef.current = { oirTexto, inicioFrase, ejecutarVoz, preguntar, pulsarAccion, arrancarEscucha, reanudar, listoParaEscuchar, bloqueoVoz, desbloquearVoz, iniciarPasiva, apagarTodo };
+    vozRef.current = { oirTexto, inicioFrase, ejecutarVoz, preguntar, pulsarAccion, arrancarEscucha, reanudar, listoParaEscuchar, bloqueoVoz, desbloquearVoz, iniciarPasiva, apagarTodo, puntosComprension };
   });
   // Encender y apagar el asistente
   const manosRef = useRef({ iniciarManosLibres, detenerManosLibres, apagarTodo });
