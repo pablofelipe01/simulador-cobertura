@@ -64,7 +64,15 @@ const sinBordes = (t: string) => t.replace(/^[\s,.;:!?]+/, "").replace(/[\s,.;:]
  * pedido es lo de antes.
  */
 export function detectarActivacion(frase: string): Activacion {
-  const partes = frase.trim().split(/\s+/).filter(Boolean);
+  // Al hablar rápido el reconocimiento pega el saludo y el nombre («heymelki», «holamelki»): se separan
+  const partes = frase
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .flatMap((p) => {
+      const m = normal(p).match(/^(hola|ola|oye|ey|ei|hey|hei|hello|helo|jelou|ok|okey)(m\w{3,5})$/);
+      return m && esNombre(m[2]) ? [m[1], m[2]] : [p];
+    });
   const claves = partes.map(normal);
   let i = -1;
   let largo = 1;
@@ -138,7 +146,9 @@ export function limpiarComando(frase: string): string {
   let t = frase.replace(/\s+/g, " ").trim();
   t = numerosEnPalabras(t);
   t = normalizarDictado(t);
-  t = t.replace(/^(eh+|em+|este|bueno|pues|a ver|mira|oye)[, ]+/i, "").replace(/[, ]+(eh+|por favor|porfa)$/i, "");
+  // Muletillas al empezar o al terminar («eh», «este», «o sea», «bueno», «mmm»), también repetidas al hablar rápido
+  for (let i = 0; i < 3; i++) t = t.replace(/^(eh+|em+|m+|este|bueno|pues|a ver|mira|oye|o sea|osea|entonces|digamos|ehm+)[, ]+/i, "");
+  t = t.replace(/[, ]+(eh+|por favor|porfa|porfavor|gracias)$/i, "");
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
 
@@ -228,27 +238,33 @@ export function frases(trato: Trato) {
 export const SALUDO_MANOS_LIBRES = frases("senor").bienvenida(true);
 
 export const AYUDA_VOZ =
-  "Soy el Asistente Melki: por voz entiendo lo mismo que por escrito. Dígame «Hola Melki», «Oye Melki» o «Hey Melki» y su pedido; por ejemplo: «pon el gateway en Cumaral», «conecta a los que faltan», «puebla la zona con doscientas cincuenta personas», «¿cuántas personas aguanta el Repetidor 1?», «¿cómo dejo la mayor cobertura posible?», «muestra el panel de resultados» o «pantalla limpia». Después de responder me quedo atento unos segundos: siga hablando sin repetir mi nombre. Para usar mis botones diga «sí, hazlo» o «la segunda»; también entiendo «para», «repite», «más detalle», «deshaz», «deja de escuchar» (quedo en reposo, atento a «Hola Melki») y «apaga el micrófono». Mi barra se arrastra a cualquier parte del mapa y se achica sola mientras espero.";
+  "Soy el Asistente Melki: por voz entiendo lo mismo que por escrito. Dígame «Hola Melki», «Oye Melki» o «Hey Melki» y su pedido; por ejemplo: «pon el gateway en Cumaral», «conecta a los que faltan», «puebla la zona con doscientas cincuenta personas», «¿cuántas personas aguanta el Repetidor 1?», «¿cómo dejo la mayor cobertura posible?», «muestra el panel de resultados» o «pantalla limpia». Después de responder me quedo atento unos segundos: siga hablando sin repetir mi nombre. Para usar mis botones diga «sí, hazlo» o «la segunda»; también entiendo «para», «repite», «más detalle», «deshaz», «deja de escuchar» (quedo en reposo, atento a «Hola Melki») y «apaga el micrófono». Mi barra se arrastra a cualquier parte del mapa y se achica sola mientras espero. Entiendo los municipios aunque se oigan mal («ubícame en Barranca de Upía, Meta»); si dudo, le pregunto «¿se refiere a…?», y si no le entiendo, le pido que me lo repita. También: «ármame una red que cubra todo el municipio», «la zona norte del municipio», «¿dónde estamos?».";
 
 /** Palabras del simulador que ayudan a elegir entre lo que el reconocimiento cree haber oído. */
 const TERMINOS =
-  /\b(red|redes|malla|mesh|meshcore|gateway|repetidor\w*|nodos?|antenas?|personas?|gente|cobertura|senal|simul\w*|hectareas?|kilometros?|km|metros?|municipio|zona|pagos?|whatsapp|mensajes?|trama|sostenible|viable|construye|hazme|arma|disena|pon|agrega|mueve|sube|baja|borra|muestra|resultados|herramientas|paneles?|starlink|solar|costo|cuesta|lleva\w*)\b/g;
+  /\b(red|redes|malla|mesh|meshcore|gateway|repetidor\w*|nodos?|antenas?|personas?|gente|cobertura|senal|simul\w*|hectareas?|kilometros?|km|metros?|municipio|departamento|zona|pagos?|whatsapp|mensajes?|trama|sostenible|viable|construye|hazme|arma|armame|disena|pon|agrega|mueve|sube|baja|borra|muestra|resultados|herramientas|paneles?|starlink|solar|costo|cuesta|lleva\w*|ubicame|popularidad|aguanta\w*)\b/g;
 
 /**
  * Elige, entre las versiones que propone el reconocimiento para una frase, la que mejor se entiende en el simulador:
  * la que trae el nombre de Melki y más palabras del simulador, sin olvidar el orden del reconocedor (la primera suele
  * ser la más probable).
  */
-export function elegirAlternativa(alternativas: string[]): string {
+export function elegirAlternativa(alternativas: string[], entiende?: (pedido: string) => number): string {
   let mejor = alternativas[0] ?? "";
   let puntos = -Infinity;
   alternativas.forEach((t, i) => {
     if (!t.trim()) return;
     const n = normal(t);
     let p = -i * 0.75;
-    if (detectarActivacion(t).activado) p += 4;
+    const a = detectarActivacion(t);
+    if (a.activado) p += 4;
     p += (n.match(TERMINOS)?.length ?? 0) * 1;
     if (/\d/.test(n)) p += 0.5;
+    // Lo que el simulador entiende como orden (con un lugar que existe) pesa más que las palabras sueltas
+    if (entiende) {
+      const pedido = limpiarComando(a.activado ? a.resto : t);
+      if (pedido) p += entiende(pedido);
+    }
     if (p > puntos) {
       puntos = p;
       mejor = t;
@@ -258,5 +274,28 @@ export function elegirAlternativa(alternativas: string[]): string {
 }
 
 /** Frases que se le sugieren al reconocimiento en el equipo (si el navegador lo permite) para que las entienda mejor. */
-export const FRASES_RECONOCIMIENTO = ["Melki", "Hola Melki", "Hey Melki", "Hello Melki", "Oye Melki", "gateway", "repetidor", "MeshCore", "red mesh", "hectáreas", "Trama", "Starlink", "WhatsApp", "Barranca de Upía", "Cumaral", "Villavicencio"];
+export const FRASES_RECONOCIMIENTO = [
+  "Melki",
+  "Hola Melki",
+  "Hey Melki",
+  "Hello Melki",
+  "Oye Melki",
+  "gateway",
+  "repetidor",
+  "MeshCore",
+  "red mesh",
+  "hectáreas",
+  "Trama",
+  "Starlink",
+  "WhatsApp",
+  "Barranca de Upía",
+  "Cumaral",
+  "Villavicencio",
+  "ubícame en",
+  "todo el municipio",
+  "zonas de popularidad",
+  "hasta dónde aguanta",
+  "señal media",
+  "señal estable",
+];
 

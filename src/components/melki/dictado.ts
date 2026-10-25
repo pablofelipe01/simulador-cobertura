@@ -82,7 +82,10 @@ export const hayMicrofono = () => typeof navigator !== "undefined" && Boolean(na
  */
 export function corregirPalabras(texto: string): string {
   return texto
-    .replace(/\b(red|redes|malla|mallas)\s+(mes|mech|mesch|mesc)\b/gi, "$1 mesh")
+    // «Mesh» al hablar rápido: «red mechen tal punto», «red meshen», «mediantales coordenadas»
+    .replace(/\b(mechen|meshen|meshe en|mechén)\b/gi, "mesh en")
+    .replace(/\bmedian\s*tales\b/gi, "mesh en tales")
+    .replace(/\b(red|redes|malla|mallas)\s+(mes|mech|mesch|mesc|meche|mecha)\b/gi, "$1 mesh")
     .replace(/\b(mes|mesh|mech)\s*(core|cor|kor|cord)\b/gi, "MeshCore")
     .replace(/\b(gate\s+way|geit\s*wey|geit\s*wei|gueit\s*wey|gueit\s*wei|getwey|getway|geiwey|geitway|gate\s*guey|gay\s*way)\b/gi, "gateway")
     .replace(/\b(e?ctarias|e?ctareas|hectarias|ectaria)\b/gi, "hectáreas")
@@ -90,7 +93,9 @@ export function corregirPalabras(texto: string): string {
     .replace(/\b(?:ese\s+efe|s\s+f)\s*(\d{1,2})\b/gi, "SF$1")
     .replace(/\b(estar\s*link|star\s+link|starling|estarlin)\b/gi, "Starlink")
     .replace(/\b(guasap|wasap|whats\s+app|guatsap)\b/gi, "WhatsApp")
-    .replace(/\blo\s+ra\b/gi, "LoRa");
+    .replace(/\blo\s+ra\b/gi, "LoRa")
+    // Palabras pegadas al hablar rápido: «ubícameen Barranca» → «ubícame en Barranca»
+    .replace(/\b(ub[ií]came|ll[eé]vame|mu[eé]strame)(en|a|al)\b/gi, "$1 $2");
 }
 
 /**
@@ -158,11 +163,16 @@ function conReconocedor(Clase: ClaseReconocedor, idioma: string, local: boolean,
       // Sin sugerencias: sigue igual
     }
   }
-  /** La frase dicha: la primera versión o la que mejor se entiende en el simulador. */
-  const texto = (x: Resultado) => {
+  /** La frase dicha: la primera versión o la que mejor se entiende en el simulador (se elige una vez por frase). */
+  const elegidas = new Map<number, string>();
+  const texto = (x: Resultado, i: number) => {
+    const ya = elegidas.get(i);
+    if (ya !== undefined) return ya;
     const n = eventos.elegir ? Math.max(1, x.length ?? 1) : 1;
     const opciones = Array.from({ length: n }, (_, k) => x[k]?.transcript?.trim() ?? "").filter(Boolean);
-    return opciones.length > 1 && eventos.elegir ? eventos.elegir(opciones) : (opciones[0] ?? "");
+    const t = opciones.length > 1 && eventos.elegir ? eventos.elegir(opciones) : (opciones[0] ?? "");
+    if (x.isFinal) elegidas.set(i, t);
+    return t;
   };
   let final = "";
   let terminado = false;
@@ -176,7 +186,7 @@ function conReconocedor(Clase: ClaseReconocedor, idioma: string, local: boolean,
     let parcial = "";
     for (let i = 0; i < e.results.length; i++) {
       const x = e.results[i];
-      if (x.isFinal) confirmado = unir(confirmado, texto(x));
+      if (x.isFinal) confirmado = unir(confirmado, texto(x, i));
       else parcial = unir(parcial, x[0].transcript.trim());
     }
     final = confirmado;

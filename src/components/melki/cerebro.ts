@@ -40,6 +40,10 @@ export type ContextoMelki = {
   red?: EstadoRed;
   /** Cómo trata Melki a la persona (lo elige en Ajustes del Asistente Melki): «señor», «señora» o sin tratamiento. */
   trato?: "senor" | "senora" | "ninguno";
+  /** El pedido llegó por voz (Asistente Melki): si no lo entiende, pide que se lo repitan. */
+  porVoz?: boolean;
+  /** El municipio que se ve en el centro del mapa («Cumaral (Meta)»), para «¿dónde estamos?». */
+  vista?: string | null;
 };
 
 /** «señor», «señora» o nada, según el trato elegido (por defecto, señor). */
@@ -61,6 +65,29 @@ const DEL_SIMULADOR =
 
 /** Charla corta («¿cómo estás?», «¿qué tal?»): responde con cortesía y vuelve al trabajo. */
 const CHARLA = /^(?:(?:hola|oye|hey|buenas|buenos dias|buenas tardes|buenas noches)\s+)?(?:melki\s+)?(?:como (?:estas|te va|te encuentras|amaneciste|has estado|vas)|que tal(?: estas| vas| te va)?|todo bien|como andas)(?:\s+melki)?$/;
+
+/** «¿Me escuchas?», «¿estás ahí?»: confirma que escucha y queda a la orden. */
+const ME_ESCUCHAS = /^(?:(?:hola|oye|hey)\s+)?(?:melki\s+)?(?:me (?:escuchas|oyes|entiendes|copias|estas escuchando|estas oyendo)|estas ahi|sigues ahi|hay alguien|estas despierto|funcionas|me lees)(?:\s+melki)?$/;
+/** «¿Dónde estamos?», «¿qué municipio es este?»: el municipio que se ve en el mapa. */
+const DONDE_ESTAMOS = /\b(?:donde (?:estamos|estoy|queda esto|es esto)|en que (?:municipio|departamento|lugar|parte|zona) (?:estamos|estoy|esta el mapa|queda esto|es esto)|que (?:lugar|municipio|zona|pueblo) es (?:este|esta|esto)|que estoy viendo|que estamos viendo)\b/;
+/** «Muy bien», «excelente trabajo», «eres el mejor»: agradece con cortesía y sigue. */
+const ELOGIO = /^(?:muy bien|excelente|buen trabajo|buenisimo|que bien|lo hiciste bien|bien hecho|eres (?:el|la) mejor|eres genial|me gusta|me encanta|increible|espectacular|asi me gusta)(?:\s+(?:melki|trabajo|hecho))*$/;
+
+/**
+ * No se entendió lo que dijo (sobre todo por voz, cuando el dictado escribe algo sin sentido): se disculpa, dice lo que
+ * oyó y pide que se lo repitan, con ejemplos.
+ */
+export function respuestaNoEntendi(c: ContextoMelki, pregunta: string): Respuesta {
+  const s = tratoDe(c);
+  const oido = pregunta.trim().replace(/\s+/g, " ").slice(0, 120);
+  return {
+    texto: `Discúlpeme${s ? `, ${s}` : ""}, no le entendí bien. ¿Me lo repite, por favor? ${c.porVoz ? `Escuché: «${oido}». ` : ""}Puede decirme, por ejemplo, «ubícame en Barranca de Upía, Meta», «ármame una red que cubra todo el municipio» o «¿cuánto cuesta la red?».`,
+    acciones: [
+      { texto: "¿Qué puedo decir?", accion: "orden", orden: { tipo: "que-hago" } },
+      { texto: "Ver los tours guiados", accion: "tours" },
+    ],
+  };
+}
 
 export function respuestaFueraDeTema(c: ContextoMelki): Respuesta {
   const s = tratoDe(c);
@@ -565,6 +592,11 @@ const TEMAS: Tema[] = [
     id: "manos-libres",
     claves: [
       "asistente melki",
+      "no me entiende",
+      "no me entiendes",
+      "hablo rapido",
+      "hablar rapido",
+      "entiende mal",
       "asistente por voz",
       "asistente inteligente",
       "en reposo",
@@ -600,6 +632,8 @@ const TEMAS: Tema[] = [
         "• Mi barra se arrastra a cualquier parte del mapa (doble clic la devuelve a su sitio), se achica sola mientras espero mi nombre y crece cuando me hablan; también puede dejarla siempre pequeña.",
         "• En Ajustes de voz elige cómo le hablo (señor, señora o sin tratamiento), la voz (la más natural que tenga su equipo; en Edge hay voces neuronales como Salomé de Colombia), si le escucho siempre en reposo y si me activo solo al abrir el simulador, con el micrófono permitido.",
         "• Si me pide algo que se sale del simulador, se lo digo con respeto y retomamos la red; y si me pide «una red sostenible y viable en Barranca de Upía de 11.226 hectáreas», la diseño y le cuento su viabilidad técnica y su costo con los precios de Trama.",
+        "• Entiendo los municipios aunque el dictado los escriba mal al hablar rápido («barranca de UPA meta», «barranco vía meta» → Barranca de Upía, Meta): comparo cómo suenan y uso el departamento que se dice o el que se ve en el mapa. Si dudo entre varios, le pregunto «¿se refiere a…?» («sí», «la segunda» o el nombre); si no le entiendo, le pido con gusto que me lo repita.",
+        "• Recuerdo el lugar del que hablamos: «ubícame en Barranca de Upía, Meta» y luego «ármame una red que cubra todo el municipio», «la zona norte del municipio», «3.000 hectáreas ahí» o «lo que estoy viendo»; y con «puntos de popularidad… hasta dónde aguanta antes de quebrarse», después del diseño pongo la gente y hago la prueba de estrés subiendo la carga.",
         "• Sin mi nombre no hago nada, por si alguien habla cerca. Funciona mejor en Edge o Chrome, con un micrófono cerca o audífonos; en Ajustes de voz elige si el audio lo procesa el navegador o se queda en su equipo.",
       ].join("\n"),
       acciones: [
@@ -965,6 +999,18 @@ export function responder(pregunta: string, c: ContextoMelki): Respuesta {
     const s = tratoDe(c);
     return { texto: `Muy bien${s ? `, ${s}` : ""}, gracias por preguntar. Estoy listo y a sus órdenes: ¿qué construimos hoy en el simulador? Por ejemplo, ${EJEMPLOS_RETOMAR}.` };
   }
+  if (ME_ESCUCHAS.test(limpio)) {
+    const s = tratoDe(c);
+    return { texto: `Sí${s ? `, ${s}` : ""}, le escucho perfectamente. ¿Qué hacemos? Por ejemplo, ${EJEMPLOS_RETOMAR}.` };
+  }
+  if (ELOGIO.test(limpio)) {
+    const s = tratoDe(c);
+    return { texto: `Muchas gracias${s ? `, ${s}` : ""}; es un gusto ayudarle. ¿Qué más hacemos?` };
+  }
+  if (DONDE_ESTAMOS.test(t) && !/\b(nodo|antena|gateway|repetidor\w*|persona|torre)\b/.test(t))
+    return c.vista
+      ? { texto: `Estamos viendo ${c.vista}. ¿Le armo una red sostenible que cubra todo el municipio?`, acciones: [{ texto: "Sí, la red de todo el municipio", accion: "orden", orden: { tipo: "red-municipio", sostenible: true } }] }
+      : { texto: "El centro del mapa está fuera de Colombia o los límites aún no cargan. Dígame un municipio y lo llevo: «ubícame en Barranca de Upía, Meta»." };
   // Fuera del simulador (aunque alguna palabra coincida con un tema, como «¿cómo está el clima?»)
   if (FUERA_DE_TEMA.test(t) && !/\b(red|malla|nodo|antena|gateway|repetidor\w*|cobertura|senal|simul\w*|trama|meshcore|lora|pagos?|radio mobile|itm|longley|propagacion|enlace)\b/.test(t)) return respuestaFueraDeTema(c);
   const especifica = sobreAntena(t, c);
@@ -990,15 +1036,19 @@ export function responder(pregunta: string, c: ContextoMelki): Respuesta {
     // Un pedido que no es del simulador («hazme el café»): con respeto, y retoma el trabajo
     if (PIDE_ACCION.test(t) && !DEL_SIMULADOR.test(t)) return respuestaFueraDeTema(c);
     const ne = noEntendiOrden(pregunta);
-    if (ne) return ne;
+    if (ne) return c.porVoz ? { ...ne, texto: `Discúlpeme${tratoDe(c) ? `, ${tratoDe(c)}` : ""}, no le entendí bien: ${ne.texto.charAt(0).toLowerCase()}${ne.texto.slice(1)}` } : ne;
   }
   if (mejor && mejor.puntos >= 2) return mejor.tema.responder(c);
   if (/\b(hola|buenas|buenos dias|saludos)\b/.test(t)) {
     const r = TEMAS.find((x) => x.id === "capacidades")!.responder(c);
     return { ...r, texto: `¡Hola! ${r.texto}` };
   }
+  // Por voz, lo que no tiene ni pregunta ni pedido claro casi siempre es el dictado que escribió mal: se pide repetir
+  const pregunta_ = /^\s*¿|\?\s*$/.test(pregunta) || /^ (que|quien|quienes|como|cual|cuales|cuando|donde|por que|cuanto|cuanta|cuantos|cuantas)\b/.test(t);
+  if (c.porVoz && !pregunta_ && !FUERA_DE_TEMA.test(t)) return respuestaNoEntendi(c, pregunta);
   // Nada del simulador en lo que pidió: se lo dice con cortesía y retoma el trabajo
   if (!DEL_SIMULADOR.test(t)) return respuestaFueraDeTema(c);
+  if (c.porVoz) return respuestaNoEntendi(c, pregunta);
   return {
     texto:
       "No estoy seguro de haber entendido. Puedo sembrar la red (gateway, repetidores y gente), poblar la zona y probar cuántos pagos, WhatsApp y consultas a la IA aguanta, dimensionar la red de un departamento, medir distancias, llevarlo a un municipio, explicar los colores, los enlaces y los saltos, o decirle por qué un nodo no llega al gateway. Pruebe: «¿qué puedes hacer?».",
