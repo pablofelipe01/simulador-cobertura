@@ -51,6 +51,48 @@ export function sirveAlArea(poligono: Poligono, lat: number, lon: number, alcanc
   return d(lat, lon) <= radio + alcanceM;
 }
 
+export type Rumbo = "norte" | "sur" | "este" | "oeste" | "noreste" | "noroeste" | "sureste" | "suroeste";
+
+/**
+ * La parte del polígono hacia un rumbo desde el centro de su caja: la mitad norte, sur, este u oeste, o un cuarto
+ * (noreste…). Recorta con un semiplano (Sutherland–Hodgman), que sirve también para polígonos cóncavos.
+ */
+export function recortarPoligono(poligono: Poligono, rumbo: Rumbo): Poligono {
+  const c = cajaPoligono(poligono);
+  const cLat = (c.sur + c.norte) / 2;
+  const cLon = (c.oeste + c.este) / 2;
+  const cortes: [0 | 1, number, boolean][] = [];
+  if (rumbo === "norte" || rumbo === "noreste" || rumbo === "noroeste") cortes.push([1, cLat, true]);
+  if (rumbo === "sur" || rumbo === "sureste" || rumbo === "suroeste") cortes.push([1, cLat, false]);
+  if (rumbo === "este" || rumbo === "noreste" || rumbo === "sureste") cortes.push([0, cLon, true]);
+  if (rumbo === "oeste" || rumbo === "noroeste" || rumbo === "suroeste") cortes.push([0, cLon, false]);
+  let salida = poligono;
+  for (const [eje, valor, mayor] of cortes) {
+    const dentro = (p: [number, number]) => (mayor ? p[eje] >= valor : p[eje] <= valor);
+    const corte = (a: [number, number], b: [number, number]): [number, number] => {
+      const t = (valor - a[eje]) / (b[eje] - a[eje]);
+      return [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])];
+    };
+    const nuevo: Poligono = [];
+    for (let i = 0; i < salida.length; i++) {
+      const a = salida[i];
+      const b = salida[(i + 1) % salida.length];
+      if (dentro(a)) nuevo.push(a);
+      if (dentro(a) !== dentro(b)) nuevo.push(corte(a, b));
+    }
+    salida = nuevo;
+  }
+  return salida;
+}
+
+/** Rectángulo de una caja [oeste, sur, este, norte] como polígono. */
+export const poligonoCaja = ([o, s, e, n]: [number, number, number, number]): Poligono => [
+  [o, s],
+  [e, s],
+  [e, n],
+  [o, n],
+];
+
 /** Círculo de radio dado (m) como polígono de muchos lados. */
 export function poligonoCirculo(lat: number, lon: number, radioM: number, lados = 72): Poligono {
   const puntos: Poligono = [];
