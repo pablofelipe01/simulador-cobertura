@@ -344,9 +344,15 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
     para ver hasta qué punto aguanta antes de quebrarse", después del
     diseño pone 250 personas por punto y hace la prueba de estrés
     subiendo la carga. "¿Dónde estamos?" dice el municipio que se ve.
+    Sin eco ni bucles: con parlantes, lo que Melki oye de su propia voz
+    (mientras habla o justo después) no lo toma como pedido, y no repite
+    la misma respuesta ni se disculpa dos veces seguidas por su eco.
+    Cada frase llega una sola vez (sin el texto duplicado del navegador
+    o del celular). Si Edge deja de escuchar tras un silencio, vuelve a
+    escuchar solo, sin que el micrófono se prenda y se apague; las
+    barritas del orbe siguen su voz.
     Consejos: Edge o Chrome actualizados, el micrófono cerca o
-    audífonos (con parlantes a todo volumen Melki se puede oír a sí
-    mismo), y hablar de corrido justo después de "Melki".
+    audífonos, y hablar de corrido justo después de "Melki".
  p) Pantalla limpia: el botón junto a "Modo avanzado" oculta el panel
     de la izquierda y el de la barra de arriba lo devuelve; el de la
     derecha oculta los Resultados. O dígale a Melki "pantalla limpia" y

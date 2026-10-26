@@ -17,11 +17,11 @@ export { interpretarOrden, ejecutarOrden, extraerCoordenadas, extraerVariasCoord
 export { responder, noEntendiOrden, respuestaNoEntendi } from "./src/components/melki/cerebro";
 export { areaM2, poligonoCirculo, recortarPoligono } from "./src/lib/radio/area";
 export { claveFonetica, parecidoFonetico } from "./src/lib/geo/fonetica";
-export { normalizarDictado, componerTexto, quitarRepeticiones, corregirPalabras } from "./src/components/melki/dictado";
+export { normalizarDictado, componerTexto, quitarRepeticiones, corregirPalabras, clavePalabras, quitarTartamudeo, loNuevo, iniciarDictado } from "./src/components/melki/dictado";
 export { TOURS } from "./src/components/melki/tours";
 export { pedidoDeTour } from "./src/components/melki/cerebro";
 export { numerosEnPalabras } from "./src/components/melki/numeros";
-export { detectarActivacion, controlDeVoz, limpiarComando, textoParaVoz, pareceEco, AYUDA_VOZ, SALUDO_MANOS_LIBRES, esNombre, frases, elegirAlternativa } from "./src/components/melki/manos-libres";
+export { detectarActivacion, controlDeVoz, limpiarComando, textoParaVoz, pareceEco, empiezaConNombre, AYUDA_VOZ, SALUDO_MANOS_LIBRES, esNombre, frases, elegirAlternativa } from "./src/components/melki/manos-libres";
 export { buscarLugares, cargarReferencia, pareceNombre, reconocerLugares, decidirLugar, contornoLugar, nombresParaVoz, textoUbicacion } from "./src/lib/geo/referencia";
 export { costoRedTrama } from "./src/lib/radio/trama";
 export { paraHablar, puntajeVoz } from "./src/components/melki/voz";
@@ -1339,6 +1339,171 @@ function crearApi(antenas) {
   caso("«¿Me escuchas?» → «Sí, señor, le escucho perfectamente»", /^Sí, señor, le escucho perfectamente/.test(m.responder("¿me escuchas?", cV).texto) && /^Sí, señor/.test(m.responder("Melki, ¿estás ahí?", cV).texto));
   caso("«¿Dónde estamos?» → el municipio que se ve", /^Estamos viendo Cumaral \(Meta\)/.test(m.responder("¿dónde estamos?", cV).texto) && /^Estamos viendo/.test(m.responder("¿qué municipio es este?", cV).texto));
   caso("«Excelente, Melki» → agradece y sigue", /^Muchas gracias, señor/.test(m.responder("excelente melki", cV).texto));
+}
+
+
+// ─── 20. v12.8: la voz sin duplicados, sin eco ni bucles, y sin prender y apagar el micrófono ───
+{
+  // Lo que el navegador repite
+  caso("«ubícame en ubícame en Barranca» → «ubícame en Barranca» (grupos repetidos al hablar rápido)", m.quitarTartamudeo("ubícame en ubícame en Barranca de Upía") === "ubícame en Barranca de Upía" && m.quitarTartamudeo("hola Melki hola Melki pon el gateway") === "hola Melki pon el gateway");
+  caso("…pero no toca lo que se repite a propósito ni los números («no, no», «cuatro punto cuatro cuatro»)", m.quitarTartamudeo("no, no, así no") === "no, no, así no" && m.quitarTartamudeo("cuatro punto cuatro cuatro") === "cuatro punto cuatro cuatro");
+  caso("Android y Safari repiten lo dicho antes («uno», «uno dos»…): solo se toma lo nuevo", m.loNuevo("uno dos", "uno dos tres", { acumula: true, reciente: true }) === "tres" && m.loNuevo("Hola Melki,", "hola melki ubícame en Cumaral", { acumula: true, reciente: false }) === "ubícame en Cumaral");
+  caso("La misma frase dos veces seguidas se toma una vez; dicha otra vez más tarde, sí cuenta", m.loNuevo("sí", "Sí.", { acumula: false, reciente: true }) === "" && m.loNuevo("sí", "sí", { acumula: false, reciente: false }) === "sí");
+  caso("En el computador una frase que empieza como la anterior es una frase nueva", m.loNuevo("hola Melki", "hola Melki pon el gateway", { acumula: false, reciente: true }) === "hola Melki pon el gateway");
+
+  // El eco: la propia voz de Melki que vuelve por el micrófono
+  caso("El eco se reconoce aunque los números vuelvan en palabras", m.pareceEco("un municipio de cuatrocientos nueve coma dos kilómetros cuadrados", "Lo llevé a Barranca de Upía (Meta), un municipio de 40.919 ha (409,2 km²)."));
+  caso("…y con ruido de por medio, si trae un trozo seguido de lo que dijo", m.pareceEco("eh no le entendí bien me lo repite por favor", "Discúlpeme, señor, no le entendí bien. ¿Me lo repite, por favor?"));
+  caso("…pero el pedido de la persona no es eco", !m.pareceEco("ubícame en Cumaral", "Discúlpeme, señor, no le entendí bien. ¿Me lo repite, por favor?") && !m.pareceEco("ármame una red en Villavicencio", "Lo llevé a Barranca de Upía (Meta), un municipio de 40.919 ha (409,2 km²)."));
+  caso("Empieza con su nombre: «Melki, …» y «Hola Melki, …» sí; «…, Melki» al final no", m.empiezaConNombre("Melki, ármame una red") && m.empiezaConNombre("Hola Melki, ubícame en Cumaral") && !m.empiezaConNombre("ármame una red que cubra todo, Melki"));
+  const cD = { antenas: [], parametros: PARAMETROS, resultado: null, desactualizado: false, relieve: "teselas", modo: "sembrar", porVoz: true, trato: "senor" };
+  const disc = m.respuestaNoEntendi(cD, "barranco loco pla xyz");
+  caso("«¿Por qué el micrófono se prende y se apaga?» → explica la escucha sin eco ni cortes", /Con parlantes no me respondo a mí mismo/.test(m.responder("¿por qué el micrófono se prende y se apaga?", { ...cD, porVoz: false }).texto) && !/Con parlantes/.test(m.responder("hazme una red sostenible económica en Cumaral", { ...cD, porVoz: false }).texto));
+  caso("La disculpa por voz no repite en voz lo que oyó (haría eco); lo deja escrito", disc.voz === "Discúlpeme, señor, no le entendí bien. ¿Me lo repite, por favor?" && /Escuché: «barranco loco pla xyz»/.test(disc.texto));
+
+  // La escucha seguida, con un reconocimiento de mentira que se porta como Edge, Chrome y Android
+  const dormir = (ms) => new Promise((ok) => setTimeout(ok, ms));
+  const sesiones = [];
+  class Falso {
+    constructor() {
+      this.lista = [];
+      sesiones.push(this);
+    }
+    start() {
+      if (Falso.fallar) throw new Error("InvalidStateError");
+    }
+    stop() {
+      setTimeout(() => this.onend?.(), 5);
+    }
+    abort() {
+      this.onend?.();
+    }
+    enviar(i) {
+      this.onresult?.({ resultIndex: i, results: this.lista.map((x) => ({ isFinal: x.f, length: 1, 0: { transcript: x.t } })) });
+    }
+    parcial(t) {
+      const i = this.lista.findIndex((x) => !x.f);
+      const k = i < 0 ? this.lista.push({ t, f: false }) - 1 : i;
+      this.lista[k].t = t;
+      this.enviar(k);
+    }
+    final(t) {
+      const i = this.lista.findIndex((x) => !x.f);
+      const k = i < 0 ? this.lista.push({ t, f: true }) - 1 : i;
+      this.lista[k] = { t, f: true };
+      this.enviar(k);
+    }
+    cortar(error) {
+      if (error) this.onerror?.({ error });
+      this.onend?.();
+    }
+  }
+  globalThis.window = globalThis;
+  globalThis.SpeechRecognition = Falso;
+  const fijarAgente = (ua) => Object.defineProperty(globalThis, "navigator", { value: { userAgent: ua }, configurable: true, writable: true });
+  const navOriginal = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  fijarAgente("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Edg/141.0");
+  const escuchar = async (opciones = { continuo: true }) => {
+    const r = { frases: [], infos: [], estados: [], errores: [], textos: [], parciales: [] };
+    const s = await m.iniciarDictado(
+      "navegador",
+      {
+        onTexto: (f, p) => r.textos.push([f, p]),
+        onEstado: (e) => r.estados.push(e),
+        onError: (e) => r.errores.push(e),
+        onFrase: (f, info) => {
+          r.frases.push(f);
+          r.infos.push(info);
+        },
+        onParcial: (p) => r.parciales.push(p),
+      },
+      {},
+      opciones,
+    );
+    r.s = s;
+    return r;
+  };
+  const ultima = () => sesiones.at(-1);
+
+  let e = await escuchar();
+  const antesDeOir = Date.now();
+  ultima().parcial("hola");
+  await dormir(30);
+  ultima().final("hola Melki");
+  ultima().final("hola Melki");
+  ultima().parcial("ubícame en");
+  ultima().final("ubícame en Cumaral");
+  caso("Cada frase sale una sola vez, aunque el navegador la mande dos veces", e.frases.join(" | ") === "hola Melki | ubícame en Cumaral", e.frases.join(" | "));
+  caso("…con la hora en que empezó a oírse (para reconocer el eco)", e.infos[0].inicio >= antesDeOir && e.infos[0].inicio <= antesDeOir + 25, `${e.infos[0]?.inicio - antesDeOir} ms`);
+  // Edge corta la escucha a los pocos segundos de silencio: se vuelve a encender sola, sin avisar
+  const n = sesiones.length;
+  ultima().cortar();
+  await dormir(150);
+  caso("Si el navegador corta la escucha, se vuelve a encender sola y la pantalla sigue «escuchando»", sesiones.length === n + 1 && e.estados.join(",") === "escuchando", `${sesiones.length - n} · ${e.estados.join(",")}`);
+  ultima().final("¿dónde estamos?");
+  caso("…y lo dicho después sigue llegando, sin perder ni repetir lo anterior", e.frases.at(-1) === "¿dónde estamos?" && e.textos.at(-1)[0] === "hola Melki ubícame en Cumaral ¿dónde estamos?", e.textos.at(-1)?.[0]);
+  // Lista que vuelve a empezar (algunos navegadores): la frase nueva llega completa
+  ultima().lista = [];
+  ultima().final("muestra los paneles");
+  caso("Si el navegador empieza la lista de nuevo, la frase llega completa", e.frases.at(-1) === "muestra los paneles", e.frases.at(-1));
+  const m0 = sesiones.length;
+  e.s.detener();
+  await dormir(150);
+  caso("Al detenerla termina de verdad (no se vuelve a encender)", e.estados.at(-1) === "inactivo" && sesiones.length === m0, e.estados.join(","));
+
+  // Sin internet: reintenta con espera creciente y, tras varios fallos seguidos, avisa y se detiene
+  e = await escuchar();
+  const reales = globalThis.setTimeout;
+  globalThis.setTimeout = (f, ms, ...a) => reales(f, Math.min(ms ?? 0, 5), ...a);
+  for (let k = 0; k < 8 && e.estados.at(-1) !== "inactivo"; k++) {
+    ultima().cortar("network");
+    await dormir(20);
+  }
+  globalThis.setTimeout = reales;
+  caso("Sin internet reintenta varias veces y luego avisa una vez y se detiene (sin bucle)", e.errores.length === 1 && /internet/.test(e.errores[0]) && e.estados.at(-1) === "inactivo", `${e.errores.length} · ${e.estados.join(",")}`);
+  // Sin permiso: se detiene enseguida, sin reintentar
+  e = await escuchar();
+  const m1 = sesiones.length;
+  ultima().cortar("not-allowed");
+  await dormir(100);
+  caso("Sin permiso del micrófono se detiene enseguida (no lo prende y apaga)", sesiones.length === m1 && e.estados.at(-1) === "inactivo" && /permiso/.test(e.errores[0] ?? ""), e.errores.join(" "));
+  // El dictado de la caja se detiene solo tras un silencio largo
+  e = await escuchar({ continuo: true, silencioMax: 40 });
+  await dormir(80);
+  const m2 = sesiones.length;
+  ultima().cortar();
+  await dormir(100);
+  caso("El dictado de la caja sigue tras los cortes y se detiene solo tras un silencio largo", sesiones.length === m2 && e.estados.at(-1) === "inactivo");
+  // Cancelar no deja nada escuchando
+  e = await escuchar();
+  const m3 = sesiones.length;
+  e.s.cancelar();
+  ultima().cortar();
+  await dormir(100);
+  caso("Al apagarlo no queda nada escuchando", sesiones.length === m3 && e.estados.at(-1) === "inactivo");
+
+  // Chrome en Android: cada resultado repite lo dicho antes («1 1 2 1 2 3…»)
+  fijarAgente("Mozilla/5.0 (Linux; Android 14; SM-A546E) Chrome/141.0 Mobile");
+  e = await escuchar();
+  for (const t of ["uno", "uno dos", "uno dos tres", "uno dos tres"]) ultima().final(t);
+  ultima().parcial("uno dos tres cuatro");
+  caso("En Android no se repite: «uno», «uno dos», «uno dos tres» → «uno dos tres»", e.textos.at(-1)[0] === "uno dos tres" && e.parciales.at(-1) === "cuatro", `${e.textos.at(-1)?.[0]} · ${e.parciales.at(-1)}`);
+  e.s.cancelar();
+  // Safari: un solo resultado que va creciendo
+  fijarAgente("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Safari/604.1");
+  e = await escuchar();
+  ultima().lista = [{ t: "hola Melki", f: true }];
+  ultima().enviar(0);
+  ultima().lista = [{ t: "hola Melki pon", f: false }];
+  ultima().enviar(0);
+  ultima().lista = [{ t: "hola Melki pon el gateway", f: true }];
+  ultima().enviar(0);
+  caso("En Safari, el resultado que crece no se repite: «hola Melki» + «pon el gateway»", e.frases.join(" | ") === "hola Melki | pon el gateway", e.frases.join(" | "));
+  e.s.cancelar();
+  if (navOriginal) Object.defineProperty(globalThis, "navigator", navOriginal);
+  else delete globalThis.navigator;
+  delete globalThis.SpeechRecognition;
+  delete globalThis.window;
 }
 
 console.log(fallos ? `\n✗ ${fallos} prueba(s) fallaron` : "\n✓ Melki verificado");

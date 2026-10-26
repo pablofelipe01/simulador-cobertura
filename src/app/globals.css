@@ -977,6 +977,11 @@ body {
 .barra-voz.activa {
   animation: barra-voz 0.9s ease-in-out infinite;
 }
+/* Con el nivel del micrófono, las barritas siguen la voz que oye (sin animación inventada) */
+.orbe-voz[data-nivel="vivo"] .barra-voz {
+  height: calc(5px + var(--nivel, 0) * 12px * var(--k, 1));
+  transition: height 0.1s linear;
+}
 
 @keyframes barra-voz {
   0%,

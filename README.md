@@ -155,6 +155,31 @@ está en rojo, qué hacer ahora) y da tours guiados.
   versiones que propone el reconocimiento elige la que el simulador entiende como orden, espera más si la frase quedó
   a medias («ubícame en…») o si se sigue hablando, corrige «red mechen» → red mesh en, separa «heymelki» y quita las
   muletillas («o sea», «eh»)
+- **Voz sin eco, sin bucles y sin cortes** (v12.8):
+  - Con parlantes Melki se oye a sí mismo. Lo que empieza a oírse mientras habla, o hasta 0,8 s después, es su voz.
+    Lo que repite lo que acaba de decir también: una frase corta, si llega hasta 1,2 s después; una de cuatro o cinco
+    palabras, hasta 2,5 s; una de seis o más, hasta 12 s. Nada de eso lo toma como pedido; solo «Melki, para» lo
+    interrumpe.
+  - No entra en bucles: no repite en voz la misma respuesta a un pedido que llegó sin su nombre, justo después de que
+    habló y con sus mismas palabras. Tampoco se disculpa dos veces seguidas si no lo llaman por su nombre: deja la
+    respuesta escrita y vuelve a esperar «Hola Melki».
+  - La disculpa dice en voz solo «Discúlpeme, señor, no le entendí bien. ¿Me lo repite, por favor?». Lo que oyó queda
+    escrito, para que el micrófono no lo vuelva a oír.
+  - Sin duplicados:
+    - Cada frase llega una sola vez, aunque el navegador la mande dos veces.
+    - En el celular no se repite lo dicho antes: Chrome en Android y Safari mandan «uno», «uno dos», «uno dos tres».
+    - Al hablar rápido se quita lo que quedó repetido («ubícame en ubícame en Barranca»).
+    - El mismo pedido dos veces en 4 s se hace una sola vez.
+  - Sin prender y apagar el micrófono: Edge deja de escuchar a los pocos segundos de silencio y Chrome al minuto.
+    - La escucha se vuelve a encender sola en 60 ms, sin que la barra cambie ni avise.
+    - En el computador, con el micrófono ya permitido, lo deja abierto entre una escucha y otra, así el aviso del
+      navegador y el de Windows no parpadean.
+    - Si falla seguido (sin internet), espera cada vez más: 0,25 s, 0,5 s, 1 s… Tras seis fallos avisa una sola vez.
+      Melki reintenta cada 4 s y a la tercera se apaga con un aviso claro.
+    - El dictado de la caja tampoco se corta solo: sigue escuchando hasta que se toque el micrófono o tras 15 s de
+      silencio.
+  - Oído atento: en el computador mide el nivel de la voz. Las barritas del orbe siguen la voz que oye, y si la
+    persona sigue hablando espera hasta 1,5 s más antes de hacer el pedido, para no cortarle la frase.
 - **Red sostenible y viable** (v12.6): «hazme una red sostenible económica y técnicamente viable en Barranca de Upía
   de 11.226 hectáreas» diseña la malla en el municipio (señal media o mejor en el 95 % del área) y la presenta con su
   viabilidad técnica (factibilidad, cobertura, enlaces y saltos), la inversión y la operación mensual con los precios
@@ -189,7 +214,8 @@ está en rojo, qué hacer ahora) y da tours guiados.
 - **Dictado por voz** para Melki: micrófono junto al botón de enviar; el texto aparece en la caja para revisarlo y
   corregirlo antes de enviarlo (los números dichos en palabras quedan en cifras). Modo «navegador» (Web Speech de Edge o
   Chrome, con internet) o «privado» (el audio no sale del equipo: reconocimiento en el dispositivo del navegador o
-  Whisper dentro de la página)
+  Whisper dentro de la página). Si el navegador deja de escuchar tras un silencio, sigue escuchando sin repetir lo
+  dicho, y se detiene sola tras 15 s sin oír nada (v12.8)
 - **Regla** tipo Google Earth: línea, trayecto y área, editables, con perfil del terreno; se guardan con el escenario
 - **Mapa de referencia** local: departamentos y municipios (DANE), ríos y lagos principales y países (Natural Earth),
   buscador de lugares y coordenadas, menú del clic derecho y coordenadas bajo el cursor
@@ -222,7 +248,9 @@ npm run dev          # http://localhost:3000
 src/
   app/                      layout, página y estilos globales
   components/simulador/     pantalla principal, mapa, paneles, regla, buscador, capas de referencia, exportación
-  components/melki/         asistente: avatar, cerebro local, órdenes, tours guiados (tours.ts + recorrido.tsx), voz y dictado;
+  components/melki/         asistente: avatar, cerebro local, órdenes, tours guiados (tours.ts + recorrido.tsx), voz y dictado
+                            (dictado.ts: escucha seguida que se vuelve a encender sola, frases sin duplicados y con su
+                            hora, micrófono abierto y nivel de la voz);
                             Asistente Melki (manos-libres.ts: llamado, controles, frases de mayordomo, resumen para la
                             voz y eco; numeros.ts: números en palabras → cifras; hud-voz.tsx: la barra del asistente)
   datos/geo/                límites, nombres y ríos de referencia (ver LEEME.md: fuentes y licencias)
@@ -439,7 +467,8 @@ vienen empaquetados con la aplicación. Dictado por voz: en el modo «navegador�
 servidores; en el modo «privado» el audio no sale del equipo (solo se descargan una vez la biblioteca, el motor y el
 modelo, que quedan guardados en el navegador). El Asistente Melki usa el mismo modo: con «navegador», mientras está activo o en reposo el
 audio del micrófono va de forma continua al servicio de Edge o Chrome; con «privado», no sale del equipo. El reposo
-solo arranca si el micrófono ya está permitido (nunca pide permiso por sorpresa) y se ve con el oído verde en el botón
+solo arranca si el micrófono ya está permitido (nunca pide permiso por sorpresa). En el computador, mientras escucha,
+deja el micrófono abierto para medir el nivel de la voz dentro de la página (ese audio no se guarda ni se envía) y se ve con el oído verde en el botón
 de Melki; «Melki, apaga el micrófono» lo apaga del todo y en Ajustes de voz se quita («Escucharme siempre en esta
 página»). «Melki, deja de escuchar» o la X de la barra lo devuelven al reposo.
 
