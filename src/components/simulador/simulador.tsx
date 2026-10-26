@@ -982,10 +982,13 @@ export function Simulador() {
       }
       despachar({ tipo: "antenas", antenas: lista });
       if (pr.parametros) despachar({ tipo: "parametros", cambios: pr.parametros });
-      idOptimizar.current++;
+      const idOpt = ++idOptimizar.current;
+      const idPrueba = idEstres.current;
       setOptimizacion({ fase: "aplicada", titulo: pr.titulo, antes: pr.antes, esperado: pr.despues });
-      // Vuelve a probar la hora pico con la red nueva
+      // Vuelve a probar la hora pico con la red nueva, salvo que mientras se simulaba se haya deshecho o se haya pedido
+      // otra prueba (no la pisa)
       await esperarResultado();
+      if (idOptimizar.current !== idOpt || idEstres.current !== idPrueba) return true;
       await probarEstres({ ...opciones, rampa: false, comparar: false, foco: null });
       return true;
     },
