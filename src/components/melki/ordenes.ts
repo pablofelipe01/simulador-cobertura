@@ -6,7 +6,7 @@
 // Órdenes para Melki: entiende pedidos en español con coordenadas (decimales o en grados, minutos y segundos)
 // y los ejecuta en el simulador: inscribir, mover, editar o borrar nodos, cambiar parámetros, simular, ir a un lugar,
 // medir distancias, ver perfiles y la señal en un punto. Todo se procesa aquí mismo, sin servicios externos.
-import { EQUIPOS, LIMITE_SALTOS_MAXIMO, META_UTIL_ESTUDIO_PCT, PRESETS, presetPorId, type EquipoId, type PresetId } from "@/lib/radio/constantes";
+import { EQUIPOS, LIMITE_SALTOS_MAXIMO, META_UTIL_ESTUDIO_PCT, PRESETS, presetEquivalente, presetPorId, type EquipoId, type PresetId, type ProtocoloId } from "@/lib/radio/constantes";
 import { entornoPorId, perdidaEntorno } from "@/lib/radio/entorno";
 import { consejoRed, piezaDe, type EstadoRed, type Pieza } from "@/lib/radio/estado-red";
 import { INTENTOS, type ViajeMensaje } from "@/lib/radio/mensaje";
@@ -24,6 +24,8 @@ import { decidirLugar, nombreLugar, pareceNombre, type CandidatoLugar, type Luga
 
 import type { CurvaCargaResultado, ResultadoCarga } from "@/lib/radio/carga";
 import type { ResultadoEstres, LimitePunto } from "@/lib/radio/estres";
+import type { PropuestaOptimizar, ResultadoOptimizar } from "@/lib/radio/optimizar";
+import { PROTOCOLOS } from "@/lib/radio/protocolos";
 import { costoRedTrama, DEPARTAMENTOS_TRAMA, pesosTrama, type CostoRed, type NodoUsuario, type SfTrama, type TerrenoTrama } from "@/lib/radio/trama";
 
 import type { EscalaSenal, ModoApp, Vista } from "../simulador/estado";
@@ -172,6 +174,11 @@ type OrdenSola =
   | { tipo: "zonas"; pedido: PedidoZonas; estres: Partial<OpcionesEstres> | null }
   | { tipo: "quitar-zonas"; centros?: string[] }
   | { tipo: "estres"; opciones: Partial<OpcionesEstres> }
+  /** Optimizar la red para la carga de la prueba (gateways y antenas de apoyo, ajustes) y aplicar una propuesta. */
+  | { tipo: "optimizar"; opciones: Partial<OpcionesEstres> }
+  | { tipo: "aplicar-optimizacion"; indice: number; combinada: boolean }
+  /** Persona por persona: a quién le funciona y a quién no, y por qué. */
+  | { tipo: "usuarios-estres"; opciones: Partial<OpcionesEstres> }
   /** Límite de un punto (o de cada uno, sin `centros`) y, con `llenar`, ponerle esa gente y confirmarlo. */
   | { tipo: "limite"; centros?: string[]; n?: number; radioKm?: number; llenar: boolean; opciones: Partial<OpcionesEstres> }
   | { tipo: "trama-departamento"; id: string; adopcionPct: number; sf: SfTrama; nodo: NodoUsuario }
@@ -297,6 +304,13 @@ export type Api = {
   quitarZonas(centros?: string[]): number;
   /** Prueba de estrés de la hora pico por repetidor y, con `rampa`, hasta dónde aguanta cada uno. */
   probarEstres(o: Partial<OpcionesEstres>): Promise<ResultadoEstres | null>;
+  /** La última prueba de estrés al día con la red de ahora. */
+  estres?(): ResultadoEstres | null;
+  /** Optimiza la red para la carga de la prueba: gateways y antenas de apoyo y ajustes, probados con la misma carga. */
+  optimizarRed?(o: Partial<OpcionesEstres>): Promise<ResultadoOptimizar | null>;
+  optimizacion?(): ResultadoOptimizar | null;
+  /** Aplica una propuesta de la optimización y vuelve a probar la hora pico. */
+  aplicarOptimizacion?(p: PropuestaOptimizar): Promise<boolean>;
   /** Un punto: poner N personas y probar la hora pico, buscar su límite o llenarlo hasta el límite. */
   evaluarPunto(o: PedidoPunto): Promise<ResultadoPunto>;
   /** El límite de cada punto (o de los pedidos), uno a la vez con los demás como están. */
@@ -480,7 +494,31 @@ function tipoNodo(tn: string): TipoNodo | null {
  * Ajuste de radio en el texto: «SF9», «SF10 a 250 kHz», «SF9 de 62,5», «el de capacidad», «el de alcance»,
  * «el de EE. UU.». Sin ancho de banda se entiende el de Trama (250 kHz).
  */
+/** «Cambia a Meshtastic», «usa MeshCore», «que los clientes no repitan» (CLIENT_MUTE). */
+function protocoloEnTexto(tn: string): { protocolo?: ProtocoloId; usuariosRepiten?: boolean } | null {
+  const mt = /\bme(sh|s)\s?t[a]?stic\w*\b|\bmeshtastic\b/.test(tn);
+  const mc = /\bme(sh|s)\s?cor\w*\b/.test(tn);
+  const mudo = /\b(client ?mute|mud[oa]s?|que no repitan|no repitan|sin repetir|no retransmitan)\b/.test(tn);
+  const repiten = !mudo && /\b(que (los clientes|las personas|los equipos|todos) repitan|repitan todos|client\b)\b/.test(tn);
+  if (!mt && !mc && !mudo && !repiten) return null;
+  // Las preguntas («¿qué es Meshtastic?», «diferencia entre MeshCore y Meshtastic») las contesta el cerebro
+  const orden = /\b(usa|usar|cambia\w*|pasa\w*|pon\w*|configura\w*|trabaj\w*|simula\w*|prueba\w*|deja\w*|vuelve\w*|selecciona\w*|escoge\w*|quiero|activa\w*|protocolo)\b/.test(tn);
+  if (!orden || /^(que|cual|cuales|como|por que|para que|en que)\s+(es|son|significa|diferencia\w*|se diferencia\w*|cambia)\b/.test(tn) || /\bdiferencia\w*\b/.test(tn)) return null;
+  if ((mudo || repiten) && !/\b(clientes?|personas?|equipos?|usuarios?|billeteras?|nodos?|client)\b/.test(tn)) return null;
+  return { ...(mt && !mc ? { protocolo: "meshtastic" as const } : mc && !mt ? { protocolo: "meshcore" as const } : {}), ...(mudo ? { usuariosRepiten: false } : repiten ? { usuariosRepiten: true } : {}) };
+}
+
 function presetEnTexto(tn: string): PresetId | null {
+  // Los presets de Meshtastic por su nombre
+  for (const [re, id] of [
+    [/\blong ?fast\b/, "MT_LONG_FAST"],
+    [/\blong ?moderate\b/, "MT_LONG_MODERATE"],
+    [/\blong ?slow\b/, "MT_LONG_SLOW"],
+    [/\bmedium ?slow\b/, "MT_MEDIUM_SLOW"],
+    [/\bmedium ?fast\b/, "MT_MEDIUM_FAST"],
+    [/\bshort ?fast\b/, "MT_SHORT_FAST"],
+  ] as const)
+    if (re.test(tn)) return id;
   if (/\b(de|el|modo|ajuste|radio|preset|velocidad) (de )?(capacidad|mas capacidad)\b/.test(tn)) return "SF9_250";
   if (/\b(de|el|modo|ajuste|radio|preset) (de )?(alcance|mas alcance|largo alcance)\b/.test(tn)) return "SF11_250";
   // «usa» es el verbo: Estados Unidos se nombra completo («el ajuste de Estados Unidos», «el de EE. UU.»)
@@ -1656,8 +1694,30 @@ function interpretarOrdenBase(texto: string, api: Api, pendiente: Pendiente, con
     return { tipo: "agregar", datos: datosNodo(texto, tn), coord: coord ?? ubicacionEnTexto(texto, tn, api, antenas, true) ?? undefined };
   }
 
+  // Protocolo de la malla: MeshCore o Meshtastic (y en Meshtastic, si los equipos de las personas repiten)
+  const proto = protocoloEnTexto(tn);
+  if (proto) {
+    const actual = api.parametros();
+    const deAhora = presetPorId(actual.preset).protocolo;
+    const cambios: Partial<Parametros> = {};
+    const partes: string[] = [];
+    if (proto.protocolo && proto.protocolo !== deAhora) {
+      cambios.preset = presetEquivalente(actual.preset, proto.protocolo);
+      cambios.limiteSaltos = Math.min(actual.limiteSaltos, PROTOCOLOS[proto.protocolo].saltosMax);
+      partes.push(`el protocolo a ${PROTOCOLOS[proto.protocolo].nombre} (ajuste ${presetPorId(cambios.preset).nombre})`);
+    }
+    if (proto.usuariosRepiten !== undefined && (proto.protocolo ?? deAhora) === "meshtastic" && (actual.usuariosRepiten !== false) !== proto.usuariosRepiten) {
+      cambios.usuariosRepiten = proto.usuariosRepiten ? undefined : false;
+      partes.push(proto.usuariosRepiten ? "los equipos de las personas a CLIENT (repiten)" : "los equipos de las personas a CLIENT_MUTE (no repiten)");
+    }
+    if (partes.length) return { tipo: "parametros", cambios, descripcion: partes.join(" y ") };
+    if (proto.protocolo) return { tipo: "aviso", texto: `La red ya está en ${PROTOCOLOS[proto.protocolo].nombre}. ${PROTOCOLOS[proto.protocolo].quienRetransmite}.` };
+  }
+
   // Parámetros de la simulación
-  const preset = presetEnTexto(tn);
+  const presetDicho = presetEnTexto(tn);
+  // «SF9» en una red Meshtastic es su preset de SF9 (MediumFast); un preset de Meshtastic por su nombre cambia el protocolo
+  const preset = presetDicho && !/^MT_/.test(presetDicho) ? presetEquivalente(presetDicho, presetPorId(api.parametros().preset).protocolo) : presetDicho;
   if (preset && /\b(usa|usar|cambia\w*|pon\w*|configura\w*|preset|modo|simula con|prueba con)\b/.test(tn))
     return { tipo: "parametros", cambios: { preset }, descripcion: `el preset a ${presetPorId(preset).nombre}` };
   const radio = tn.match(/\bradio(?: de estudio)?\s*(?:de|a|en)?\s*(\d{1,2}(?:[.,]\d+)?)\s*(?:km|kilometros?)\b/);
@@ -2300,7 +2360,7 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
         };
       const pct = (p: number) => (p >= 0.999 ? "más de 99,9 %" : `${f1(p * 100, 0)} %`);
       return {
-        texto: `Envié un mensaje de prueba desde «${desde.nombre}» del tamaño de un pago (la orden firmada, ${v.bytes} bytes): llega al gateway en ${v.saltos} ${v.saltos === 1 ? "salto" : "saltos"} (${ruta}), en ≈ ${tiempoTxt(v.totalMs.tipica)}${v.totalMs.max - v.totalMs.min >= 1 ? ` (entre ${tiempoTxt(v.totalMs.min)} y ${tiempoTxt(v.totalMs.max)})` : ""}. Llega al primer intento ${pct(v.probabilidad)} de las veces y ${pct(v.probabilidadReintentos)} con los ${INTENTOS} intentos de MeshCore (3 por la ruta y el último por inundación). Con ${v.preset} cada salto ocupa ${tiempoTxt(v.aireMs)} en el aire; va directo por la ruta aprendida y solo los repetidores la pasan, cada uno después de un turno al azar. El gateway lo pasa por Starlink (el pago se verifica con el banco, el WhatsApp sale a internet y la consulta va a la IA) y la respuesta vuelve por la misma ruta —en un pago, el comprobante—: ≈ ${tiempoTxt(v.totalMs.tipica)} de radio más lo que tarde el banco o la IA. Lo puede ver en el mapa. Para ver muchos a la vez: «envía 15 pagos al tiempo» o «manda 15 mensajes de WhatsApp al tiempo».`,
+        texto: `Envié un mensaje de prueba desde «${desde.nombre}» del tamaño de un pago (la orden firmada, ${v.bytes} bytes): llega al gateway en ${v.saltos} ${v.saltos === 1 ? "salto" : "saltos"} (${ruta}), en ≈ ${tiempoTxt(v.totalMs.tipica)}${v.totalMs.max - v.totalMs.min >= 1 ? ` (entre ${tiempoTxt(v.totalMs.min)} y ${tiempoTxt(v.totalMs.max)})` : ""}. Llega al primer intento ${pct(v.probabilidad)} de las veces y ${pct(v.probabilidadReintentos)} ${presetPorId(api.parametros().preset).protocolo === "meshtastic" ? "con los 3 envíos de Meshtastic (el último por inundación)" : `con los ${INTENTOS} intentos de MeshCore (3 por la ruta y el último por inundación)`}. Con ${v.preset} cada salto ocupa ${tiempoTxt(v.aireMs)} en el aire; va directo por la ruta aprendida${presetPorId(api.parametros().preset).protocolo === "meshtastic" ? " (el siguiente salto)" : " y solo los repetidores la pasan"}, cada uno después de un turno al azar. El gateway lo pasa por Starlink (el pago se verifica con el banco, el WhatsApp sale a internet y la consulta va a la IA) y la respuesta vuelve por la misma ruta —en un pago, el comprobante—: ≈ ${tiempoTxt(v.totalMs.tipica)} de radio más lo que tarde el banco o la IA. Lo puede ver en el mapa. Para ver muchos a la vez: «envía 15 pagos al tiempo» o «manda 15 mensajes de WhatsApp al tiempo».`,
         acciones: [{ texto: "15 pagos al tiempo", accion: "orden", orden: { tipo: "carga", opciones: { mensajes: 15 }, curva: false } }],
       };
     }
@@ -2445,6 +2505,9 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
     case "quitar-zonas":
     case "estres":
     case "limite":
+    case "optimizar":
+    case "aplicar-optimizacion":
+    case "usuarios-estres":
     case "trama-departamento":
     case "trama-dimensionar":
       return ejecutarCapacidad(o, api);
