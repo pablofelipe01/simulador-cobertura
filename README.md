@@ -1,6 +1,6 @@
-# Simulador de cobertura · Red MeshCore de Trama: pagos, WhatsApp e IA (LoRa 915–928 MHz)
+# Simulador de cobertura · Red MeshCore o Meshtastic de Trama: pagos, WhatsApp e IA (LoRa 915–928 MHz)
 
-Herramienta web para planear la red por radio de **Trama** sobre **MeshCore**, que lleva la comunicación a donde
+Herramienta web para planear la red por radio de **Trama** sobre **MeshCore** o **Meshtastic**, que lleva la comunicación a donde
 normalmente no llega: por ella viajan **pagos, mensajes de WhatsApp por texto y consultas a la inteligencia
 artificial** en los lugares sin señal, y todo ese tráfico comparte el mismo canal. Se ubican el gateway, los
 repetidores y la gente por coordenadas (o en el mapa) y el simulador calcula la cobertura y el alcance sobre el relieve,
@@ -155,6 +155,34 @@ está en rojo, qué hacer ahora) y da tours guiados.
   versiones que propone el reconocimiento elige la que el simulador entiende como orden, espera más si la frase quedó
   a medias («ubícame en…») o si se sigue hablando, corrige «red mechen» → red mesh en, separa «heymelki» y quita las
   muletillas («o sea», «eh»)
+- **MeshCore o Meshtastic, persona por persona y optimizar la red para la carga** (v12.9):
+  - En Parámetros → Radio LoRa se escoge el protocolo de la malla. MeshCore: solo los repetidores retransmiten, la
+    ruta se aprende, hasta 64 saltos y sus 7 ajustes de radio. Meshtastic: inundación administrada (repiten todos,
+    salvo los mudos), hasta 7 saltos y sus presets (LongFast de fábrica, LongModerate, LongSlow, MediumSlow,
+    MediumFast y ShortFast); los equipos de las personas repiten (CLIENT) o no (CLIENT_MUTE). Melki: «cambia a
+    Meshtastic», «usa MeshCore», «que los clientes no repitan», «usa LongFast».
+  - La prueba de estrés evalúa a cada persona: qué parte de sus mensajes vuelve, cuánto espera y por qué no le
+    funciona (sin cobertura, más saltos que el límite, señal débil, canal ocupado, choques, cola llena, la fila del
+    gateway o espera larga). En el mapa el contorno de cada persona toma el color de su estado, con la paleta de los
+    rangos de señal: le funciona bien, le funciona, a medias, con dificultades y no le funciona; la leyenda dice
+    cuántas hay de cada una y la lista del panel muestra las que peor la pasan. La rampa da la capacidad real: el
+    máximo de personas atendidas. Melki: «¿qué usuarios no funcionan?», «¿a quiénes no les funciona?».
+  - Tráfico «Medido en el gateway», con la ficha técnica de un gateway real (Meshtastic, Raspberry Pi 5 con un Heltec
+    V3, semana del 19 al 26 de octubre de 2026): comandos de 15 a 56 caracteres (mediana 40), respuestas de hasta 200 B
+    por parte (las de la IA, en varias), 5,8 mensajes por equipo al día con el 24 % en la hora pico, y el gateway que
+    atiende de a uno (~1 s por mensaje; hasta 15 s si la base de datos no responde). Enlaces «medidos en campo»: la
+    curva de entrega calibrada con la SNR y la respuesta a los sondeos de las cinco antenas de la ficha: cerca de la
+    mitad de los paquetes pasa con SNR de −12 dB y el 3,6 % llega con error aun con buena señal. En el repositorio el
+    gateway y sus antenas van con nombres genéricos (Antena A a E, sin IDs de nodo ni distancias). Melki: «prueba la
+    hora pico con lo medido en el gateway», «¿qué se midió en el gateway?».
+  - «Optimizar» (en el resultado de la prueba, o «optimiza la red para la carga», «recomiéndame gateways de apoyo»):
+    mira qué falla y prueba, con la misma carga, gateways de apoyo (convertir el repetidor de una zona cargada en
+    gateway, un segundo gateway cerca de la gente que más sufre, o uno en otra frecuencia que se lleva a la gente de
+    esa zona), antenas de apoyo para la gente sin cobertura (la cadena la busca el sembrado automático con el
+    relieve), un ajuste de radio más rápido, en Meshtastic los equipos en CLIENT_MUTE y sin telemetría a la malla, y
+    atender en paralelo en el gateway. Cada propuesta trae el antes y el después (personas atendidas, mensajes
+    completos, canal); «Todo junto» suma las que ayudan. Se aplica al mapa con un botón (y se deshace) o queda marcada
+    «se hace en campo» (otra frecuencia, el servicio del gateway, la telemetría).
 - **Voz sin eco, sin bucles y sin cortes** (v12.8):
   - Con parlantes Melki se oye a sí mismo. Lo que empieza a oírse mientras habla, o hasta 0,8 s después, es su voz.
     Lo que repite lo que acaba de decir también: una frase corta, si llega hasta 1,2 s después; una de cuatro o cinco
@@ -259,7 +287,10 @@ src/
                             y reconocimiento de lugares dichos (fonetica.ts: cómo suena el español y cuánto se parecen)
   lib/radio/                motor: modelo, relieve, perfil, cobertura, malla, factibilidad, worker;
                             estado-red (piezas y guía), siembra (repetidores automáticos), mensaje (viaje de un paquete
-                            MeshCore), carga (prueba de carga por eventos), estres (hora pico por zona y rampa),
+                            MeshCore o Meshtastic), protocolos (MeshCore, Meshtastic y la ficha del gateway
+                            medido; los nombres, en ficha-gateway), carga (prueba de carga por eventos, con la
+                            inundación administrada de Meshtastic), estres (hora pico por zona, persona por persona
+                            y rampa), optimizar (gateways y antenas de apoyo y ajustes para la carga),
                             poblar (personas al azar), trama (equipos,
                             precios, capacidad y dimensionamiento del documento de Trama),
                             alcance-plano (alcance de referencia), area (áreas objetivo y cobertura dentro de ellas),
@@ -360,6 +391,43 @@ la cobertura útil, la confiable (≥ 37 dB), la que tiene servicio (≥ 20 dB) 
   personas sin demora, va lento desde ~380 y se revienta desde ~640; con SF9, ~1.600. «Llenar hasta el límite» pone
   esa gente y repite la hora pico con las personas puestas (si no queda estable, baja un 15 % y prueba de nuevo, hasta
   tres veces).
+- **Protocolos** (`src/lib/radio/protocolos.ts`, `constantes.ts`): el protocolo lo da el ajuste de radio
+  (`preset.protocolo`); cambiarlo pasa al ajuste equivalente (mismo SF y ancho de banda; si no hay, el de fábrica) y al
+  límite de saltos que admite (7 en Meshtastic). Meshtastic: preámbulo de 16 símbolos, cabecera de 16 B, mensaje
+  directo = 16 + 18 B (Data y cifrado de clave pública) + la carga, acuse de ~24 B; las difusiones van con la clave del
+  canal. La ficha del gateway medido y su tráfico están en `FICHA_GATEWAY` y `TRAFICO_MEDIDO`; los nombres del gateway
+  y de sus antenas, en `ficha-gateway.ts` (genéricos en el repositorio).
+- **Inundación administrada** (`carga.ts`, constantes del firmware en `mensaje.ts`): cada nodo que repite espera según
+  la SNR con que oyó el paquete (ventana de 2³ a 2⁸ ranuras de 2,5 símbolos + 7,6 ms; el que oyó más débil sale
+  primero; los ROUTER y el siguiente salto, en la ventana corta) y, si oye que otro ya lo repitió, cancela el suyo (los
+  ROUTER no cancelan). Límite de saltos en cada paquete, siguiente salto aprendido, acuse del destino y hasta 3 envíos
+  con la espera del firmware (2 × aire + ranuras + 4,5 s), con el mismo identificador (los que ya lo pasaron no lo
+  repiten, salvo el siguiente salto que oye el reenvío del remitente, y el destino vuelve a acusar) y el último por
+  inundación. Antes de transmitir escucha el canal con la ventana según su ocupación. Sin tope de ciclo en 915 MHz y
+  cola de 16 paquetes. Tráfico de fondo (opcional): telemetría cada 30 min y NodeInfo cada 3 h por equipo, inundadas y
+  recortadas con el canal sobre el 25 %. La ruta de cada persona es la del análisis de la malla si cabe en el límite;
+  si no, la de menos saltos por los nodos que repiten (personas incluidas). Entre billeteras (a 1,5 m) el margen se
+  calcula con Longley-Rice sobre terreno plano (se oyen hasta ~8 km): el modelo calibrado es para antenas en torre.
+  Cada transmisión inundada se evalúa solo en quienes la oyen (guardados al empezar); con 1.000 clientes que repiten,
+  una hora pico tarda ~15 s.
+- **Gateway que atiende de a uno** (`atencion` en la prueba de carga): fila en orden de llegada con el tiempo de proceso
+  (y a veces la demora de la base de datos); las consultas a la IA van en paralelo; las respuestas largas salen en
+  partes [i/n] y el mensaje completa cuando llegan todas.
+- **Persona por persona** (`evaluarUsuarios` en `estres.ts`): para cada enlace de la ruta, ida y vuelta, la
+  probabilidad de que el paquete pase con su margen (curva del diseño o medida en campo) × lo que se perdió en el
+  receptor (choques o mientras transmitía, contado sobre los paquetes dirigidos a él) × lo que botó el transmisor por
+  cola llena; con los envíos del protocolo, la probabilidad de que el mensaje llegue y la respuesta vuelva. Se calibra
+  por zona (un mismo corrimiento logístico para todas las de la zona, hasta que sus mensajes simulados completen lo que
+  completó la zona) y se ajusta con los mensajes propios (4 mensajes de peso). La espera es la de sus mensajes o la de
+  su zona. Estados: le funciona bien (≥ 95 % en ≤ 30 s), le funciona (≥ 90 % en ≤ 60 s), a medias (≥ 75 %, o más
+  lento), con dificultades (≥ 40 %) y no le funciona (< 40 % o sin ruta).
+- **Optimizar** (`src/lib/radio/optimizar.ts`, en el Web Worker con el relieve de la zona): diagnóstico, candidatas y
+  la prueba de cada una con la misma carga y semilla. Se comparan las personas atendidas (la suma de la parte de los
+  mensajes de cada persona que vuelve, rebajada si tarda: completa hasta 30 s, 80 % a los 60 s, 30 % pasados 5 min),
+  que cambia poco a poco aunque una zona entera salte de estado por unos segundos de espera. La otra frecuencia se mide
+  como dos canales que no se estorban. En el laboratorio (gateway y 3 repetidores con 250 personas cada uno, SF11,
+  una frecuencia) SF10 atiende a casi todas, un gateway de apoyo en otra frecuencia suma ~370–480 personas atendidas y
+  convertir un repetidor en gateway ~140–280; en una red que aguanta, lo dice y no inventa arreglos.
 - **Poblar** (`src/lib/radio/poblar.ts`): puntos uniformes en área (la latitud se sortea en seno), dentro del polígono,
   con separación mínima y repetibles con la misma semilla (mulberry32).
 - **Trama** (`src/lib/radio/trama.ts`): catálogo del cotizador (TRM 3.158 con 3 % de colchón; lo importado suma 12 %
@@ -438,6 +506,9 @@ piloto.
 - La mezcla del tráfico: la prueba de estrés usa 2,4 mensajes por persona al día con el tamaño de un pago; cuántos
   WhatsApp y consultas a la IA manda cada persona, y su tamaño, cambian la capacidad (se ajusta con «Mensajes por
   persona al día» o el multiplicador).
+- Del gateway medido: el preset de módem (la ficha lo deja pendiente; se supone LongFast), qué parte de los
+  mensajes son consultas a la IA (se supone el 5 %, con respuestas de ~640 B en 4 partes y 4 a 12 s de la IA) y si los
+  equipos mandan su telemetría a la malla (depende de la versión del firmware; en la prueba se puede apagar).
 
 ## Variables de entorno
 
