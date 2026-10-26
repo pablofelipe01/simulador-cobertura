@@ -29,30 +29,64 @@ export const DISTANCIA_MINIMA_M = 30;
 /** Banda de uso libre reconocida por la ANE (Resolución 000028 de 2026). */
 export const BANDA_LIBRE_MHZ = { min: 915, max: 928 } as const;
 
+/** Protocolo de la malla: MeshCore (solo los repetidores retransmiten) o Meshtastic (todos, salvo los mudos). */
+export type ProtocoloId = "meshcore" | "meshtastic";
+
 /**
- * Ajustes de radio de MeshCore (ancho de banda, factor de dispersión y tasa de código 4/5). Los de 250 kHz son los
- * de Trama (SF11 para alcance; SF10 y SF9 para capacidad); los de 62,5 kHz son los de la comunidad MeshCore.
+ * Ajustes de radio (ancho de banda, factor de dispersión y tasa de código). MeshCore: los de 250 kHz son los de Trama
+ * (SF11 para alcance; SF10 y SF9 para capacidad); los de 62,5 kHz, los de la comunidad MeshCore (para América el
+ * proyecto recomienda SF7 · 62,5 kHz en 910,525 MHz). Meshtastic: sus «presets» de módem (LongFast por defecto).
  */
-export type PresetId = "SF11_250" | "SF10_250" | "SF9_250" | "SF7_62" | "SF8_62" | "SF9_62" | "SF10_62";
+export type PresetId =
+  | "SF11_250"
+  | "SF10_250"
+  | "SF9_250"
+  | "SF7_62"
+  | "SF8_62"
+  | "SF9_62"
+  | "SF10_62"
+  | "MT_SHORT_FAST"
+  | "MT_MEDIUM_FAST"
+  | "MT_MEDIUM_SLOW"
+  | "MT_LONG_FAST"
+  | "MT_LONG_MODERATE"
+  | "MT_LONG_SLOW";
 
 export type Preset = {
   id: PresetId;
   nombre: string;
+  /** Protocolo al que pertenece el ajuste (todos los nodos de una red usan el mismo protocolo y el mismo ajuste). */
+  protocolo: ProtocoloId;
   sf: number;
   anchoBandaKhz: number;
   /** Sensibilidad del receptor (dBm) = −174 + 10·log10(BW) + NF(6 dB) + SNR límite. */
   sensibilidadDbm: number;
   /** Velocidad de datos LoRa (kbps) = SF · BW / 2^SF · 4 / CR. */
   velocidadKbps: number;
-  /** Tasa de código LoRa 4/cr (5 = 4/5). */
+  /** Tasa de código LoRa 4/cr (5 = 4/5, 8 = 4/8). */
   cr: number;
+  /** Símbolos de preámbulo (Meshtastic: 16 por debajo de 1 GHz; MeshCore: 32 con SF ≤ 8 y 16 con SF ≥ 9). */
+  preambulo?: number;
   /** Para qué sirve, en una línea. */
   uso: string;
 };
 
 const velocidad = (sf: number, bw: number, cr: number) => Math.round(((sf * bw) / 2 ** sf) * (4 / cr) * 1000) / 1000;
 const sensibilidad = (sf: number, bw: number) => Math.round((-174 + 10 * Math.log10(bw * 1000) + 6 - 2.5 * (sf - 4)) * 10) / 10;
-const preset = (id: PresetId, nombre: string, sf: number, bw: number, uso: string, s = sensibilidad(sf, bw)): Preset => ({ id, nombre, sf, anchoBandaKhz: bw, sensibilidadDbm: s, velocidadKbps: velocidad(sf, bw, 5), cr: 5, uso });
+const preset = (id: PresetId, nombre: string, sf: number, bw: number, uso: string, s = sensibilidad(sf, bw)): Preset => ({ id, nombre, protocolo: "meshcore", sf, anchoBandaKhz: bw, sensibilidadDbm: s, velocidadKbps: velocidad(sf, bw, 5), cr: 5, uso });
+/** Preset de Meshtastic (firmware: módem por nombre, preámbulo de 16 símbolos). */
+const presetMt = (id: PresetId, nombre: string, sf: number, bw: number, cr: number, uso: string, s = sensibilidad(sf, bw)): Preset => ({
+  id,
+  nombre,
+  protocolo: "meshtastic",
+  sf,
+  anchoBandaKhz: bw,
+  sensibilidadDbm: s,
+  velocidadKbps: velocidad(sf, bw, cr),
+  cr,
+  preambulo: 16,
+  uso,
+});
 
 export const PRESETS: readonly Preset[] = [
   // SF11 / 250 kHz da −131,5 dBm por fórmula; se usa −131 dBm, el mismo valor de las simulaciones de Radio Mobile
@@ -64,10 +98,32 @@ export const PRESETS: readonly Preset[] = [
   preset("SF8_62", "MeshCore SF8 · 62,5 kHz", 8, 62.5, "Rápido y un poco más de alcance."),
   preset("SF9_62", "MeshCore SF9 · 62,5 kHz", 9, 62.5, "El equilibrado de la comunidad MeshCore: buen alcance, canal angosto."),
   preset("SF10_62", "MeshCore SF10 · 62,5 kHz", 10, 62.5, "Más alcance; cada paquete ocupa el aire mucho más tiempo."),
+  // Meshtastic: LongFast es el de fábrica (SF11 · 250 kHz, el mismo aire que el SF11 de Trama)
+  presetMt("MT_LONG_FAST", "Meshtastic LongFast", 11, 250, 5, "El de fábrica de Meshtastic: buen alcance, ~1,07 kbps.", -131),
+  presetMt("MT_LONG_MODERATE", "Meshtastic LongModerate", 11, 125, 8, "Más alcance que LongFast; cada mensaje dura casi tres veces más en el aire."),
+  presetMt("MT_LONG_SLOW", "Meshtastic LongSlow", 12, 125, 8, "El de más alcance y el más lento: pocas personas por canal."),
+  presetMt("MT_MEDIUM_SLOW", "Meshtastic MediumSlow", 10, 250, 5, "Un paso más rápido que LongFast, con algo menos de alcance."),
+  presetMt("MT_MEDIUM_FAST", "Meshtastic MediumFast", 9, 250, 5, "Más capacidad: ~3,5 kbps; el alcance baja a ~65 %."),
+  presetMt("MT_SHORT_FAST", "Meshtastic ShortFast", 7, 250, 5, "Para redes densas y cortas: ~11 kbps, poco alcance."),
 ];
 
 export function presetPorId(id: PresetId): Preset {
   return PRESETS.find((p) => p.id === id) ?? PRESETS[0];
+}
+
+/** Ajustes de radio de un protocolo. */
+export function presetsDe(protocolo: ProtocoloId): Preset[] {
+  return PRESETS.filter((p) => p.protocolo === protocolo);
+}
+
+/** Ajuste de fábrica de cada protocolo: el SF11 de Trama en MeshCore y LongFast en Meshtastic. */
+export const PRESET_DEFECTO: Record<ProtocoloId, PresetId> = { meshcore: "SF11_250", meshtastic: "MT_LONG_FAST" };
+
+/** El ajuste equivalente en el otro protocolo (mismo SF y ancho de banda si existe; si no, el de fábrica). */
+export function presetEquivalente(id: PresetId, protocolo: ProtocoloId): PresetId {
+  const p = presetPorId(id);
+  if (p.protocolo === protocolo) return id;
+  return presetsDe(protocolo).find((x) => x.sf === p.sf && x.anchoBandaKhz === p.anchoBandaKhz)?.id ?? PRESET_DEFECTO[protocolo];
 }
 
 export type ClaseId = "buena" | "estable" | "media" | "baja" | "sin";

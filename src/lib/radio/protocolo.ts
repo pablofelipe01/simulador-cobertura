@@ -8,6 +8,7 @@ import type { Ajuste, PedidoAjuste } from "./ajuste";
 import type { CurvaCargaResultado, PedidoCarga, ResultadoCarga } from "./carga";
 import type { Diseno, PedidoDiseno } from "./diseno";
 import type { PedidoEstres, ResultadoEstres } from "./estres";
+import type { PedidoOptimizar, ResultadoOptimizar } from "./optimizar";
 import type { PedidoSiembra, Siembra } from "./siembra";
 import type { Inspeccion } from "./simulacion";
 import type { Antena, AreaObjetivo, FuenteRelieve, Parametros, Perfil, PerfilTerreno, ResultadoSimulacion } from "./tipos";
@@ -24,11 +25,12 @@ export type Entrada =
   | { tipo: "ajustar"; id: number; pedido: PedidoAjuste; relieve: FuenteRelieve }
   | { tipo: "carga"; id: number; pedido: PedidoCarga; curva: boolean }
   | { tipo: "estres"; id: number; pedido: PedidoEstres }
+  | { tipo: "optimizar"; id: number; pedido: PedidoOptimizar; relieve: FuenteRelieve }
   | { tipo: "cargar-hgt"; id: number; archivos: { nombre: string; datos: ArrayBuffer }[] }
   | { tipo: "borrar-hgt"; id: number }
   | { tipo: "cancelar" };
 
-export type Fase = "relieve" | "cobertura" | "enlaces" | "estres";
+export type Fase = "relieve" | "cobertura" | "enlaces" | "estres" | "optimizar";
 
 export type Salida =
   | { tipo: "progreso"; id: number; fase: Fase; avance: number }
@@ -42,5 +44,6 @@ export type Salida =
   | { tipo: "ajuste"; id: number; ajuste: Ajuste }
   | { tipo: "carga"; id: number; carga: ResultadoCarga; curva: CurvaCargaResultado | null }
   | { tipo: "estres"; id: number; estres: ResultadoEstres }
+  | { tipo: "optimizacion"; id: number; optimizacion: ResultadoOptimizar }
   | { tipo: "hgt"; id: number; archivos: string[]; errores: string[] }
   | { tipo: "error"; id: number; mensaje: string };

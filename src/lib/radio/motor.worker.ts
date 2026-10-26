@@ -8,7 +8,7 @@ import { curvaCarga, simularCarga } from "./carga";
 import { estresMalla } from "./estres";
 import type { Entrada, Salida } from "./protocolo";
 import { ColeccionHgt, decodificarTerrarium, leerHgt } from "./relieve";
-import { ajustarRed, disenarMallaArea, inspeccionar, olvidarRelieve, perfil, perfilTerreno, sembrarMalla, simular, type Contexto } from "./simulacion";
+import { ajustarRed, disenarMallaArea, inspeccionar, olvidarRelieve, optimizarRed, perfil, perfilTerreno, sembrarMalla, simular, type Contexto } from "./simulacion";
 import type { FuenteRelieve } from "./tipos";
 
 const alcance = self as unknown as {
@@ -137,6 +137,11 @@ alcance.onmessage = async (e) => {
       case "estres": {
         const r = estresMalla(m.pedido, (avance) => alcance.postMessage({ tipo: "progreso", id: m.id, fase: "estres", avance }));
         alcance.postMessage({ tipo: "estres", id: m.id, estres: r });
+        return;
+      }
+      case "optimizar": {
+        const r = await optimizarRed(m.pedido, m.relieve, contexto(m.id, m.relieve, false), (avance) => alcance.postMessage({ tipo: "progreso", id: m.id, fase: "optimizar", avance }));
+        alcance.postMessage({ tipo: "optimizacion", id: m.id, optimizacion: r });
         return;
       }
       case "disenar": {

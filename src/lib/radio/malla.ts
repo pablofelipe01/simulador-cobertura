@@ -4,7 +4,7 @@
 // 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
 
 // Enlaces entre nodos, comportamiento de la red mesh (saltos, puntos críticos) y factibilidad.
-import { BANDA_LIBRE_MHZ, DISTANCIA_MINIMA_M, ENLACES, META_UTIL_ESTUDIO_PCT, PRESETS, presetPorId, UMBRAL_CONFIABLE_DB, UMBRAL_UTIL_DB } from "./constantes";
+import { BANDA_LIBRE_MHZ, DISTANCIA_MINIMA_M, ENLACES, META_UTIL_ESTUDIO_PCT, presetPorId, presetsDe, UMBRAL_CONFIABLE_DB, UMBRAL_UTIL_DB } from "./constantes";
 import { perdidaEntorno } from "./entorno";
 import { distanciaM, rumbo } from "./geo";
 import { claseEnlace, longitudOnda, presupuestoEnlace } from "./modelo";
@@ -346,14 +346,14 @@ export function evaluarFactibilidad(d: DatosFactibilidad): Factibilidad {
   }
   for (const a of lejanas) {
     recomendaciones.push(
-      `${a.nombre} está a ${nodo.get(a.id)?.saltos} saltos del gateway y el diseño pide ${p.limiteSaltos} como máximo. MeshCore admite hasta 64, pero cada salto suma tiempo en el aire a cada mensaje y le quita capacidad a la frecuencia: acerque un repetidor o ponga otro sitio gateway.`,
+      `${a.nombre} está a ${nodo.get(a.id)?.saltos} saltos del gateway y el diseño pide ${p.limiteSaltos} como máximo. ${preset.protocolo === "meshtastic" ? "Meshtastic admite hasta 7 (el límite viaja en cada paquete y por encima no llega)" : "MeshCore admite hasta 64"}, pero cada salto suma tiempo en el aire a cada mensaje y le quita capacidad a la frecuencia: acerque un repetidor o ponga otro sitio gateway.`,
     );
   }
   for (const a of criticos) {
     recomendaciones.push(`${a.nombre} es un punto único de falla: si se apaga, otros nodos pierden la pasarela. Agregue un enlace alterno que la rodee.`);
   }
   if (util < meta - 1e-9) {
-    const masLento = PRESETS.filter((x) => x.sensibilidadDbm < preset.sensibilidadDbm - 0.5).sort((x, y) => y.sensibilidadDbm - x.sensibilidadDbm)[0];
+    const masLento = presetsDe(preset.protocolo).filter((x) => x.sensibilidadDbm < preset.sensibilidadDbm - 0.5).sort((x, y) => y.sensibilidadDbm - x.sensibilidadDbm)[0];
     const sugerencia = masLento
       ? `Agregue repetidores en las zonas naranja y roja o eleve los existentes; ${masLento.nombre} da ${fmt(preset.sensibilidadDbm - masLento.sensibilidadDbm)} dB más de margen que ${preset.nombre}, a cambio de capacidad`
       : "Agregue repetidores en las zonas naranja y roja o eleve los existentes";
