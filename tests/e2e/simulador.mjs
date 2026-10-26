@@ -1017,6 +1017,107 @@ await flujo(
   { sembrar: true },
 );
 
+// v12.9: el protocolo en los parámetros (MeshCore o Meshtastic, con los clientes que repiten o mudos)
+await flujo("protocolo", async (page, foto) => {
+  await esperarSimulacion(page);
+  await page.getByRole("tab", { name: "Parámetros" }).click();
+  const radio = page.locator("[data-tour=radio]");
+  const proto = radio.getByRole("radiogroup", { name: "Protocolo de la malla" });
+  afirmar((await proto.getByRole("radio", { name: "MeshCore" }).getAttribute("aria-checked")) === "true", "Debería abrir en MeshCore");
+  await proto.getByRole("radio", { name: "Meshtastic" }).click();
+  await radio.getByText("Ajuste de radio Meshtastic").waitFor();
+  const opciones = await radio.locator("select").first().locator("option").allInnerTexts();
+  afirmar(opciones.length === 6 && opciones.every((o) => /^Meshtastic /.test(o)) && (await radio.locator("select").first().inputValue()) === "MT_LONG_FAST", `Los ajustes deberían ser los de Meshtastic: ${opciones.join(" | ")}`);
+  await radio.getByText(/Inundación administrada/).first().waitFor();
+  await radio.getByText("Los equipos de las personas repiten (CLIENT)").waitFor();
+  const saltos = radio.getByLabel("Límite de saltos");
+  await saltos.fill("9");
+  afirmar((await saltos.getAttribute("aria-invalid")) === "true", "En Meshtastic el límite de saltos no pasa de 7");
+  await saltos.fill("3");
+  await saltos.blur();
+  await page.waitForTimeout(900);
+  await esperarSimulacion(page);
+  await foto("meshtastic");
+  await proto.getByRole("radio", { name: "MeshCore" }).click();
+  await radio.getByText("Ajuste de radio MeshCore").waitFor();
+  afirmar((await radio.locator("select").first().inputValue()) === "SF11_250", "Al volver a MeshCore queda el SF11 de Trama");
+  afirmar(!(await radio.getByText("Los equipos de las personas repiten (CLIENT)").count()), "En MeshCore no se ofrece el rol de los clientes");
+});
+
+// v12.9: persona por persona (contorno de color en el mapa), lo medido en el gateway y optimizar la red para la carga
+await flujo(
+  "usuarios-y-optimizar",
+  async (page, foto) => {
+    await esperarRed(page);
+    await cargarMalla(page);
+    const resultados = page.locator("aside[aria-label=Resultados]");
+    const zonas = resultados.locator("[data-tour=zonas-popularidad]");
+    await zonas.getByRole("button", { name: "150", exact: true }).click();
+    await zonas.getByRole("button", { name: /^Poner 150 en cada uno \(300\)/ }).click();
+    await zonas.getByText(/Puse \d+ personas/).waitFor({ timeout: 20000 });
+    await esperarRed(page);
+    const estres = resultados.locator("[data-tour=prueba-estres]");
+    // Diez veces la hora pico: la red se carga y hay a quién no le funciona
+    await estres.getByRole("radiogroup", { name: "Multiplicar la carga" }).getByRole("radio", { name: "×10" }).click();
+    await estres.getByRole("button", { name: /^Probar la hora pico/ }).click();
+    const res = estres.locator("[data-tour=resultado-estres]");
+    await res.getByText(/% de los mensajes de la hora pico con respuesta/).waitFor({ timeout: 120000 });
+    const bloque = res.locator("[data-tour=usuarios-estres]");
+    await bloque.waitFor();
+    const tb = await bloque.innerText();
+    afirmar(/Persona por persona: a [\d.]+ de [\d.]+ les funciona \(\d+ %\)/.test(tb) && /Por qué:/.test(tb), `Falta persona por persona: ${tb.slice(0, 300)}`);
+    // En el mapa, cada persona con el color de su estado en el contorno, y la leyenda con los estados
+    await page.waitForFunction(() => document.querySelectorAll(".marcador-raiz.con-usuario").length > 100, null, { timeout: 15000 });
+    const colores = await page.evaluate(() => [...new Set([...document.querySelectorAll(".marcador-raiz.con-usuario")].map((e) => e.style.getPropertyValue("--usuario")))]);
+    afirmar(colores.length >= 1 && colores.every((c) => /^#[0-9A-F]{6}$/i.test(c)), `Los contornos no tienen color: ${colores.join(", ")}`);
+    const leyenda = page.locator("[data-tour=leyenda-usuarios]");
+    await leyenda.waitFor();
+    afirmar(/Le funciona bien/.test(await leyenda.innerText()) && /No le funciona/.test(await leyenda.innerText()), "Falta la leyenda de los estados de las personas");
+    await bloque.scrollIntoViewIfNeeded();
+    await foto("persona-por-persona");
+    // Optimizar para esta carga: propuestas con su antes y después, aplicar y deshacer
+    const opt = res.locator("[data-tour=optimizar]");
+    await opt.getByRole("button", { name: /^Optimizar$/ }).click();
+    await opt.getByText(/Con esta carga le funciona a/).waitFor({ timeout: 180000 });
+    const to = await opt.innerText();
+    afirmar(/atendidas/.test(to) && /Antes: .* Después: /.test(to), `La optimización no trae propuestas con antes y después: ${to.slice(0, 500)}`);
+    await opt.scrollIntoViewIfNeeded();
+    await foto("optimizar");
+    const aplicar = opt.getByRole("button", { name: /^Aplicar (al mapa|todo junto)$/ }).first();
+    if (await aplicar.count()) {
+      const antes = await page.locator(".marcador-raiz").count();
+      await aplicar.click();
+      await opt.getByText(/Apliqué «/).waitFor({ timeout: 30000 });
+      await res.getByText(/% de los mensajes de la hora pico con respuesta/).waitFor({ timeout: 180000 });
+      await opt.getByRole("button", { name: "Deshacer" }).waitFor();
+      await foto("optimizar-aplicada");
+      await opt.getByRole("button", { name: "Deshacer" }).click();
+      await page.waitForFunction((n) => document.querySelectorAll(".marcador-raiz").length === n, antes, { timeout: 15000 });
+    }
+    // Lo medido en el gateway: atiende de a uno
+    await estres.getByRole("radiogroup", { name: "Tráfico de la prueba" }).getByRole("radio", { name: /^Medido en / }).click();
+    await estres.getByRole("radiogroup", { name: "Multiplicar la carga" }).getByRole("radio", { name: "×1", exact: true }).click();
+    afirmar((await estres.getByRole("radiogroup", { name: "Curva de entrega por enlace" }).getByRole("radio", { name: "Medidos en campo" }).getAttribute("aria-checked")) === "true", "Con lo medido, los enlaces son los medidos en campo");
+    await estres.getByRole("button", { name: /^Probar la hora pico/ }).click();
+    await res.getByText(/El gateway atiende de a uno/).waitFor({ timeout: 120000 });
+    await foto("medido");
+    // Por chat: a quién no le funciona, y Meshtastic
+    await page.getByRole("button", { name: /Abrir a Melki/ }).click();
+    const chat = page.getByRole("region", { name: "Conversación con Melki" });
+    await chat.getByLabel("Pregunta para Melki").fill("¿qué usuarios no funcionan?");
+    await page.keyboard.press("Enter");
+    await chat.getByText(/les funciona \(\d+ %\)/).first().waitFor({ timeout: 60000 });
+    await chat.getByLabel("Pregunta para Melki").fill("cambia a Meshtastic");
+    await page.keyboard.press("Enter");
+    await chat.getByText(/Cambié el protocolo a Meshtastic/).first().waitFor({ timeout: 30000 });
+    await esperarRed(page);
+    await estres.getByRole("button", { name: /^Probar la hora pico/ }).click();
+    await res.getByText(/Protocolo Meshtastic|Meshtastic paquete por paquete|inundación administrada/).first().waitFor({ timeout: 180000 });
+    await foto("meshtastic-estres");
+  },
+  { sembrar: true },
+);
+
 await flujo(
   "zonas-y-estres",
   async (page, foto) => {
