@@ -181,14 +181,38 @@ export function textoParaVoz(texto: string, completo = false): string {
  * ¿Lo que se oyó es la propia voz de Melki que volvió a entrar por el micrófono (parlantes sin audífonos)? Lo es si casi
  * todas sus palabras están en lo que Melki acaba de decir. Así no se responde a sí mismo.
  */
-export function pareceEco(oido: string, dicho: string): boolean {
-  const palabras = normal(oido)
+function compararConLoDicho(oido: string, dicho: string) {
+  // Los números pueden volver en palabras o en cifras («cuatrocientos nueve» o «409»)
+  const palabras = normal(numerosEnPalabras(oido))
     .split(" ")
     .filter((w) => w.length > 1);
-  if (!palabras.length) return false;
-  const voz = new Set(normal(`${paraHablar(dicho)} ${dicho}`).split(" "));
+  const texto = normal(`${paraHablar(dicho)} ${dicho} ${numerosEnPalabras(paraHablar(dicho))}`);
+  const voz = new Set(texto.split(" "));
   const dentro = palabras.filter((w) => voz.has(w)).length;
-  return palabras.length === 1 ? dentro === 1 : dentro / palabras.length >= 0.75;
+  return { palabras, texto, parte: palabras.length ? dentro / palabras.length : 0 };
+}
+
+/** Qué parte (0 a 1) de las palabras oídas están en lo que Melki dijo. */
+export function parteDeLoDicho(oido: string, dicho: string): number {
+  return compararConLoDicho(oido, dicho).parte;
+}
+
+export function pareceEco(oido: string, dicho: string): boolean {
+  const { palabras, texto, parte } = compararConLoDicho(oido, dicho);
+  if (!palabras.length) return false;
+  if (palabras.length === 1) return parte === 1;
+  if (parte >= 0.75) return true;
+  // Con ruido de por medio: la mitad de las palabras y un trozo seguido de cuatro o más tal como lo dijo
+  if (parte < 0.5) return false;
+  const seguido = ` ${texto} `;
+  for (let i = 0; i + 4 <= palabras.length; i++) if (seguido.includes(` ${palabras.slice(i, i + 4).join(" ")} `)) return true;
+  return false;
+}
+
+/** ¿La frase empieza llamando a Melki por su nombre («Melki, …», «Hola Melki, …»)? */
+export function empiezaConNombre(frase: string): boolean {
+  const palabras = normal(frase).split(" ").slice(0, 3);
+  return detectarActivacion(palabras.join(" ")).activado;
 }
 
 /** Cómo se dirige Melki a la persona. */

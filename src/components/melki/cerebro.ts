@@ -27,7 +27,12 @@ export type AccionMelki = "recorrido" | "tours" | "simular" | "ejemplo" | "agreg
 /** Con «detalle», la acción se muestra como una opción de menú (título y una línea). */
 export type AccionRespuesta = { texto: string; accion: AccionMelki; orden?: Orden; escenario?: Escenario; tour?: IdTour; detalle?: string };
 
-export type Respuesta = { texto: string; acciones?: AccionRespuesta[] };
+export type Respuesta = {
+  texto: string;
+  acciones?: AccionRespuesta[];
+  /** Lo que se dice en voz alta, si es distinto de lo escrito (la disculpa no repite en voz lo que oyó: haría eco). */
+  voz?: string;
+};
 
 export type ContextoMelki = {
   antenas: Antena[];
@@ -82,6 +87,8 @@ export function respuestaNoEntendi(c: ContextoMelki, pregunta: string): Respuest
   const oido = pregunta.trim().replace(/\s+/g, " ").slice(0, 120);
   return {
     texto: `Discúlpeme${s ? `, ${s}` : ""}, no le entendí bien. ¿Me lo repite, por favor? ${c.porVoz ? `Escuché: «${oido}». ` : ""}Puede decirme, por ejemplo, «ubícame en Barranca de Upía, Meta», «ármame una red que cubra todo el municipio» o «¿cuánto cuesta la red?».`,
+    // En voz, solo la disculpa: repetir lo que oyó o los ejemplos haría que el micrófono los volviera a oír
+    voz: `Discúlpeme${s ? `, ${s}` : ""}, no le entendí bien. ¿Me lo repite, por favor?`,
     acciones: [
       { texto: "¿Qué puedo decir?", accion: "orden", orden: { tipo: "que-hago" } },
       { texto: "Ver los tours guiados", accion: "tours" },
@@ -597,6 +604,14 @@ const TEMAS: Tema[] = [
       "hablo rapido",
       "hablar rapido",
       "entiende mal",
+      "se prende y se apaga",
+      "se apaga el microfono",
+      "se apaga solo",
+      "se responde solo",
+      "se repite",
+      "texto duplicado",
+      "eco",
+      "bucle",
       "asistente por voz",
       "asistente inteligente",
       "en reposo",
@@ -630,6 +645,7 @@ const TEMAS: Tema[] = [
         "• Se activa con el botón «Asistente Melki» de la barra de arriba, con el ícono de ondas de esta conversación o diciéndome por escrito «activa el asistente». Al activarme oculto el panel de herramientas y el de resultados para dejarle el mapa libre; cuando un resultado se vea mejor en un panel, le pregunto si se lo muestro, y vuelven al apagarme. Arriba del mapa ve lo que le entiendo, lo que le digo y mis sugerencias.",
         "• En reposo, como Siri o el Asistente de Google: con el micrófono permitido me quedo escuchando solo mi nombre aunque la barra esté cerrada; diga «Hey Melki», «Hola Melki» o «Hello Melki» y me activo sin tocar ningún botón. «Deja de escuchar» me devuelve al reposo y «apaga el micrófono» me apaga del todo.",
         "• Mi barra se arrastra a cualquier parte del mapa (doble clic la devuelve a su sitio), se achica sola mientras espero mi nombre y crece cuando me hablan; también puede dejarla siempre pequeña.",
+        "• Con parlantes no me respondo a mí mismo: lo que oigo de mi propia voz, mientras hablo o justo después, no lo tomo como pedido, y no repito la misma respuesta ni me disculpo dos veces seguidas por mi eco. Cada frase la tomo una sola vez, aunque el navegador la mande repetida. Si el navegador deja de escuchar tras un silencio, vuelvo a escuchar solo, sin prender y apagar el micrófono; las barritas de mi orbe siguen su voz.",
         "• En Ajustes de voz elige cómo le hablo (señor, señora o sin tratamiento), la voz (la más natural que tenga su equipo; en Edge hay voces neuronales como Salomé de Colombia), si le escucho siempre en reposo y si me activo solo al abrir el simulador, con el micrófono permitido.",
         "• Si me pide algo que se sale del simulador, se lo digo con respeto y retomamos la red; y si me pide «una red sostenible y viable en Barranca de Upía de 11.226 hectáreas», la diseño y le cuento su viabilidad técnica y su costo con los precios de Trama.",
         "• Entiendo los municipios aunque el dictado los escriba mal al hablar rápido («barranca de UPA meta», «barranco vía meta» → Barranca de Upía, Meta): comparo cómo suenan y uso el departamento que se dice o el que se ve en el mapa. Si dudo entre varios, le pregunto «¿se refiere a…?» («sí», «la segunda» o el nombre); si no le entiendo, le pido con gusto que me lo repita.",

@@ -62,17 +62,55 @@ function guardarHud(v: { pos: Posicion; mini: boolean }) {
   }
 }
 
-function Orbe({ estado, pequeno }: { estado: EstadoManosLibres; pequeno?: boolean }) {
+/** Cuánto sube cada barrita con la voz (la del centro, más). */
+const FORMA_BARRAS = [0.55, 0.85, 1, 0.8, 0.6];
+
+/**
+ * El orbe del asistente. Mientras escucha (esperando su nombre o atento al pedido), si el micrófono da su nivel, las
+ * barritas siguen la voz de verdad: así se ve que oye, sin que el micrófono se prenda y se apague.
+ */
+function Orbe({ estado, pequeno, nivel }: { estado: EstadoManosLibres; pequeno?: boolean; nivel?: () => number | null }) {
   const [a, b, c] = COLORES[estado];
   const estilo = { "--orbe-a": a, "--orbe-b": b, "--orbe-c": c } as CSSProperties;
-  const barras = estado === "hablando" || estado === "atento";
+  const escucha = estado === "esperando" || estado === "atento";
+  const raiz = useRef<HTMLSpanElement>(null);
+  const [vivo, setVivo] = useState(false);
+  useEffect(() => {
+    const el = raiz.current;
+    if (!el || !nivel || !escucha) {
+      setVivo(false);
+      return;
+    }
+    let suave = 0;
+    let conMedida = false;
+    // Unas doce veces por segundo basta (la transición de las barritas lo suaviza)
+    const id = window.setInterval(() => {
+      const v = nivel();
+      if ((v !== null) !== conMedida) {
+        conMedida = v !== null;
+        setVivo(conMedida);
+      }
+      if (!conMedida) return;
+      suave = suave * 0.5 + (v ?? 0) * 0.5;
+      el.style.setProperty("--nivel", Math.min(1, Math.sqrt(suave) * 1.6).toFixed(3));
+    }, 80);
+    return () => window.clearInterval(id);
+  }, [nivel, escucha]);
+  const barras = estado === "hablando" || (estado === "atento" && !vivo);
   return (
-    <span className={`orbe-voz relative grid shrink-0 place-items-center ${pequeno ? "h-8 w-8" : "h-10 w-10"}`} data-estado={estado} style={estilo} aria-hidden="true">
+    <span
+      ref={raiz}
+      className={`orbe-voz relative grid shrink-0 place-items-center ${pequeno ? "h-8 w-8" : "h-10 w-10"}`}
+      data-estado={estado}
+      data-nivel={vivo && escucha ? "vivo" : undefined}
+      style={estilo}
+      aria-hidden="true"
+    >
       <span className="orbe-aura absolute -inset-1 rounded-full blur-md" />
       <span className="orbe-anillo absolute inset-0 rounded-full" />
       <span className={`orbe-centro absolute inset-[3px] flex items-center justify-center rounded-full ${pequeno ? "gap-[2px]" : "gap-[3px]"}`}>
         {[0, 1, 2, 3, 4].slice(0, pequeno ? 3 : 5).map((k) => (
-          <i key={k} className={`barra-voz block w-[3px] rounded-full bg-white/95 ${barras ? "activa" : ""}`} style={{ animationDelay: `${k * 0.11}s` }} />
+          <i key={k} className={`barra-voz block w-[3px] rounded-full bg-white/95 ${barras ? "activa" : ""}`} style={{ animationDelay: `${k * 0.11}s`, "--k": FORMA_BARRAS[k] } as CSSProperties} />
         ))}
       </span>
     </span>
@@ -121,6 +159,7 @@ export function HudVoz({
   onSugerencia,
   onOirme,
   onApagar,
+  nivel,
 }: {
   estado: EstadoManosLibres;
   /** Lo que va reconociendo (en vivo). */
@@ -140,6 +179,8 @@ export function HudVoz({
   onSugerencia: (s: SugerenciaHud) => void;
   onOirme: () => void;
   onApagar: () => void;
+  /** Nivel de la voz que oye el micrófono (0 a 1), o `null` si no hay medida. */
+  nivel?: () => number | null;
 }) {
   const [pos, setPos] = useState<Posicion>(() => leerHud().pos);
   const [mini, setMini] = useState(() => leerHud().mini);
@@ -249,7 +290,7 @@ export function HudVoz({
         {...comunes}
         className={`hud-asistente pointer-events-auto absolute z-20 flex max-w-[calc(100%-24px)] cursor-grab touch-none items-center gap-2 rounded-full py-1 pr-1 pl-1 text-white shadow-[0_10px_30px_-10px_rgba(0,0,0,0.6)] ring-1 ring-white/15 backdrop-blur-xl select-none active:cursor-grabbing ${lugar}`}
       >
-        <Orbe estado={estado} pequeno />
+        <Orbe estado={estado} pequeno nivel={nivel} />
         <span className="max-w-[240px] min-w-0 truncate pr-1 text-[12.5px] text-white/90">{etiquetaPequena}</span>
         {estado === "hablando" && (
           <Boton etiqueta="Callar a Melki" titulo="Callar (o diga «Melki, para»)" onClick={onCallar} fondo>
@@ -272,7 +313,7 @@ export function HudVoz({
       className={`hud-asistente pointer-events-auto absolute z-20 w-[min(500px,calc(100%-24px))] cursor-grab touch-none overflow-hidden rounded-[20px] text-white shadow-[0_18px_48px_-14px_rgba(0,0,0,0.6)] ring-1 ring-white/15 backdrop-blur-xl select-none active:cursor-grabbing ${lugar}`}
     >
       <div className="flex items-center gap-2.5 px-3 pt-2.5 pb-2">
-        <Orbe estado={estado} />
+        <Orbe estado={estado} nivel={nivel} />
         <div className="min-w-0 flex-1">
           <p className="flex min-w-0 items-center gap-2">
             <span className="shrink-0 font-cond text-[14.5px] leading-none font-semibold tracking-wide">Asistente Melki</span>

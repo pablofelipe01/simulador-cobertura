@@ -11,7 +11,7 @@
 // el mapa libre y sugiere los paneles cuando hacen falta) y menú de tours guiados (también en la primera visita).
 // Escucha avisos de la ventana: «melki:abrir», «melki:tours» y «melki:pedir» (los usan los tours y la barra superior).
 import { AudioLines, Compass, Ear, Globe, LoaderCircle, Mic, Play, Send, Settings2, ShieldCheck, Square, Trash2, Volume2, VolumeX, X } from "lucide-react";
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { consejoRed, estadoRed, piezaDe } from "@/lib/radio/estado-red";
 import type { Escenario, ResultadoSimulacion } from "@/lib/radio/tipos";
@@ -19,7 +19,21 @@ import { nombresParaVoz, type Lugar } from "@/lib/geo/referencia";
 
 import { MelkiAvatar } from "./avatar";
 import { HudVoz, type SugerenciaHud } from "./hud-voz";
-import { AYUDA_VOZ, controlDeVoz, detectarActivacion, elegirAlternativa, frases, FRASES_RECONOCIMIENTO, limpiarComando, pareceEco, textoParaVoz, type EstadoManosLibres, type Trato } from "./manos-libres";
+import {
+  AYUDA_VOZ,
+  controlDeVoz,
+  detectarActivacion,
+  elegirAlternativa,
+  empiezaConNombre,
+  frases,
+  FRASES_RECONOCIMIENTO,
+  limpiarComando,
+  pareceEco,
+  parteDeLoDicho,
+  textoParaVoz,
+  type EstadoManosLibres,
+  type Trato,
+} from "./manos-libres";
 import { menuTours, pedidoDeTour, responder, SUGERENCIAS, type AccionMelki, type AccionRespuesta, type ContextoMelki, type Respuesta } from "./cerebro";
 import {
   borrarReconocedor,
@@ -29,6 +43,8 @@ import {
   hayReconocimientoNavegador,
   iniciarDictado,
   reconocedorDescargado,
+  clavePalabras,
+  quitarTartamudeo,
   type ControlDictado,
   type Dictado,
   type EstadoDictado,
@@ -41,6 +57,12 @@ import { alCargarVoces, callar, fijarVozPreferida, hablar, puntajeVoz, sonando, 
 type Mensaje = { id: number; de: "melki" | "usuario"; texto: string; acciones?: AccionRespuesta[]; voz?: boolean };
 
 /** Un pedido dicho que quedó a medias («ubícame en…», «arma una red de…»): se espera un poco más a que termine. */
+/** Lo que empieza a oírse hasta 0,8 s después de que Melki calla es todavía su voz (el reconocimiento avisa tarde). */
+const MARGEN_ECO = 800;
+/** Lo que repite lo que Melki dijo y empezó a oírse hasta 2,5 s después es eco; más tarde, la persona que lo repite. */
+const VENTANA_ECO = 2500;
+/** Melki no repite en voz la misma respuesta a un pedido por voz antes de este tiempo: así no entra en un bucle con su eco. */
+const NO_REPETIR_MS = 25000;
 const COLGANDO = /\b(en|de|del|a|al|y|o|para|con|que|la|el|los|las|un|una|hasta|por|sobre|entre|cerca|ubicame|llevame|muestrame|pon|ponme|arma|armame|disena|disename|hazme|crea|creame|agrega|busca|vamos|cubre|cubra|municipio|departamento|coordenadas)$/;
 
 const CLAVE = "simulador-cobertura-melki-v1";
@@ -289,15 +311,24 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     estado: "apagado" as EstadoManosLibres,
     sesion: null as Dictado | null,
     control: null as ControlDictado | null,
-    consumido: 0,
     cola: [] as string[],
     hablandoHasta: 0,
+    /** Cuándo empezó a sonar lo que Melki dice ahora. */
+    hablandoDesde: 0,
     /** Hay voz sonando de verdad (con los subtítulos solos no hay eco que evitar). */
     conVoz: false,
-    /** La frase que se está oyendo empezó mientras Melki hablaba: es su propia voz. */
-    inicioDuranteVoz: false,
-    /** Lo dicho en voz alta hace poco, para reconocer el eco. */
-    recientes: [] as { texto: string; hasta: number }[],
+    /** Lo dicho en voz alta hace poco y cuándo sonó, para reconocer el eco (su propia voz que vuelve por el micrófono). */
+    recientes: [] as { texto: string; desde: number; hasta: number }[],
+    /** Nivel del micrófono (en el computador): cuándo se oyó voz por última vez y si hay medida. */
+    nivel: { valor: 0, ultimaVoz: 0, hora: 0 },
+    /** Hasta cuándo se puede esperar a que termine de hablar quien sigue hablando. */
+    limiteEspera: 0,
+    /** Lo último que respondió en voz a un pedido por voz: no lo repite seguido (así no se responde a sí mismo). */
+    ultimaRespuesta: { clave: "", hora: 0, disculpa: false },
+    /** El último pedido por voz: si llega dos veces seguidas (el navegador lo repitió), no se hace dos veces. */
+    ultimoPedido: { clave: "", hora: 0 },
+    /** Veces seguidas que la escucha se cayó del todo (sin internet): se reintenta despacio y luego se avisa. */
+    caidas: 0,
     /** Después de hablar: quedarse atento (seguir la conversación) o volver a esperar su nombre. */
     trasHablar: "atento" as "atento" | "esperando",
     /** Al apagar con una despedida, no se corta lo que está diciendo. */
@@ -307,10 +338,15 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     ultimoDicho: "",
     ultimoCompleto: "",
     comando: "",
+    /** El pedido que se está armando trae su nombre (lo que no lo trae, justo después de que habló, puede ser su eco). */
+    comandoConNombre: false,
+    /** El pedido que se responde ahora llegó sin su nombre, justo después de que habló y con sus palabras: si la respuesta se repite, es un bucle. */
+    pedidoDudoso: false,
+    /** El pedido que se responde ahora trajo su nombre (es la persona, sin duda). */
+    pedidoConNombre: false,
     atento: 0,
     espera: 0,
     pensando: 0,
-    reinicios: [] as number[],
     saludado: false,
     /** Cuántas veces lo han llamado solo por su nombre (para no contestar siempre igual). */
     llamados: 0,
@@ -461,6 +497,9 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
           onError: (m) => !c.cancelado && setErrorDictado(m),
         },
         c,
+        // Si el navegador corta (Edge lo hace a los pocos segundos de silencio), sigue escuchando; se detiene sola tras
+        // 15 s sin oír nada o cuando se vuelve a tocar el micrófono
+        { continuo: true, silencioMax: 15000 },
       );
       if (c.cancelado) s.cancelar();
       else sesion.current = s;
@@ -495,9 +534,27 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     if (empezar) void empezarDictado(m);
   };
 
-  const decir = (t: string) => {
-    if (ml.current.activo && ml.current.despierto) {
-      encolarVoz(t);
+  const decir = (t: string, escrito = t) => {
+    const m = ml.current;
+    if (m.activo && m.despierto) {
+      // Respuesta a un pedido por voz: si es la misma que acaba de dar en voz, no la repite (queda escrita) y vuelve a
+      // esperar su nombre. Así, si el micrófono oyó su propia voz y la tomó como pedido, no entra en un bucle.
+      if (m.estado === "pensando") {
+        const clave = clavePalabras(t).slice(0, 14).join(" ");
+        const ahora = reloj();
+        const disculpa = /^disculpeme/.test(clave);
+        const reciente = ahora - m.ultimaRespuesta.hora < NO_REPETIR_MS;
+        const bucle = reciente && ((clave === m.ultimaRespuesta.clave && m.pedidoDudoso) || (disculpa && m.ultimaRespuesta.disculpa && !m.pedidoConNombre));
+        if (clave && bucle) {
+          m.ultimaRespuesta.hora = ahora;
+          window.clearTimeout(m.pensando);
+          fijarEstadoVoz("esperando");
+          setEscuchado("");
+          return;
+        }
+        m.ultimaRespuesta = { clave, hora: ahora, disculpa };
+      }
+      encolarVoz(t, actual.current.manos.completo, "atento", true, escrito);
       return;
     }
     if (!actual.current.vozActiva) return;
@@ -508,7 +565,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   const agregarMelki = (r: Respuesta) => {
     setMensajes((m) => [...m, { id: siguiente.current++, de: "melki", texto: r.texto, acciones: r.acciones }]);
     if (!actual.current.abierto) setNoLeido(true);
-    decir(r.texto);
+    decir(r.voz ?? r.texto, r.texto);
   };
 
   /* ───────────── Asistente Melki (por voz) ───────────── */
@@ -540,10 +597,10 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
    * Lee en voz alta, en orden, lo que Melki va respondiendo (resumido, salvo que se pida completo). Con `guardar` en
    * falso no cambia lo que se lee con «más detalle» (los saludos y las sugerencias).
    */
-  const encolarVoz = (texto: string, completo = actual.current.manos.completo, despues: "atento" | "esperando" = "atento", guardar = true) => {
+  const encolarVoz = (texto: string, completo = actual.current.manos.completo, despues: "atento" | "esperando" = "atento", guardar = true, escrito = texto) => {
     const m = ml.current;
     m.trasHablar = despues;
-    if (guardar) m.ultimoCompleto = texto;
+    if (guardar) m.ultimoCompleto = escrito;
     m.cola.push(textoParaVoz(texto, completo));
     window.clearTimeout(m.pensando);
     if (m.estado !== "hablando") siguienteVoz();
@@ -585,17 +642,23 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       return;
     }
     m.conVoz = true;
+    m.hablandoDesde = reloj();
     setHablando(true);
     hablar(
       t,
       () => {
-        const x = ml.current;
-        x.hablandoHasta = reloj();
-        x.recientes = [...x.recientes.filter((r) => x.hablandoHasta - r.hasta < 8000), { texto: t, hasta: x.hablandoHasta }];
-        if (x.estado === "hablando") siguienteVoz();
+        registrarVoz(t);
+        if (ml.current.estado === "hablando") siguienteVoz();
       },
       (error) => error === "not-allowed" && vozRef.current.bloqueoVoz(t),
     );
+  };
+
+  /** Guarda lo que acaba de sonar y cuándo: lo que el micrófono oiga de eso es su propia voz (eco). */
+  const registrarVoz = (texto: string) => {
+    const x = ml.current;
+    x.hablandoHasta = reloj();
+    x.recientes = [...x.recientes.filter((r) => x.hablandoHasta - r.hasta < 30000), { texto, desde: x.hablandoDesde || x.hablandoHasta, hasta: x.hablandoHasta }];
   };
 
   /** Guarda lo que no pudo decir y muestra «Toque aquí para oír mi voz». */
@@ -619,82 +682,134 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     m.cola = [];
     callar();
     setHablando(false);
-    if (m.conVoz) m.hablandoHasta = reloj();
+    if (m.conVoz) registrarVoz(m.ultimoDicho);
     m.conVoz = false;
     if (m.activo && m.despierto) quedarAtento();
   };
 
-  /**
-   * Una frase nueva empieza a oírse: si Melki está hablando (o acaba de terminar: el reconocimiento avisa unas décimas
-   * después de que empieza la voz), es su propia voz que entra por el micrófono.
-   */
-  const inicioFrase = () => {
+  /** ¿Suena ahora una voz (la de Melki o la de un tour), o acaba de callar? */
+  const sonandoAhora = () => {
     const m = ml.current;
-    m.inicioDuranteVoz = (m.estado === "hablando" && m.conVoz) || sonando() || reloj() - m.hablandoHasta < 800;
+    return (m.estado === "hablando" && m.conVoz) || sonando() || reloj() - m.hablandoHasta < 600;
   };
 
   /**
-   * ¿Lo que llegó es eco del final de lo último que Melki dijo? Solo enseguida de terminar y comparando con sus últimas
-   * palabras: si el usuario repite un ejemplo que Melki dio («pantalla limpia»), es un pedido.
+   * ¿La frase empezó a oírse mientras Melki hablaba, o enseguida? Entonces es su propia voz que entró por el micrófono
+   * (el reconocimiento avisa unas décimas de segundo después de que empieza a oír).
    */
-  const esEco = (frase: string) => {
+  const empezoConSuVoz = (inicio: number) => {
     const m = ml.current;
-    const desde = reloj() - m.hablandoHasta;
-    const ultimo = m.recientes.at(-1);
-    if (!ultimo || desde > 2000) return false;
-    const cola = ultimo.texto.split(/\s+/).slice(-25).join(" ");
-    // Si empieza con su nombre y Melki no lo acaba de decir, es la persona («Melki, ármame una red…» justo después de
-    // que Melki sugirió esas mismas palabras)
-    if (detectarActivacion(frase).activado && /^\s*\S*\s*\S*\s*(melk|melq|mel k)/i.test(frase) && !/melk/i.test(cola)) return false;
-    return pareceEco(frase, cola) && (frase.trim().split(/\s+/).length > 1 || desde < 1200);
+    if (sonandoAhora()) return true;
+    if (!inicio) return false;
+    return m.recientes.some((r) => inicio >= r.desde - 200 && inicio <= r.hasta + MARGEN_ECO);
   };
 
-  /** Lo que llega del reconocimiento: busca el llamado («Hola Melki») y arma el pedido. */
-  const oirTexto = (final: string, parcial: string) => {
+  /**
+   * ¿Lo que llegó repite lo que Melki acaba de decir? Una frase corta, solo si empezó a oírse poco después de que habló
+   * (el reconocimiento puede tardar): pasado ese momento, si el usuario repite un ejemplo que Melki dio («pantalla
+   * limpia», «Hola Melki»), es un pedido. Una frase larga (seis palabras o más) que repite lo que dijo hace poco es su voz aunque
+   * llegue tarde. Si empieza con su nombre y Melki no lo dijo, es la persona («Melki, ármame una red…» justo después
+   * de la sugerencia).
+   */
+  const esEco = (frase: string, inicio = reloj()) => {
     const m = ml.current;
-    if (!m.activo) return;
-    if (final.length < m.consumido) m.consumido = 0;
-    const nuevo = final.slice(m.consumido).trim();
-    // Mientras suena una voz (la de Melki o la de un tour) no se le hace caso a lo que se oye, salvo «Melki, para»;
-    // tampoco a lo que empezó a oírse mientras sonaba ni a lo que repite lo que Melki acaba de decir (el eco).
-    const sonandoAhora = (m.estado === "hablando" && m.conVoz) || sonando() || reloj() - m.hablandoHasta < 600;
-    const ocupado = sonandoAhora || m.inicioDuranteVoz;
-    if (nuevo) {
-      m.consumido = final.length;
-      const duranteVoz = m.inicioDuranteVoz;
-      m.inicioDuranteVoz = false;
-      if (sonandoAhora || duranteVoz || esEco(nuevo)) {
-        const a = detectarActivacion(nuevo);
-        if (a.activado && controlDeVoz(a.resto)?.tipo === "callar" && !esEco(nuevo)) callarYa();
-      } else procesarFrase(nuevo);
+    const cerca = m.recientes.filter((r) => inicio - r.hasta < 12000 && r.hasta - inicio < 60000);
+    if (!cerca.length) return false;
+    if (empiezaConNombre(frase) && !cerca.some((r) => /melk/i.test(r.texto))) return false;
+    const palabras = frase.trim().split(/\s+/).length;
+    return cerca.some((r) => {
+      const tras = inicio - r.hasta;
+      if (!pareceEco(frase, r.texto)) return false;
+      // Muy corta («Hola Melki», «sí»): solo enseguida; la persona suele contestar así justo después
+      if (palabras <= 3) return tras < 1200;
+      return tras < VENTANA_ECO || palabras >= 6;
+    });
+  };
+
+  /** ¿Es la voz de Melki (o de un tour) y no la de la persona? Por cuándo empezó a oírse y por lo que dice. */
+  const esSuVoz = (frase: string, inicio: number) => empezoConSuVoz(inicio) || esEco(frase, inicio || reloj());
+
+  /** Una frase confirmada (llega una sola vez y sin lo que el navegador repite): busca el llamado y arma el pedido. */
+  const oirFrase = (frase: string, inicio: number) => {
+    const m = ml.current;
+    const nuevo = frase.trim();
+    if (!m.activo || !nuevo) return;
+    m.caidas = 0;
+    // Su propia voz no se toma como pedido (así no se responde a sí mismo); solo «Melki, para» la interrumpe
+    if (esSuVoz(nuevo, inicio)) {
+      const a = detectarActivacion(nuevo);
+      if (a.activado && controlDeVoz(a.resto)?.tipo === "callar" && !esEco(nuevo, inicio || reloj())) callarYa();
+      return;
     }
-    if (!ocupado && parcial) {
-      if (m.estado === "dormido") {
-        // En reposo: en cuanto se oye su nombre se despierta (sin esperar a que termine la frase)
-        const a = detectarActivacion(parcial);
-        if (a.activado && !m.pendienteDespertar) {
-          if (actual.current.manos.sonido) tono(true);
-          m.desperto = reloj();
-          m.pendienteDespertar = { via: "parcial", resto: a.resto };
-          onManosLibres(true);
-        }
-      } else if (m.estado === "atento" || m.comando) {
-        setEscuchado(`${m.comando ? `${m.comando} ` : ""}${parcial}`.trim());
-        // Sigue hablando: no se corta el pedido (cuando llegue lo que falta, se espera la pausa normal)
-        if (m.comando) {
-          window.clearTimeout(m.espera);
-          m.espera = window.setTimeout(() => vozRef.current.ejecutarVoz(), 1800);
-        }
-      }
-      else if (m.estado === "esperando" && detectarActivacion(parcial).activado) {
-        // Ya se oyó su nombre: responde enseguida, sin esperar a que termine la frase
+    procesarFrase(nuevo);
+  };
+
+  /** Lo que se va oyendo de la frase en curso: despierta con su nombre y muestra el pedido mientras se dice. */
+  const oirParcial = (parcial: string, inicio: number) => {
+    const m = ml.current;
+    if (!m.activo || !parcial || empezoConSuVoz(inicio)) return;
+    if (m.estado === "dormido") {
+      // En reposo: en cuanto se oye su nombre se despierta (sin esperar a que termine la frase)
+      const a = detectarActivacion(parcial);
+      if (a.activado && !m.pendienteDespertar) {
         if (actual.current.manos.sonido) tono(true);
         m.desperto = reloj();
-        window.clearTimeout(m.atento);
-        fijarEstadoVoz("atento");
-        setEscuchado(detectarActivacion(parcial).resto);
+        m.pendienteDespertar = { via: "parcial", resto: a.resto };
+        onManosLibres(true);
       }
+    } else if (m.estado === "atento" || m.comando) {
+      setEscuchado(`${m.comando ? `${m.comando} ` : ""}${parcial}`.trim());
+      // Sigue hablando: no se corta el pedido (cuando llegue lo que falta, se espera la pausa normal)
+      if (m.comando) esperarFin(1800);
+    } else if (m.estado === "esperando" && detectarActivacion(parcial).activado) {
+      // Ya se oyó su nombre: responde enseguida, sin esperar a que termine la frase
+      if (actual.current.manos.sonido) tono(true);
+      m.desperto = reloj();
+      window.clearTimeout(m.atento);
+      fijarEstadoVoz("atento");
+      setEscuchado(detectarActivacion(parcial).resto);
     }
+  };
+
+  /** El nivel del micrófono (en el computador): para la barra y para no cortar a quien sigue hablando. */
+  const oirNivel = (valor: number, voz: boolean) => {
+    const n = ml.current.nivel;
+    n.valor = valor;
+    n.hora = reloj();
+    if (voz) n.ultimaVoz = n.hora;
+  };
+
+  /** El nivel de la voz que oye el micrófono, si hay medida reciente (para las barritas de la barra del asistente). */
+  const nivelVoz = useCallback(() => {
+    const n = ml.current.nivel;
+    // (con el mapa ocupado la medida puede llegar con retraso)
+    return reloj() - n.hora < 1500 ? n.valor : null;
+  }, []);
+
+  /** ¿La persona sigue hablando? (el micrófono oye voz justo ahora y no es la de Melki). */
+  const sigueHablando = () => {
+    const m = ml.current;
+    const ahora = reloj();
+    return ahora - m.nivel.hora < 1000 && ahora - m.nivel.ultimaVoz < 450 && !sonandoAhora();
+  };
+
+  /**
+   * Hace el pedido cuando termina de hablar: tras una pausa (más larga si la frase quedó a medias) y, si el micrófono
+   * todavía oye su voz, un poco después (hasta 1,5 s más), para no cortarle la frase.
+   */
+  const esperarFin = (ms: number) => {
+    const m = ml.current;
+    window.clearTimeout(m.espera);
+    m.limiteEspera = reloj() + ms + 1500;
+    const revisar = () => {
+      const x = ml.current;
+      if (vozRef.current.sigueHablando() && reloj() < x.limiteEspera) {
+        x.espera = window.setTimeout(revisar, 250);
+        return;
+      }
+      vozRef.current.ejecutarVoz();
+    };
+    m.espera = window.setTimeout(revisar, ms);
   };
 
   const procesarFrase = (frase: string) => {
@@ -724,7 +839,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
         encolarVoz(fr().llamado(m.llamados++, a.ingles), true, "atento", false);
         return;
       }
-      acumular(a.resto);
+      acumular(a.resto, true);
       return;
     }
     // Atento: lo que diga es el pedido (si repite su nombre, se quita). Solo su nombre: contesta como un mayordomo
@@ -735,12 +850,13 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       encolarVoz(fr().llamado(m.llamados++, a.ingles), true, "atento", false);
       return;
     }
-    acumular(a.activado ? a.resto : frase);
+    acumular(a.activado ? a.resto : frase, a.activado);
   };
 
   /** Junta lo que se dice seguido (una pausa corta no corta el pedido) y lo ejecuta. */
-  const acumular = (t: string) => {
+  const acumular = (t: string, conNombre = false) => {
     const m = ml.current;
+    if (conNombre) m.comandoConNombre = true;
     // Si habla encima de los subtítulos, lo que faltaba por mostrar ya no importa
     if (m.estado === "hablando") m.cola = [];
     m.comando = m.comando ? `${m.comando} ${t}` : t;
@@ -750,14 +866,29 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     fijarEstadoVoz("atento");
     // Si la frase quedó a medias («ubícame en…», «arma una red de…»), espera un poco más a que termine
     const aMedias = COLGANDO.test(m.comando.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[.,;:!?¿¡]+$/g, "").trim());
-    m.espera = window.setTimeout(() => vozRef.current.ejecutarVoz(), aMedias ? 1800 : 700);
+    esperarFin(aMedias ? 1800 : 700);
   };
 
   const ejecutarVoz = () => {
     const m = ml.current;
-    const dicho = m.comando.trim();
+    // Lo que quedó repetido al juntar las frases («llévame a Villavicencio llévame a Villavicencio») va una sola vez
+    const dicho = quitarTartamudeo(m.comando.trim());
+    const conNombre = m.comandoConNombre;
     m.comando = "";
+    m.comandoConNombre = false;
     if (!dicho || !m.activo) return;
+    // El mismo pedido dos veces seguidas (el navegador lo repitió): se hace una sola vez
+    const ahora = reloj();
+    const clavePedido = clavePalabras(dicho).join(" ");
+    if (clavePedido === m.ultimoPedido.clave && ahora - m.ultimoPedido.hora < 4000) {
+      m.ultimoPedido.hora = ahora;
+      quedarAtento();
+      return;
+    }
+    m.ultimoPedido = { clave: clavePedido, hora: ahora };
+    // Sin su nombre, justo después de que habló y con sus mismas palabras: puede ser su propia voz que se coló
+    m.pedidoConNombre = conNombre;
+    m.pedidoDudoso = !conNombre && ahora - m.hablandoHasta < 6000 && m.recientes.some((r) => ahora - r.hasta < 15000 && parteDeLoDicho(dicho, r.texto) >= 0.5);
     const c = controlDeVoz(dicho);
     if (c) {
       if (c.tipo === "callar") return callarYa();
@@ -774,7 +905,10 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
         m.cola = [];
         m.despedida = true;
         setSubtitulo(t);
-        if (actual.current.vozActiva || m.encendioVoz) hablar(t, () => (ml.current.hablandoHasta = reloj()));
+        if (actual.current.vozActiva || m.encendioVoz) {
+          m.hablandoDesde = reloj();
+          hablar(t, () => registrarVoz(t));
+        }
         onManosLibres(false);
         return;
       }
@@ -854,15 +988,21 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   const arrancarEscucha = async (modo: ModoDictado) => {
     const m = ml.current;
     if (!m.activo) return;
+    // Una sola escucha a la vez (dos oirían todo dos veces)
+    if (m.control) m.control.cancelado = true;
+    m.sesion?.cancelar();
+    m.sesion = null;
     const c: ControlDictado = {};
     m.control = c;
-    m.consumido = 0;
     try {
       const s = await iniciarDictado(
         modo,
         {
-          onTexto: (final, parcial) => !c.cancelado && vozRef.current.oirTexto(final, parcial),
-          onInicioFrase: () => !c.cancelado && vozRef.current.inicioFrase(),
+          // Cada frase llega una sola vez, sin lo que el navegador repite y con la hora en que empezó a oírse (eco)
+          onTexto: () => {},
+          onFrase: (frase, info) => !c.cancelado && vozRef.current.oirFrase(frase, info.inicio),
+          onParcial: (parcial, info) => !c.cancelado && vozRef.current.oirParcial(parcial, info.inicio),
+          onNivel: (nivel, voz) => !c.cancelado && vozRef.current.oirNivel(nivel, voz),
           // Entre las versiones que propone el reconocimiento, la que trae su nombre y la que el simulador entiende
           // como orden (con un lugar que existe); y los nombres de los municipios que se ven, para entenderlos mejor
           elegir: (alternativas) => elegirAlternativa(alternativas, (pedido) => vozRef.current.puntosComprension(pedido)),
@@ -874,7 +1014,8 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
               setAvisoVoz(null);
               if (ml.current.estado === "preparando") vozRef.current.listoParaEscuchar();
             }
-            // El reconocimiento del navegador se apaga solo de vez en cuando: se vuelve a encender
+            // Si el navegador corta la escucha, la escucha misma se vuelve a encender sin que se note; esto es solo
+            // cuando se cayó del todo (por ejemplo, sin internet)
             if (e === "inactivo" && ml.current.activo && ml.current.control === c) vozRef.current.reanudar(modo);
           },
           onError: (mensaje) => {
@@ -889,6 +1030,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
           },
         },
         c,
+        { continuo: true },
       );
       if (c.cancelado) s.cancelar();
       else {
@@ -903,20 +1045,25 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     }
   };
 
+  /**
+   * La escucha se cayó del todo (ya reintentó sola varias veces; por ejemplo, sin internet): espera unos segundos y
+   * vuelve a empezar, sin prender y apagar el micrófono a cada momento; a la tercera vez seguida, avisa y se apaga.
+   */
   const reanudar = (modo: ModoDictado) => {
     const m = ml.current;
-    const ahora = reloj();
-    m.reinicios = [...m.reinicios.filter((t) => ahora - t < 20000), ahora];
-    if (m.reinicios.length > 8) {
-      setAvisoVoz("El micrófono se apaga a cada rato. Revise la conexión o el permiso del micrófono y vuelva a activar el asistente.");
+    m.sesion = null;
+    m.caidas++;
+    if (m.caidas > 3) {
+      setAvisoVoz("No logro escuchar. Revise el internet y el micrófono, y vuelva a activarme. Sin internet, use el dictado privado (en Ajustes de voz).");
       m.activo = false;
-      m.pasivaApagada = true;
       if (!m.despierto) vozRef.current.apagarTodo();
       else window.setTimeout(() => onManosLibres(false), 5000);
       return;
     }
-    m.sesion = null;
-    window.setTimeout(() => void vozRef.current.arrancarEscucha(modo), 250);
+    const c = m.control;
+    window.setTimeout(() => {
+      if (ml.current.activo && ml.current.control === c) void vozRef.current.arrancarEscucha(modo);
+    }, 4000);
   };
 
   const listoParaEscuchar = () => {
@@ -983,7 +1130,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     m.pasivaApagada = false;
     m.activo = true;
     m.despierto = true;
-    m.reinicios = [];
+    m.caidas = 0;
     m.pendienteDespertar = null;
     prepararDespierto();
     fijarEstadoVoz("preparando");
@@ -1010,7 +1157,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     if (actual.current.manos.sonido && reloj() - m.desperto > 3000) tono(true);
     if (p.resto) {
       fijarEstadoVoz("atento");
-      acumular(p.resto);
+      acumular(p.resto, true);
     } else {
       fijarEstadoVoz("atento");
       encolarVoz(fr().llamado(m.llamados++, p.ingles), true, "atento", false);
@@ -1024,7 +1171,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     if (!hayReconocimientoNavegador() && !hayMicrofono()) return;
     m.activo = true;
     m.despierto = false;
-    m.reinicios = [];
+    m.caidas = 0;
     m.pendienteDespertar = null;
     fijarEstadoVoz("dormido");
     void arrancarEscucha(modoEscucha());
@@ -1180,9 +1327,10 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       return;
     }
     setHablando(true);
+    ml.current.hablandoDesde = reloj();
     hablar(t, () => {
       setHablando(false);
-      ml.current.hablandoHasta = reloj();
+      registrarVoz(t);
     });
   };
 
@@ -1411,9 +1559,9 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     avisos.current = { preguntar, mostrarTours, cerrarOferta, oferta };
   });
   // Lo que llama el reconocimiento de voz siempre usa la versión de ahora (con el escenario de ahora)
-  const vozRef = useRef({ oirTexto, inicioFrase, ejecutarVoz, preguntar, pulsarAccion, arrancarEscucha, reanudar, listoParaEscuchar, bloqueoVoz, desbloquearVoz, iniciarPasiva, apagarTodo, puntosComprension });
+  const vozRef = useRef({ oirFrase, oirParcial, oirNivel, sigueHablando, ejecutarVoz, preguntar, pulsarAccion, arrancarEscucha, reanudar, listoParaEscuchar, bloqueoVoz, desbloquearVoz, iniciarPasiva, apagarTodo, puntosComprension });
   useEffect(() => {
-    vozRef.current = { oirTexto, inicioFrase, ejecutarVoz, preguntar, pulsarAccion, arrancarEscucha, reanudar, listoParaEscuchar, bloqueoVoz, desbloquearVoz, iniciarPasiva, apagarTodo, puntosComprension };
+    vozRef.current = { oirFrase, oirParcial, oirNivel, sigueHablando, ejecutarVoz, preguntar, pulsarAccion, arrancarEscucha, reanudar, listoParaEscuchar, bloqueoVoz, desbloquearVoz, iniciarPasiva, apagarTodo, puntosComprension };
   });
   // Encender y apagar el asistente
   const manosRef = useRef({ iniciarManosLibres, detenerManosLibres, apagarTodo });
@@ -1535,6 +1683,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       onSugerencia={sugerenciaHud}
       onOirme={desbloquearVoz}
       onApagar={() => onManosLibres(false)}
+      nivel={nivelVoz}
     />
     <div className="pointer-events-none absolute right-3 bottom-8 z-30 flex flex-col items-end gap-3">
       {abierto && (
