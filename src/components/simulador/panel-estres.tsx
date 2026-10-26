@@ -10,11 +10,30 @@
 // su ritmo en la hora pico (pagos, WhatsApp y consultas a la IA) y mide, repetidor por repetidor, mensajes completos,
 // espera, canal, ciclo de trabajo, colas,
 // alcance con carga y energía; la rampa sube la carga hasta encontrar dónde se revienta cada zona.
-import { Activity, BatteryCharging, ChevronDown, Flame, Gauge, MapPinned, Radio, Trash, TrendingUp, Users } from "lucide-react";
+import { Activity, BatteryCharging, ChevronDown, Flame, Gauge, MapPin, MapPinned, Radio, Sparkles, Trash, TrendingUp, Undo2, UserCheck, Users, Wrench } from "lucide-react";
 import { useState } from "react";
 
 import { presetPorId } from "@/lib/radio/constantes";
-import { ENERGIA_P1, PEDIDO_ESTRES_DEFECTO, TOPE_CICLO_PCT, TOPE_PERSONAS_PUNTO, type EstadoZona, type LimitePunto, type LimiteZona, type ResultadoEstres, type ZonaEstres } from "@/lib/radio/estres";
+import {
+  CAUSAS_USUARIO,
+  curvaDe,
+  ENERGIA_P1,
+  ESTADOS_USUARIO,
+  ESTRES_MEDIDO,
+  ORDEN_ESTADOS_USUARIO,
+  PEDIDO_ESTRES_DEFECTO,
+  TOPE_CICLO_PCT,
+  TOPE_PERSONAS_PUNTO,
+  type CausaUsuario,
+  type EstadoUsuario,
+  type EstadoZona,
+  type LimitePunto,
+  type LimiteZona,
+  type ResultadoEstres,
+  type ZonaEstres,
+} from "@/lib/radio/estres";
+import type { MedidaRed, PropuestaOptimizar, ResultadoOptimizar } from "@/lib/radio/optimizar";
+import { FICHA_GATEWAY, FONDO_MT, PROTOCOLOS, TRAFICO_MEDIDO, type CurvaEnlace, type PerfilTrafico } from "@/lib/radio/protocolos";
 import { CAPACIDAD_TRAMA } from "@/lib/radio/trama";
 import type { Parametros } from "@/lib/radio/tipos";
 
@@ -55,7 +74,7 @@ function Chips({ valores, valor, onCambio, sufijo = "" }: { valores: readonly nu
     <>
       {valores.map((v) => (
         <button key={v} type="button" onClick={() => onCambio(v)} aria-pressed={valor === v} className={`rounded-full px-2.5 py-1 text-[12.5px] font-medium ring-1 ${valor === v ? "bg-carbon text-white ring-carbon" : "bg-white ring-linea hover:bg-papel-2"}`}>
-          {v}
+          {String(v).replace(".", ",")}
           {sufijo}
         </button>
       ))}
@@ -323,7 +342,20 @@ export function ZonaRapida({
 
 /* ───────────── Prueba de estrés ───────────── */
 
-export type OpcionesEstres = { pagosPersonaDia: number; horaPicoPct: number; factor: number; rampa: boolean; comparar: boolean; foco?: string | null };
+export type OpcionesEstres = {
+  pagosPersonaDia: number;
+  horaPicoPct: number;
+  factor: number;
+  rampa: boolean;
+  comparar: boolean;
+  foco?: string | null;
+  /** Pagos de Trama o lo medido en un gateway real. */
+  perfil?: PerfilTrafico;
+  /** Curva de entrega por enlace (sin valor: la del perfil). */
+  curva?: CurvaEnlace;
+  /** Meshtastic: contar la telemetría y el NodeInfo de cada equipo. */
+  fondo?: boolean;
+};
 
 export const ESTRES_DEFECTO: OpcionesEstres = {
   pagosPersonaDia: PEDIDO_ESTRES_DEFECTO.pagosPersonaDia,
@@ -331,7 +363,22 @@ export const ESTRES_DEFECTO: OpcionesEstres = {
   factor: 1,
   rampa: false,
   comparar: false,
+  perfil: "trama",
 };
+
+/** Opciones del perfil de tráfico: el ritmo de Trama o el medido en un gateway real. */
+export function opcionesPerfil(perfil: PerfilTrafico): Partial<OpcionesEstres> {
+  return perfil === "medido"
+    ? { perfil, pagosPersonaDia: ESTRES_MEDIDO.pagosPersonaDia, horaPicoPct: ESTRES_MEDIDO.horaPicoPct, curva: undefined }
+    : { perfil, pagosPersonaDia: PEDIDO_ESTRES_DEFECTO.pagosPersonaDia, horaPicoPct: PEDIDO_ESTRES_DEFECTO.horaPicoPct, curva: undefined };
+}
+
+export type FaseOptimizar =
+  | { fase: "nada" }
+  | { fase: "buscando"; avance: number; texto?: string }
+  | { fase: "listo"; resultado: ResultadoOptimizar; firma: string; opciones: OpcionesEstres }
+  | { fase: "aplicada"; titulo: string; antes: MedidaRed; esperado: MedidaRed }
+  | { fase: "error"; texto: string };
 
 export type FaseEstres =
   | { fase: "nada" }
@@ -345,6 +392,7 @@ export const TEXTO_ESTADO: Record<EstadoZona, string> = { aguanta: "Aguanta", le
 const TEXTO_LIMITE: Record<LimiteZona, string> = {
   canal: "canal lleno",
   ciclo: `al tope del ciclo de trabajo (${TOPE_CICLO_PCT} %)`,
+  recorte: "canal sobre el 25 %: Meshtastic recorta posiciones y telemetría",
   cola: "cola llena: descarta paquetes",
   choques: "muchos choques",
   alcance: "pierde alcance con la carga",
@@ -455,6 +503,11 @@ export function PruebaEstres({
   desactualizado,
   onProbar,
   onVerZona,
+  optimizacion = { fase: "nada" },
+  onOptimizar,
+  onAplicar,
+  onDeshacer,
+  onVerPunto,
 }: {
   parametros: Parametros;
   remitentes: number;
@@ -462,11 +515,19 @@ export function PruebaEstres({
   desactualizado: boolean;
   onProbar: (o: OpcionesEstres) => void;
   onVerZona: (id: string) => void;
+  optimizacion?: FaseOptimizar;
+  onOptimizar?: (o: Partial<OpcionesEstres>) => void;
+  onAplicar?: (p: PropuestaOptimizar) => void;
+  onDeshacer?: () => void;
+  onVerPunto?: (lat: number, lon: number) => void;
 }) {
   const [o, setO] = useState<OpcionesEstres>(ESTRES_DEFECTO);
   const [verTodas, setVerTodas] = useState(false);
   const cambiar = (c: Partial<OpcionesEstres>) => setO((x) => ({ ...x, ...c }));
   const preset = presetPorId(parametros.preset);
+  const protocolo = preset.protocolo;
+  const perfil = o.perfil ?? "trama";
+  const curva = curvaDe(o);
   const r = estres.fase === "listo" ? estres.resultado : null;
   const pagosHora = remitentes * o.pagosPersonaDia * (o.horaPicoPct / 100) * o.factor;
   const zonas = r ? [...r.zonas].sort((a, b) => Number(b.usuarios > 0) - Number(a.usuarios > 0) || rango(a.estado) - rango(b.estado) || b.usuarios - a.usuarios) : [];
@@ -480,11 +541,27 @@ export function PruebaEstres({
       </Titulo>
       <div className="space-y-2.5">
         <p className="text-[12.5px] leading-snug text-carbon-2">
-          Todas las personas usan la red a su ritmo en la hora más cargada del día —pagos, mensajes de WhatsApp y consultas a la IA— y se mide cada gateway y repetidor: mensajes que completan, espera, canal ocupado, cuánto transmite, alcance con carga y energía. Ajuste de radio: {preset.nombre}.
+          Todas las personas usan la red a su ritmo en la hora más cargada del día —pagos, mensajes de WhatsApp y consultas a la IA— y se mide cada gateway y repetidor, y a cada persona: si le funciona, a medias o no, y por qué. Protocolo {PROTOCOLOS[protocolo].nombre}, ajuste {preset.nombre}.
         </p>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1" data-tour="perfil-trafico">
+          <span className="text-[12.5px] text-carbon-2">Tráfico</span>
+          <Segmentado<PerfilTrafico>
+            etiqueta="Tráfico de la prueba"
+            valor={perfil}
+            onCambio={(x) => cambiar(opcionesPerfil(x))}
+            opciones={[
+              { valor: "trama", texto: "Pagos de Trama", titulo: "Orden firmada de 118 B, comprobante y aviso de 126 B; el servidor contesta en paralelo; 2,4 por persona al día" },
+              {
+                valor: "medido",
+                texto: FICHA_GATEWAY.medidoEn,
+                titulo: `Comandos de ${FICHA_GATEWAY.mensaje.minimo} a ${FICHA_GATEWAY.mensaje.maximo} caracteres (mediana ${FICHA_GATEWAY.mensaje.mediana}), respuestas de hasta ${FICHA_GATEWAY.respuestaParte} B por parte; el gateway atiende de a uno (~${FICHA_GATEWAY.proceso.porMensajeS} s, hasta ${FICHA_GATEWAY.proceso.peorS} s); ${FICHA_GATEWAY.picos.dia} mensajes al día entre ${FICHA_GATEWAY.nodos.conocidos} equipos`,
+              },
+            ]}
+          />
+        </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-[12.5px] text-carbon-2">Mensajes por persona al día</span>
-          <Chips valores={[1, PEDIDO_ESTRES_DEFECTO.pagosPersonaDia, 5, 10]} valor={o.pagosPersonaDia} onCambio={(pagosPersonaDia) => cambiar({ pagosPersonaDia })} />
+          <Chips valores={[1, PEDIDO_ESTRES_DEFECTO.pagosPersonaDia, ESTRES_MEDIDO.pagosPersonaDia, 10]} valor={o.pagosPersonaDia} onCambio={(pagosPersonaDia) => cambiar({ pagosPersonaDia })} />
         </div>
         <div className="flex flex-wrap gap-2">
           <Segmentado<string>
@@ -494,6 +571,9 @@ export function PruebaEstres({
             opciones={[
               { valor: String(CAPACIDAD_TRAMA.horaPicoNormalPct), texto: "Día normal", titulo: `El ${CAPACIDAD_TRAMA.horaPicoNormalPct} % de los mensajes del día cae en la hora pico` },
               { valor: String(CAPACIDAD_TRAMA.horaPicoMercadoPct), texto: "Día de mercado", titulo: `El ${CAPACIDAD_TRAMA.horaPicoMercadoPct} % de los mensajes del día cae en la hora pico` },
+              ...(perfil === "medido"
+                ? [{ valor: String(ESTRES_MEDIDO.horaPicoPct), texto: "Medido", titulo: `En el gateway: ${FICHA_GATEWAY.picos.hora} de ${FICHA_GATEWAY.picos.dia} mensajes del día en la hora pico (${ESTRES_MEDIDO.horaPicoPct} %)` }]
+                : []),
             ]}
           />
           <Segmentado<string>
@@ -508,7 +588,32 @@ export function PruebaEstres({
             ? `${entero(remitentes)} personas con ruta × ${fmt(o.pagosPersonaDia, 1)} mensajes al día × ${o.horaPicoPct} % en la hora pico${o.factor > 1 ? ` × ${o.factor}` : ""} = ${fmt(pagosHora, 0)} mensajes por hora.`
             : "Sin personas con ruta al gateway todavía."}
         </p>
-        <Interruptor etiqueta="Comparar ajustes de radio" detalle="La misma hora pico con más alcance (62,5 kHz) o más capacidad (SF9 · 250 kHz)" activo={o.comparar} onCambio={(comparar) => cambiar({ comparar })} />
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="text-[12.5px] text-carbon-2">Enlaces</span>
+          <Segmentado<CurvaEnlace>
+            etiqueta="Curva de entrega por enlace"
+            valor={curva}
+            onCambio={(x) => cambiar({ curva: x })}
+            opciones={[
+              { valor: "diseno", texto: "Del diseño", titulo: "Conservadora: 20 dB de margen ≈ 70 % de los paquetes, 30 dB ≈ 98 % (cubre el error del modelo)" },
+              { valor: "campo", texto: "Medidos en campo", titulo: `La de ${FICHA_GATEWAY.enFrase}: ${fmt(FICHA_GATEWAY.erroresPct, 1)} % de paquetes con error y cerca de la mitad de los paquetes pasa con SNR de −12 dB` },
+            ]}
+          />
+        </div>
+        {protocolo === "meshtastic" && (
+          <Interruptor
+            etiqueta="Telemetría y NodeInfo de cada equipo"
+            detalle={`Meshtastic: cada equipo difunde su telemetría cada ${FONDO_MT.telemetriaS / 60} min y su NodeInfo cada ${FONDO_MT.nodeInfoS / 3600} h, inundadas por la malla; con el canal sobre el ${FONDO_MT.recortePct} % las recorta`}
+            activo={o.fondo !== false}
+            onCambio={(fondo) => cambiar({ fondo })}
+          />
+        )}
+        <Interruptor
+          etiqueta="Comparar ajustes de radio"
+          detalle={protocolo === "meshtastic" ? "La misma hora pico con los otros presets de Meshtastic (LongSlow … ShortFast)" : "La misma hora pico con más alcance (62,5 kHz) o más capacidad (SF9 · 250 kHz)"}
+          activo={o.comparar}
+          onCambio={(comparar) => cambiar({ comparar })}
+        />
         <div className="flex flex-wrap gap-2">
           <Boton variante="principal" onClick={() => onProbar({ ...o, rampa: false })} tour="boton-estres" deshabilitado={estres.fase === "probando"}>
             <Activity size={16} /> Probar la hora pico
@@ -555,8 +660,13 @@ export function PruebaEstres({
                   </div>
                 </dl>
                 <p className="text-[12px] leading-snug text-carbon-2">
-                  {entero(r.usuarios)} personas con ruta; el 95 % de los mensajes completa en {fmt(r.p95S, 0)} s (típico {fmt(r.p50S, r.p50S < 10 ? 1 : 0)} s). Cada persona gasta ~{fmt(r.zonas.find((z) => z.usuarios > 0)?.airePersonaS ?? 0, 1)} s de aire en la hora pico; un mensaje sin choques (del tamaño de un pago) ocupa ~{fmt(r.airePorPagoS, 1)} s.
+                  {entero(r.usuarios)} {r.protocolo === "meshtastic" ? "personas enviando" : "personas con ruta"}
+                  {r.personas > r.usuarios ? ` (de ${entero(r.personas)})` : ""}; el 95 % de los mensajes completa en {fmt(r.p95S, 0)} s (típico {fmt(r.p50S, r.p50S < 10 ? 1 : 0)} s). Cada persona gasta ~{fmt(r.zonas.find((z) => z.usuarios > 0)?.airePersonaS ?? 0, 1)} s de aire en la hora pico; un mensaje sin choques {r.perfil === "medido" ? "(un comando con su respuesta)" : "(del tamaño de un pago)"} ocupa ~{fmt(r.airePorPagoS, 1)} s.
+                  {r.gateway.modo === "secuencial" ? ` El gateway atiende de a uno: la espera en su fila es de ${fmt(r.gateway.esperaP50S, 1)} s típica y ${fmt(r.gateway.esperaP95S, 0)} s para el 95 % (máximo ${fmt(r.gateway.esperaMaxS, 0)} s); está ocupado el ${fmt(r.gateway.ocupadoPct, 0)} % del tiempo.` : ""}
+                  {r.protocolo === "meshtastic" && r.cancelados > 0 ? ` La inundación administrada evitó ~${entero(r.cancelados)} retransmisiones (el nodo oyó que otro ya lo había repetido).` : ""}
                 </p>
+                <PersonaPorPersona r={r} onVer={onVerZona} />
+                {onOptimizar && <Optimizacion fase={optimizacion} onOptimizar={() => onOptimizar({})} onAplicar={onAplicar} onDeshacer={onDeshacer} onVerPunto={onVerPunto} />}
                 {estres.limites && estres.limites.length > 1 ? <TablaLimites limites={estres.limites} onVer={onVerZona} /> : r.limite ? <BloqueLimite l={r.limite} /> : null}
                 {r.rampa && (
                   <div className="space-y-1.5 rounded-md bg-papel-2/60 p-2">
@@ -565,6 +675,11 @@ export function PruebaEstres({
                       {r.rampa.factorQuiebre !== null ? ` Se revienta desde ×${fmt(r.rampa.factorQuiebre, r.rampa.factorQuiebre < 1 ? 2 : 1)} (~${entero(r.usuarios * r.rampa.factorQuiebre)} personas).` : " No se revienta con lo probado."}
                       {r.rampa.primera ? ` La primera zona en reventarse: ${r.rampa.primera}.` : ""}
                     </p>
+                    {r.rampa.capacidadReal && (
+                      <p className="text-[12.5px] leading-snug font-semibold text-carbon" data-tour="capacidad-real">
+                        Capacidad real: ~{entero(r.rampa.capacidadReal.personas)} personas atendidas (a las que les funciona), con ×{fmt(r.rampa.capacidadReal.factor, r.rampa.capacidadReal.factor < 1 ? 2 : 1)} la carga ({fmt(r.rampa.capacidadReal.funcionanPct, 0)} % de las personas).
+                      </p>
+                    )}
                     <CurvaRendimiento r={r.rampa} />
                   </div>
                 )}
@@ -624,6 +739,189 @@ export function PruebaEstres({
         )}
       </div>
     </section>
+  );
+}
+
+const medida = (m: MedidaRed) => `${entero(m.atendidas)} personas atendidas · ${fmt(m.completosPct, 0)} % completos · canal ${fmt(m.canalPct, 0)} %`;
+
+/** Una propuesta en palabras (pantalla y Melki). */
+export function textoPropuesta(pr: PropuestaOptimizar): string {
+  const mas = pr.gananciaAtendidas;
+  return `${pr.titulo}: atiende a ~${entero(Math.max(0, mas))} ${Math.round(mas) === 1 ? "persona" : "personas"} más (de ~${entero(pr.antes.atendidas)} a ~${entero(pr.despues.atendidas)}${pr.ganancia > 0 ? `; les funciona a ${entero(pr.ganancia)} más` : ""}). ${pr.que}`;
+}
+
+/** La optimización en palabras (pantalla y Melki). */
+export function textoOptimizacion(x: ResultadoOptimizar): string {
+  if (x.motivo) return x.motivo;
+  if (!x.propuestas.length) return x.diagnostico.join(" ");
+  const mejor = x.combinada ?? x.propuestas[0];
+  return `${x.diagnostico[0] ?? ""} Lo que más ayuda: ${textoPropuesta(mejor)}${x.propuestas.length > 1 ? ` Probé ${x.propuestas.length + x.descartadas.length} arreglos; ${x.propuestas.length} ayudan.` : ""}`;
+}
+
+/** Optimizar la red para la carga de la prueba: diagnóstico, propuestas con su antes y después, aplicar y deshacer. */
+function Optimizacion({
+  fase,
+  onOptimizar,
+  onAplicar,
+  onDeshacer,
+  onVerPunto,
+}: {
+  fase: FaseOptimizar;
+  onOptimizar: () => void;
+  onAplicar?: (p: PropuestaOptimizar) => void;
+  onDeshacer?: () => void;
+  onVerPunto?: (lat: number, lon: number) => void;
+}) {
+  const x = fase.fase === "listo" ? fase.resultado : null;
+  const lista = x ? [...(x.combinada ? [x.combinada] : []), ...x.propuestas] : [];
+  return (
+    <div className="space-y-1.5 rounded-md bg-salvia/10 p-2 ring-1 ring-salvia/30" data-tour="optimizar">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="flex items-center gap-1.5 text-[12.5px] font-semibold text-carbon">
+          <Wrench size={14} /> Optimizar la red para esta carga
+        </p>
+        <Boton onClick={onOptimizar} deshabilitado={fase.fase === "buscando"} tour="boton-optimizar">
+          <Sparkles size={15} /> {x ? "Volver a optimizar" : "Optimizar"}
+        </Boton>
+      </div>
+      {fase.fase === "nada" && <p className="text-[11.5px] leading-snug text-carbon-2">Busca gateways de apoyo, antenas de apoyo y ajustes del protocolo que hagan que les funcione a más personas, y los prueba uno por uno con la misma carga.</p>}
+      {fase.fase === "buscando" && (
+        <p className="flex items-center gap-2 text-[12.5px] text-carbon-2" role="status">
+          <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-salvia border-t-transparent" aria-hidden="true" />
+          {fase.texto ?? "Probando gateways de apoyo, antenas de apoyo y ajustes con la misma carga…"} {Math.round(fase.avance * 100)} %
+        </p>
+      )}
+      {fase.fase === "error" && <p className="text-[12.5px] text-sin">{fase.texto}</p>}
+      {fase.fase === "aplicada" && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[12.5px] leading-snug text-carbon" role="status">
+            Apliqué «{fase.titulo}». Se esperaba pasar de {medida(fase.antes)} a {medida(fase.esperado)}; la prueba de la hora pico de arriba ya es con la red nueva.
+          </p>
+          {onDeshacer && (
+            <Boton onClick={onDeshacer}>
+              <Undo2 size={15} /> Deshacer
+            </Boton>
+          )}
+        </div>
+      )}
+      {x && (
+        <>
+          <ul className="list-disc space-y-0.5 pl-4 text-[12px] leading-snug text-carbon-2">
+            {x.diagnostico.map((d) => (
+              <li key={d}>{d}</li>
+            ))}
+          </ul>
+          {lista.length > 0 && (
+            <ul className="space-y-1.5" aria-label="Propuestas de optimización">
+              {lista.map((pr) => (
+                <li key={pr.id} className={`rounded-md bg-white p-2 ring-1 ${pr.id === "combinada" ? "ring-salvia" : "ring-linea"}`}>
+                  <p className="flex flex-wrap items-baseline justify-between gap-x-2">
+                    <b className="font-cond text-[14px] leading-tight">{pr.titulo}</b>
+                    <span className="text-[12px] font-semibold tabular-nums text-salvia-oscura">+{entero(pr.gananciaAtendidas)} atendidas</span>
+                  </p>
+                  <p className="text-[12px] leading-snug text-carbon">{pr.que}</p>
+                  <p className="text-[11.5px] leading-snug text-carbon-2">{pr.porque}</p>
+                  <p className="text-[11.5px] leading-snug text-tenue tabular-nums">
+                    Antes: {medida(pr.antes)}. Después: {medida(pr.despues)}
+                    {pr.ganancia !== 0 ? `; les funciona a ${entero(pr.antes.funcionan)} → ${entero(pr.despues.funcionan)}` : ""}.
+                  </p>
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    {pr.aplicable && onAplicar ? (
+                      <Boton variante="principal" onClick={() => onAplicar(pr)}>
+                        {pr.id === "combinada" ? "Aplicar todo junto" : "Aplicar al mapa"}
+                      </Boton>
+                    ) : (
+                      <span className="rounded-full bg-papel-2 px-2 py-0.5 text-[11.5px] text-carbon-2">Se hace en campo</span>
+                    )}
+                    {pr.lat !== null && pr.lon !== null && onVerPunto && (
+                      <Boton onClick={() => onVerPunto(pr.lat!, pr.lon!)}>
+                        <MapPin size={14} /> Ver dónde
+                      </Boton>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          {x.descartadas.length > 0 && <p className="text-[11px] leading-snug text-tenue">Probados sin mejora: {x.descartadas.map((d) => d.titulo.charAt(0).toLowerCase() + d.titulo.slice(1)).join("; ")}.</p>}
+          <p className="text-[11px] leading-snug text-tenue">Personas atendidas: la suma de la parte de los mensajes de cada persona que vuelve, rebajada si tarda más de 30 s. Cada propuesta se prueba con la misma carga y la misma semilla; las de «en campo» (otra frecuencia, el servicio del gateway, la telemetría) no cambian el mapa.</p>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Resumen de las personas en palabras (pantalla y Melki). */
+export function textoUsuarios(r: ResultadoEstres): string {
+  const u = r.resumenUsuarios;
+  if (!u || !u.total) return "";
+  const partes = ORDEN_ESTADOS_USUARIO.filter((e) => u.porEstado[e] > 0).map((e) => `${entero(u.porEstado[e])} ${ESTADOS_USUARIO[e].nombre.toLowerCase()}`);
+  const causas = (Object.entries(u.porCausa) as [CausaUsuario, number][]).sort((a, b) => b[1] - a[1]);
+  return `De ${entero(u.total)} personas, a ${entero(u.funcionan)} les funciona (${fmt(u.funcionanPct, 0)} %): ${partes.join(", ")}.${causas.length ? ` Lo que más pesa: ${causas.slice(0, 3).map(([c, n]) => `${CAUSAS_USUARIO[c]} (${entero(n)})`).join(", ")}.` : ""}`;
+}
+
+/** Persona por persona: cuántas les funciona, la barra de colores y las que más sufren, con su causa. */
+function PersonaPorPersona({ r, onVer }: { r: ResultadoEstres; onVer: (id: string) => void }) {
+  const u = r.resumenUsuarios;
+  const peores = ORDEN_ESTADOS_USUARIO.slice().reverse().find((e) => u?.porEstado[e] && e !== "bien" && e !== "funciona") ?? null;
+  const [ver, setVer] = useState<EstadoUsuario | null>(null);
+  if (!u || !u.total) return null;
+  const filtro = ver ?? peores;
+  const lista = filtro ? r.porUsuario.filter((x) => x.estado === filtro).sort((a, b) => a.exitoPct - b.exitoPct) : [];
+  const causas = (Object.entries(u.porCausa) as [CausaUsuario, number][]).sort((a, b) => b[1] - a[1]);
+  return (
+    <div className="space-y-1.5 rounded-md bg-papel-2/60 p-2" data-tour="usuarios-estres">
+      <p className="flex items-center gap-1.5 text-[12.5px] font-semibold text-carbon">
+        <UserCheck size={14} /> Persona por persona: a {entero(u.funcionan)} de {entero(u.total)} les funciona ({fmt(u.funcionanPct, 0)} %)
+      </p>
+      <div className="flex h-3 overflow-hidden rounded-[3px] ring-1 ring-black/10" role="img" aria-label={textoUsuarios(r)}>
+        {ORDEN_ESTADOS_USUARIO.map((e) =>
+          u.porEstado[e] ? <span key={e} style={{ width: `${(100 * u.porEstado[e]) / u.total}%`, background: ESTADOS_USUARIO[e].color }} title={`${ESTADOS_USUARIO[e].nombre}: ${entero(u.porEstado[e])}`} /> : null,
+        )}
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {ORDEN_ESTADOS_USUARIO.map((e) => (
+          <button
+            key={e}
+            type="button"
+            disabled={!u.porEstado[e]}
+            aria-pressed={filtro === e}
+            onClick={() => setVer(e)}
+            title={ESTADOS_USUARIO[e].descripcion}
+            className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[11.5px] ring-1 disabled:opacity-40 ${filtro === e ? "bg-carbon text-white ring-carbon" : "bg-white ring-linea hover:bg-papel-2"}`}
+          >
+            <i className="h-2.5 w-2.5 rounded-full" style={{ background: ESTADOS_USUARIO[e].color }} aria-hidden="true" />
+            {ESTADOS_USUARIO[e].nombre} {entero(u.porEstado[e])}
+          </button>
+        ))}
+      </div>
+      {causas.length > 0 && <p className="text-[12px] leading-snug text-carbon-2">Por qué: {causas.map(([c, n]) => `${CAUSAS_USUARIO[c]} ${entero(n)}`).join(" · ")}.</p>}
+      {lista.length > 0 && (
+        <ul className="divide-y divide-linea rounded-md bg-white ring-1 ring-linea">
+          {lista.slice(0, 8).map((x) => (
+            <li key={x.id}>
+              <button type="button" className="flex w-full items-start gap-2 px-2 py-1.5 text-left" onClick={() => onVer(x.id)} title={`Ver ${x.nombre} en el mapa`}>
+                <i className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full ring-2" style={{ background: `${ESTADOS_USUARIO[x.estado].color}66`, ["--tw-ring-color" as string]: ESTADOS_USUARIO[x.estado].color }} aria-hidden="true" />
+                <span className="min-w-0 flex-1">
+                  <span className="flex flex-wrap items-baseline justify-between gap-x-2">
+                    <b className="text-[12.5px] font-semibold">{x.nombre}</b>
+                    <span className="text-[11.5px] text-tenue tabular-nums">
+                      vuelve {fmt(x.exitoPct, 0)} % · hasta {fmt(x.esperaP95S, 0)} s{x.saltos !== null ? ` · ${x.saltos} ${x.saltos === 1 ? "salto" : "saltos"}` : ""}
+                      {x.snrDb !== null ? ` · SNR ${fmt(x.snrDb, 1)} dB` : ""}
+                    </span>
+                  </span>
+                  {x.porque && <span className="block text-[11.5px] leading-snug text-carbon-2">{x.porque}</span>}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {lista.length > 8 && <p className="text-[11.5px] text-tenue">Y {entero(lista.length - 8)} más; en el mapa cada persona lleva el color de su estado en el contorno.</p>}
+      <p className="text-[11px] leading-snug text-tenue">
+        Para cada persona: la física de su ruta (el margen de cada enlace, ida y vuelta, con los reintentos del protocolo) por lo que se perdió en cada nodo de su ruta (choques, transmitiendo, cola llena), ajustado con lo que completó su zona y con sus propios mensajes simulados.
+      </p>
+    </div>
   );
 }
 
@@ -756,9 +1054,27 @@ function Supuestos({ r }: { r: ResultadoEstres }) {
           <li>
             Carga: {fmt(r.pagosPersonaDia, 1)} mensajes por persona al día entre pagos, WhatsApp y consultas a la IA (el ritmo de Trama: 55 por hora por frecuencia con 150 usuarios; si la gente escribe o consulta más, súbalo o multiplique la carga), el {r.horaPicoPct} % en la hora pico{r.factor !== 1 ? `, multiplicado ×${r.factor}` : ""}. Se simulan {r.duracionMin} minutos de hora pico, dos sorteos.
           </li>
-          <li>Cada mensaje se mide con el tamaño de un pago del documento de Trama: 118 B de ida al gateway (la orden firmada, el WhatsApp o la consulta), 126 B de vuelta (el comprobante, la confirmación o la respuesta de la IA) y un aviso de 126 B a quien recibe, con sus acuses y hasta 3 reintentos (el último por inundación), paquete por paquete como MeshCore. Un WhatsApp largo o una respuesta larga de la IA ocupan más aire.</li>
+          {r.perfil === "medido" ? (
+            <li>
+              Tráfico medido en {FICHA_GATEWAY.enFrase} ({FICHA_GATEWAY.semana}): comandos de {FICHA_GATEWAY.mensaje.minimo} a {FICHA_GATEWAY.mensaje.maximo} caracteres (mediana {FICHA_GATEWAY.mensaje.mediana}) con una respuesta de ~{TRAFICO_MEDIDO.respuestaBytes} B; el {TRAFICO_MEDIDO.iaPct} % son consultas a la IA ({FICHA_GATEWAY.ia.tokens} tokens, en paralelo, respuesta en {Math.ceil(TRAFICO_MEDIDO.respuestaIaBytes / PROTOCOLOS[r.protocolo].textoMaximo)} partes de hasta {PROTOCOLOS[r.protocolo].textoMaximo} B). El gateway atiende de a uno (~{FICHA_GATEWAY.proceso.porMensajeS} s por mensaje; a veces hasta {FICHA_GATEWAY.proceso.peorS} s si la base de datos tarda).
+            </li>
+          ) : (
+            <li>Cada mensaje se mide con el tamaño de un pago del documento de Trama: 118 B de ida al gateway (la orden firmada, el WhatsApp o la consulta), 126 B de vuelta (el comprobante, la confirmación o la respuesta de la IA) y un aviso de 126 B a quien recibe, con sus acuses y los reintentos del protocolo. Un WhatsApp largo o una respuesta larga de la IA ocupan más aire.</li>
+          )}
+          <li>
+            {r.protocolo === "meshtastic"
+              ? `Meshtastic paquete por paquete: inundación administrada (cada nodo espera según la SNR y cancela si oye que otro ya lo repitió; los ROUTER no cancelan), límite de saltos, siguiente salto aprendido, acuse del destino y hasta ${PROTOCOLOS.meshtastic.envios} envíos (el último por inundación), cabecera de 16 B y cola de ${PROTOCOLOS.meshtastic.colaRadio} paquetes, sin tope de ciclo en 915 MHz.`
+              : `MeshCore paquete por paquete: solo los repetidores retransmiten, ruta aprendida o inundación, acuses y 3 reintentos (el último por inundación), ciclo de trabajo del ${TOPE_CICLO_PCT} % y colas de 32 (repetidor) y 16 (billetera).`}
+          </li>
+          <li>
+            Enlaces: {r.curva === "campo" ? `la curva medida en campo (con ${fmt(FICHA_GATEWAY.erroresPct, 1)} % de paquetes con error y cerca de la mitad pasando con SNR de −12 dB)` : "la curva del diseño (20 dB de margen ≈ 70 % de los paquetes, 30 dB ≈ 98 %), conservadora porque cubre el error del modelo"}.
+          </li>
           <li>Aguanta: el 90 % o más recibe su respuesta y el 95 % en menos de un minuto. Lento: aguanta pero tarda más. Se revienta: menos del 90 %.</li>
-          <li>La zona de un nodo son las personas que entran a la malla por él (su primer salto). El canal es el % del tiempo con alguna señal al aire que ese nodo oye; «transmite» es su propio aire (el repetidor se frena al {TOPE_CICLO_PCT} %).</li>
+          <li>
+            La zona de un nodo son las personas que entran a la malla por él (su primer salto). El canal es el % del tiempo con alguna señal al aire que ese nodo oye; «transmite» es su propio aire
+            {r.protocolo === "meshtastic" ? ` (Meshtastic recorta posiciones y telemetría desde el ${PROTOCOLOS.meshtastic.canalAlertaPct} % de canal)` : ` (el repetidor se frena al ${TOPE_CICLO_PCT} %)`}.
+          </li>
+          <li>Cada persona: le funciona bien con el 95 % o más de sus mensajes de vuelta en menos de 30 s; le funciona con el 90 % en menos de un minuto; a medias del 75 al 90 % (o más lento); con dificultades del 40 al 75 %; no le funciona por debajo o sin ruta.</li>
           <li>Alcance con carga: del más cercano al más lejano, hasta dónde completa el 90 % de los mensajes. Los lejanos llegan más débiles y pierden primero cuando dos señales se pisan.</li>
           <li>
             <BatteryCharging size={12} className="inline" /> Energía del repetidor solar P1: {fmt(ENERGIA_P1.txW, 2)} W al transmitir y {fmt(ENERGIA_P1.rxW, 2)} W escuchando; panel de {ENERGIA_P1.panelW} W × {ENERGIA_P1.horasSol} h de sol × {fmt(ENERGIA_P1.eficiencia * 100, 0)} % ≈ {fmt(ENERGIA_P1.panelW * ENERGIA_P1.horasSol * ENERGIA_P1.eficiencia, 0)} Wh/día; batería útil ≈ {fmt(ENERGIA_P1.bateriaWh, 0)} Wh.

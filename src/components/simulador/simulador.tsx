@@ -20,9 +20,10 @@ import { buscarLugares, cargarReferencia, contornoLugar, reconocerLugares, texto
 import { PERMISOS_AJUSTE, zonaDeRed, type Ajuste, type PedidoAjuste } from "@/lib/radio/ajuste";
 import { areaM2, margenEnPunto, poligonoCirculo, sirveAlArea } from "@/lib/radio/area";
 import { BYTES_PAGO, PEDIDO_CARGA_DEFECTO } from "@/lib/radio/carga";
-import { PEDIDO_ESTRES_DEFECTO, type EstadoZona, type LimitePunto, type ResultadoEstres } from "@/lib/radio/estres";
+import { ESTADOS_USUARIO, PEDIDO_ESTRES_DEFECTO, type EstadoZona, type LimitePunto, type ResultadoEstres } from "@/lib/radio/estres";
 import { puntosAlAzar } from "@/lib/radio/poblar";
-import { EQUIPOS, META_UTIL_ESTUDIO_PCT, UMBRAL_SERVICIO_DB } from "@/lib/radio/constantes";
+import { EQUIPOS, META_UTIL_ESTUDIO_PCT, presetPorId, UMBRAL_SERVICIO_DB } from "@/lib/radio/constantes";
+import { PROTOCOLOS } from "@/lib/radio/protocolos";
 import { metrosPorGrado } from "@/lib/radio/geo";
 import { MotorCobertura } from "@/lib/radio/cliente";
 import { estadoRed, type EstadoRed } from "@/lib/radio/estado-red";
@@ -57,12 +58,13 @@ import {
   type TipoRelieve,
 } from "./estado";
 import { exportarCsv, exportarJson, exportarKmz } from "./exportar";
-import { Mapa, type AnimacionMensaje, type CapaSembrar, type PuntoMapa, type SolicitudVista, type ZonaMapa } from "./mapa";
+import { Mapa, type AnimacionMensaje, type CapaSembrar, type PuntoMapa, type SolicitudVista, type UsuarioMapa, type ZonaMapa } from "./mapa";
 import type { FaseAjuste } from "./panel-ajuste";
 import { PanelAntenas } from "./panel-antenas";
 import { PanelParametros } from "./panel-parametros";
 import { CARGA_DEFECTO, MAX_POBLAR, PoblarPersonas, PruebaCarga, type AreaPoblar, type FaseCarga, type OpcionesCarga, type PedidoPoblar, type ResultadoPoblar } from "./panel-capacidad";
-import { COLOR_ESTADO, ESTRES_DEFECTO, MAX_POBLADAS, MAX_POR_ZONA, MUESTRA_PUNTO, PruebaEstres, TEXTO_ESTADO, ZONA_DEFECTO, ZonaRapida, ZonasPopularidad, type CentroZona, type FaseEstres, type OpcionesEstres, type PedidoPunto, type PedidoZonas, type ResultadoPunto, type ResultadoZonas } from "./panel-estres";
+import { COLOR_ESTADO, ESTRES_DEFECTO, MAX_POBLADAS, MAX_POR_ZONA, MUESTRA_PUNTO, PruebaEstres, TEXTO_ESTADO, ZONA_DEFECTO, ZonaRapida, ZonasPopularidad, type CentroZona, type FaseEstres, type FaseOptimizar, type OpcionesEstres, type PedidoPunto, type PedidoZonas, type ResultadoPunto, type ResultadoZonas } from "./panel-estres";
+import type { PropuestaOptimizar, ResultadoOptimizar } from "@/lib/radio/optimizar";
 import { PanelResultados } from "./panel-resultados";
 import { PanelSembrar, type FaseSiembra, type ViajeVisible } from "./panel-sembrar";
 import { ALTURA_REPETIDOR_DEFECTO, ALTURAS_REPETIDOR, escenarioMalla, nombreLibre, nuevaPieza, piezaDe } from "./piezas";
@@ -75,7 +77,7 @@ import { Interruptor, Segmentado } from "./ui";
 type Pestana = "antenas" | "parametros";
 type Hoja = Pestana | "resultado" | "sembrar" | null;
 
-const TEXTO_FASE: Record<Fase, string> = { relieve: "Obteniendo el relieve", cobertura: "Calculando la cobertura", enlaces: "Analizando la malla", estres: "Probando la hora pico" };
+const TEXTO_FASE: Record<Fase, string> = { relieve: "Obteniendo el relieve", cobertura: "Calculando la cobertura", enlaces: "Analizando la malla", estres: "Probando la hora pico", optimizar: "Optimizando la red" };
 
 function fuenteDe(relieve: TipoRelieve, hgt: string[]): FuenteRelieve {
   if (relieve === "plano") return { tipo: "plano" };
@@ -199,6 +201,10 @@ export function Simulador() {
   const [puntoOcupado, setPuntoOcupado] = useState<{ id: string | null; texto: string } | null>(null);
   /** Escenario antes de aplicar el último ajuste (para deshacerlo desde el panel). */
   const ajusteAntes = useRef<Escenario | null>(null);
+  /** Optimización de la red para la carga de la prueba de estrés, y el escenario de antes de aplicar una propuesta. */
+  const [optimizacion, setOptimizacion] = useState<FaseOptimizar>({ fase: "nada" });
+  const optimizacionAntes = useRef<Escenario | null>(null);
+  const idOptimizar = useRef(0);
 
   const motor = useRef<MotorCobertura | null>(null);
   const idSimulacion = useRef(0);
@@ -261,6 +267,23 @@ export function Simulador() {
       return [{ id: z.id, lat: a.lat, lon: a.lon, radioKm: z.radioZonaKm, color: COLOR_ESTADO[z.estado], texto, titulo }];
     });
   }, [estres, firma, escenario.antenas]);
+  // Cada persona de la prueba de estrés: el color de su estado en el contorno de su marcador y un aro en el mapa
+  const usuariosMapa = useMemo<Map<string, UsuarioMapa> | null>(() => {
+    if (estres.fase !== "listo" || estres.firma !== firma || estres.resultado.motivo || !estres.resultado.porUsuario?.length) return null;
+    return new Map(
+      estres.resultado.porUsuario.map((u) => [
+        u.id,
+        {
+          lat: u.lat,
+          lon: u.lon,
+          color: ESTADOS_USUARIO[u.estado].color,
+          estado: u.estado,
+          titulo: `${u.nombre}: ${ESTADOS_USUARIO[u.estado].nombre.toLowerCase()} · vuelve el ${Math.round(u.exitoPct)} % · espera hasta ${Math.round(u.esperaP95S)} s${u.porque ? ` · ${u.porque}` : ""}`,
+        },
+      ]),
+    );
+  }, [estres, firma]);
+  const resumenUsuarios = usuariosMapa && estres.fase === "listo" ? estres.resultado.resumenUsuarios : null;
   const remitentes = useMemo(() => {
     if (!resultado) return 0;
     const porId = new Map(escenario.antenas.map((a) => [a.id, a]));
@@ -274,11 +297,11 @@ export function Simulador() {
     (ajuste.fase === "buscando" || ajuste.fase === "propuesta") && ajuste.firma !== firma ? { fase: "nada" } : ajuste.fase === "aplicada" && ajuste.antenas !== escenario.antenas ? { fase: "nada" } : ajuste;
 
   // Valores actuales para las funciones estables
-  const ultimo = useRef({ estado, fuente, firma, resultado, firmaResultado, inspeccion, perfil, perfilTerreno, red, siembra: siembraVisible, alturaRepetidor, viaje: viajeVisible, ajuste: ajusteVisible, carga, estres });
+  const ultimo = useRef({ estado, fuente, firma, resultado, firmaResultado, inspeccion, perfil, perfilTerreno, red, siembra: siembraVisible, alturaRepetidor, viaje: viajeVisible, ajuste: ajusteVisible, carga, estres, optimizacion });
   /** Nodos insertados desde el último render (dos pedidos seguidos no repiten nombre). */
   const recientes = useRef<Antena[]>([]);
   useEffect(() => {
-    ultimo.current = { estado, fuente, firma, resultado, firmaResultado, inspeccion, perfil, perfilTerreno, red, siembra: siembraVisible, alturaRepetidor, viaje: viajeVisible, ajuste: ajusteVisible, carga, estres };
+    ultimo.current = { estado, fuente, firma, resultado, firmaResultado, inspeccion, perfil, perfilTerreno, red, siembra: siembraVisible, alturaRepetidor, viaje: viajeVisible, ajuste: ajusteVisible, carga, estres, optimizacion };
     recientes.current = [];
   });
   const existentes = () => {
@@ -892,6 +915,90 @@ export function Simulador() {
     [esperarResultado],
   );
 
+  /**
+   * Optimiza la red para la carga de la última prueba de estrés (si no hay una al día, la hace primero): diagnostica,
+   * propone gateways y antenas de apoyo y ajustes, y los prueba con la misma carga.
+   */
+  const optimizarRed = useCallback(
+    async (o: Partial<OpcionesEstres> = {}): Promise<ResultadoOptimizar | null> => {
+      const m = motor.current;
+      if (!m) return null;
+      const id = ++idOptimizar.current;
+      const u = ultimo.current;
+      let opciones: OpcionesEstres = { ...ESTRES_DEFECTO, ...(u.estres.fase === "listo" ? u.estres.opciones : {}), ...o, rampa: false, comparar: false, foco: null };
+      let res = u.estres.fase === "listo" && u.estres.firma === u.firma && !u.estres.resultado.motivo && !u.estres.resultado.limite ? u.estres.resultado : null;
+      if (u.estres.fase === "listo" && Object.keys(o).length) res = null;
+      if (!res) {
+        setOptimizacion({ fase: "buscando", avance: 0, texto: "Primero pruebo la hora pico…" });
+        res = await probarEstres(opciones);
+        if (id !== idOptimizar.current) return null;
+        if (!res || res.motivo) {
+          setOptimizacion({ fase: "error", texto: res?.motivo ?? "No pude probar la hora pico para optimizar." });
+          return null;
+        }
+      } else if (u.estres.fase === "listo") opciones = { ...u.estres.opciones, ...o, rampa: false, comparar: false, foco: null };
+      const r = ultimo.current.resultado;
+      const { estado: e, fuente: f, firma: fi } = ultimo.current;
+      if (!r) {
+        setOptimizacion({ fase: "error", texto: "Falta simular la red." });
+        return null;
+      }
+      setOptimizacion({ fase: "buscando", avance: 0 });
+      try {
+        const x = await m.optimizar(
+          {
+            estres: { ...PEDIDO_ESTRES_DEFECTO, ...opciones, antenas: e.escenario.antenas.filter((a) => a.activa), enlaces: r.enlaces, nodos: r.nodos, parametros: e.escenario.parametros },
+            resultado: res,
+          },
+          f,
+          (avance) => {
+            if (id === idOptimizar.current) setOptimizacion({ fase: "buscando", avance });
+          },
+        );
+        if (id !== idOptimizar.current) return null;
+        setOptimizacion({ fase: "listo", resultado: x, firma: fi, opciones });
+        return x;
+      } catch (err) {
+        if (id === idOptimizar.current) setOptimizacion({ fase: "error", texto: (err as Error).message || "No pude optimizar la red." });
+        return null;
+      }
+    },
+    [probarEstres],
+  );
+
+  /** Aplica una propuesta de la optimización (nodos de apoyo, gateways y ajustes) y vuelve a probar la hora pico. */
+  const aplicarOptimizacion = useCallback(
+    async (pr: PropuestaOptimizar): Promise<boolean> => {
+      if (!pr.aplicable) return false;
+      const u = ultimo.current;
+      const opciones = u.estres.fase === "listo" ? u.estres.opciones : ESTRES_DEFECTO;
+      const e = u.estado.escenario;
+      optimizacionAntes.current = e;
+      const cambios = new Map(pr.editar.map((x) => [x.id, x.cambios]));
+      const lista = e.antenas.map((a) => (cambios.has(a.id) ? { ...a, ...cambios.get(a.id) } : a));
+      for (const x of pr.agregar) {
+        const base = nuevaPieza(x.pasarela ? "gateway" : "repetidor", x.lat, x.lon, lista, x.alturaM);
+        lista.push({ ...base, alturaM: x.alturaM, nombre: lista.some((y) => y.nombre === x.nombre) ? base.nombre : x.nombre });
+      }
+      despachar({ tipo: "antenas", antenas: lista });
+      if (pr.parametros) despachar({ tipo: "parametros", cambios: pr.parametros });
+      idOptimizar.current++;
+      setOptimizacion({ fase: "aplicada", titulo: pr.titulo, antes: pr.antes, esperado: pr.despues });
+      // Vuelve a probar la hora pico con la red nueva
+      await esperarResultado();
+      await probarEstres({ ...opciones, rampa: false, comparar: false, foco: null });
+      return true;
+    },
+    [esperarResultado, probarEstres],
+  );
+
+  const deshacerOptimizacion = useCallback(() => {
+    if (optimizacionAntes.current) despachar({ tipo: "cargar", escenario: optimizacionAntes.current });
+    optimizacionAntes.current = null;
+    idOptimizar.current++;
+    setOptimizacion({ fase: "nada" });
+  }, []);
+
   /** Poner las zonas y probar de una vez la hora pico con toda esa gente enviando información. */
   const ponerYProbar = useCallback(
     async (o: PedidoZonas, opciones: Partial<OpcionesEstres> = {}): Promise<{ zonas: ResultadoZonas; estres: ResultadoEstres | null }> => {
@@ -1324,8 +1431,18 @@ export function Simulador() {
       probarEstres,
       evaluarPunto,
       evaluarPuntos,
+      estres: () => {
+        const u = ultimo.current;
+        return u.estres.fase === "listo" && u.estres.firma === u.firma ? u.estres.resultado : null;
+      },
+      optimizarRed,
+      optimizacion: () => {
+        const u = ultimo.current;
+        return u.optimizacion.fase === "listo" && u.optimizacion.firma === u.firma ? u.optimizacion.resultado : null;
+      },
+      aplicarOptimizacion,
     }),
-    [inscribirNodo, pedirSimulacion, simular, centrar, encuadrar, encuadrarCaja, abrirPerfil, inspeccionar, cambiarModo, sembrarHacia, aceptarSiembra, enviarMensaje, disenarArea, aplicarDiseno, esperarResultado, pedirAjuste, aplicarAjuste, poblarPersonas, quitarPobladas, probarCarga, poblarZonas, quitarZonas, probarEstres, evaluarPunto, evaluarPuntos],
+    [inscribirNodo, pedirSimulacion, simular, centrar, encuadrar, encuadrarCaja, abrirPerfil, inspeccionar, cambiarModo, sembrarHacia, aceptarSiembra, enviarMensaje, disenarArea, aplicarDiseno, esperarResultado, pedirAjuste, aplicarAjuste, poblarPersonas, quitarPobladas, probarCarga, poblarZonas, quitarZonas, probarEstres, evaluarPunto, evaluarPuntos, optimizarRed, aplicarOptimizacion],
   );
 
   const restaurar = useCallback((e: Escenario) => despachar({ tipo: "cargar", escenario: e }), []);
@@ -1655,6 +1772,14 @@ export function Simulador() {
         centrar(a.lat, a.lon);
         if (!esEscritorio()) setHoja(null);
       }}
+      optimizacion={optimizacion.fase === "listo" && optimizacion.firma !== firma ? { fase: "nada" } : optimizacion}
+      onOptimizar={(o) => void optimizarRed(o)}
+      onAplicar={(pr) => void aplicarOptimizacion(pr)}
+      onDeshacer={optimizacion.fase === "aplicada" ? deshacerOptimizacion : undefined}
+      onVerPunto={(lat, lon) => {
+        centrar(lat, lon, 14);
+        if (!esEscritorio()) setHoja(null);
+      }}
     />
   );
   /** Control de la zona de popularidad de un gateway o repetidor (tarjeta del mapa y lista de piezas). */
@@ -1771,6 +1896,8 @@ export function Simulador() {
     <div className="flex h-dvh flex-col">
       <BarraSuperior
         nombre={escenario.nombre}
+        protocolo={PROTOCOLOS[presetPorId(escenario.parametros.preset).protocolo].nombre}
+        frecuenciaMhz={escenario.parametros.frecuenciaMhz}
         onRenombrar={(n) => despachar({ tipo: "renombrar-escenario", nombre: n })}
         onNuevo={() => {
           fueraDelTour();
@@ -1844,6 +1971,7 @@ export function Simulador() {
             sembrar={capaSembrar}
             ajuste={ajusteVisible.fase === "propuesta" ? (ajusteVisible.ajuste.opciones[ajusteVisible.elegida]?.cambios ?? null) : null}
             estres={zonasMapa}
+            usuarios={usuariosMapa}
             onPieza={ponerPieza}
             onDestino={(lat, lon) => {
               despachar({ tipo: "herramienta", herramienta: "mover" });
@@ -1895,7 +2023,7 @@ export function Simulador() {
               if (a && inspeccion) abrirPerfil(a, { lat: inspeccion.lat, lon: inspeccion.lon }, `${a.nombre} → punto medido`);
             }}
           />
-          <Leyenda estado={estado} resultado={resultado} antenas={escenario.antenas} />
+          <Leyenda estado={estado} resultado={resultado} antenas={escenario.antenas} usuarios={resumenUsuarios} />
           {perfil && (
             <PerfilEnlace key={perfil.n} perfil={perfil.perfil} titulo={perfil.titulo} frecuenciaMhz={escenario.parametros.frecuenciaMhz} informe={perfil.informe} onCerrar={() => setPerfil(null)} />
           )}

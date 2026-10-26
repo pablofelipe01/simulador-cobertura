@@ -77,10 +77,13 @@ type Props = {
   ajuste?: CambioAjuste[] | null;
   /** Prueba de estrés: cada zona (gateway o repetidor) pintada según aguante, vaya lenta o se reviente. */
   estres?: ZonaMapa[] | null;
+  /** Cada persona en la prueba de estrés: el color de su estado (le funciona, a medias, no) y por qué. */
+  usuarios?: Map<string, UsuarioMapa> | null;
 };
 
 /** Zona de la prueba de estrés en el mapa: centro, radio (la persona más lejana que atiende), color y etiqueta. */
 export type ZonaMapa = { id: string; lat: number; lon: number; radioKm: number; color: string; texto: string; titulo: string };
+export type UsuarioMapa = { lat: number; lon: number; color: string; titulo: string; estado: string };
 
 const VACIO: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 const SOBRE = `<svg viewBox="0 0 14 14" aria-hidden="true"><rect x="1.6" y="3.2" width="10.8" height="7.6" rx="1.2"/><path d="M1.9 3.8 L7 7.6 L12.1 3.8"/></svg>`;
@@ -203,7 +206,7 @@ function sincronizarEtiquetas(m: MapaML, vivas: Map<string, Marker>, lista: Etiq
   }
 }
 
-export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar, solicitud, punto, onMenu, onListo, sembrar, onPieza, onDestino, ajuste, estres }: Props) {
+export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar, solicitud, punto, onMenu, onListo, sembrar, onPieza, onDestino, ajuste, estres, usuarios }: Props) {
   const contenedor = useRef<HTMLDivElement>(null);
   const mapa = useRef<MapaML | null>(null);
   const marcadores = useRef(new Map<string, Marker>());
@@ -244,10 +247,24 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
     m.on("load", () => {
       crearCapasReferencia(m);
       m.addLayer({ id: "capa-etiquetas", type: "raster", source: "etiquetas", layout: { visibility: "none" } });
-      for (const id of ["circulos", "anillos", "alcance", "enlaces", "haces", "propuesta", "ajuste", "ruta-mensaje", "estres"]) m.addSource(id, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      for (const id of ["circulos", "anillos", "alcance", "enlaces", "haces", "propuesta", "ajuste", "ruta-mensaje", "estres", "usuarios-estres"]) m.addSource(id, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       // Zonas de la prueba de estrés, debajo de todo lo demás
       m.addLayer({ id: "estres-relleno", type: "fill", source: "estres", paint: { "fill-color": ["get", "color"], "fill-opacity": 0.2 } });
       m.addLayer({ id: "estres-borde", type: "line", source: "estres", paint: { "line-color": ["get", "color"], "line-width": 2, "line-opacity": 0.9 } });
+      // Cada persona de la prueba de estrés: un aro del color de su estado (se ve aun con el mapa lejos)
+      m.addLayer({
+        id: "usuarios-estres",
+        type: "circle",
+        source: "usuarios-estres",
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 3.5, 12, 7, 15, 13],
+          "circle-color": ["get", "color"],
+          "circle-opacity": 0.28,
+          "circle-stroke-color": ["get", "color"],
+          "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 8, 1.4, 14, 3],
+          "circle-stroke-opacity": 0.95,
+        },
+      });
       m.addLayer({ id: "haces-relleno", type: "fill", source: "haces", filter: ["==", ["get", "parte"], "abanico"], paint: { "fill-color": "#FFFFFF", "fill-opacity": 0.16 } });
       m.addLayer({
         id: "haces-borde",
@@ -605,12 +622,25 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
         el.dataset.html = html;
       }
       el.style.zIndex = estado.seleccion === a.id ? "5" : "1";
+      // Contorno del color de su estado en la prueba de estrés
+      const u = usuarios?.get(a.id);
+      if (u) {
+        el.classList.add("con-usuario");
+        el.style.setProperty("--usuario", u.color);
+        el.dataset.usuario = u.estado;
+        el.title = u.titulo;
+      } else if (el.classList.contains("con-usuario")) {
+        el.classList.remove("con-usuario");
+        el.style.removeProperty("--usuario");
+        delete el.dataset.usuario;
+        el.removeAttribute("title");
+      }
       mk.setOffset(marca ? [0, RADIO_PIEZA] : [0, 0]);
       el.setAttribute("aria-label", red ? `${{ gateway: "Gateway", repetidor: "Repetidor", persona: "Persona" }[piezaDe(a)]} ${a.nombre}` : `${(a.tipo ?? "antena") === "nodo" ? "Nodo" : "Nodo antena"} ${a.nombre}`);
       const p = mk.getLngLat();
       if (Math.abs(p.lat - a.lat) > 1e-7 || Math.abs(p.lng - a.lon) > 1e-7) mk.setLngLat([a.lon, a.lat]);
     });
-  }, [antenas, estado.seleccion, resultado, estado.vista.modo, red]);
+  }, [antenas, estado.seleccion, resultado, estado.vista.modo, red, usuarios]);
 
   // Repetidores propuestos por el sembrado automático: torres fantasma y la cadena hasta cada destino
   const propuesta = sembrar?.propuesta ?? null;
@@ -672,6 +702,21 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
       etiquetasEstres.current.push(new maplibregl.Marker({ element: el, anchor: "top" }).setLngLat([z.lon, z.lat - (z.radioKm * 1000) / g.lat]).addTo(m));
     }
   }, [estres, listo]);
+
+  // Personas de la prueba de estrés: aro de color en el mapa
+  useEffect(() => {
+    const m = mapa.current;
+    if (!m || !listo) return;
+    const fuente = m.getSource("usuarios-estres") as GeoJSONSource | undefined;
+    if (!usuarios?.size) {
+      fuente?.setData(VACIO);
+      return;
+    }
+    fuente?.setData({
+      type: "FeatureCollection",
+      features: [...usuarios.values()].map((u) => ({ type: "Feature", properties: { color: u.color }, geometry: { type: "Point", coordinates: [u.lon, u.lat] } })),
+    });
+  }, [usuarios, listo]);
 
   // Propuesta del ajuste automático: apoyos como torres punteadas, flecha a la loma y etiquetas de cada cambio
   const ajustados = useRef<Marker[]>([]);

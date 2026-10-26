@@ -34,6 +34,9 @@ type Props = {
   onManosLibres: () => void;
   /** Buscador; recibe una función para cerrarlo (en pantallas angostas se abre en una fila aparte). */
   buscador?: (alElegir?: () => void) => React.ReactNode;
+  /** Protocolo de la malla (MeshCore o Meshtastic) y frecuencia, para el subtítulo. */
+  protocolo?: string;
+  frecuenciaMhz?: number;
 };
 
 export function BarraSuperior(p: Props) {
@@ -92,7 +95,9 @@ export function BarraSuperior(p: Props) {
         <span className="hidden h-6 w-px bg-linea sm:block" />
         <div className="hidden min-w-0 sm:block">
           <h1 className="font-cond text-[17px] leading-tight font-semibold">Simulador de cobertura</h1>
-          <p className="text-[12px] leading-tight text-tenue">Pagos, WhatsApp e IA por MeshCore · LoRa 920 MHz</p>
+          <p className="text-[12px] leading-tight text-tenue">
+            Pagos, WhatsApp e IA por {p.protocolo ?? "MeshCore"} · LoRa {(p.frecuenciaMhz ?? 920).toLocaleString("es-CO", { maximumFractionDigits: 3 })} MHz
+          </p>
         </div>
       </div>
 
