@@ -276,6 +276,22 @@ body {
   transform: scale(0.55);
   transform-origin: 50% 100%;
 }
+/* Prueba de estrés: el contorno de cada persona toma el color de su estado (le funciona, a medias, no le funciona) */
+.marcador-raiz.con-usuario .torre-marcador.es-persona .halo path,
+.marcador-raiz.con-usuario .torre-marcador.es-persona .halo circle {
+  stroke: var(--usuario);
+  stroke-width: 7;
+}
+.marcador-raiz.con-usuario .torre-marcador.es-persona .trazo path,
+.marcador-raiz.con-usuario .torre-marcador.es-persona .trazo circle {
+  fill: var(--usuario);
+}
+.marcador-raiz.con-usuario .pieza-persona .pieza-disco {
+  border-color: var(--usuario);
+  box-shadow:
+    0 0 0 3px var(--usuario),
+    0 0 12px 2px color-mix(in srgb, var(--usuario) 70%, transparent);
+}
 .torre-marcador.poblada:not(.sel) .nombre,
 .torre-marcador.poblada:not(.sel) .saltos {
   display: none;
