@@ -27,6 +27,7 @@ export { costoRedTrama } from "./src/lib/radio/trama";
 export { paraHablar, puntajeVoz } from "./src/components/melki/voz";
 export { estadoInicial, reductor } from "./src/components/simulador/estado";
 export { estadoRed } from "./src/lib/radio/estado-red";
+export { FICHA_GATEWAY } from "./src/lib/radio/protocolos";
 `;
 const tmp = mkdtempSync(path.join(os.tmpdir(), "melki-"));
 const archivo = path.join(tmp, "melki.mjs");
@@ -1504,6 +1505,72 @@ function crearApi(antenas) {
   else delete globalThis.navigator;
   delete globalThis.SpeechRecognition;
   delete globalThis.window;
+}
+
+// ─── 21. v12.9: MeshCore o Meshtastic, persona por persona y optimizar la red para la carga ───
+{
+  const g = base("g", "Gateway", 4.2, -73.37, { pasarela: true, rol: "COMPANION" });
+  const r1 = base("r1", "Repetidor 1", 4.25, -73.3, { rol: "REPETIDOR" });
+  const api = crearApi([g, r1]);
+  const orden = (t) => m.interpretarOrden(t, api, null);
+  const mt = orden("cambia a Meshtastic");
+  caso("«Cambia a Meshtastic» → LongFast con el límite de saltos de Meshtastic", mt?.tipo === "parametros" && mt.cambios.preset === "MT_LONG_FAST" && mt.cambios.limiteSaltos === 3, JSON.stringify(mt));
+  caso("«Usa mesh tastic» (como lo oye el dictado) también", orden("usa mesh tastic")?.cambios?.preset === "MT_LONG_FAST");
+  caso("«Usa MeshCore» en una red MeshCore avisa que ya lo está", orden("usa MeshCore")?.tipo === "aviso");
+  caso("«¿Qué es Meshtastic?» no cambia nada (lo explica el cerebro)", orden("¿qué es Meshtastic?")?.tipo !== "parametros");
+  caso("«Usa LongFast» → el preset de Meshtastic", orden("usa LongFast")?.cambios?.preset === "MT_LONG_FAST");
+  const apiMt = crearApi([g, r1]);
+  apiMt.parametros = () => ({ ...PARAMETROS, preset: "MT_LONG_FAST" });
+  const omt = (t) => m.interpretarOrden(t, apiMt, null);
+  caso("En Meshtastic, «usa SF9» es su MediumFast", omt("usa SF9")?.cambios?.preset === "MT_MEDIUM_FAST", JSON.stringify(omt("usa SF9")));
+  caso("«Pon que los clientes no repitan» → CLIENT_MUTE", omt("pon que los clientes no repitan")?.cambios?.usuariosRepiten === false, JSON.stringify(omt("pon que los clientes no repitan")));
+  caso("«Cambia a MeshCore» desde Meshtastic → SF11 de Trama", omt("cambia a MeshCore")?.cambios?.preset === "SF11_250");
+  caso("«Optimiza la red para la carga» → optimizar", orden("optimiza la red para la carga")?.tipo === "optimizar");
+  caso("«Recomiéndame gateways de apoyo» → optimizar", orden("recomiéndame gateways de apoyo")?.tipo === "optimizar");
+  caso("«Getways de pollo» (como lo oye el dictado) → optimizar", orden("recomiéndame los getways de pollo")?.tipo === "optimizar");
+  caso("«Optimiza la red» sola sigue siendo el ajuste de cobertura", orden("optimiza la red")?.tipo === "ajustar");
+  caso("«¿Qué usuarios no funcionan?» → persona por persona", orden("¿qué usuarios no funcionan?")?.tipo === "usuarios-estres");
+  caso("«¿A quiénes no les funciona?» → persona por persona", orden("¿a quiénes no les funciona la red?")?.tipo === "usuarios-estres");
+  const med = orden("prueba la hora pico con lo medido en el gateway");
+  caso("«Prueba la hora pico con lo medido en el gateway» → perfil medido", med?.tipo === "estres" && med.opciones.perfil === "medido" && med.opciones.pagosPersonaDia > 5 && med.opciones.horaPicoPct === 24, JSON.stringify(med));
+  caso("«Aplica la optimización» → aplicar", orden("aplica la optimización")?.tipo === "aplicar-optimizacion");
+
+  // Ejecutar con un simulador de mentira
+  const medida = (atendidas, funcionan) => ({ atendidas, funcionan, total: 200, funcionanPct: funcionan / 2, completosPct: 60 + funcionan / 10, p95S: 90, canalPct: 80, estado: "revienta" });
+  const prop = { id: "gateway-zona-r1", tipo: "gateway-zona", titulo: "Gateway de apoyo en Repetidor 1", que: "Convierta Repetidor 1 en gateway de apoyo.", porque: "Se revienta.", agregar: [], editar: [{ id: "r1", cambios: { pasarela: true } }], parametros: null, opciones: null, lat: 4.25, lon: -73.3, aplicable: true, antes: medida(80, 40), despues: medida(150, 120), ganancia: 80, gananciaAtendidas: 70 };
+  const frec = { ...prop, id: "otra-frecuencia-r1", tipo: "otra-frecuencia", titulo: "Gateway de apoyo en 921,5 MHz en Repetidor 1", aplicable: false, editar: [], gananciaAtendidas: 40, ganancia: 30 };
+  const opt = { antes: medida(80, 40), diagnostico: ["Con esta carga le funciona a 40 de 200 personas (20 %); canal del gateway 80 %."], propuestas: [prop, frec], combinada: null, descartadas: [], motivo: null };
+  const usuarios = [
+    { id: "p1", nombre: "Persona 1", lat: 4.2, lon: -73.3, zona: "r1", zonaNombre: "Repetidor 1", saltos: 2, margenDb: 8, snrDb: -9.5, exitoPct: 35, fisicaPct: 60, esperaS: 40, esperaP95S: 120, mensajes: 2, completos: 0, estado: "no", causa: "canal", porque: "El canal en Repetidor 1 está ocupado el 80 % del tiempo." },
+    { id: "p2", nombre: "Persona 2", lat: 4.2, lon: -73.3, zona: "g", zonaNombre: "Gateway", saltos: 1, margenDb: 40, snrDb: 22.5, exitoPct: 98, fisicaPct: 100, esperaS: 5, esperaP95S: 10, mensajes: 1, completos: 1, estado: "bien", causa: null, porque: "" },
+  ];
+  const estres = { motivo: null, resumenUsuarios: { total: 2, porEstado: { bien: 1, funciona: 0, medias: 0, dificultad: 0, no: 1 }, funcionan: 1, funcionanPct: 50, porCausa: { canal: 1 } }, porUsuario: usuarios };
+  apiMt.optimizarRed = async () => opt;
+  apiMt.optimizacion = () => opt;
+  let aplicada = null;
+  apiMt.aplicarOptimizacion = async (p) => ((aplicada = p), true);
+  apiMt.estres = () => estres;
+  const ro = m.ejecutarOrden(omt("optimiza la red para la carga"), apiMt);
+  caso("Optimizar avisa qué prueba (Meshtastic, gateways y antenas de apoyo)", /Busco cómo hacer que la red aguante esta carga \(Meshtastic\)/.test(ro.texto) && /gateways de apoyo, antenas de apoyo/.test(ro.texto) && ro.luego, ro.texto.slice(0, 160));
+  const to = await ro.luego;
+  caso("Cuenta lo que más ayuda y ofrece aplicarlo", /Gateway de apoyo en Repetidor 1: atiende a ~70 personas más/.test(to.texto) && /921,5 MHz/.test(to.texto) && to.acciones?.some((a) => a.orden?.tipo === "aplicar-optimizacion" && a.orden.indice === 0), to.texto.slice(0, 240).replace(/\n/g, " "));
+  const ra = m.ejecutarOrden({ tipo: "aplicar-optimizacion", indice: 0, combinada: false }, apiMt);
+  const ta = await ra.luego;
+  caso("Aplicar la propuesta: la aplica, vuelve a probar y deja deshacer", aplicada?.id === "gateway-zona-r1" && /apliqué «Gateway de apoyo en Repetidor 1»/.test(ta.texto) && /De 2 personas, a 1 les funciona/.test(ta.texto) && ra.deshacer);
+  const rf = m.ejecutarOrden({ tipo: "aplicar-optimizacion", indice: 1, combinada: false }, apiMt);
+  caso("La otra frecuencia se hace en campo, no en el mapa", /se hace en campo/.test(rf.texto) && !rf.luego);
+  const ru = m.ejecutarOrden(omt("¿qué usuarios no funcionan?"), apiMt);
+  caso("Persona por persona: cuántas les funciona, las que peor la pasan y por qué", /a 1 les funciona \(50 %\)/.test(ru.texto) && /Persona 1: no le funciona, le vuelve el 35 %/.test(ru.texto) && /canal ocupado/.test(ru.texto) && /contorno/.test(ru.texto) && ru.acciones?.some((a) => a.orden?.tipo === "optimizar"), ru.texto.slice(0, 240).replace(/\n/g, " "));
+
+  // Cerebro
+  const c = { antenas: [g, r1], parametros: { ...PARAMETROS, preset: "SF11_250" }, resultado: null, desactualizado: false, relieve: "teselas", modo: "sembrar" };
+  const rm = m.responder("¿qué es Meshtastic?", c);
+  caso("«¿Qué es Meshtastic?» explica los dos protocolos y ofrece cambiar", /Meshtastic:/.test(rm.texto) && /MeshCore:/.test(rm.texto) && rm.acciones?.some((a) => a.orden?.tipo === "parametros" && a.orden.cambios.preset === "MT_LONG_FAST"), rm.texto.slice(0, 160));
+  const rg = m.responder("¿qué se midió en el gateway?", c);
+  caso("«¿Qué se midió en el gateway?» da los valores de la ficha, antena por antena", m.FICHA_GATEWAY.antenas.every((a) => rg.texto.includes(`${a.nombre} (`)) && /185 mensajes al día/.test(rg.texto) && /responde el 64 %/.test(rg.texto) && /responde el 0 %/.test(rg.texto), rg.texto.slice(0, 200));
+  const gw = m.FICHA_GATEWAY.claves[0];
+  if (gw) caso(`«Lo medido en ${gw}» también es el perfil medido`, orden(`prueba la hora pico con lo de ${gw}`)?.opciones?.perfil === "medido");
+  caso("«¿Qué son los gateways de apoyo?» explica la optimización", /Gateways de apoyo/.test(m.responder("¿qué son los gateways de apoyo?", c).texto));
 }
 
 console.log(fallos ? `\n✗ ${fallos} prueba(s) fallaron` : "\n✓ Melki verificado");
