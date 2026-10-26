@@ -1125,9 +1125,12 @@ await flujo(
 );
 
 // Manos libres: micrófono y voz de mentira. window.__voz.decir(texto) «habla» al reconocedor (como Chrome: un parcial
-// y luego el final, en un resultado nuevo); lo que Melki dice queda en window.__voz.dicho.
+// y luego el final, en un resultado nuevo); lo que Melki dice queda en window.__voz.dicho. Para probar lo que pasa con
+// parlantes y navegadores de verdad: `eco` hace que el reconocedor oiga lo que Melki dice («durante»: empieza a oírlo
+// mientras habla; «tarde»: lo oye 1,3 s después; «muy-tarde»: 3,2 s después), `duplicar` manda dos veces cada frase y
+// `cortarTrasSilencio` (ms) corta la escucha tras ese silencio, como Edge.
 const manosLibresDeMentira = () => {
-  const voz = { dicho: [], activo: null, inicios: 0 };
+  const voz = { dicho: [], activo: null, inicios: 0, cortes: 0, eco: null, duplicar: false, cortarTrasSilencio: 0, ultimoSonido: Date.now() };
   window.__voz = voz;
   class Reconocedor {
     constructor() {
@@ -1137,6 +1140,7 @@ const manosLibresDeMentira = () => {
     start() {
       voz.activo = this;
       voz.inicios++;
+      voz.ultimoSonido = Date.now();
     }
     stop() {
       if (voz.activo === this) voz.activo = null;
@@ -1150,18 +1154,60 @@ const manosLibresDeMentira = () => {
   Reconocedor.available = async () => "unavailable";
   window.SpeechRecognition = Reconocedor;
   window.webkitSpeechRecognition = Reconocedor;
+  const empezar = (r, texto) => {
+    const i = r.resultados.length;
+    r.resultados.push({ isFinal: false, 0: { transcript: texto } });
+    r.onresult?.({ resultIndex: i, results: [...r.resultados] });
+    return i;
+  };
+  const confirmar = (r, i, texto) => {
+    r.resultados[i] = { isFinal: true, 0: { transcript: texto } };
+    r.onresult?.({ resultIndex: i, results: [...r.resultados] });
+  };
   voz.decir = (texto) => {
     const r = voz.activo;
     if (!r) return false;
-    const i = r.resultados.length;
-    r.resultados.push({ isFinal: false, 0: { transcript: texto.split(" ").slice(0, 2).join(" ") } });
-    r.onresult?.({ resultIndex: i, results: [...r.resultados] });
+    voz.ultimoSonido = Date.now();
+    const i = empezar(r, texto.split(" ").slice(0, 2).join(" "));
     setTimeout(() => {
-      r.resultados[i] = { isFinal: true, 0: { transcript: texto } };
-      r.onresult?.({ resultIndex: i, results: [...r.resultados] });
+      confirmar(r, i, texto);
+      // Algunos navegadores mandan la misma frase otra vez, en un resultado nuevo
+      if (voz.duplicar) setTimeout(() => voz.activo === r && confirmar(r, r.resultados.length, texto), 120);
     }, 150);
     return true;
   };
+  // Con parlantes, el micrófono oye a Melki: empieza a oírlo mientras habla, o lo oye tarde
+  const ecoDe = (u) => u.text.replace(/[«»"]/g, "");
+  const empiezaEco = (u) => {
+    if (voz.eco !== "durante") return;
+    setTimeout(() => {
+      const r = voz.activo;
+      if (!r || !sonando) return;
+      voz.ultimoSonido = Date.now();
+      u.eco = { r, i: empezar(r, ecoDe(u).split(" ").slice(0, 3).join(" ")) };
+    }, 60);
+  };
+  const terminaEco = (u) => {
+    if (!voz.eco) return;
+    setTimeout(
+      () => {
+        const r = voz.activo;
+        if (!r) return;
+        voz.ultimoSonido = Date.now();
+        if (u.eco?.r === r) confirmar(r, u.eco.i, ecoDe(u));
+        else confirmar(r, empezar(r, ecoDe(u)), ecoDe(u));
+      },
+      voz.eco === "durante" ? 400 : voz.eco === "tarde" ? 1300 : 3200,
+    );
+  };
+  // Como Edge: tras unos segundos sin oír nada, deja de escuchar por su cuenta
+  setInterval(() => {
+    const r = voz.activo;
+    if (!voz.cortarTrasSilencio || !r || Date.now() - voz.ultimoSonido < voz.cortarTrasSilencio) return;
+    voz.activo = null;
+    voz.cortes++;
+    r.onend?.();
+  }, 100);
   // El navegador corta la escucha de vez en cuando
   voz.cortar = () => {
     const r = voz.activo;
@@ -1177,9 +1223,11 @@ const manosLibresDeMentira = () => {
       return;
     }
     sonando = true;
+    empiezaEco(u);
     setTimeout(() => {
       if (cola[0] !== u) return;
       cola.shift();
+      terminaEco(u);
       u.onend?.();
       siguiente();
     }, 120 + u.text.length * 2);
@@ -1496,6 +1544,127 @@ await flujo(
     // El área del diseño lleva el nombre del municipio
     afirmar(await page.evaluate(() => JSON.stringify(localStorage)).then((t) => /Área objetivo · Barranca de Upía \(Meta\)/.test(t)), "El área objetivo debería llamarse como el municipio");
     await foto("municipio");
+  },
+  {
+    preparar: async (page) => {
+      await page.addInitScript(manosLibresDeMentira);
+      await page.addInitScript(() => {
+        const consultar = navigator.permissions.query.bind(navigator.permissions);
+        navigator.permissions.query = (d) => (d.name === "microphone" ? Promise.resolve({ state: "granted" }) : consultar(d));
+      });
+    },
+  },
+);
+
+// v12.8: con parlantes Melki se oye a sí mismo, Edge deja de escuchar tras unos segundos de silencio y el navegador a
+// veces manda dos veces la misma frase. Melki no se responde a sí mismo, no entra en bucles, no hace dos veces el mismo
+// pedido y el micrófono no se prende y apaga a la vista; el dictado de la caja tampoco se corta solo.
+await flujo(
+  "voz-sin-eco",
+  async (page, foto) => {
+    await esperarSimulacion(page);
+    const hud = page.locator("[data-tour=hud-voz]");
+    // Como una persona: habla cuando el micrófono escucha (entre un corte del navegador y la escucha siguiente hay un instante)
+    const decir = async (texto) => {
+      await page.waitForFunction(() => Boolean(window.__voz.activo), null, { timeout: 3000 }).catch(() => {});
+      afirmar(await page.evaluate((x) => window.__voz.decir(x), texto), `El micrófono no estaba escuchando al decir «${texto}»`);
+    };
+    const veces = (re) => page.evaluate((r) => window.__voz.dicho.filter((x) => new RegExp(r).test(x)).length, re.source);
+    const oido = async (re, timeout = 20000) => {
+      try {
+        await page.waitForFunction((r) => new RegExp(r).test(window.__voz.dicho.join(" | ")), re.source, { timeout });
+      } catch {
+        throw new Error(`No dijo ${re} · dijo: ${(await page.evaluate(() => window.__voz.dicho.slice(-3).join(" | "))).slice(0, 500)}`);
+      }
+    };
+    const callado = async () => {
+      await page.waitForFunction(() => !window.speechSynthesis.speaking, null, { timeout: 30000 });
+      await page.waitForTimeout(900);
+    };
+    // Espera a que pase el eco (el más tardío llega 3,2 s después) y a lo que Melki respondería si lo tomara como pedido
+    const sinBucle = async () => {
+      await callado();
+      await page.waitForTimeout(4500);
+      await callado();
+    };
+    await page.locator("[data-tour=melki-reposo]").waitFor({ timeout: 15000 });
+    // Los estados de la barra, para ver que no parpadea
+    await page.evaluate(() => {
+      window.__estados = [];
+      const leer = () => {
+        const e = document.querySelector("[data-tour=hud-voz]")?.getAttribute("data-estado") ?? "sin barra";
+        if (window.__estados.at(-1) !== e) window.__estados.push(e);
+      };
+      new MutationObserver(leer).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-estado"] });
+    });
+    await page.evaluate(() => Object.assign(window.__voz, { eco: "durante", duplicar: true, cortarTrasSilencio: 2500, ultimoSonido: Date.now() }));
+
+    // Con parlantes y frases duplicadas: un solo pedido, una sola respuesta, y no se responde a sí mismo
+    await decir("Hey Melki, llévame a Villavicencio");
+    await hud.waitFor({ timeout: 10000 });
+    await oido(/Lo llevé a Villavicencio/);
+    await sinBucle();
+    afirmar((await veces(/Lo llevé a Villavicencio/)) === 1, `Respondió más de una vez (eco o pedido duplicado): ${await veces(/Lo llevé a Villavicencio/)}`);
+    afirmar((await veces(/Diseño la malla/)) === 0, "No debe tomar su propia sugerencia («¿le armo una red…?») como pedido");
+    await foto("sin-eco");
+
+    // Lo que no entiende: se disculpa una vez, sin repetir en voz lo que oyó, aunque oiga su propia disculpa
+    await decir("Melki, barranco loco pla xyz");
+    await oido(/no le entendí bien\. ¿Me lo repite, por favor\?/);
+    await sinBucle();
+    afirmar((await veces(/no le entendí bien/)) === 1, `Se disculpó ${await veces(/no le entendí bien/)} veces (bucle con su eco)`);
+    afirmar((await veces(/Escuché/)) === 0, "La disculpa no debe repetir en voz lo que oyó");
+
+    // El eco que llega tarde (sin oírse mientras hablaba) se reconoce por lo que dice
+    await page.evaluate(() => (window.__voz.eco = "tarde"));
+    await decir("Melki, ¿dónde estamos?");
+    await oido(/Estamos viendo Villavicencio/);
+    await sinBucle();
+    afirmar((await veces(/Estamos viendo/)) === 1, `Respondió a su propio eco tardío: ${await veces(/Estamos viendo/)}`);
+
+    // Y el que llega muy tarde: tampoco hay bucle
+    await page.evaluate(() => (window.__voz.eco = "muy-tarde"));
+    await decir("Melki, ¿me escuchas?");
+    await oido(/le escucho perfectamente/);
+    await sinBucle();
+    afirmar((await veces(/le escucho perfectamente/)) === 1, `Repitió la respuesta con su eco muy tardío: ${await veces(/le escucho perfectamente/)}`);
+    afirmar((await veces(/no le entendí bien/)) <= 2, `Entró en un bucle de disculpas: ${await veces(/no le entendí bien/)}`);
+
+    // Edge corta la escucha cada 2,5 s de silencio: se vuelve a encender sola, sin que la barra parpadee ni avise
+    await page.evaluate(() => (window.__voz.eco = "durante"));
+    const cortes = await page.evaluate(() => window.__voz.cortes);
+    await page.waitForTimeout(8000);
+    const tras = await page.evaluate(() => ({ cortes: window.__voz.cortes, activo: Boolean(window.__voz.activo), estados: window.__estados.join(" → ") }));
+    afirmar(tras.cortes - cortes >= 2 && tras.activo, `La escucha debería volver sola tras los cortes (${tras.cortes - cortes} cortes)`);
+    afirmar(!/preparando/.test(tras.estados), `La barra no debe volver a «preparando» por los cortes: ${tras.estados}`);
+    afirmar(!(await hud.innerText()).match(/apaga a cada rato|No logro escuchar|deja de escuchar a cada/), "No debe avisar que el micrófono se apaga");
+    await decir("Melki, muestra los paneles");
+    await page.locator("[data-tour=panel-izquierdo]").waitFor({ state: "visible", timeout: 15000 });
+    await sinBucle();
+
+    // Lo dicho por voz quedó una sola vez en la conversación
+    await page.getByRole("button", { name: /^Abrir a Melki/ }).click();
+    const chat = page.getByRole("region", { name: "Conversación con Melki" });
+    const pedidos = await chat.locator("[title='Dicho por voz']").evaluateAll((xs) => xs.map((x) => (x.parentElement?.textContent ?? "").replace(/^\s*Por voz:\s*/, "").trim()));
+    afirmar(pedidos.length === 5, `Los pedidos por voz deberían ser 5, sin duplicados ni eco: ${pedidos.join(" | ")}`);
+    afirmar(/^Llévame a Villavicencio$/.test(pedidos[0]), `El pedido quedó repetido: «${pedidos[0]}»`);
+    await foto("conversacion");
+
+    // El dictado de la caja: sigue escuchando aunque Edge corte tras el silencio, sin repetir lo dicho
+    await page.evaluate(() => Object.assign(window.__voz, { eco: null }));
+    await page.getByRole("button", { name: "Apagar el Asistente Melki" }).first().click();
+    await hud.waitFor({ state: "detached", timeout: 10000 });
+    await chat.getByRole("button", { name: "Dictar por voz" }).click();
+    await chat.getByRole("dialog", { name: "¿Cómo quiere dictar?" }).getByRole("button", { name: /Con el navegador/ }).click();
+    await chat.getByText(/Escuchando… Revise el texto/).waitFor();
+    await decir("pon un repetidor");
+    await page.waitForTimeout(3500);
+    afirmar(await chat.getByText(/Escuchando/).isVisible(), "El dictado no debe apagarse solo tras unos segundos de silencio");
+    await decir("en el norte del mapa");
+    await page.waitForFunction(() => document.querySelector("[aria-label='Pregunta para Melki']")?.value === "Pon un repetidor en el norte del mapa", null, { timeout: 10000 });
+    await foto("dictado-sin-cortes");
+    await chat.getByRole("button", { name: "Terminar el dictado" }).click();
+    await chat.getByText(/Escuchando…/).waitFor({ state: "detached" });
   },
   {
     preparar: async (page) => {
