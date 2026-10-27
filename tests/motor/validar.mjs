@@ -43,6 +43,8 @@ export { disenar, cajaDiseno } from "./src/lib/radio/diseno";
 export { poligonoCirculo, poligonoRectangulo, conArea, radioDeArea, areaM2, dentroPoligono, coberturaEnArea, porcentajeSobre, celdasEnPoligono, sirveAlArea } from "./src/lib/radio/area";
 export { ajustar, cajaAjuste, textoCambio, analisisAjuste, PERMISOS_AJUSTE, contornoCirculos } from "./src/lib/radio/ajuste";
 export { costoTorre, costoNodo, ALTURA_MAXIMA_M } from "./src/lib/radio/costos";
+export { costoRedTrama, OPERACION_TRAMA, SF_TRAMA } from "./src/lib/radio/trama";
+export { armarPitch, equilibrio, usuariosParaEquilibrio, pesosHablados, departamentoTrama, PAGOS_DIA_DEFECTO } from "./src/lib/negocio/pitch";
 `;
 const tmp = mkdtempSync(path.join(os.tmpdir(), "motor-"));
 const archivo = path.join(tmp, "motor.mjs");
@@ -457,6 +459,68 @@ caso("Sin D, todas conectadas", sinD.nodos.every((n) => n.saltos !== null));
     "Optimizar: al caserío sin servicio le propone una antena de apoyo (la cadena con el relieve) y lo atiende",
     eCas.porUsuario.filter((u) => u.id.startsWith("cs")).every((u) => u.estado === "no") && Boolean(apoyo) && apoyo.agregar.every((a) => a.rol === "REPETIDOR") && apoyo.gananciaAtendidas >= 3,
     apoyo ? `${apoyo.titulo}: ${apoyo.que} (+${apoyo.gananciaAtendidas.toFixed(1)} atendidas)` : JSON.stringify(optCas.descartadas),
+  );
+
+  // v13 · El pitch del modelo de negocio, armado con esta red (4 sitios y 160 personas, con su prueba de estrés)
+  const lugar = () => ({ municipio: "Cumaral", departamento: "Meta" });
+  const caps = m.armarPitch({ antenas: pocas, parametros: pT, resultado: rPocas, estres: e1, lugar });
+  const ids = caps.map((c) => c.id);
+  caso(
+    "Pitch: portada, problema, solución, una por antena (gateway primero), cobertura, capacidad, CAPEX, OPEX, equilibrio, escala y cierre",
+    ids.join() === ["portada", "problema", "solucion", "antena", "antena", "antena", "antena", "cobertura", "capacidad", "inversion", "operacion", "equilibrio", "escala", "cierre"].join() && caps[3].titulo === "Gateway",
+    ids.join(" "),
+  );
+  const textoPitch = JSON.stringify(caps);
+  caso("Pitch: sin «undefined» ni «NaN» en ningún capítulo", !/undefined|NaN|Infinity/.test(textoPitch));
+  const antenasPitch = caps.filter((c) => c.id === "antena");
+  caso(
+    "Pitch: cada antena dice su altura, su ubicación (municipio) y se enfoca en su punto",
+    antenasPitch.every((c) => {
+      const a = pocas.find((x) => x.id === c.antena);
+      return a && c.foco.tipo === "punto" && Math.abs(c.foco.lat - a.lat) < 1e-9 && c.cifras[0].etiqueta === "Altura de la antena" && c.cifras[1].etiqueta === "Ubicación" && /Cumaral \(Meta\)/.test(c.guion) && c.guion.includes(`${a.alturaM.toLocaleString("es-CO")} m`);
+    }),
+    antenasPitch[1]?.guion.slice(0, 160),
+  );
+  caso("Pitch: el problema usa las cifras del departamento", caps[1].subtitulo.startsWith("Meta, puesto") && /En Meta viven/.test(caps[1].guion));
+  // Con el recargo de logística de la región (el Meta, en la Orinoquía)
+  const costo = m.costoRedTrama(1, 3, 160, "xiao", m.departamentoTrama("Meta").logistica);
+  const inv = caps.find((c) => c.id === "inversion");
+  caso("Pitch: el CAPEX es el de Trama con la red del mapa (1 sitio, 3 repetidores, 160 billeteras)", inv.cifras[0].valor === m.pesosTrama(costo.inversion.total) && /160 billeteras/.test(inv.subtitulo), `${inv.cifras[0].valor} · ${inv.subtitulo}`);
+  const op = caps.find((c) => c.id === "operacion");
+  caso("Pitch: el OPEX suma internet, sitios, repetidores y soporte", op.cifras[0].valor === m.pesosTrama(costo.mensual.total) && op.cifras.at(-1).valor === m.pesosTrama(costo.totalMes));
+  const cap = caps.find((c) => c.id === "capacidad");
+  caso("Pitch: la capacidad sale de la prueba de estrés, persona por persona", cap.cifras[0].etiqueta === "Les funciona" && cap.guion.includes(`De ${(160).toLocaleString("es-CO")} personas`));
+  const eqCap = caps.find((c) => c.id === "equilibrio");
+  caso("Pitch: sin comisión da la de equilibrio y ofrece probar otra", /Comisión de equilibrio/.test(JSON.stringify(eqCap.cifras)) && /se puede probar aquí mismo/.test(eqCap.guion));
+  const con300 = m.armarPitch({ antenas: pocas, parametros: pT, resultado: rPocas, estres: e1, lugar, comisionPago: 300 }).find((c) => c.id === "equilibrio");
+  const e300 = m.equilibrio(costo.inversion.total, costo.mensual.total, 160, m.PAGOS_DIA_DEFECTO, 300);
+  caso(
+    "Pitch: con $300 por pago da ingresos, margen y meses para recuperar la inversión",
+    con300.subtitulo === "Con una comisión de $300 por pago" && con300.cifras.some((c) => c.etiqueta === "Recupera la inversión") && (e300.mesesRecuperacion === null ? /no alcanza/.test(con300.guion) : /se recupera en/.test(con300.guion)),
+    con300.guion.split(". ").slice(-2).join(". ").slice(0, 200),
+  );
+  // Una muestra (sin personas): las cuentas van con la red llena (la capacidad de diseño: 150 por frecuencia en SF11)
+  const muestra = m.armarPitch({ antenas: lista, parametros: pT, resultado: null, estres: null });
+  const invM = muestra.find((c) => c.id === "inversion");
+  caso("Pitch con una muestra: cuenta la red llena (150 billeteras en SF11) y sin simular no inventa cobertura", !muestra.some((c) => c.id === "cobertura") && /150 billeteras/.test(invM.subtitulo) && /con la red llena, 150 usuarios/.test(invM.guion), invM.subtitulo);
+}
+
+// v13 · Punto de equilibrio: la red al mes (inversión a 5 años + operación) y la comisión por pago que la cubre
+{
+  const e = m.equilibrio(100e6, 2e6, 1000, 2.4);
+  const costoMes = 100e6 / (12 * m.OPERACION_TRAMA.aniosInversion) + 2e6;
+  caso("Equilibrio: costo al mes, 72.000 pagos y la comisión que cubre todo", cerca(e.costoMes, costoMes, 1e-6) && e.pagosMes === 72000 && cerca(e.comisionEquilibrio, costoMes / 72000, 1e-9) && cerca(e.costoMesUsuario, costoMes / 1000, 1e-9) && e.comision === null && e.mesesRecuperacion === null, `${e.comisionEquilibrio.toFixed(2)} por pago`);
+  const c = m.equilibrio(100e6, 2e6, 1000, 2.4, 100);
+  caso("Equilibrio: con $100 por pago, ingresos, margen y meses (100 M ÷ 5,2 M ≈ 19)", c.ingresosMes === 7.2e6 && c.margenOperacionMes === 5.2e6 && cerca(c.mesesRecuperacion, 100e6 / 5.2e6, 1e-9));
+  caso("Equilibrio: si la comisión no cubre la operación, no hay recuperación", m.equilibrio(100e6, 2e6, 1000, 2.4, 10).mesesRecuperacion === null);
+  const u = m.usuariosParaEquilibrio(1, 3, 300);
+  const cubre = (n) => 300 * m.PAGOS_DIA_DEFECTO * 30 * n >= m.costoRedTrama(1, 3, n).totalMes;
+  caso("Equilibrio: desde cuántos usuarios se paga sola (el primero que cubre la red completa)", u !== null && cubre(u) && !cubre(u - 1), `${u} usuarios con $300`);
+  caso("Equilibrio: con $1 por pago no se paga nunca (cada billetera cuesta más de lo que deja)", m.usuariosParaEquilibrio(1, 3, 1) === null);
+  caso("Pesos en voz alta", m.pesosHablados(6.4e6) === "6,4 millones de pesos" && m.pesosHablados(178000) === "178 mil pesos" && m.pesosHablados(1.5e9) === "1,5 mil millones de pesos" && m.pesosHablados(350) === "350 pesos", [6.4e6, 178000, 1.5e9, 350].map(m.pesosHablados).join(" · "));
+  caso(
+    "El departamento de Trama por su nombre, como lo da el mapa (con o sin tildes, «D. C.», «y Providencia»)",
+    m.departamentoTrama("Chocó")?.id === "choco" && m.departamentoTrama("META")?.nombre === "Meta" && m.departamentoTrama("Bogotá, D. C.")?.id === "bogota" && m.departamentoTrama("San Andrés y Providencia")?.id === "sanandres" && m.departamentoTrama("Cauca")?.id === "cauca" && m.departamentoTrama("Valle del Cauca")?.id === "valle" && m.departamentoTrama("Atlántida") === null,
   );
 }
 

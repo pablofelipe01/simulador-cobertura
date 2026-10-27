@@ -28,6 +28,10 @@ export { paraHablar, puntajeVoz } from "./src/components/melki/voz";
 export { estadoInicial, reductor } from "./src/components/simulador/estado";
 export { estadoRed } from "./src/lib/radio/estado-red";
 export { FICHA_GATEWAY } from "./src/lib/radio/protocolos";
+export { pedidoPitch } from "./src/lib/negocio/pitch";
+export { SesionLive, mensajeSetup, motivoCierre, cierreRecuperable, aBase64, deBase64, pcmDeBytes, bytesDePcm, MODELO_IA_DEFECTO } from "./src/components/melki/ia-live";
+export { aPcm16k } from "./src/components/melki/audio-ia";
+export { HERRAMIENTAS_IA, instruccionesMelki, estadoParaIA } from "./src/components/melki/herramientas-ia";
 `;
 const tmp = mkdtempSync(path.join(os.tmpdir(), "melki-"));
 const archivo = path.join(tmp, "melki.mjs");
@@ -1571,6 +1575,159 @@ function crearApi(antenas) {
   const gw = m.FICHA_GATEWAY.claves[0];
   if (gw) caso(`«Lo medido en ${gw}» también es el perfil medido`, orden(`prueba la hora pico con lo de ${gw}`)?.opciones?.perfil === "medido");
   caso("«¿Qué son los gateways de apoyo?» explica la optimización", /Gateways de apoyo/.test(m.responder("¿qué son los gateways de apoyo?", c).texto));
+}
+
+// v13 · El pitch por voz o por escrito: empezar, avanzar, ir a un capítulo, probar una comisión
+{
+  const pp = (t, enCurso = false) => m.pedidoPitch(t, enCurso);
+  caso("«Preséntame el modelo de negocio» y «Melki, haz el pitch» empiezan la presentación", pp("preséntame el modelo de negocio")?.accion === "empezar" && pp("Melki, haz el pitch")?.accion === "empezar" && pp("inicia la presentación")?.accion === "empezar");
+  caso("Las preguntas sobre el pitch las contesta el cerebro (no lo abren)", pp("¿qué es el pitch?") === null && pp("¿cómo funciona la presentación?") === null);
+  caso("Las órdenes cortas solo con la presentación abierta", pp("siguiente") === null && pp("siguiente", true)?.accion === "siguiente" && pp("anterior", true)?.accion === "anterior" && pp("pausa", true)?.accion === "pausar" && pp("sigue", true)?.accion === "seguir" && pp("repite", true)?.accion === "repetir");
+  const c300 = pp("prueba una comisión de 300 pesos", true);
+  const c1500 = pp("¿y con una comisión de 1.500 pesos?", true);
+  caso("Probar una comisión lleva al punto de equilibrio con ese valor", c300?.accion === "ir" && c300.capitulo === "equilibrio" && c300.comision === 300 && c1500?.comision === 1500, JSON.stringify(c1500));
+  caso("Ir a un capítulo y terminar", pp("ve a la inversión", true)?.capitulo === "inversion" && pp("vamos a la cobertura", true)?.capitulo === "cobertura" && pp("termina la presentación", true)?.accion === "terminar" && pp("termina la presentación") === null);
+}
+
+// v13 · Conversar con la IA (Gemini Live): la conexión, el audio, las herramientas y la reanudación
+{
+  const tick = (ms = 5) => new Promise((ok) => setTimeout(ok, ms));
+  class WsFalso {
+    static ultimo = null;
+    constructor(url) {
+      this.url = url;
+      this.enviados = [];
+      this.readyState = 0;
+      WsFalso.ultimo = this;
+      setTimeout(() => {
+        this.readyState = 1;
+        this.onopen?.();
+      }, 0);
+    }
+    send(d) {
+      this.enviados.push(JSON.parse(d));
+    }
+    close(code = 1000, reason = "") {
+      if (this.readyState === 3) return;
+      this.readyState = 3;
+      setTimeout(() => this.onclose?.({ code, reason }), 0);
+    }
+    /** Lo que manda el servidor. */
+    llega(msj) {
+      this.onmessage?.({ data: JSON.stringify(msj) });
+    }
+    /** El servidor cierra (o se cae la red). */
+    cae(code, reason = "") {
+      this.readyState = 3;
+      this.onclose?.({ code, reason });
+    }
+  }
+  const setup = m.mensajeSetup({ clave: "k", instrucciones: "Eres Melki", herramientas: m.HERRAMIENTAS_IA, voz: "Charon" }).setup;
+  caso(
+    "La configuración pide voz, subtítulos, herramientas, conversaciones largas y manijas para reanudar",
+    setup.model === `models/${m.MODELO_IA_DEFECTO}` && setup.generationConfig.responseModalities.join() === "AUDIO" && setup.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName === "Charon" && setup.tools[0].functionDeclarations.length === 5 && setup.inputAudioTranscription && setup.outputAudioTranscription && setup.contextWindowCompression.slidingWindow && setup.sessionResumption && !setup.sessionResumption.handle && setup.systemInstruction.parts[0].text === "Eres Melki",
+  );
+  const sinVoz = m.mensajeSetup({ clave: "k", instrucciones: "x", modelo: "models/otro", reanudar: "h-1" }).setup;
+  caso("Sin voz elegida usa la del modelo; con manija, reanuda", sinVoz.model === "models/otro" && !sinVoz.generationConfig.speechConfig && !sinVoz.tools && sinVoz.sessionResumption.handle === "h-1");
+
+  const ev = { audios: [], usuario: "", modelo: "", turnos: 0, interr: 0, herr: [], adios: [], cerradas: [] };
+  const s = new m.SesionLive(
+    { clave: "k-1", instrucciones: "Eres Melki", herramientas: m.HERRAMIENTAS_IA, url: "ws://x/ws", WebSocketImpl: WsFalso },
+    {
+      onAudio: (p) => ev.audios.push(p),
+      onTextoUsuario: (t) => (ev.usuario += t),
+      onTextoModelo: (t) => (ev.modelo += t),
+      onTurnoCompleto: () => ev.turnos++,
+      onInterrumpido: () => ev.interr++,
+      onHerramientas: (l) => ev.herr.push(...l),
+      onAdios: (ms) => ev.adios.push(ms),
+      onCerrada: (t, c, r) => ev.cerradas.push({ t, c, r }),
+    },
+  );
+  const p = s.conectar(2000);
+  s.enviarTexto("antes de abrir");
+  await tick();
+  const ws = WsFalso.ultimo;
+  caso("Conecta con la clave en la dirección y lo primero que manda es la configuración", ws.url === "ws://x/ws?key=k-1" && ws.enviados.length === 1 && ws.enviados[0].setup?.model);
+  ws.llega({ setupComplete: {} });
+  await p;
+  caso("Lo pedido mientras abría sale apenas abre", s.lista && ws.enviados[1]?.realtimeInput?.text === "antes de abrir");
+  const pcm = new Int16Array([0, 1000, -1000, 32767, -32768]);
+  ws.llega({ serverContent: { modelTurn: { parts: [{ inlineData: { mimeType: "audio/pcm;rate=24000", data: m.aBase64(m.bytesDePcm(pcm)) } }] } } });
+  caso("La voz del modelo llega como PCM de 16 bits", ev.audios.length === 1 && [...ev.audios[0]].join() === [...pcm].join());
+  ws.llega({ serverContent: { inputTranscription: { text: "pon un " } } });
+  ws.llega({ serverContent: { inputTranscription: { text: "repetidor" } } });
+  ws.llega({ serverContent: { outputTranscription: { text: "Listo." }, turnComplete: true } });
+  caso("Lo que oyó, lo que dice y el fin del turno", ev.usuario === "pon un repetidor" && ev.modelo === "Listo." && ev.turnos === 1);
+  ws.llega({ toolCall: { functionCalls: [{ id: "f1", name: "estado_simulador", args: {} }] } });
+  s.responder([{ id: "f1", name: "estado_simulador", response: { ok: true } }]);
+  caso("Pide una herramienta y recibe su respuesta", ev.herr[0]?.name === "estado_simulador" && ws.enviados.at(-1)?.toolResponse?.functionResponses?.[0]?.id === "f1");
+  s.enviarAudio(new Int16Array(1600));
+  const audio = ws.enviados.at(-1)?.realtimeInput?.audio;
+  caso("El micrófono va en PCM de 16 kHz (100 ms = 3.200 bytes)", audio?.mimeType === "audio/pcm;rate=16000" && m.deBase64(audio.data).length === 3200);
+  ws.llega({ serverContent: { interrupted: true } });
+  ws.llega({ sessionResumptionUpdate: { newHandle: "h-9", resumable: true } });
+  ws.llega({ sessionResumptionUpdate: { newHandle: "", resumable: false } });
+  ws.llega({ goAway: { timeLeft: "4.5s" } });
+  caso("Interrupción, la última manija buena para reanudar y el aviso de cierre de Google", ev.interr === 1 && s.manija === "h-9" && ev.adios[0] === 4500);
+  ws.cae(1011, "Internal error");
+  caso("Si la conexión se cae sola, avisa y dice que vale reanudar", ev.cerradas.length === 1 && ev.cerradas[0].c === 1011 && ev.cerradas[0].r === true && !s.lista);
+
+  let caidas = 0;
+  const s2 = new m.SesionLive({ clave: "k-1", instrucciones: "x", reanudar: s.manija, WebSocketImpl: WsFalso }, { onCerrada: () => caidas++ });
+  const p2 = s2.conectar(2000);
+  await tick();
+  const ws2 = WsFalso.ultimo;
+  caso("La conexión nueva sigue la misma conversación (con la manija)", ws2.enviados[0].setup.sessionResumption.handle === "h-9" && s2.manija === "h-9");
+  ws2.llega({ setupComplete: {} });
+  await p2;
+  s2.cerrar();
+  await tick();
+  caso("Cerrarla a propósito no cuenta como caída", caidas === 0 && !s2.lista);
+
+  const s3 = new m.SesionLive({ clave: "mala", instrucciones: "x", WebSocketImpl: WsFalso });
+  const p3 = s3.conectar(2000).then(() => "", (e) => e.message);
+  await tick();
+  WsFalso.ultimo.cae(1008, "API key not valid. Please pass a valid API key.");
+  caso("Clave mala: lo explica en español", /no es válida/.test(await p3));
+  const s4 = new m.SesionLive({ clave: "k", instrucciones: "x", WebSocketImpl: WsFalso });
+  caso("Si Google no responde, avisa a tiempo", /no respondió a tiempo/.test(await s4.conectar(40).then(() => "", (e) => e.message)));
+  caso(
+    "Por qué se cerró y si vale reanudar (no con la clave, el cupo o el modelo)",
+    /cupo gratuito/.test(m.motivoCierre(1011, "RESOURCE_EXHAUSTED: quota exceeded")) && /sin internet/.test(m.motivoCierre(1006, "")) && m.cierreRecuperable(1006, "") && m.cierreRecuperable(1011, "deadline expired") && !m.cierreRecuperable(1011, "quota exceeded") && !m.cierreRecuperable(1008, "") && !m.cierreRecuperable(1007, "Request contains an invalid argument"),
+  );
+
+  // El audio del micrófono a 16 kHz: promedia (filtro), recorta y no pierde muestras entre trozos
+  const r48 = m.aPcm16k(new Float32Array(4800).fill(0.5), 48000, { fase: 0 });
+  caso("48 kHz a 16 kHz: 4.800 muestras dan 1.600, con el valor de 16 bits", r48.length === 1600 && r48.every((v) => Math.abs(v - 16384) <= 1));
+  const resto = { fase: 0 };
+  let n = 0;
+  for (let k = 0; k < 10; k++) n += m.aPcm16k(new Float32Array(4410), 44100, resto).length;
+  caso("44,1 kHz en trozos: un segundo da 16.000 muestras (±1)", Math.abs(n - 16000) <= 1, String(n));
+  caso("Lo que se pasa de 1 se recorta (sin dar la vuelta)", m.aPcm16k(new Float32Array(30).fill(2), 48000, { fase: 0 }).every((v) => v === 32767));
+  const grande = new Uint8Array(100000).map((_, k) => (k * 37) % 256);
+  caso("Base64 por trozos (audios largos) ida y vuelta", m.deBase64(m.aBase64(grande)).every((v, k) => v === grande[k]));
+
+  // Quién es Melki para la IA y qué puede hacer en el simulador
+  const nombres = m.HERRAMIENTAS_IA.map((h) => h.name);
+  caso("Las herramientas de la IA: órdenes, estado, conocimiento, presentación y despedida", nombres.join() === "ejecutar_orden,estado_simulador,consultar_melki,presentacion,terminar_conversacion" && m.HERRAMIENTAS_IA.every((h) => h.description.length > 40) && m.HERRAMIENTAS_IA.find((h) => h.name === "presentacion").parameters.properties.accion.enum.includes("empezar"));
+  const ins = m.instruccionesMelki("senor", "Estado: {}");
+  caso("Las instrucciones: trato, no inventar cifras, usar las herramientas y el estado al final", /«señor»/.test(ins) && /Nunca inventes cifras/.test(ins) && /estado_simulador/.test(ins) && ins.endsWith("Estado: {}") && /«señora»/.test(m.instruccionesMelki("senora")) && /de usted/.test(m.instruccionesMelki("neutro")));
+  const gw = base("g", "Gateway", 4.2, -73.37, { pasarela: true, rol: "COMPANION" });
+  const rep = base("r1", "Repetidor 1", 4.25, -73.3, { rol: "REPETIDOR" });
+  const est = m.estadoParaIA({ antenas: [gw, rep], parametros: { ...PARAMETROS, preset: "SF11_250" }, resultado: null, desactualizado: false, estres: null, optimizacion: null, ubicacion: () => "Cumaral (Meta)", centro: { lat: 4.2, lon: -73.3 } });
+  caso(
+    "El estado para la IA: la red, que falta simular y los costos de Trama (sin inventar)",
+    est.gateways === 1 && est.repetidores === 1 && est.simulado === false && /Falta simular/.test(est.cobertura) && est.infraestructura.length === 2 && est.infraestructura[0].lugar === "Cumaral (Meta)" && est.costos.inversionTotal === Math.round(m.costoRedTrama(1, 1, 0).inversion.total) && est.mapaCentro.lugar === "Cumaral (Meta)",
+    JSON.stringify(est.costos).slice(0, 160),
+  );
+
+  // El cerebro local explica el pitch y la IA, y ofrece abrirlos
+  const c = { antenas: [gw, rep], parametros: { ...PARAMETROS, preset: "SF11_250" }, resultado: null, desactualizado: false, relieve: "teselas", modo: "sembrar" };
+  const rp = m.responder("¿qué es el pitch?", c);
+  caso("«¿Qué es el pitch?» lo explica y ofrece empezarlo", /En el pitch recorro el mapa con mi robot/.test(rp.texto) && rp.acciones?.some((a) => a.accion === "pitch"));
+  const ri = m.responder("¿puedes hablar como chat gpt con gemini live?", c);
+  caso("Hablar como una IA: Gemini Live gratis con la clave, y ofrece abrir los ajustes", /Gemini Live de Google/.test(ri.texto) && /gratis/.test(ri.texto) && ri.acciones?.some((a) => a.accion === "ajustes-ia"), ri.texto.slice(0, 120));
 }
 
 console.log(fallos ? `\n✗ ${fallos} prueba(s) fallaron` : "\n✓ Melki verificado");

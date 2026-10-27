@@ -23,7 +23,7 @@ import { accionAjuste, textoCoberturaUtil, textoRed, type Orden } from "./ordene
 import { TOURS, type IdTour } from "./tours";
 
 /** «recorrido» empieza el tour indicado; «tours» muestra el menú de tours; «manos-libres» activa la escucha por voz; «acerca» abre la autoría y la licencia. */
-export type AccionMelki = "recorrido" | "tours" | "simular" | "ejemplo" | "agregar" | "inspeccionar" | "parametros" | "resultados" | "kmz" | "regla" | "orden" | "deshacer" | "manos-libres" | "acerca" | "herramientas";
+export type AccionMelki = "recorrido" | "tours" | "simular" | "ejemplo" | "agregar" | "inspeccionar" | "parametros" | "resultados" | "kmz" | "regla" | "orden" | "deshacer" | "manos-libres" | "acerca" | "herramientas" | "pitch" | "ajustes-ia";
 
 /** Con «detalle», la acción se muestra como una opción de menú (título y una línea). */
 export type AccionRespuesta = { texto: string; accion: AccionMelki; orden?: Orden; escenario?: Escenario; tour?: IdTour; detalle?: string };
@@ -64,6 +64,9 @@ const EJEMPLOS_RETOMAR = "«hazme una red sostenible en Barranca de Upía de 11.
  */
 const FUERA_DE_TEMA =
   /\b(chistes?|cuentame algo|cancion\w*|cantame|musica|pelicula\w*|netflix|recetas?|cocinar|cocina\w*|noticias|politic\w*|presidente|elecciones|horoscopo|signo zodiacal|futbol|partido de futbol|el partido|goles?|mundial|seleccion colombia|deportes?|como esta el clima|el clima (de|en|hoy|para)|que tiempo hace|va a llover|pronostico del tiempo|que hora es|la hora actual|que dia es hoy|la fecha de hoy|capital de|traduce\w*|traducir|poema|poesia|novia|novio|amor|enamorad\w*|bitcoin|criptomoneda\w*|dolar hoy|bolsa de valores|tarea de|matematicas|chatgpt|gemini|alexa|siri|youtube|tiktok|instagram|facebook)\b/;
+
+/** Conversar con una IA (Gemini Live, «como ChatGPT»): es del simulador desde la v13, aunque nombre a otros. */
+const SOBRE_IA_VOZ = /\b(gemini live|gemini|gpt live|gpt-live|chat ?gpt|vapi|whisper|ai studio|clave de (la )?api|modelo de voz|hablar como (una )?ia|conectar(te)? (a|con) (una|la) ia)\b/;
 
 /** Palabras del simulador: si aparecen, el pedido es de aquí aunque no se haya entendido. */
 const DEL_SIMULADOR =
@@ -440,6 +443,34 @@ const TEMAS: Tema[] = [
         "Cada propuesta trae el antes y el después (personas atendidas, mensajes completos, canal) y la que combina las que suman; las aplico al mapa con un botón y se pueden deshacer.",
       ].join("\n"),
       acciones: [{ texto: "Optimizar la red para esta carga", accion: "orden", orden: { tipo: "optimizar", opciones: {} } }],
+    }),
+  },
+  {
+    id: "pitch",
+    claves: ["pitch", "presentacion", "modelo de negocio", "punto de equilibrio", "capex", "opex", "inversion y operacion", "se paga sola", "comision por pago"],
+    responder: () => ({
+      texto: [
+        "En el pitch recorro el mapa con mi robot y presento el modelo de negocio con la red que tenga puesta:",
+        "• El problema (adultos rurales sin canal digital en el departamento y en el país) y la solución de Trama.",
+        "• Cada antena: dónde está, a qué altura va y por qué (su enlace, la línea de vista, el área que cubre y la gente que entra por ella).",
+        "• La cobertura con el relieve real y la capacidad real, persona por persona.",
+        "• La inversión (CAPEX), la operación al mes (OPEX), el costo por usuario y el punto de equilibrio: la comisión por pago que cubre la red; puede probar la suya y le digo en cuántos meses se recupera.",
+        "• Cómo escala al departamento y al país.",
+        "Se maneja con las flechas, el espacio y Esc, o diciéndome «siguiente», «pausa», «ve a la inversión» o «termina la presentación». Con la IA conectada lo narro con mi voz de IA y respondo preguntas en medio.",
+      ].join("\n"),
+      acciones: [{ texto: "Empezar el pitch", accion: "pitch" }],
+    }),
+  },
+  {
+    id: "ia-voz",
+    claves: ["gemini", "gemini live", "inteligencia artificial de verdad", "chatgpt", "chat gpt", "como chatgpt", "como chat gpt", "gpt live", "gpt-live", "vapi", "whisper", "conectar la ia", "conectarte a una ia", "clave de api", "ai studio", "modelo de voz", "hablar como una ia"],
+    responder: () => ({
+      texto: [
+        "Puedo conversar como un modelo de inteligencia artificial con Gemini Live de Google: oigo su voz directamente (el audio, no un texto), le contesto con voz natural y hago en el simulador lo que me pida, sin inventar cifras (las tomo del simulador).",
+        "Es gratis con una clave de Google AI Studio (capa gratuita, con límites por día). La pega una vez en Ajustes → «Conversar con IA» y queda solo en este navegador. Mientras conversamos, su voz y un resumen del escenario van a Google; en la capa gratuita Google puede usarlos para mejorar sus productos.",
+        "Otras opciones: GPT-Live-1 de OpenAI (la voz de ChatGPT) cuesta unos US$0,05 por minuto y no tiene capa gratuita; Vapi cobra US$0,05 por minuto más cada servicio; Whisper solo pasa la voz a texto (ya lo uso en el dictado privado). Sin clave o sin internet sigo con mi cerebro local.",
+      ].join("\n"),
+      acciones: [{ texto: "Abrir los ajustes de la IA", accion: "ajustes-ia" }],
     }),
   },
   {
@@ -1092,7 +1123,7 @@ export function responder(pregunta: string, c: ContextoMelki): Respuesta {
       ? { texto: `Estamos viendo ${c.vista}. ¿Le armo una red sostenible que cubra todo el municipio?`, acciones: [{ texto: "Sí, la red de todo el municipio", accion: "orden", orden: { tipo: "red-municipio", sostenible: true } }] }
       : { texto: "El centro del mapa está fuera de Colombia o los límites aún no cargan. Dígame un municipio y lo llevo: «ubícame en Barranca de Upía, Meta»." };
   // Fuera del simulador (aunque alguna palabra coincida con un tema, como «¿cómo está el clima?»)
-  if (FUERA_DE_TEMA.test(t) && !/\b(red|malla|nodo|antena|gateway|repetidor\w*|cobertura|senal|simul\w*|trama|meshcore|lora|pagos?|radio mobile|itm|longley|propagacion|enlace)\b/.test(t)) return respuestaFueraDeTema(c);
+  if (FUERA_DE_TEMA.test(t) && !SOBRE_IA_VOZ.test(t) && !/\b(red|malla|nodo|antena|gateway|repetidor\w*|cobertura|senal|simul\w*|trama|meshcore|lora|pagos?|radio mobile|itm|longley|propagacion|enlace)\b/.test(t)) return respuestaFueraDeTema(c);
   const especifica = sobreAntena(t, c);
   const palabras = new Set(t.trim().split(" "));
   let mejor: { tema: Tema; puntos: number } | null = null;

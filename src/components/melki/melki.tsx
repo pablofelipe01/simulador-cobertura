@@ -10,14 +10,19 @@
 // todo el tiempo, se activa con «Hola Melki», ejecuta y contesta en voz alta con trato de mayordomo; al activarse deja
 // el mapa libre y sugiere los paneles cuando hacen falta) y menú de tours guiados (también en la primera visita).
 // Escucha avisos de la ventana: «melki:abrir», «melki:tours» y «melki:pedir» (los usan los tours y la barra superior).
-import { AudioLines, Compass, Ear, Globe, LoaderCircle, Mic, Play, Send, Settings2, ShieldCheck, Square, Trash2, Volume2, VolumeX, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { AudioLines, Compass, Ear, Globe, KeyRound, LoaderCircle, Mic, Play, Send, Settings2, ShieldCheck, Sparkles, Square, Trash2, Volume2, VolumeX, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { consejoRed, estadoRed, piezaDe } from "@/lib/radio/estado-red";
 import type { Escenario, ResultadoSimulacion } from "@/lib/radio/tipos";
 import { nombresParaVoz, type Lugar } from "@/lib/geo/referencia";
+import { armarPitch, pedidoPitch, type PedidoPitch } from "@/lib/negocio/pitch";
 
+import { abrirMicrofonoIA, ReproductorIA, type MicrofonoIA } from "./audio-ia";
 import { MelkiAvatar } from "./avatar";
+import { estadoParaIA, HERRAMIENTAS_IA, instruccionesMelki } from "./herramientas-ia";
+import { MODELO_IA_DEFECTO, MODELOS_IA, SesionLive, VOCES_IA, type LlamadaFuncion } from "./ia-live";
+import { PresentacionPitch, type ControlPitch, type Narrador } from "./presentacion";
 import { HudVoz, type SugerenciaHud } from "./hud-voz";
 import {
   AYUDA_VOZ,
@@ -117,7 +122,33 @@ async function permisoMicrofono(): Promise<PermissionState | "desconocido"> {
   }
 }
 
-type Preferencias = { visto: boolean; voz: boolean; dictado?: ModoDictado; manos?: PreferenciasManos };
+/** La conversación con IA (Gemini Live): si se usa, el modelo y su voz. La clave va aparte (CLAVE_IA). */
+type PreferenciasIA = { activa: boolean; modelo: string; voz: string | null };
+const IA_DEFECTO: PreferenciasIA = { activa: false, modelo: MODELO_IA_DEFECTO, voz: null };
+/** La clave de Google AI Studio: solo en este navegador (nunca en el código ni en el repositorio). */
+const CLAVE_IA = "simulador-cobertura-melki-ia-clave";
+
+function leerClaveIA(): string {
+  try {
+    return window.localStorage.getItem(CLAVE_IA) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function guardarClaveIA(clave: string) {
+  try {
+    if (clave) window.localStorage.setItem(CLAVE_IA, clave);
+    else window.localStorage.removeItem(CLAVE_IA);
+  } catch {
+    // Sin almacenamiento: dura hasta cerrar la página
+  }
+}
+
+/** Para las pruebas: otra dirección del servidor de voz (uno de mentira). */
+const urlIAPruebas = (): string | undefined => (typeof window !== "undefined" ? (window as unknown as { __melkiIA?: { url?: string } }).__melkiIA?.url : undefined);
+
+type Preferencias = { visto: boolean; voz: boolean; dictado?: ModoDictado; manos?: PreferenciasManos; ia?: PreferenciasIA };
 
 function leerPreferencias(): Preferencias {
   try {
@@ -306,6 +337,59 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   const [voces, setVoces] = useState<{ nombre: string; idioma: string; natural: boolean }[]>([]);
   const [permiso, setPermiso] = useState<PermissionState | "desconocido">("desconocido");
   const escritorio = useSyncExternalStore(suscribirAncho, esEscritorio, () => false);
+  /* Conversación con IA (Gemini Live) */
+  const [iaPref, setIaPref] = useState<PreferenciasIA>(() => ({ ...IA_DEFECTO, ...leerPreferencias().ia }));
+  const [claveIA, setClaveIA] = useState(() => leerClaveIA());
+  const [claveEscrita, setClaveEscrita] = useState("");
+  const [pruebaIA, setPruebaIA] = useState<{ estado: "nada" | "probando" | "ok" | "error"; texto?: string }>({ estado: "nada" });
+  const [modoIA, setModoIA] = useState(false);
+  const [estadoIA, setEstadoIA] = useState<EstadoManosLibres>("apagado");
+  const [oidoIA, setOidoIA] = useState("");
+  const [subIA, setSubIA] = useState("");
+  const [avisoIA, setAvisoIA] = useState<string | null>(null);
+  /** «No pude conectar con la IA…»: se ve un rato aunque el asistente local ya esté escuchando. */
+  const [avisoFallo, setAvisoFallo] = useState<string | null>(null);
+  const tAvisoFallo = useRef(0);
+  const ia = useRef({
+    activa: false,
+    sesion: null as SesionLive | null,
+    mic: null as MicrofonoIA | null,
+    rep: null as ReproductorIA | null,
+    estado: "apagado" as EstadoManosLibres,
+    textoModelo: "",
+    textoUsuario: "",
+    /** Terminó el turno del modelo (falta que suene lo que quedó en cola). */
+    turnoCompleto: false,
+    /** Se pidió callar: no suena lo que siga llegando de este turno. */
+    silenciado: false,
+    ultimaActividad: 0,
+    nivel: 0,
+    vigilante: 0,
+    /** Un capítulo del pitch que la IA está narrando: se llama al terminar de sonar. */
+    alNarrar: null as null | (() => void),
+    /** Se despidió: cierra cuando termine de sonar. */
+    cerrarAlTerminar: false,
+    clave: "",
+    /** Se está abriendo una conexión nueva para seguir la misma conversación. */
+    reconectando: false,
+    /** Google avisó que va a cerrar: se reanuda al terminar el turno. */
+    reconectarAlTerminar: false,
+    /** Cuándo se reanudó (para no insistir si se cae una y otra vez). */
+    reconexiones: [] as number[],
+    /** El capítulo que se le pidió narrar (y en qué conexión), por si hay que pedirlo de nuevo. */
+    narracion: null as null | { texto: string; sesion: SesionLive | null },
+  });
+  /* Presentación del modelo de negocio */
+  const [pitch, setPitch] = useState(false);
+  const controlPitch = useRef<ControlPitch | null>(null);
+  const pitchPendiente = useRef<PedidoPitch | null>(null);
+  /** La presentación está abierta (al momento, sin esperar a que la pantalla se entere). */
+  const pitchAbierto = useRef(false);
+  const panelesPitch = useRef<Paneles | null>(null);
+  /** Lo que Melki responde mientras la IA espera el resultado de una orden. */
+  const captura = useRef<string[] | null>(null);
+  /** Órdenes que siguen calculando (sembrado, diseño, prueba de estrés…). */
+  const trabajos = useRef(0);
   const ml = useRef({
     activo: false,
     estado: "apagado" as EstadoManosLibres,
@@ -371,9 +455,9 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     /** El dictado de la caja pausó la escucha en reposo: se retoma al terminar. */
     reanudarTrasDictado: false,
   });
-  const actual = useRef({ abierto, vozActiva, api, mensajes, manos, usados, paneles });
+  const actual = useRef({ abierto, vozActiva, api, mensajes, manos, usados, paneles, contexto, iaPref });
   useEffect(() => {
-    actual.current = { abierto, vozActiva, api, mensajes, manos, usados, paneles };
+    actual.current = { abierto, vozActiva, api, mensajes, manos, usados, paneles, contexto, iaPref };
   });
   /** Las frases del asistente con el trato elegido. */
   const fr = () => frases(actual.current.manos.trato);
@@ -536,6 +620,8 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
 
   const decir = (t: string, escrito = t) => {
     const m = ml.current;
+    // Con la IA conversando, la que habla es ella (y si espera el resultado de una orden, se lo lleva)
+    if (ia.current.activa) return;
     if (m.activo && m.despierto) {
       // Respuesta a un pedido por voz: si es la misma que acaba de dar en voz, no la repite (queda escrita) y vuelve a
       // esperar su nombre. Así, si el micrófono oyó su propia voz y la tomó como pedido, no entra en un bucle.
@@ -563,6 +649,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   };
 
   const agregarMelki = (r: Respuesta) => {
+    if (captura.current) captura.current.push(r.acciones?.length ? `${r.texto}\n(Opciones: ${r.acciones.map((a) => a.texto).join(" · ")})` : r.texto);
     setMensajes((m) => [...m, { id: siguiente.current++, de: "melki", texto: r.texto, acciones: r.acciones }]);
     if (!actual.current.abierto) setNoLeido(true);
     decir(r.voz ?? r.texto, r.texto);
@@ -679,6 +766,8 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
 
   const callarYa = () => {
     const m = ml.current;
+    // «Melki, para» en la presentación: la pausa (no salta al capítulo siguiente)
+    if (pitchAbierto.current) controlPitch.current?.pedir({ accion: "pausar" });
     m.cola = [];
     callar();
     setHablando(false);
@@ -739,6 +828,14 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     if (esSuVoz(nuevo, inicio)) {
       const a = detectarActivacion(nuevo);
       if (a.activado && controlDeVoz(a.resto)?.tipo === "callar" && !esEco(nuevo, inicio || reloj())) callarYa();
+      // En la presentación, «Melki, siguiente» o «Melki, pausa» funcionan aunque esté narrando
+      else if (a.activado && pitchAbierto.current && !esEco(nuevo, inicio || reloj())) {
+        const pp = pedidoPitch(a.resto, true);
+        if (pp) {
+          const t = pedirPitch(pp);
+          setMensajes((x) => [...x, { id: siguiente.current++, de: "usuario", texto: a.resto, voz: true }, { id: siguiente.current++, de: "melki", texto: t }]);
+        }
+      }
       return;
     }
     procesarFrase(nuevo);
@@ -781,6 +878,9 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
 
   /** El nivel de la voz que oye el micrófono, si hay medida reciente (para las barritas de la barra del asistente). */
   const nivelVoz = useCallback(() => {
+    // Conversando con la IA: la voz que suena o la del micrófono
+    const x = ia.current;
+    if (x.activa) return x.estado === "hablando" ? (x.rep?.nivel() ?? 0) : x.nivel;
     const n = ml.current.nivel;
     // (con el mapa ocupado la medida puede llegar con retraso)
     return reloj() - n.hora < 1500 ? n.valor : null;
@@ -954,6 +1054,11 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       }
     }
     const texto = limpiarComando(dicho);
+    // Con la IA lista, el pedido lo atiende ella (conversa, ejecuta y explica)
+    if (iaDisponible() && !pedidoPitch(texto, pitchAbierto.current)) {
+      void iaRef.current.iniciarIA(texto);
+      return;
+    }
     fijarEstadoVoz("pensando");
     setEscuchado(texto);
     // Si nada responde (no debería pasar), vuelve a escuchar
@@ -1114,6 +1219,14 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
 
   const iniciarManosLibres = () => {
     const m = ml.current;
+    // Con la IA conectada, el asistente conversa con ella (el pedido que venía con su nombre lo atiende la IA)
+    if (ia.current.activa) return;
+    if (iaDisponible() && !(m.activo && !m.despierto && m.pendienteDespertar?.via === "parcial")) {
+      const p = m.activo && !m.despierto ? m.pendienteDespertar : null;
+      m.pendienteDespertar = null;
+      void iaRef.current.iniciarIA(p?.resto || undefined);
+      return;
+    }
     // Ya escuchaba en reposo: se despierta sin reiniciar el micrófono
     if (m.activo) {
       if (!m.despierto) despertar();
@@ -1217,6 +1330,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
 
   /** Apaga el micrófono del todo (el asistente y la escucha en reposo). */
   const apagarTodo = () => {
+    if (ia.current.activa) iaRef.current.terminarIA(false);
     const m = ml.current;
     const estaba = m.activo || m.estado !== "apagado";
     m.activo = false;
@@ -1248,6 +1362,10 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
 
   /** Al apagar el asistente: vuelve al reposo si puede escuchar su nombre; si no, apaga el micrófono. */
   const detenerManosLibres = () => {
+    if (ia.current.activa) {
+      iaRef.current.terminarIA(true);
+      return;
+    }
     const m = ml.current;
     if (m.activo && pasivaPermitida()) {
       if (m.estado !== "dormido" || m.despierto) dormir();
@@ -1370,13 +1488,18 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     // Con los paneles ocultos, ofrece el que sirve (el resultado de una simulación lo ofrece cuando termine)
     if (!res.luego && !(res.esperar && VER_RESULTADOS.has(orden.tipo))) sugerirPanel(orden.tipo);
     // Órdenes que tardan (el sembrado automático, el diseño por área): la respuesta llega cuando el motor termina
-    if (res.luego)
+    if (res.luego) {
+      trabajos.current++;
       void res.luego
         .then((r) => {
           agregarMelki(r);
           sugerirPanel(orden.tipo);
         })
-        .catch(() => agregarMelki({ texto: "No pude terminar ese cálculo. Intente de nuevo." }));
+        .catch(() => agregarMelki({ texto: "No pude terminar ese cálculo. Intente de nuevo." }))
+        .finally(() => {
+          trabajos.current = Math.max(0, trabajos.current - 1);
+        });
+    }
   };
 
   /**
@@ -1430,12 +1553,25 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     if (ultimoTipo && !esperando.current) sugerirPanel(ultimoTipo);
   };
 
-  const preguntar = (q: string, deVoz = false) => {
+  const preguntar = (q: string, deVoz = false, deIA = false) => {
     const pregunta = q.trim();
     if (!pregunta) return;
-    if (sesion.current || control.current) cortarDictado();
-    setMensajes((m) => [...m, { id: siguiente.current++, de: "usuario", texto: pregunta, voz: deVoz || undefined }]);
-    if (!deVoz) setTexto("");
+    if (!deIA && (sesion.current || control.current)) cortarDictado();
+    setMensajes((m) => [...m, { id: siguiente.current++, de: "usuario", texto: pregunta, voz: deVoz || deIA || undefined }]);
+    if (!deVoz && !deIA) setTexto("");
+    // La presentación del modelo de negocio: «preséntame el modelo de negocio», «siguiente», «pausa»…
+    const pp = pedidoPitch(pregunta, pitchAbierto.current);
+    if (pp) {
+      const t = pedirPitch(pp);
+      // Sin hablar encima de la narración: queda escrito
+      setMensajes((m) => [...m, { id: siguiente.current++, de: "melki", texto: t }]);
+      if (captura.current) captura.current.push(t);
+      if (ml.current.activo && ml.current.despierto) {
+        window.clearTimeout(ml.current.pensando);
+        quedarAtento();
+      }
+      return;
+    }
     // La voz de Melki
     const sinAcentos = pregunta.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     // El asistente por escrito: «activa el asistente», «asistente Melki», «activa manos libres», «modo Jarvis», «escúchame»
@@ -1502,7 +1638,10 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     if (pasos.length > 1 && !(entera && ["disenar", "elegir", "pedir-diseno", "pedir-lugar", "aviso"].includes(entera.tipo))) {
       const primera = interpretarOrden(pasos[0], api, pendiente.current, contextoOrden());
       if (primera) {
-        void ejecutarPlan(pasos, primera);
+        trabajos.current++;
+        void ejecutarPlan(pasos, primera).finally(() => {
+          trabajos.current = Math.max(0, trabajos.current - 1);
+        });
         return;
       }
     }
@@ -1513,6 +1652,598 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     // Sin orden: el cerebro responde (por voz, si no entendió, pide que se lo repita)
     const c = api.centroMapa();
     agregarMelki(responder(pregunta, { ...contexto, trato: actual.current.manos.trato, porVoz: deVoz, vista: c ? api.ubicacion(c.lat, c.lon) : null }));
+  };
+
+  /* ───────────── Conversación con IA (Gemini Live) ───────────── */
+
+  /** Tras una falla de conexión, un rato con el cerebro local (no reintenta a cada momento). */
+  const falloIA = useRef(0);
+  /** ¿Se conversa con la IA? Con la opción encendida, la clave puesta y conexión. */
+  const iaDisponible = () => actual.current.iaPref.activa && !!leerClaveIA() && reloj() - falloIA.current > 60000 && (typeof navigator === "undefined" || navigator.onLine !== false);
+
+  const fijarEstadoIA = (e: EstadoManosLibres) => {
+    ia.current.estado = e;
+    setEstadoIA(e);
+  };
+
+  const espera = (ms: number) => new Promise<void>((ok) => window.setTimeout(ok, ms));
+
+  /** Un pedido de la IA al simulador: lo hace el intérprete de Melki y devuelve lo que respondió (esperando lo que tarda). */
+  const pedidoIA = async (pedido: string): Promise<string> => {
+    const lista: string[] = [];
+    captura.current = lista;
+    try {
+      vozRef.current.preguntar(pedido, false, true);
+      await espera(150);
+      const limite = reloj() + 180000;
+      let vueltas = 0;
+      while (reloj() < limite && (trabajos.current > 0 || esperando.current)) {
+        if (esperando.current && trabajos.current === 0) {
+          await actual.current.api.esperarResultado();
+          await espera(350);
+          // El resumen de la simulación ya llegó (o no hacía falta): no se espera más
+          if (++vueltas >= 3) break;
+        } else await espera(250);
+      }
+    } finally {
+      captura.current = null;
+    }
+    return lista.join("\n").slice(0, 6000) || "Listo.";
+  };
+
+  /** El estado del simulador para la IA. */
+  const estadoSimuladorIA = () => {
+    const a = actual.current;
+    return estadoParaIA({
+      antenas: a.contexto.antenas,
+      parametros: a.contexto.parametros,
+      resultado: a.contexto.resultado,
+      desactualizado: a.contexto.desactualizado,
+      estres: a.api.estres?.() ?? null,
+      optimizacion: a.api.optimizacion?.() ?? null,
+      ubicacion: a.api.ubicacion,
+      centro: a.api.centroMapa(),
+    });
+  };
+
+  const ejecutarHerramienta = async (f: LlamadaFuncion): Promise<Record<string, unknown>> => {
+    const a = actual.current;
+    try {
+      switch (f.name) {
+        case "ejecutar_orden": {
+          const p = String(f.args.pedido ?? "").trim();
+          if (!p) return { error: "Falta el pedido." };
+          return { resultado: await pedidoIA(p) };
+        }
+        case "estado_simulador":
+          return { estado: estadoSimuladorIA() };
+        case "consultar_melki": {
+          const q = String(f.args.pregunta ?? "").trim();
+          const c = a.api.centroMapa();
+          const r = responder(q, { ...a.contexto, trato: a.manos.trato, porVoz: false, vista: c ? a.api.ubicacion(c.lat, c.lon) : null });
+          return { respuesta: r.texto };
+        }
+        case "presentacion": {
+          const accion = String(f.args.accion ?? "empezar") as PedidoPitch["accion"];
+          const p: PedidoPitch = {
+            accion,
+            ...(f.args.capitulo ? { capitulo: String(f.args.capitulo) as NonNullable<PedidoPitch["capitulo"]> } : {}),
+            ...(typeof f.args.comision === "number" ? { comision: f.args.comision } : {}),
+          };
+          return { resultado: pedirPitch(p) };
+        }
+        case "terminar_conversacion":
+          ia.current.cerrarAlTerminar = true;
+          // Si no alcanza a despedirse en voz, cierra igual
+          window.setTimeout(() => {
+            const x = ia.current;
+            if (x.activa && x.cerrarAlTerminar && !x.rep?.sonando) iaRef.current.terminarIA(true);
+          }, 5000);
+          return { ok: true };
+      }
+      return { error: `No conozco la herramienta ${f.name}.` };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) };
+    }
+  };
+
+  /** Lo que la IA sabe de entrada (sin tener que preguntar): la red de ahora, resumida. */
+  const contextoInicialIA = () => {
+    try {
+      return `Estado del simulador al empezar la conversación (JSON resumido; para datos al día usa estado_simulador): ${JSON.stringify(estadoSimuladorIA()).slice(0, 3500)}`;
+    } catch {
+      return "";
+    }
+  };
+
+  /** Termina el turno de la IA cuando ya sonó todo: vuelve a escuchar (o cierra si se despidió). */
+  const terminarTurnoIA = () => {
+    const x = ia.current;
+    if (!x.activa) return;
+    setHablando(false);
+    fijarEstadoIA("atento");
+    if (x.alNarrar) {
+      const fin = x.alNarrar;
+      x.alNarrar = null;
+      x.narracion = null;
+      fin();
+    }
+    if (x.cerrarAlTerminar) terminarIA(true);
+    else if (x.reconectarAlTerminar) void reconectarIA();
+  };
+
+  const alAudioIA = (pcm: Int16Array) => {
+    const x = ia.current;
+    if (!x.activa || !x.rep || x.silenciado) return;
+    x.turnoCompleto = false;
+    x.rep.encolar(pcm);
+    x.ultimaActividad = reloj();
+    if (x.estado !== "hablando") {
+      fijarEstadoIA("hablando");
+      setHablando(true);
+    }
+    x.rep.alVaciarse(() => {
+      if (ia.current.turnoCompleto) iaRef.current.terminarTurnoIA();
+    });
+  };
+
+  const alTurnoIA = () => {
+    const x = ia.current;
+    // Lo conversado queda escrito en la conversación
+    const u = x.textoUsuario.trim();
+    const mk = x.textoModelo.trim();
+    if (u || mk)
+      setMensajes((l) => [
+        ...l,
+        ...(u ? [{ id: siguiente.current++, de: "usuario" as const, texto: u, voz: true }] : []),
+        ...(mk ? [{ id: siguiente.current++, de: "melki" as const, texto: mk }] : []),
+      ]);
+    x.textoUsuario = "";
+    x.textoModelo = "";
+    x.silenciado = false;
+    x.turnoCompleto = true;
+    if (!x.rep?.sonando) terminarTurnoIA();
+    else {
+      // Si el audio no avisa que terminó (el navegador lo tiene en pausa), se da por terminado a su tiempo
+      const rep = x.rep;
+      window.setTimeout(() => {
+        const y = ia.current;
+        if (y.activa && y.rep === rep && y.turnoCompleto && rep.sonando) {
+          rep.callar();
+          iaRef.current.terminarTurnoIA();
+        }
+      }, rep.restanteMs() + 1500);
+    }
+  };
+
+  const alInterrumpirIA = () => {
+    const x = ia.current;
+    x.rep?.callar();
+    setHablando(false);
+    // Le hablaron encima mientras narraba el pitch: se pausa (para responder la pregunta)
+    if (x.alNarrar) {
+      x.alNarrar = null;
+      controlPitch.current?.pedir({ accion: "pausar" });
+    }
+    fijarEstadoIA("atento");
+  };
+
+  const alHerramientasIA = async (lista: LlamadaFuncion[]) => {
+    const x = ia.current;
+    const s = x.sesion;
+    if (!s) return;
+    fijarEstadoIA("pensando");
+    setSubIA(lista.some((f) => f.name === "ejecutar_orden") ? "Trabajando en el simulador…" : "Revisando el simulador…");
+    const respuestas: { id: string; name: string; response: Record<string, unknown> }[] = [];
+    for (const f of lista) respuestas.push({ id: f.id, name: f.name, response: await ejecutarHerramienta(f) });
+    const ahora = ia.current.sesion;
+    if (ahora !== s) {
+      // Se reanudó en otra conexión mientras trabajaba: la nueva no sabe de la llamada, se le cuenta el resultado
+      if (ia.current.activa && ahora)
+        ahora.enviarTexto(`(Se reanudó la conexión. Ya hiciste en el simulador lo que pidió el usuario; cuéntale el resultado en pocas palabras:) ${JSON.stringify(respuestas.map((r) => ({ herramienta: r.name, ...r.response }))).slice(0, 2500)}`);
+      return;
+    }
+    s.responder(respuestas);
+    x.ultimaActividad = reloj();
+    if (ia.current.estado === "pensando") fijarEstadoIA("atento");
+  };
+
+  /** Si nadie habla en un minuto (y no está presentando), cierra para no gastar el cupo y vuelve a esperar su nombre. */
+  const vigilarIA = () => {
+    const x = ia.current;
+    if (!x.activa || x.rep?.sonando || x.estado === "pensando" || pitchAbierto.current) return;
+    if (reloj() - x.ultimaActividad > 60000) terminarIA(true);
+  };
+
+  /** Cierra la conversación con la IA; con `volver`, vuelve al reposo (o se apaga), y con `silencioso` no hace nada más. */
+  const terminarIA = (volver: boolean, silencioso = false) => {
+    const x = ia.current;
+    if (!x.activa) return;
+    x.activa = false;
+    x.reconectando = false;
+    x.reconectarAlTerminar = false;
+    x.narracion = null;
+    window.clearInterval(x.vigilante);
+    const s = x.sesion;
+    x.sesion = null;
+    s?.cerrar();
+    x.mic?.cerrar();
+    x.mic = null;
+    x.rep?.cerrar();
+    x.rep = null;
+    if (x.alNarrar) {
+      // El pitch sigue con la voz del equipo
+      x.narracion = null;
+      const fin = x.alNarrar;
+      x.alNarrar = null;
+      fin();
+    }
+    setModoIA(false);
+    fijarEstadoIA("apagado");
+    setOidoIA("");
+    setSubIA("");
+    setHablando(false);
+    if (silencioso) return;
+    if (actual.current.manos.sonido) tono(false);
+    devolverPaneles();
+    onManosLibres(false);
+    if (volver && pasivaPermitida()) window.setTimeout(() => vozRef.current.iniciarPasiva(), 500);
+  };
+
+  /** Empieza a conversar con la IA (con el pedido que venía con su nombre, si hay); si no conecta, sigue el cerebro local. */
+  const iniciarIA = async (primerTexto?: string) => {
+    const x = ia.current;
+    if (x.activa) {
+      if (primerTexto) x.sesion?.enviarTexto(primerTexto);
+      return;
+    }
+    const clave = leerClaveIA();
+    if (!clave) return;
+    x.activa = true;
+    x.textoModelo = "";
+    x.textoUsuario = "";
+    x.turnoCompleto = false;
+    x.silenciado = false;
+    x.cerrarAlTerminar = false;
+    x.ultimaActividad = reloj();
+    // El micrófono lo usa la IA: se suelta la escucha local
+    const m = ml.current;
+    if (m.control) m.control.cancelado = true;
+    m.sesion?.cancelar();
+    m.sesion = null;
+    m.control = null;
+    m.activo = false;
+    m.despierto = false;
+    window.clearTimeout(m.atento);
+    window.clearTimeout(m.espera);
+    window.clearTimeout(m.pensando);
+    m.cola = [];
+    m.comando = "";
+    callar();
+    setHablando(false);
+    setModoIA(true);
+    setAvisoIA(null);
+    setOidoIA(primerTexto ?? "");
+    setSubIA("Conectando con la IA…");
+    fijarEstadoIA("preparando");
+    prepararDespierto();
+    if (actual.current.manos.sonido) tono(true);
+    const rep = new ReproductorIA();
+    rep.preparar();
+    x.rep = rep;
+    x.clave = clave;
+    x.reconexiones = [];
+    x.reconectarAlTerminar = false;
+    x.narracion = null;
+    const s = crearSesionIA(clave, null);
+    x.sesion = s;
+    try {
+      await s.conectar();
+      if (!ia.current.activa || ia.current.sesion !== s) {
+        s.cerrar();
+        return;
+      }
+      const mic = await abrirMicrofonoIA(
+        // A la conexión de turno (si se reanudó en otra, el micrófono sigue igual)
+        (pcm) => ia.current.sesion?.enviarAudio(pcm),
+        (n) => {
+          const y = ia.current;
+          y.nivel = n;
+          if (n > 0.12) y.ultimaActividad = reloj();
+        },
+      );
+      if (!ia.current.activa || ia.current.sesion !== s) {
+        mic.cerrar();
+        return;
+      }
+      x.mic = mic;
+      fijarEstadoIA("atento");
+      setSubIA("");
+      s.enviarTexto(primerTexto || "(El usuario te acaba de llamar por tu nombre: salúdalo en una sola frase corta, como mayordomo, y espera su pedido.)");
+      window.clearInterval(x.vigilante);
+      x.vigilante = window.setInterval(() => iaRef.current.vigilarIA(), 5000);
+    } catch (e) {
+      const motivo = e instanceof Error ? e.message : String(e);
+      falloIA.current = reloj();
+      iaRef.current.terminarIA(false, true);
+      // Sigue con el cerebro local, sin que la persona tenga que repetir
+      avisarFalloIA(`No pude conectar con la IA (${motivo.replace(/\.$/, "")}). Sigo con mi cerebro local.`);
+      avisoChat(`No pude conectar con la IA: ${motivo} Mientras tanto le atiendo con mi cerebro local.`);
+      manosRef.current.iniciarManosLibres();
+      if (primerTexto) window.setTimeout(() => vozRef.current.preguntar(primerTexto, true), 400);
+    }
+  };
+
+  /** Un aviso de la IA en la conversación (y el puntico de «sin leer» si está cerrada). */
+  const avisoChat = (texto: string) => {
+    setMensajes((l) => [...l, { id: siguiente.current++, de: "melki", texto }]);
+    if (!actual.current.abierto) setNoLeido(true);
+  };
+
+  const avisarFalloIA = (texto: string) => {
+    window.clearTimeout(tAvisoFallo.current);
+    setAvisoFallo(texto);
+    tAvisoFallo.current = window.setTimeout(() => setAvisoFallo(null), 10000);
+  };
+
+  /** Una conexión con el modelo: nueva, o la misma conversación reanudada con la manija de la anterior. */
+  const crearSesionIA = (clave: string, reanudar: string | null): SesionLive => {
+    const pref = actual.current.iaPref;
+    let yo: SesionLive | null = null;
+    // Lo que llegue por una conexión que ya se reemplazó no cuenta
+    const mia = () => yo !== null && ia.current.sesion === yo;
+    const s = new SesionLive(
+      { clave, modelo: pref.modelo, voz: pref.voz, instrucciones: instruccionesMelki(actual.current.manos.trato, contextoInicialIA()), herramientas: HERRAMIENTAS_IA, url: urlIAPruebas(), reanudar },
+      {
+        onAudio: (pcm) => mia() && iaRef.current.alAudioIA(pcm),
+        onTextoModelo: (t) => {
+          if (!mia()) return;
+          const y = ia.current;
+          y.textoModelo += t;
+          setSubIA(y.textoModelo.slice(-280));
+        },
+        onTextoUsuario: (t) => {
+          if (!mia()) return;
+          const y = ia.current;
+          y.textoUsuario += t;
+          y.ultimaActividad = reloj();
+          setOidoIA(y.textoUsuario.slice(-220));
+        },
+        onTurnoCompleto: () => mia() && iaRef.current.alTurnoIA(),
+        onInterrumpido: () => mia() && iaRef.current.alInterrumpirIA(),
+        onHerramientas: (l) => mia() && void iaRef.current.alHerramientasIA(l),
+        onError: (msg) => mia() && setAvisoIA(msg),
+        // Google va a cerrar esta conexión (duran unos 10 minutos): se sigue en otra, al terminar lo que está diciendo
+        onAdios: () => {
+          if (!mia()) return;
+          const y = ia.current;
+          if (y.estado === "atento" && !y.rep?.sonando) void iaRef.current.reconectarIA();
+          else y.reconectarAlTerminar = true;
+        },
+        onCerrada: (motivo, _codigo, recuperable) => {
+          if (!mia() || !ia.current.activa) return;
+          if (recuperable && yo?.manija) {
+            void iaRef.current.reconectarIA(motivo);
+            return;
+          }
+          avisoChat(`La conversación con la IA terminó: ${motivo}`);
+          iaRef.current.terminarIA(true);
+        },
+      },
+    );
+    yo = s;
+    return s;
+  };
+
+  /**
+   * Sigue la misma conversación en una conexión nueva (Google corta cada una a los 10 minutos, o se cayó la red),
+   * sin que la persona lo note: el micrófono y la voz siguen; lo que el modelo estaba narrando se le pide de nuevo.
+   */
+  const reconectarIA = async (motivo?: string) => {
+    const x = ia.current;
+    const vieja = x.sesion;
+    if (!x.activa || !vieja || x.reconectando) return;
+    x.reconectarAlTerminar = false;
+    if (x.cerrarAlTerminar) {
+      terminarIA(true);
+      return;
+    }
+    const manija = vieja.manija;
+    x.reconexiones = x.reconexiones.filter((t) => reloj() - t < 120000);
+    if (!manija || x.reconexiones.length >= 3) {
+      avisoChat(`La conversación con la IA terminó${motivo ? `: ${motivo}` : "."} Diga «Hola Melki» para empezar otra.`);
+      terminarIA(true);
+      return;
+    }
+    x.reconexiones.push(reloj());
+    x.reconectando = true;
+    const nueva = crearSesionIA(x.clave, manija);
+    x.sesion = nueva;
+    vieja.cerrar();
+    // Lo que alcanzó a decir antes del corte queda escrito; el turno cortado no va a terminar
+    const u = x.textoUsuario.trim();
+    const mk = x.textoModelo.trim();
+    if (u || mk)
+      setMensajes((l) => [
+        ...l,
+        ...(u ? [{ id: siguiente.current++, de: "usuario" as const, texto: u, voz: true }] : []),
+        ...(mk ? [{ id: siguiente.current++, de: "melki" as const, texto: mk }] : []),
+      ]);
+    x.textoUsuario = "";
+    x.textoModelo = "";
+    x.silenciado = false;
+    const narrando = !!(x.alNarrar && x.narracion);
+    // Si no hay capítulo pendiente, al acabar de sonar lo que quedó en cola vuelve a escuchar
+    x.turnoCompleto = !narrando;
+    if (!x.rep?.sonando) fijarEstadoIA(narrando ? "pensando" : "atento");
+    setSubIA("Reanudando la conversación…");
+    try {
+      await nueva.conectar();
+      if (ia.current.sesion !== nueva || !ia.current.activa) {
+        nueva.cerrar();
+        return;
+      }
+      x.ultimaActividad = reloj();
+      setSubIA("");
+      // El capítulo que narraba se cortó: se le pide otra vez (si ya se pidió por esta conexión, no)
+      const n = x.narracion;
+      if (x.alNarrar && n && n.sesion !== nueva) {
+        n.sesion = nueva;
+        nueva.enviarTexto(n.texto);
+      }
+    } catch (e) {
+      if (ia.current.sesion !== nueva) return;
+      const m = e instanceof Error ? e.message : String(e);
+      avisoChat(`La conversación con la IA terminó: ${m} Diga «Hola Melki» para empezar otra.`);
+      terminarIA(true);
+    } finally {
+      if (ia.current.sesion === nueva || !ia.current.activa) ia.current.reconectando = false;
+    }
+  };
+
+  /** Prueba la clave y el modelo: abre la conexión y la cierra. */
+  const probarIA = async () => {
+    const clave = leerClaveIA();
+    if (!clave) {
+      setPruebaIA({ estado: "error", texto: "Primero guarde la clave." });
+      return;
+    }
+    setPruebaIA({ estado: "probando" });
+    const s = new SesionLive({ clave, modelo: iaPref.modelo, voz: iaPref.voz, instrucciones: "Prueba de conexión.", url: urlIAPruebas() });
+    try {
+      await s.conectar();
+      setPruebaIA({ estado: "ok", texto: `Conectado con ${MODELOS_IA.find((x) => x.id === iaPref.modelo)?.nombre ?? iaPref.modelo}.` });
+      falloIA.current = 0;
+    } catch (e) {
+      setPruebaIA({ estado: "error", texto: e instanceof Error ? e.message : String(e) });
+    } finally {
+      s.cerrar();
+    }
+  };
+
+  const fijarIA = (c: Partial<PreferenciasIA>) => {
+    setIaPref((x) => {
+      const n = { ...x, ...c };
+      guardarPreferencias({ ia: n });
+      return n;
+    });
+    falloIA.current = 0;
+  };
+
+  /* ───────────── Presentación del modelo de negocio (pitch) ───────────── */
+
+  const [versionPitch, setVersionPitch] = useState(0);
+  // Si la red cambia mientras presenta (una orden, una simulación), el pitch se rehace con lo nuevo
+  useEffect(
+    () =>
+      suscribir(() => {
+        if (pitchAbierto.current) setVersionPitch((v) => v + 1);
+      }),
+    [suscribir],
+  );
+
+  /** Abre la presentación o le pasa el pedido (siguiente, pausa…); devuelve qué hizo. */
+  const pedirPitch = (p: PedidoPitch): string => {
+    if (pitchAbierto.current && controlPitch.current) return controlPitch.current.pedir(p);
+    if (p.accion !== "empezar" && p.accion !== "ir") return "La presentación no está abierta. Pídame «preséntame el modelo de negocio».";
+    const a = actual.current.api;
+    if (!a.datosPitch || !a.mapaPitch?.()) return "Ahora no puedo presentar: el mapa no está listo.";
+    if (!a.antenas().some((x) => x.activa && (x.tipo ?? "antena") === "antena")) return "Para presentar necesito una red en el mapa: ponga el gateway y los repetidores, o pídame «ármame una red que cubra todo el municipio».";
+    pitchPendiente.current = p;
+    // Deja el mapa libre: sin paneles ni la conversación encima
+    if (esEscritorio()) {
+      panelesPitch.current = { ...actual.current.paneles };
+      if (actual.current.paneles.izquierdo) a.paneles({ izquierdo: false });
+      if (actual.current.paneles.derecho) a.paneles({ derecho: false });
+    } else a.paneles({ izquierdo: false, derecho: false });
+    setAbierto(false);
+    // Sin la tarjeta del nodo seleccionado encima del mapa
+    if (a.seleccion()) a.seleccionar(null);
+    // La presentación se oye (si el equipo tiene voz)
+    if (!actual.current.vozActiva && vozDisponible() && !ia.current.activa) onVoz(true);
+    pitchAbierto.current = true;
+    setPitch(true);
+    // Con la red al día (si faltaba simular, el pitch se rehace cuando termine)
+    void a.esperarResultado().then(() => setVersionPitch((v) => v + 1));
+    return "Empiezo la presentación del modelo de negocio. Use las flechas o dígame «siguiente», «pausa» o «termina la presentación».";
+  };
+
+  const cerrarPitch = () => {
+    pitchAbierto.current = false;
+    setPitch(false);
+    controlPitch.current = null;
+    pitchPendiente.current = null;
+    callar();
+    const pa = panelesPitch.current;
+    panelesPitch.current = null;
+    if (pa && esEscritorio()) {
+      if (pa.izquierdo) actual.current.api.paneles({ izquierdo: true });
+      if (pa.derecho) actual.current.api.paneles({ derecho: true });
+    }
+  };
+
+  const mapaPitch = useMemo(() => (pitch ? (api.mapaPitch?.() ?? null) : null), [pitch, api]);
+
+  const armarCapitulos = useCallback(
+    (comision: number | null) => {
+      const d = actual.current.api.datosPitch?.();
+      return d ? armarPitch({ ...d, comisionPago: comision ?? pitchPendiente.current?.comision ?? null }) : [];
+    },
+    // Se rehace cuando cambia la red (versionPitch)
+    [versionPitch], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  /** Narra un capítulo: con la IA (su voz) si está conversando; si no, con la voz del equipo (o el tiempo de leerlo). */
+  const narrarPitch: Narrador = (texto, fin) => {
+    const x = ia.current;
+    let hecho = false;
+    const terminar = () => {
+      if (hecho) return;
+      hecho = true;
+      fin();
+    };
+    const tiempo = Math.max(2500, texto.length * 68);
+    if (x.activa && x.sesion) {
+      x.alNarrar = terminar;
+      const pedido = `(Capítulo de la presentación para el público. Nárralo con tus palabras, con tono de pitch profesional, en unos 30 a 50 segundos y sin agregar cifras que no estén aquí:) ${texto}`;
+      x.narracion = { texto: pedido, sesion: x.sesion };
+      x.sesion.enviarTexto(pedido);
+      return () => {
+        hecho = true;
+        if (ia.current.alNarrar === terminar) {
+          ia.current.alNarrar = null;
+          ia.current.narracion = null;
+        }
+      };
+    }
+    if (!vozDisponible()) {
+      const t = window.setTimeout(terminar, tiempo);
+      return () => {
+        hecho = true;
+        window.clearTimeout(t);
+      };
+    }
+    const m = ml.current;
+    m.hablandoDesde = reloj();
+    let fallo = false;
+    let t = 0;
+    const parar = hablar(
+      texto,
+      () => {
+        registrarVoz(texto);
+        if (!fallo) terminar();
+      },
+      () => {
+        // Sin voz (el navegador no deja hablar todavía): el tiempo de leerlo
+        fallo = true;
+        t = window.setTimeout(terminar, tiempo);
+      },
+    );
+    return () => {
+      hecho = true;
+      window.clearTimeout(t);
+      parar();
+    };
   };
 
   /** Muestra el menú de tours (sin repetirlo si es lo último que dijo). */
@@ -1533,6 +2264,17 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     if (a.accion === "resultados" || a.accion === "herramientas") {
       setUsados((u) => new Set(u).add(clave));
       mostrarPanel(a.accion);
+      return;
+    }
+    if (a.accion === "pitch") {
+      setUsados((u) => new Set(u).add(clave));
+      const t = pedirPitch({ accion: "empezar" });
+      setMensajes((x) => [...x, { id: siguiente.current++, de: "melki", texto: t }]);
+      return;
+    }
+    if (a.accion === "ajustes-ia") {
+      setAbierto(true);
+      setAjustes(true);
       return;
     }
     if (a.accion === "deshacer") deshacer(a.escenario, clave);
@@ -1560,14 +2302,29 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   });
   // Lo que llama el reconocimiento de voz siempre usa la versión de ahora (con el escenario de ahora)
   const vozRef = useRef({ oirFrase, oirParcial, oirNivel, sigueHablando, ejecutarVoz, preguntar, pulsarAccion, arrancarEscucha, reanudar, listoParaEscuchar, bloqueoVoz, desbloquearVoz, iniciarPasiva, apagarTodo, puntosComprension });
-  useEffect(() => {
-    vozRef.current = { oirFrase, oirParcial, oirNivel, sigueHablando, ejecutarVoz, preguntar, pulsarAccion, arrancarEscucha, reanudar, listoParaEscuchar, bloqueoVoz, desbloquearVoz, iniciarPasiva, apagarTodo, puntosComprension };
-  });
   // Encender y apagar el asistente
   const manosRef = useRef({ iniciarManosLibres, detenerManosLibres, apagarTodo });
+  // La IA y la presentación siempre usan la versión de ahora de estas funciones
+  const iaRef = useRef({ iniciarIA, terminarIA, terminarTurnoIA, alAudioIA, alTurnoIA, alInterrumpirIA, alHerramientasIA, vigilarIA, reconectarIA });
   useEffect(() => {
+    vozRef.current = { oirFrase, oirParcial, oirNivel, sigueHablando, ejecutarVoz, preguntar, pulsarAccion, arrancarEscucha, reanudar, listoParaEscuchar, bloqueoVoz, desbloquearVoz, iniciarPasiva, apagarTodo, puntosComprension };
     manosRef.current = { iniciarManosLibres, detenerManosLibres, apagarTodo };
+    iaRef.current = { iniciarIA, terminarIA, terminarTurnoIA, alAudioIA, alTurnoIA, alInterrumpirIA, alHerramientasIA, vigilarIA, reconectarIA };
   });
+  // La IA y la presentación siempre usan la versión de ahora de estas funciones
+  // Al salir de la página: cierra la conversación con la IA
+  useEffect(
+    () => () => {
+      const x = ia.current;
+      x.activa = false;
+      window.clearInterval(x.vigilante);
+      x.sesion?.cerrar();
+      x.mic?.cerrar();
+      x.rep?.cerrar();
+    },
+    [],
+  );
+
   useEffect(() => {
     if (manosLibres) manosRef.current.iniciarManosLibres();
     else manosRef.current.detenerManosLibres();
@@ -1671,20 +2428,45 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   return (
     <>
     <HudVoz
-      estado={estadoVoz}
-      escuchado={escuchado}
-      subtitulo={subtitulo}
-      aviso={avisoVoz}
-      motor={motorVoz}
+      estado={modoIA ? estadoIA : estadoVoz}
+      escuchado={modoIA ? oidoIA : escuchado}
+      subtitulo={modoIA ? subIA : subtitulo}
+      aviso={modoIA ? (avisoIA ?? avisoVoz) : (avisoVoz ?? avisoFallo)}
+      motor={modoIA ? "con IA (Gemini Live)" : motorVoz}
+      ia={modoIA}
       paneles={escritorio ? paneles : null}
       resaltado={resaltado}
       bloqueada={vozBloqueada}
-      onCallar={callarYa}
+      onCallar={() => {
+        if (ia.current.activa) {
+          // Calla la voz de la IA (lo que siga de este turno no suena)
+          ia.current.rep?.callar();
+          ia.current.silenciado = true;
+          setHablando(false);
+          fijarEstadoIA("atento");
+          if (pitchAbierto.current) controlPitch.current?.pedir({ accion: "pausar" });
+        } else callarYa();
+      }}
       onSugerencia={sugerenciaHud}
       onOirme={desbloquearVoz}
       onApagar={() => onManosLibres(false)}
       nivel={nivelVoz}
     />
+    {pitch && (
+      <PresentacionPitch
+        armar={armarCapitulos}
+        mapa={mapaPitch}
+        narrar={narrarPitch}
+        voz={vozActiva || modoIA}
+        onVoz={(v) => {
+          onVoz(v);
+          if (!v) callar();
+        }}
+        onSalir={cerrarPitch}
+        control={controlPitch}
+        narradorIA={modoIA}
+      />
+    )}
     <div className="pointer-events-none absolute right-3 bottom-8 z-30 flex flex-col items-end gap-3">
       {abierto && (
         <section
@@ -1757,6 +2539,105 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
           </header>
           {ajustes && (
             <div className="desplazable max-h-[58%] shrink-0 overflow-y-auto border-b border-linea bg-white px-3.5 py-3 text-[13px]" role="group" aria-label="Ajustes de voz">
+              <section className="mb-3 rounded-xl bg-melki-clara/45 p-2.5 ring-1 ring-melki/30" aria-label="Conversar con inteligencia artificial" data-tour="ajustes-ia">
+                <p className="mb-1 flex items-center gap-1.5 font-cond text-[14px] font-semibold">
+                  <Sparkles size={15} className="text-melki-oscura" aria-hidden="true" /> Conversar con IA (Gemini Live)
+                </p>
+                <p className="mb-2 text-[12px] leading-snug text-carbon-2">
+                  Con una clave gratuita de Google AI Studio hablo como un modelo de inteligencia artificial: oigo su voz directamente (no la paso a texto), le contesto con voz natural, le explico y hago en el simulador lo que me pida. Sin clave o sin internet sigo con mi cerebro local.
+                </p>
+                <Interruptor activo={iaPref.activa} onCambiar={(v) => fijarIA({ activa: v })} titulo="Usar la IA en el Asistente Melki" detalle="Al activarme («Hola Melki» o el botón) converso con la IA." />
+                <label className="mt-2 mb-1 flex items-center gap-1 text-[12.5px] font-medium text-carbon" htmlFor="clave-ia">
+                  <KeyRound size={13} aria-hidden="true" /> Clave de Google AI Studio
+                </label>
+                <form
+                  className="flex gap-1.5"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const c = claveEscrita.trim();
+                    guardarClaveIA(c);
+                    setClaveIA(c);
+                    setClaveEscrita("");
+                    setPruebaIA({ estado: "nada" });
+                    falloIA.current = 0;
+                    if (c && !iaPref.activa) fijarIA({ activa: true });
+                  }}
+                >
+                  <input
+                    id="clave-ia"
+                    type="password"
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={claveEscrita}
+                    onChange={(e) => setClaveEscrita(e.target.value)}
+                    placeholder={claveIA ? `Guardada: ••••${claveIA.slice(-4)}` : "Pegue aquí su clave"}
+                    className="campo min-w-0 flex-1 py-1.5 text-[12.5px]"
+                  />
+                  <button type="submit" disabled={!claveEscrita.trim()} className="shrink-0 rounded-lg bg-carbon px-2.5 text-[12.5px] font-medium text-white hover:bg-carbon-2 disabled:opacity-40">
+                    Guardar
+                  </button>
+                </form>
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]">
+                  <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="font-medium text-melki-oscura underline underline-offset-2">
+                    Conseguir una clave gratis
+                  </a>
+                  {claveIA && (
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-sin hover:bg-sin/10"
+                      onClick={() => {
+                        guardarClaveIA("");
+                        setClaveIA("");
+                        setPruebaIA({ estado: "nada" });
+                        if (ia.current.activa) iaRef.current.terminarIA(true);
+                      }}
+                    >
+                      <Trash2 size={12} /> Borrar la clave
+                    </button>
+                  )}
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-1.5">
+                  <label className="text-[12px] text-carbon-2">
+                    Modelo
+                    <select className="campo mt-0.5 w-full py-1 text-[12.5px]" value={iaPref.modelo} onChange={(e) => fijarIA({ modelo: e.target.value })} aria-label="Modelo de la IA">
+                      {MODELOS_IA.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-[12px] text-carbon-2">
+                    Voz de la IA
+                    <select className="campo mt-0.5 w-full py-1 text-[12.5px]" value={iaPref.voz ?? ""} onChange={(e) => fijarIA({ voz: e.target.value || null })} aria-label="Voz de la IA">
+                      <option value="">La del modelo</option>
+                      {VOCES_IA.map((v) => (
+                        <option key={v} value={v}>
+                          {v}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void probarIA()}
+                    disabled={!claveIA || pruebaIA.estado === "probando"}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-white px-2.5 py-1 text-[12.5px] font-medium text-carbon ring-1 ring-linea hover:bg-papel-2 disabled:opacity-40"
+                  >
+                    {pruebaIA.estado === "probando" ? <LoaderCircle size={13} className="animate-spin" aria-hidden="true" /> : <Play size={13} aria-hidden="true" />} Probar conexión
+                  </button>
+                  {pruebaIA.texto && (
+                    <span className={`text-[12px] leading-snug ${pruebaIA.estado === "ok" ? "text-buena" : "text-sin"}`} role="status">
+                      {pruebaIA.texto}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-2 text-[11.5px] leading-snug text-tenue">
+                  La clave queda solo en este navegador (no se sube a ningún lado). Mientras conversa, su voz y un resumen del escenario (posiciones de las antenas y resultados) van a Google; en la capa gratuita Google puede usarlos para mejorar sus productos, con límites de uso por día.
+                </p>
+              </section>
               <p className="mb-1.5 font-cond text-[14px] font-semibold">Dictado por voz</p>
               <div className="space-y-1.5" role="radiogroup" aria-label="Modo de dictado">
                 <OpcionDictado
