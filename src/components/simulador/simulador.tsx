@@ -1465,8 +1465,15 @@ export function Simulador() {
             const c = m.getContainer();
             // Si los márgenes no dejan espacio (pantalla chica), sin márgenes
             const cabe = c.clientWidth - padding.left - padding.right > 160 && c.clientHeight - padding.top - padding.bottom > 140;
+            // El margen del mapa se queda en cero: «padding» en un vuelo se queda guardado en el mapa y MapLibre lo
+            // suma después en cada encuadre (los capítulos y el recorrido saldrían cada vez más lejos). El punto se
+            // corre con «offset», que vale solo para ese vuelo.
+            const p0 = m.getPadding();
+            const sinMargen = { top: 0, bottom: 0, left: 0, right: 0 };
+            if (p0.top || p0.bottom || p0.left || p0.right) m.setPadding(sinMargen);
             if (foco.tipo === "punto") {
-              m.flyTo({ center: [foco.lon, foco.lat], zoom: foco.zoom, duration: ms, essential: true, padding: cabe ? padding : undefined, pitch: 0 });
+              const offset: [number, number] = cabe ? [(padding.left - padding.right) / 2, (padding.top - padding.bottom) / 2] : [0, 0];
+              m.flyTo({ center: [foco.lon, foco.lat], zoom: foco.zoom, duration: ms, essential: true, offset, pitch: 0 });
             } else {
               const caja = foco.tipo === "pais" ? CAJA_COLOMBIA : foco.caja;
               if (!caja) return 0;
@@ -1978,6 +1985,7 @@ export function Simulador() {
         onExportarCsv={() => exportarCsv(escenario, resultado)}
         onExportarKmz={kmz}
         onRecorrido={() => avisarMelki("tours")}
+        onRecorridoRed={() => avisarMelki("pedir", "hazme un recorrido por la red")}
         onPitch={() => avisarMelki("pedir", "preséntame el modelo de negocio")}
         onAcerca={() => setAcerca(true)}
         resultadosAbiertos={resultadosAbiertos}

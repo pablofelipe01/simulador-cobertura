@@ -6,8 +6,9 @@
 "use client";
 
 // Barra superior: nombre del escenario, buscador, archivo (nuevo, ejemplo, importar, exportar), Asistente Melki, tours
-// guiados (abre el menú de Melki) y los botones para mostrar u ocultar los paneles de los lados.
-import { AudioLines, ChevronDown, CircleQuestionMark, FileDown, FileUp, FolderOpen, PanelLeftOpen, PanelRightClose, PanelRightOpen, Plus, Presentation, RotateCcw, Scale, Search } from "lucide-react";
+// guiados (abre el menú de Melki), el recorrido de la red, el pitch y los botones para mostrar u ocultar los paneles
+// de los lados.
+import { AudioLines, ChevronDown, CircleQuestionMark, FileDown, FileUp, FolderOpen, PanelLeftOpen, PanelRightClose, PanelRightOpen, Plus, Presentation, RotateCcw, Route, Scale, Search } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { DERECHOS } from "@/lib/autoria";
@@ -24,6 +25,8 @@ type Props = {
   onRecorrido: () => void;
   /** La presentación del modelo de negocio (el pitch con el robot de Melki). */
   onPitch?: () => void;
+  /** El recorrido de la red: el robot de Melki explica cada punto en una nube. */
+  onRecorridoRed?: () => void;
   /** «Acerca del simulador»: autoría, titularidad y licencia. */
   onAcerca: () => void;
   resultadosAbiertos: boolean;
@@ -190,6 +193,18 @@ export function BarraSuperior(p: Props) {
         >
           <CircleQuestionMark size={17} /> <span className="hidden md:inline">Tours</span>
         </button>
+        {p.onRecorridoRed && (
+          <button
+            type="button"
+            onClick={p.onRecorridoRed}
+            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[14px] font-medium hover:bg-papel-2"
+            data-tour="boton-recorrido-red"
+            title="Recorrido: Melki recorre la red punto por punto y explica en una nube qué se instaló, por qué ahí y por qué la red quedó así"
+            aria-label="Recorrido de la red con Melki"
+          >
+            <Route size={17} /> <span className="hidden md:inline">Recorrido</span>
+          </button>
+        )}
         {p.onPitch && (
           <button
             type="button"
