@@ -51,6 +51,11 @@ export type Dictado = {
   detener: () => void;
   /** Corta todo sin esperar. */
   cancelar: () => void;
+  /**
+   * Deja de oír un rato sin soltar la escucha (con parlantes, mientras Melki habla: así no se oye a sí mismo). Lo que
+   * se estaba oyendo se descarta; al reanudar vuelve a escuchar enseguida.
+   */
+  pausar?: (pausado: boolean) => void;
   /** Motor usado en esta sesión (para mostrarlo). */
   motor: "navegador" | "dispositivo" | "whisper";
 };
@@ -297,8 +302,13 @@ const ERRORES: Record<string, string> = {
   "language-not-supported": "El reconocimiento no admite español en este equipo.",
 };
 
-/** Errores tras los que no tiene sentido volver a escuchar (falta permiso o micrófono). */
-const FATALES = new Set(["not-allowed", "service-not-allowed", "audio-capture", "language-not-supported", "bad-grammar"]);
+/** Errores tras los que no tiene sentido volver a escuchar (falta permiso o el idioma). */
+const FATALES = new Set(["not-allowed", "service-not-allowed", "language-not-supported", "bad-grammar"]);
+/** El micrófono ocupado o desconectado un momento (otra app, el celular cambiando de audio): se reintenta unas veces. */
+const CAPTURAS_MAX = 5;
+/** Aviso cuando la escucha se cae seguido (sigue intentando sola, más despacio). */
+const AVISO_RED = "Sin conexión con el servicio de voz: sigo intentando cada pocos segundos. Sin internet, use el dictado privado (en Ajustes de voz).";
+const AVISO_MIC = "El micrófono deja de escuchar a cada momento: sigo intentando. Revise que esté conectado y que otra aplicación no lo esté usando.";
 
 /**
  * Escucha con el reconocimiento del navegador. Lo que el navegador hace distinto se arregla aquí, una sola vez:
@@ -322,15 +332,41 @@ function conReconocedor(Clase: ClaseReconocedor, idioma: string, local: boolean,
   let terminado = false;
   let empezo = false;
   let fallos = 0;
+  let capturas = 0;
+  let avisado = false;
+  let pausado = false;
   let reintento = 0;
   let ultimoSonido = reloj();
   let cerrarMic: (() => void) | null = null;
   let abriendoMic = false;
 
+  /** Al volver a la pestaña, al recuperar el internet o el foco: si no estaba escuchando, vuelve enseguida. */
+  const alVolver = () => {
+    if (terminado || cancelado || detenido || pausado || actual) return;
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+    window.clearTimeout(reintento);
+    fallos = 0;
+    reintento = window.setTimeout(arrancar, 120);
+  };
+  const alCambiarVisibilidad = () => document.visibilityState === "visible" && alVolver();
+  const conOyentes = Boolean(opciones.continuo) && typeof document !== "undefined" && typeof window.addEventListener === "function";
+  if (conOyentes) {
+    document.addEventListener("visibilitychange", alCambiarVisibilidad);
+    window.addEventListener("online", alVolver);
+    window.addEventListener("focus", alVolver);
+  }
+  const soltarOyentes = () => {
+    if (!conOyentes) return;
+    document.removeEventListener("visibilitychange", alCambiarVisibilidad);
+    window.removeEventListener("online", alVolver);
+    window.removeEventListener("focus", alVolver);
+  };
+
   const terminar = () => {
     if (terminado) return;
     terminado = true;
     window.clearTimeout(reintento);
+    soltarOyentes();
     cerrarMic?.();
     cerrarMic = null;
     eventos.onParcial?.("", { inicio: 0 });
@@ -371,6 +407,7 @@ function conReconocedor(Clase: ClaseReconocedor, idioma: string, local: boolean,
   const arrancar = () => {
     if (cancelado || terminado) return;
     if (detenido) return terminar();
+    if (pausado || actual) return;
     const r = new Clase();
     r.lang = idioma;
     r.continuous = true;
@@ -442,7 +479,11 @@ function conReconocedor(Clase: ClaseReconocedor, idioma: string, local: boolean,
       if (actual !== r) return;
       if (e.error === "no-speech" || e.error === "aborted") return;
       if (e.error === "network") red = true;
-      else if (FATALES.has(e.error)) fatal = ERRORES[e.error] ?? `El dictado se detuvo (${e.error}).`;
+      else if (e.error === "audio-capture") {
+        // Un momento sin micrófono (otra app lo tomó, el celular cambió de audio): se reintenta; solo seguido es fatal
+        capturas++;
+        if (capturas > CAPTURAS_MAX || !opciones.continuo) fatal = ERRORES["audio-capture"];
+      } else if (FATALES.has(e.error)) fatal = ERRORES[e.error] ?? `El dictado se detuvo (${e.error}).`;
       else red = true;
     };
     r.onend = () => {
@@ -455,27 +496,40 @@ function conReconocedor(Clase: ClaseReconocedor, idioma: string, local: boolean,
       }
       if (detenido || !opciones.continuo) return terminar();
       if (opciones.silencioMax && reloj() - ultimoSonido > opciones.silencioMax) return terminar();
+      if (pausado) return;
       // El navegador dejó de escuchar por su cuenta: se vuelve a encender sin avisar. Si se corta enseguida sin oír
-      // nada o sin internet, cada vez espera un poco más; tras varios fallos seguidos, avisa y se detiene.
+      // nada o sin internet, cada vez espera un poco más; tras varios fallos seguidos avisa una vez y sigue intentando,
+      // más despacio (no se rinde: al volver el internet o a la pestaña, vuelve enseguida).
       const fallo = red || (!oyo && reloj() - desde < 1500);
       fallos = fallo ? fallos + 1 : 0;
-      if (fallos >= 6) {
-        eventos.onError(red ? ERRORES.network : "El micrófono deja de escuchar a cada momento. Revise que esté conectado y que el navegador tenga permiso.");
-        return terminar();
+      if (!fallo) {
+        capturas = 0;
+        if (avisado) {
+          avisado = false;
+          eventos.onEstado("escuchando", local ? "en este equipo" : undefined);
+        }
       }
-      reintento = window.setTimeout(arrancar, fallos ? Math.min(4000, 250 * 2 ** (fallos - 1)) : 60);
+      if (fallos >= 6 && !avisado) {
+        avisado = true;
+        eventos.onEstado("preparando", red ? AVISO_RED : AVISO_MIC);
+      }
+      reintento = window.setTimeout(arrancar, fallos >= 6 ? 8000 : fallos ? Math.min(4000, 250 * 2 ** (fallos - 1)) : 60);
     };
     try {
       r.start();
     } catch {
-      // El navegador no lo dejó empezar todavía: se intenta de nuevo en un momento
+      // El navegador no lo dejó empezar todavía: se intenta de nuevo en un momento (con escucha seguida, sin rendirse)
       actual = null;
       fallos++;
-      if (fallos >= 6) {
+      if (fallos >= 6 && !opciones.continuo) {
         eventos.onError("No pude encender el micrófono. Revise que esté conectado y que el navegador tenga permiso.");
         return terminar();
       }
-      reintento = window.setTimeout(arrancar, Math.min(4000, 250 * 2 ** (fallos - 1)));
+      if (fallos >= 6 && !avisado) {
+        avisado = true;
+        eventos.onEstado("preparando", AVISO_MIC);
+      }
+      reintento = window.setTimeout(arrancar, fallos >= 6 ? 8000 : Math.min(4000, 250 * 2 ** (fallos - 1)));
       return;
     }
     if (!empezo) {
@@ -502,12 +556,28 @@ function conReconocedor(Clase: ClaseReconocedor, idioma: string, local: boolean,
       detenido = true;
       terminado = true;
       window.clearTimeout(reintento);
+      soltarOyentes();
       cerrarMic?.();
       cerrarMic = null;
       const r = actual;
       actual = null;
       r?.abort();
       eventos.onEstado("inactivo");
+    },
+    pausar: (v: boolean) => {
+      if (cancelado || terminado || detenido || v === pausado) return;
+      pausado = v;
+      window.clearTimeout(reintento);
+      if (v) {
+        // Lo que estaba oyendo (su propia voz) no se entrega
+        const r = actual;
+        actual = null;
+        r?.abort();
+        eventos.onParcial?.("", { inicio: 0 });
+      } else {
+        fallos = 0;
+        reintento = window.setTimeout(arrancar, 120);
+      }
     },
   };
 }
@@ -636,6 +706,7 @@ async function conWhisper(eventos: EventosDictado, control: ControlDictado): Pro
   }
   let detenido = false;
   let cancelado = false;
+  let pausado = false;
   let final = "";
   let pendientes = 0;
 
@@ -707,6 +778,13 @@ async function conWhisper(eventos: EventosDictado, control: ControlDictado): Pro
 
   proc.onaudioprocess = (e) => {
     if (detenido) return;
+    // En pausa (Melki habla por parlantes): lo que entra es su voz y se descarta
+    if (pausado) {
+      hablando = false;
+      frase = [];
+      previo = [];
+      return;
+    }
     const x = new Float32Array(e.inputBuffer.getChannelData(0));
     let suma = 0;
     for (let i = 0; i < x.length; i++) suma += x[i] * x[i];
@@ -765,6 +843,9 @@ async function conWhisper(eventos: EventosDictado, control: ControlDictado): Pro
       detenido = true;
       cerrar();
       eventos.onEstado("inactivo");
+    },
+    pausar: (v: boolean) => {
+      pausado = v;
     },
   };
 }

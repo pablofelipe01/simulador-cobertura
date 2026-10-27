@@ -58,7 +58,7 @@ export function alCargarVoces(fn: () => void): () => void {
 /** El texto como se debe oír: unidades en palabras y sin los símbolos que la voz deletrea. */
 export function paraHablar(texto: string): string {
   return texto
-    .replace(/[«»"]/g, "")
+    .replace(/[«»"■]/g, "")
     .replace(/(\d),(\d)/g, "$1 coma $2")
     .replace(/(\d)\.(?=\d{3}\b)/g, "$1")
     .replace(/(\d)\.(\d)/g, "$1 punto $2")
@@ -88,24 +88,57 @@ export function paraHablar(texto: string): string {
     .trim();
 }
 
-/** Parte el texto en trozos cortos por frases (algunas voces se cortan solas con textos largos). */
-function trozos(texto: string): string[] {
-  const frases = texto.split(/(?<=[.!?;:])\s+/);
+/** Largo máximo de cada trozo: Chrome corta las voces en línea que hablan más de ~15 s seguidos. */
+const MAX_TROZO = 150;
+
+/** Junta piezas seguidas mientras quepan en un trozo. */
+function juntar(piezas: string[], max: number): string[] {
   const salida: string[] = [];
   let actual = "";
-  for (const f of frases) {
-    if (actual && actual.length + f.length > 200) {
+  for (const p of piezas) {
+    if (actual && actual.length + p.length + 1 > max) {
       salida.push(actual);
-      actual = f;
-    } else actual = actual ? `${actual} ${f}` : f;
+      actual = p;
+    } else actual = actual ? `${actual} ${p}` : p;
   }
   if (actual) salida.push(actual);
   return salida;
 }
 
 /**
+ * Parte el texto en trozos cortos (algunas voces se cortan solas con textos largos): por frases y, si una frase es
+ * larga, por comas y, si hace falta, por palabras. Las frases cortas seguidas van juntas (menos pausas).
+ */
+export function trozosVoz(texto: string, max = MAX_TROZO): string[] {
+  const piezas: string[] = [];
+  for (const f of texto.split(/(?<=[.!?;:])\s+/).filter(Boolean)) {
+    if (f.length <= max) {
+      piezas.push(f);
+      continue;
+    }
+    for (const c of f.split(/(?<=,)\s+/).filter(Boolean)) {
+      if (c.length <= max) piezas.push(c);
+      else piezas.push(...juntar(c.split(/\s+/), max));
+    }
+  }
+  return juntar(piezas, max);
+}
+
+/** Las frases en curso: si el recolector de basura se las lleva, Chrome deja de avisar que terminaron. */
+const vivas = new Set<SpeechSynthesisUtterance>();
+
+/** Una voz en español del propio equipo (no en línea): para seguir si la voz en línea falla por la red. */
+function vozDelEquipo(): SpeechSynthesisVoice | undefined {
+  return vocesEspanol().find((v) => v.localService);
+}
+
+/**
  * Lee el texto en voz alta; devuelve una función para detenerlo. `alTerminar` se llama una sola vez. `alFallar` recibe
  * el error de la voz (por ejemplo «not-allowed»: el navegador no deja hablar hasta que la persona toque la página).
+ *
+ * Dice un trozo a la vez (cada uno empieza cuando termina el anterior): así ninguno pasa de unos 10 s, si uno no avisa
+ * que terminó se sigue con el siguiente a su tiempo y, si la voz en línea falla (la red), se repite ese trozo con una
+ * voz del equipo en vez de quedarse a medias.
  */
 export function hablar(texto: string, alTerminar?: () => void, alFallar?: (error: string) => void): () => void {
   if (!vozDisponible()) {
@@ -113,42 +146,78 @@ export function hablar(texto: string, alTerminar?: () => void, alFallar?: (error
     return () => {};
   }
   const s = window.speechSynthesis;
+  const ocupada = s.speaking || s.pending;
   s.cancel();
-  const limpio = paraHablar(texto);
-  const partes = trozos(limpio);
+  const partes = trozosVoz(paraHablar(texto));
   let terminado = false;
+  let k = 0;
   let guardia = 0;
+  let espera = 0;
+  let voz = elegirVoz();
+  let cambioVoz = false;
   const fin = () => {
     if (terminado) return;
     terminado = true;
     window.clearTimeout(guardia);
+    window.clearTimeout(espera);
     alTerminar?.();
   };
   if (!partes.length) {
     fin();
     return () => {};
   }
-  const voz = elegirVoz();
-  // Las voces neuronales ya suenan naturales a su ritmo; las demás, un poco más pausadas y sin subir el tono
-  const natural = voz ? puntajeVoz(voz) >= 70 : false;
-  partes.forEach((p, k) => {
-    const u = new SpeechSynthesisUtterance(p);
+  const decirTrozo = () => {
+    if (terminado) return;
+    if (k >= partes.length) return fin();
+    const trozo = partes[k];
+    const u = new SpeechSynthesisUtterance(trozo);
+    // Las voces neuronales ya suenan naturales a su ritmo; las demás, un poco más pausadas y sin subir el tono
+    const natural = voz ? puntajeVoz(voz) >= 70 : false;
     if (voz) u.voice = voz;
     u.lang = voz?.lang ?? "es-CO";
     u.rate = natural ? 0.98 : 0.94;
     u.pitch = 1;
     u.volume = 1;
-    if (k === partes.length - 1) u.onend = fin;
+    let listo = false;
+    const avanzar = () => {
+      if (listo) return;
+      listo = true;
+      vivas.delete(u);
+      window.clearTimeout(guardia);
+      k++;
+      decirTrozo();
+    };
+    u.onend = avanzar;
     u.onerror = (e) => {
+      if (listo) return;
+      listo = true;
+      vivas.delete(u);
+      window.clearTimeout(guardia);
       const error = (e as SpeechSynthesisErrorEvent).error;
-      if (error && error !== "interrupted" && error !== "canceled") alFallar?.(error);
+      if (terminado || error === "interrupted" || error === "canceled") return;
+      // La voz en línea falló (sin red o el servicio no respondió): este trozo y los que siguen, con una del equipo
+      if (!cambioVoz && error !== "not-allowed" && voz && !voz.localService) {
+        const otra = vozDelEquipo();
+        if (otra) {
+          cambioVoz = true;
+          voz = otra;
+          decirTrozo();
+          return;
+        }
+      }
+      if (error) alFallar?.(error);
       fin();
     };
+    vivas.add(u);
+    // Si el trozo no avisa que terminó (pasa en algunos navegadores), se sigue con el siguiente a su tiempo
+    guardia = window.setTimeout(avanzar, 2500 + trozo.length * 95);
     s.speak(u);
-  });
-  // Si la voz no avisa que terminó (pasa en algunos navegadores), se da por terminada a su tiempo
-  guardia = window.setTimeout(fin, 2500 + limpio.length * 85);
+  };
+  // Justo después de cancelar otra voz, Chrome a veces se salta lo siguiente: se espera un instante
+  if (ocupada) espera = window.setTimeout(decirTrozo, 120);
+  else decirTrozo();
   return () => {
+    if (terminado) return;
     s.cancel();
     fin();
   };
