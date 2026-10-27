@@ -160,6 +160,7 @@ export function HudVoz({
   onOirme,
   onApagar,
   nivel,
+  ia = false,
 }: {
   estado: EstadoManosLibres;
   /** Lo que va reconociendo (en vivo). */
@@ -181,6 +182,8 @@ export function HudVoz({
   onApagar: () => void;
   /** Nivel de la voz que oye el micrófono (0 a 1), o `null` si no hay medida. */
   nivel?: () => number | null;
+  /** Conversa con la IA (Gemini Live): lo dice con una insignia. */
+  ia?: boolean;
 }) {
   const [pos, setPos] = useState<Posicion>(() => leerHud().pos);
   const [mini, setMini] = useState(() => leerHud().mini);
@@ -275,6 +278,7 @@ export function HudVoz({
     "data-tour": "hud-voz",
     "data-estado": estado,
     "data-forma": pequena ? "pequena" : "completa",
+    "data-ia": ia ? "si" : undefined,
     style: pos ? { left: pos.x, top: pos.y } : undefined,
     onPointerDown: empezar,
     onPointerMove: mover,
@@ -317,6 +321,11 @@ export function HudVoz({
         <div className="min-w-0 flex-1">
           <p className="flex min-w-0 items-center gap-2">
             <span className="shrink-0 font-cond text-[14.5px] leading-none font-semibold tracking-wide">Asistente Melki</span>
+            {ia && (
+              <span className="hud-ia inline-flex shrink-0 items-center gap-1 rounded-full bg-gradient-to-r from-[#e07a3f] to-[#8fb3ff] px-1.5 py-0.5 text-[10.5px] font-semibold tracking-wide text-white" title={`Conversando ${motor}`}>
+                <Sparkles size={11} aria-hidden="true" /> IA en vivo
+              </span>
+            )}
             <span
               className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${estado === "atento" ? "bg-melki/25 text-[#ffd2b8]" : "bg-white/10 text-white/75"}`}
               title={motor ? `Escucho ${motor}` : undefined}

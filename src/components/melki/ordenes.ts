@@ -24,6 +24,7 @@ import { decidirLugar, nombreLugar, pareceNombre, type CandidatoLugar, type Luga
 
 import type { CurvaCargaResultado, ResultadoCarga } from "@/lib/radio/carga";
 import type { ResultadoEstres, LimitePunto } from "@/lib/radio/estres";
+import type { DatosPitch, MapaPitch } from "@/lib/negocio/pitch";
 import type { PropuestaOptimizar, ResultadoOptimizar } from "@/lib/radio/optimizar";
 import { PROTOCOLOS } from "@/lib/radio/protocolos";
 import { costoRedTrama, DEPARTAMENTOS_TRAMA, pesosTrama, type CostoRed, type NodoUsuario, type SfTrama, type TerrenoTrama } from "@/lib/radio/trama";
@@ -315,6 +316,11 @@ export type Api = {
   evaluarPunto(o: PedidoPunto): Promise<ResultadoPunto>;
   /** El límite de cada punto (o de los pedidos), uno a la vez con los demás como están. */
   evaluarPuntos(o: { centros?: string[]; n?: number; radioKm?: number; opciones?: Partial<OpcionesEstres> }): Promise<{ limites: LimitePunto[]; zonas: ResultadoZonas | null; error: string | null }>;
+  /* Presentación del modelo de negocio (pitch) */
+  /** El mapa para la presentación: proyectar puntos, mover la cámara y seguir sus movimientos. */
+  mapaPitch?(): MapaPitch | null;
+  /** La red de ahora para armar el pitch (simulación y prueba de estrés al día). */
+  datosPitch?(): DatosPitch;
 };
 
 /** Pedido de ajuste automático que arma Melki (qué puede cambiar, límites y sitios dados). */
