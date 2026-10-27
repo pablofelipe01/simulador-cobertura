@@ -45,6 +45,7 @@ export { ajustar, cajaAjuste, textoCambio, analisisAjuste, PERMISOS_AJUSTE, cont
 export { costoTorre, costoNodo, ALTURA_MAXIMA_M } from "./src/lib/radio/costos";
 export { costoRedTrama, OPERACION_TRAMA, SF_TRAMA } from "./src/lib/radio/trama";
 export { armarPitch, equilibrio, usuariosParaEquilibrio, pesosHablados, departamentoTrama, PAGOS_DIA_DEFECTO } from "./src/lib/negocio/pitch";
+export { armarRecorrido, resumenRecorrido, buscarParada, MAX_PUNTOS_RECORRIDO } from "./src/lib/negocio/recorrido-red";
 `;
 const tmp = mkdtempSync(path.join(os.tmpdir(), "motor-"));
 const archivo = path.join(tmp, "motor.mjs");
@@ -503,6 +504,56 @@ caso("Sin D, todas conectadas", sinD.nodos.every((n) => n.saltos !== null));
   const muestra = m.armarPitch({ antenas: lista, parametros: pT, resultado: null, estres: null });
   const invM = muestra.find((c) => c.id === "inversion");
   caso("Pitch con una muestra: cuenta la red llena (150 billeteras en SF11) y sin simular no inventa cobertura", !muestra.some((c) => c.id === "cobertura") && /150 billeteras/.test(invM.subtitulo) && /con la red llena, 150 usuarios/.test(invM.guion), invM.subtitulo);
+
+  // v13.1 · El recorrido de la red: punto por punto, con la nube de cada uno (qué se instaló, por qué ahí, su papel)
+  const rr = m.armarRecorrido({ antenas: pocas, parametros: pT, resultado: rPocas, estres: e1, lugar });
+  caso(
+    "Recorrido: panorama, el gateway, cada repetidor (rama por rama, en el sentido del reloj), las personas y por qué quedó así",
+    rr.map((x) => x.id).join() === "panorama,gateway,repetidor,repetidor,repetidor,personas,cierre" && rr[1].titulo === "Gateway" && rr.slice(2, 5).map((x) => x.titulo).join() === "Repetidor 1,Repetidor 2,Repetidor 3",
+    rr.map((x) => x.titulo).join(" · "),
+  );
+  caso("Recorrido: sin «undefined» ni «NaN» en ninguna parada", !/undefined|NaN|Infinity/.test(JSON.stringify(rr)));
+  const puntosRr = rr.filter((x) => x.antena);
+  caso(
+    "Recorrido: la nube de cada antena sale de su punto y dice qué se instaló, a qué altura, su enlace y su papel",
+    puntosRr.every((x) => {
+      const a = pocas.find((y) => y.id === x.antena);
+      const txt = x.nube.parrafos.join(" ");
+      return a && x.ancla && Math.abs(x.ancla.lat - a.lat) < 1e-9 && x.foco.tipo === "punto" && /^Se instaló/.test(x.nube.parrafos[0]) && txt.includes(`${a.alturaM.toLocaleString("es-CO")} m`) && /dB/.test(txt) && x.nube.datos[0].etiqueta === "Altura de la antena";
+    }),
+    puntosRr[1]?.nube.parrafos.join(" ").slice(0, 200),
+  );
+  caso("Recorrido: el gateway es la entrada a internet y dice cuántas personas salen por él", /Starlink/.test(rr[1].nube.parrafos.join(" ")) && /salen a internet las 160 personas conectadas/.test(rr[1].nube.parrafos.join(" ")) && /único gateway/.test(rr[1].nube.parrafos.join(" ")));
+  caso("Recorrido: cada repetidor dice por qué está ahí (su enlace y la gente que atiende) y su papel", puntosRr.slice(1).every((x) => /Desde aquí alcanza a Gateway/.test(x.nube.parrafos.join(" ")) && /repetidor de acceso/.test(x.nube.parrafos.join(" ")) && /Queda en medio de las 40 personas/.test(x.nube.parrafos.join(" "))));
+  caso("Recorrido: en voz va lo breve y el detalle va escrito", rr.every((x) => x.voz.length <= 260 && x.nube.parrafos.join(" ").length > x.voz.length * 1.5), rr.map((x) => x.voz.length).join(", "));
+  const cierreRr = rr.at(-1);
+  const infraCosto = m.costoRedTrama(1, 3, 0, "xiao", m.departamentoTrama("Meta").logistica);
+  caso(
+    "Recorrido: la conclusión explica la estructura, la carga, los enlaces, la cobertura y el costo de la infraestructura",
+    cierreRr.ancla === null && /Es una malla de 1 gateway y 3 repetidores/.test(cierreRr.resumen) && /La carga quedó repartida/.test(cierreRr.resumen) && /línea de vista/.test(cierreRr.resumen) && /«Factible»/.test(cierreRr.resumen) && cierreRr.resumen.includes(m.pesosHablados(infraCosto.inversion.total)),
+    cierreRr.resumen.slice(0, 160),
+  );
+  caso("Recorrido: las personas dicen cuántas llegan y por dónde entran", /Las 160 personas del mapa llegan al gateway/.test(rr[5].nube.parrafos.join(" ")) && /Entran a la red por/.test(rr[5].nube.parrafos.join(" ")) && rr[5].ancla !== null);
+  const resumenRr = m.resumenRecorrido(rr);
+  caso("Recorrido: al terminar queda escrito, una línea por punto y por qué quedó así", /^Le dejo por escrito el recorrido de la red \(7 paradas\)/.test(resumenRr) && resumenRr.split("\n").filter((x) => x.startsWith("• ")).length === 5 && /Por qué quedó así: Es una malla/.test(resumenRr));
+  // Con gente sin cobertura (el caserío a 30 km): lo que falta, con el pedido que lo resuelve
+  const rrCas = m.armarRecorrido({ antenas: conCaserio, parametros: pT, resultado: rCas, estres: null, lugar });
+  const falta = rrCas.find((x) => x.id === "pendiente");
+  caso(
+    "Recorrido: si hay gente sin cobertura, la parada «Lo que falta» la señala y propone «conecta a los que faltan»",
+    !!falta && /5 personas no llegan al gateway/.test(falta.nube.parrafos[0]) && falta.nube.sugerencia?.pedido === "conecta a los que faltan" && /todavía no llegan/.test(rrCas.find((x) => x.id === "personas").nube.parrafos.join(" ")) && /No factible todavía/.test(rrCas.at(-1).resumen),
+    falta?.nube.parrafos[0],
+  );
+  // Sin simular: explica lo que se ve, sin inventar enlaces; con muchas antenas, recorre las primeras y cuenta las demás
+  const sinSim = m.armarRecorrido({ antenas: pocas, parametros: pT, resultado: null, estres: null, lugar });
+  caso("Recorrido sin simular: lo dice y no inventa enlaces ni cobertura", /Aún no hay una simulación al día/.test(sinSim[0].nube.parrafos.join(" ")) && !sinSim.some((x) => x.id === "pendiente") && !/ dB de margen/.test(JSON.stringify(sinSim)) && !/undefined|NaN/.test(JSON.stringify(sinSim)));
+  const doce = [pocas[0], ...Array.from({ length: 12 }, (_, k) => ({ ...pocas[1], id: `x${k}`, nombre: `Repetidor ${k + 10}`, lat: pocas[0].lat + 0.01 * (k + 1), lon: pocas[0].lon }))];
+  const rrDoce = m.armarRecorrido({ antenas: doce, parametros: pT, resultado: null, estres: null });
+  caso(`Recorrido con muchas antenas: recorre ${m.MAX_PUNTOS_RECORRIDO} y cuenta las demás al final`, rrDoce.filter((x) => x.antena).length === m.MAX_PUNTOS_RECORRIDO && /3 antenas más con el mismo criterio/.test(rrDoce.at(-1).resumen), rrDoce.at(-1).resumen.slice(0, 220));
+  caso(
+    "Recorrido: encuentra el punto pedido («el repetidor dos», «el gateway», «el tercer repetidor», «por qué quedó así», «lo que falta»)",
+    m.buscarParada(rr, "ve al repetidor dos") === 3 && m.buscarParada(rr, "llévame al gateway") === 1 && m.buscarParada(rr, "el tercer repetidor") === 4 && m.buscarParada(rr, "por qué la red quedó así") === 6 && m.buscarParada(rr, "las personas") === 5 && m.buscarParada(rrCas, "lo que falta") === rrCas.findIndex((x) => x.id === "pendiente") && m.buscarParada(rr, "la luna") === -1,
+  );
 }
 
 // v13 · Punto de equilibrio: la red al mes (inversión a 5 años + operación) y la comisión por pago que la cubre
