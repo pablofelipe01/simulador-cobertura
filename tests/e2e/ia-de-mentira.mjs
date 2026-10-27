@@ -67,7 +67,7 @@ const miles = (x) => Math.round(x).toLocaleString("es-CO");
  * Arranca el servidor en un puerto libre. `rechazar`: si es un texto, cierra cada conexión con ese motivo (clave mala).
  */
 export async function iniciarIADeMentira() {
-  const estado = { conexiones: 0, setups: [], claves: [], textos: [], respuestas: [], audios: 0, narrados: 0, rechazar: null, cerradas: 0, abierta: null, manijas: 0, pausaNarrar: 0 };
+  const estado = { conexiones: 0, setups: [], claves: [], textos: [], respuestas: [], audios: 0, silencios: 0, narrados: 0, puntos: 0, rechazar: null, cerradas: 0, abierta: null, manijas: 0, pausaNarrar: 0 };
   const servidor = http.createServer((_, r) => r.writeHead(404).end());
   // Las conexiones abiertas (al terminar se cierran todas: si no, el servidor no termina de cerrar)
   const sockets = new Set();
@@ -118,6 +118,10 @@ export async function iniciarIADeMentira() {
         estado.narrados++;
         return hablar(`Les cuento: ${texto.replace(/^\([^)]*\)\s*/, "").slice(0, 70)}`, null, estado.pausaNarrar);
       }
+      if (/^\(Punto del recorrido/.test(texto)) {
+        estado.puntos++;
+        return hablar(texto.replace(/^\([^)]*\)\s*/, "").slice(0, 70));
+      }
       if (/adi[oó]s|eso es todo/i.test(texto)) return hablar("Con gusto, señor. Hasta luego.", () => herramienta("terminar_conversacion", {}, () => {}));
       if (/cu[aá]nto cuesta/i.test(texto))
         return herramienta("estado_simulador", {}, (r) => {
@@ -125,6 +129,7 @@ export async function iniciarIADeMentira() {
           hablar(c ? `La red cuesta ${miles(c.inversionTotal)} pesos de inversión y ${miles(c.operacionMes)} pesos al mes de operación.` : "No encontré los costos.");
         });
       if (/pres[eé]nta|pitch|modelo de negocio/i.test(texto)) return herramienta("presentacion", { accion: "empezar" }, (r) => hablar(`Con gusto. ${r.resultado ?? ""}`.slice(0, 120)));
+      if (/expl[ií]came la red|recorrido/i.test(texto)) return herramienta("recorrido_red", { accion: "empezar" }, (r) => hablar(`Con gusto. ${r.resultado ?? ""}`.slice(0, 120)));
       if (/qu[eé] sabes de|trama/i.test(texto)) return herramienta("consultar_melki", { pregunta: texto }, (r) => hablar(String(r.respuesta ?? "").slice(0, 120)));
       if (/\b(pon|agrega|ub[ií]came|simula|prueba|sube|cambia|quita)\b/i.test(texto)) return herramienta("ejecutar_orden", { pedido: texto }, (r) => hablar(`Listo, señor. ${String(r.resultado ?? "").split(/(?<=\.)\s/)[0]}`));
       return hablar("Entendido, señor.");
@@ -147,8 +152,12 @@ export async function iniciarIADeMentira() {
               enviar({ setupComplete: {} });
               manija();
             }, 40);
-          } else if (m.realtimeInput?.audio) estado.audios++;
-          else if (m.realtimeInput?.text) atender(m.realtimeInput.text);
+          } else if (m.realtimeInput?.audio) {
+            estado.audios++;
+            // Con parlantes, mientras suena la voz de la IA el micrófono manda silencio (así no se oye a sí misma)
+            const pcm = Buffer.from(m.realtimeInput.audio.data ?? "", "base64");
+            if (pcm.length && pcm.every((x) => x === 0)) estado.silencios++;
+          } else if (m.realtimeInput?.text) atender(m.realtimeInput.text);
           else if (m.toolResponse) {
             for (const f of m.toolResponse.functionResponses ?? []) {
               estado.respuestas.push(f);
