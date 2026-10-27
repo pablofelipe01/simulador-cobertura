@@ -5,7 +5,9 @@
 
 // El audio de la conversación con la IA: el micrófono a PCM de 16 bits y 16 kHz en trozos de 100 ms (con cancelación
 // de eco, supresión de ruido y control de ganancia del navegador), y la voz del modelo (PCM a 24 kHz) en cola, sin
-// cortes entre trozos, con la posibilidad de callarla de golpe cuando la persona habla encima.
+// cortes entre trozos (con un colchón al empezar, por si la red trae los trozos a saltos), con la posibilidad de
+// callarla de golpe cuando la persona habla encima. Si el micrófono se desconecta o el navegador pausa el audio (la
+// pestaña en segundo plano, el celular), se avisa o se reanuda solo.
 
 const TASA_ENTRADA = 16000;
 const TROZO = 1600; // 100 ms a 16 kHz
@@ -36,6 +38,24 @@ export type MicrofonoIA = {
   pausar(v: boolean): void;
 };
 
+/** Reanuda un contexto de audio pausado (la pestaña volvió, o el primer toque de la persona). */
+function reanudarAlVolver(ctx: AudioContext): () => void {
+  const reanudar = () => {
+    if (ctx.state === "suspended" || (ctx.state as string) === "interrupted") void ctx.resume().catch(() => {});
+  };
+  const alVer = () => document.visibilityState === "visible" && reanudar();
+  document.addEventListener("visibilitychange", alVer);
+  window.addEventListener("pointerdown", reanudar);
+  window.addEventListener("keydown", reanudar);
+  ctx.onstatechange = () => document.visibilityState === "visible" && reanudar();
+  return () => {
+    document.removeEventListener("visibilitychange", alVer);
+    window.removeEventListener("pointerdown", reanudar);
+    window.removeEventListener("keydown", reanudar);
+    ctx.onstatechange = null;
+  };
+}
+
 /** Código del procesador de audio (va en un Blob: así funciona también desde el archivo HTML, sin servidor). */
 const CODIGO_WORKLET = `
 class MelkiCaptura extends AudioWorkletProcessor {
@@ -50,9 +70,10 @@ registerProcessor("melki-captura", MelkiCaptura);
 
 /**
  * Abre el micrófono y entrega trozos de 100 ms en PCM de 16 kHz. `onNivel` recibe el volumen (0 a 1) para las
- * barritas. Lanza un error con un texto claro si no hay permiso.
+ * barritas; `onFin`, si el micrófono se desconecta (para volver a abrirlo). Lanza un error con un texto claro si no hay
+ * permiso.
  */
-export async function abrirMicrofonoIA(onPcm: (pcm: Int16Array) => void, onNivel?: (nivel: number) => void): Promise<MicrofonoIA> {
+export async function abrirMicrofonoIA(onPcm: (pcm: Int16Array) => void, onNivel?: (nivel: number) => void, onFin?: () => void): Promise<MicrofonoIA> {
   if (!navigator.mediaDevices?.getUserMedia) throw new Error("Este navegador no deja usar el micrófono.");
   let stream: MediaStream;
   try {
@@ -105,8 +126,14 @@ export async function abrirMicrofonoIA(onPcm: (pcm: Int16Array) => void, onNivel
   nodo.connect(mudo);
   mudo.connect(ctx.destination);
   if (ctx.state === "suspended") await ctx.resume().catch(() => {});
+  const soltar = reanudarAlVolver(ctx);
+  let cerrado = false;
+  // El micrófono se desconectó (audífonos que se quitan, otra app que lo toma): se avisa para abrirlo de nuevo
+  for (const t of stream.getAudioTracks()) t.onended = () => !cerrado && onFin?.();
   return {
     cerrar() {
+      cerrado = true;
+      soltar();
       try {
         fuente.disconnect();
         nodo.disconnect();
@@ -123,6 +150,10 @@ export async function abrirMicrofonoIA(onPcm: (pcm: Int16Array) => void, onNivel
   };
 }
 
+/** Colchón al empezar a sonar (o si la red se atrasó): absorbe los trozos que llegan a saltos. */
+const COLCHON_INICIO_S = 0.22;
+const COLCHON_CORTE_S = 0.12;
+
 /** La voz del modelo: los trozos de PCM a 24 kHz suenan en orden, sin huecos; `callar` corta todo de una vez. */
 export class ReproductorIA {
   private ctx: AudioContext | null = null;
@@ -132,17 +163,18 @@ export class ReproductorIA {
   private datos: Uint8Array<ArrayBuffer> | null = null;
   private alTerminar: (() => void) | null = null;
   private volumen = 1;
+  private soltar: (() => void) | null = null;
+  /** Cuándo terminó de sonar lo último (reloj de la página). */
+  private finSonido = 0;
 
   constructor(private readonly tasa = 24000) {}
 
   private asegurar(): AudioContext {
     if (!this.ctx) {
       const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      try {
-        this.ctx = new Ctx({ sampleRate: this.tasa });
-      } catch {
-        this.ctx = new Ctx();
-      }
+      // A la frecuencia del equipo (la más estable); los trozos a 24 kHz se convierten solos al sonar
+      this.ctx = new Ctx();
+      this.soltar = reanudarAlVolver(this.ctx);
       this.analizador = this.ctx.createAnalyser();
       this.analizador.fftSize = 256;
       this.datos = new Uint8Array(new ArrayBuffer(this.analizador.frequencyBinCount));
@@ -155,6 +187,17 @@ export class ReproductorIA {
   /** Despierta el audio con un toque de la persona (los navegadores lo piden). */
   preparar() {
     this.asegurar();
+  }
+
+  /** El navegador no deja sonar todavía (falta un toque de la persona en la página). */
+  get bloqueado(): boolean {
+    return this.ctx?.state === "suspended";
+  }
+
+  /** Cuánto hace que terminó de sonar (ms); 0 si está sonando. */
+  silencioMs(): number {
+    if (this.fuentes.size) return 0;
+    return this.finSonido ? Date.now() - this.finSonido : Number.POSITIVE_INFINITY;
   }
 
   fijarVolumen(v: number) {
@@ -176,16 +219,20 @@ export class ReproductorIA {
     f.buffer = buf;
     f.connect(this.analizador!);
     const ahora = ctx.currentTime;
-    // Un colchón de 60 ms al empezar evita el primer corte
-    const inicio = this.siguiente > ahora ? this.siguiente : ahora + 0.06;
+    // Al empezar (o si la red se atrasó y la cola se vació) se deja un colchón: así los trozos que llegan a saltos no
+    // dejan huecos (la voz no suena entrecortada)
+    const inicio = this.siguiente > ahora + 0.01 ? this.siguiente : ahora + (this.fuentes.size ? COLCHON_CORTE_S : COLCHON_INICIO_S);
     f.start(inicio);
     this.siguiente = inicio + buf.duration;
     this.fuentes.add(f);
     f.onended = () => {
       this.fuentes.delete(f);
-      if (!this.fuentes.size && this.alTerminar) {
-        const fn = this.alTerminar;
-        fn();
+      if (!this.fuentes.size) {
+        this.finSonido = Date.now();
+        if (this.alTerminar) {
+          const fn = this.alTerminar;
+          fn();
+        }
       }
     };
   }
@@ -215,6 +262,7 @@ export class ReproductorIA {
 
   /** Corta la voz de inmediato (la persona habló encima). */
   callar() {
+    const sonaba = this.fuentes.size > 0;
     for (const f of this.fuentes) {
       f.onended = null;
       try {
@@ -225,10 +273,13 @@ export class ReproductorIA {
     }
     this.fuentes.clear();
     this.siguiente = 0;
+    if (sonaba) this.finSonido = Date.now();
   }
 
   cerrar() {
     this.callar();
+    this.soltar?.();
+    this.soltar = null;
     void this.ctx?.close().catch(() => {});
     this.ctx = null;
   }

@@ -42,6 +42,11 @@ export type OpcionesLive = {
   WebSocketImpl?: typeof WebSocket;
   /** Para seguir la misma conversación en una conexión nueva (la manija que dio la anterior). */
   reanudar?: string | null;
+  /**
+   * Con parlantes (sin audífonos): el modelo no se deja interrumpir y le cuesta más «oír» que alguien empezó a hablar,
+   * así el eco de su propia voz no lo corta (además, mientras habla, el micrófono manda silencio).
+   */
+  parlantes?: boolean;
 };
 
 export type EventosLive = {
@@ -113,6 +118,14 @@ export function mensajeSetup(o: OpcionesLive): Record<string, unknown> {
       contextWindowCompression: { slidingWindow: {} },
       // Cada conexión dura unos 10 minutos: con la manija se sigue la misma conversación en otra
       sessionResumption: o.reanudar ? { handle: o.reanudar } : {},
+      ...(o.parlantes
+        ? {
+            realtimeInputConfig: {
+              automaticActivityDetection: { startOfSpeechSensitivity: "START_SENSITIVITY_LOW" },
+              activityHandling: "NO_INTERRUPTION",
+            },
+          }
+        : {}),
     },
   };
 }
