@@ -7,7 +7,7 @@
 
 // Barra superior: nombre del escenario, buscador, archivo (nuevo, ejemplo, importar, exportar), Asistente Melki, tours
 // guiados (abre el menú de Melki) y los botones para mostrar u ocultar los paneles de los lados.
-import { AudioLines, ChevronDown, CircleQuestionMark, FileDown, FileUp, FolderOpen, PanelLeftOpen, PanelRightClose, PanelRightOpen, Plus, RotateCcw, Scale, Search } from "lucide-react";
+import { AudioLines, ChevronDown, CircleQuestionMark, FileDown, FileUp, FolderOpen, PanelLeftOpen, PanelRightClose, PanelRightOpen, Plus, Presentation, RotateCcw, Scale, Search } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { DERECHOS } from "@/lib/autoria";
@@ -22,6 +22,8 @@ type Props = {
   onExportarCsv: () => void;
   onExportarKmz: (() => void) | null;
   onRecorrido: () => void;
+  /** La presentación del modelo de negocio (el pitch con el robot de Melki). */
+  onPitch?: () => void;
   /** «Acerca del simulador»: autoría, titularidad y licencia. */
   onAcerca: () => void;
   resultadosAbiertos: boolean;
@@ -188,6 +190,18 @@ export function BarraSuperior(p: Props) {
         >
           <CircleQuestionMark size={17} /> <span className="hidden md:inline">Tours</span>
         </button>
+        {p.onPitch && (
+          <button
+            type="button"
+            onClick={p.onPitch}
+            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[14px] font-medium hover:bg-papel-2"
+            data-tour="boton-pitch"
+            title="Pitch: Melki presenta el modelo de negocio recorriendo el mapa (antenas, cobertura, capacidad, inversión, operación y equilibrio)"
+            aria-label="Presentar el modelo de negocio (pitch)"
+          >
+            <Presentation size={17} /> <span className="hidden md:inline">Pitch</span>
+          </button>
+        )}
         <button
           type="button"
           onClick={p.onResultados}

@@ -21,6 +21,7 @@ import { PERMISOS_AJUSTE, zonaDeRed, type Ajuste, type PedidoAjuste } from "@/li
 import { areaM2, margenEnPunto, poligonoCirculo, sirveAlArea } from "@/lib/radio/area";
 import { BYTES_PAGO, PEDIDO_CARGA_DEFECTO } from "@/lib/radio/carga";
 import { ESTADOS_USUARIO, PEDIDO_ESTRES_DEFECTO, type EstadoZona, type LimitePunto, type ResultadoEstres } from "@/lib/radio/estres";
+import { CAJA_COLOMBIA } from "@/lib/negocio/pitch";
 import { puntosAlAzar } from "@/lib/radio/poblar";
 import { EQUIPOS, META_UTIL_ESTUDIO_PCT, presetPorId, UMBRAL_SERVICIO_DB } from "@/lib/radio/constantes";
 import { PROTOCOLOS } from "@/lib/radio/protocolos";
@@ -1444,6 +1445,55 @@ export function Simulador() {
         return u.optimizacion.fase === "listo" && u.optimizacion.firma === u.firma ? u.optimizacion.resultado : null;
       },
       aplicarOptimizacion,
+      // La presentación del modelo de negocio: el mapa (proyectar, cámara, movimientos) y la red de ahora
+      mapaPitch: () => {
+        const m = mapaRef.current;
+        if (!m) return null;
+        const quieto = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+        return {
+          proyectar: (lat, lon) => {
+            const q = m.project([lon, lat]);
+            return Number.isFinite(q.x) ? { x: q.x, y: q.y } : null;
+          },
+          tamano: () => {
+            const c = m.getContainer();
+            return { ancho: c.clientWidth, alto: c.clientHeight };
+          },
+          volar: (foco, margen) => {
+            const padding = { left: margen.izquierda, right: margen.derecha, top: margen.arriba, bottom: margen.abajo };
+            const ms = quieto ? 0 : 2400;
+            const c = m.getContainer();
+            // Si los márgenes no dejan espacio (pantalla chica), sin márgenes
+            const cabe = c.clientWidth - padding.left - padding.right > 160 && c.clientHeight - padding.top - padding.bottom > 140;
+            if (foco.tipo === "punto") {
+              m.flyTo({ center: [foco.lon, foco.lat], zoom: foco.zoom, duration: ms, essential: true, padding: cabe ? padding : undefined, pitch: 0 });
+            } else {
+              const caja = foco.tipo === "pais" ? CAJA_COLOMBIA : foco.caja;
+              if (!caja) return 0;
+              m.fitBounds(caja, { padding: cabe ? padding : 30, duration: ms, maxZoom: foco.tipo === "pais" ? 6 : 13.5, essential: true });
+            }
+            return ms;
+          },
+          alMover: (fn) => {
+            m.on("move", fn);
+            return () => {
+              m.off("move", fn);
+            };
+          },
+        };
+      },
+      datosPitch: () => {
+        const u = ultimo.current;
+        const alDia = u.resultado !== null && u.firma === u.firmaResultado;
+        return {
+          antenas: u.estado.escenario.antenas,
+          parametros: u.estado.escenario.parametros,
+          resultado: alDia ? u.resultado : null,
+          estres: u.estres.fase === "listo" && u.estres.firma === u.firma ? u.estres.resultado : null,
+          lugar: ubicarMunicipio,
+          nombre: u.estado.escenario.nombre,
+        };
+      },
     }),
     [inscribirNodo, pedirSimulacion, simular, centrar, encuadrar, encuadrarCaja, abrirPerfil, inspeccionar, cambiarModo, sembrarHacia, aceptarSiembra, enviarMensaje, disenarArea, aplicarDiseno, esperarResultado, pedirAjuste, aplicarAjuste, poblarPersonas, quitarPobladas, probarCarga, poblarZonas, quitarZonas, probarEstres, evaluarPunto, evaluarPuntos, optimizarRed, aplicarOptimizacion],
   );
@@ -1928,6 +1978,7 @@ export function Simulador() {
         onExportarCsv={() => exportarCsv(escenario, resultado)}
         onExportarKmz={kmz}
         onRecorrido={() => avisarMelki("tours")}
+        onPitch={() => avisarMelki("pedir", "preséntame el modelo de negocio")}
         onAcerca={() => setAcerca(true)}
         resultadosAbiertos={resultadosAbiertos}
         onResultados={() => setResultadosAbiertos((v) => !v)}
