@@ -15,7 +15,10 @@ Trama del Inge. Incluye a **Melki**, un asistente local que ejecuta pedidos en e
 -73.37», «puebla la zona con 250 personas», «por cada antena 250 personas y mira qué tan colapsada queda la red»,
 «¿cuántas personas aguanta el Repetidor 1?», «llena el gateway hasta su límite», «envía 25 pagos al tiempo», «¿cuánto
 cuesta la red para el Chocó?», «conecta a los que faltan»), responde preguntas (cómo viaja un mensaje, por qué una persona
-está en rojo, qué hacer ahora) y da tours guiados.
+está en rojo, qué hacer ahora) y da tours guiados. Con una clave gratuita de Google AI Studio, Melki también **conversa
+como un modelo de inteligencia artificial** (Gemini Live: oye la voz directamente y contesta con voz natural) y presenta
+el **pitch del modelo de negocio** con su robot volando por el mapa: cada antena, la inversión, la operación y el punto
+de equilibrio.
 
 > **© 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero. Todos los derechos reservados.**
 > Creado por Giancarlo González Guerrero para el Ingeniero Pablo Felipe Acevedo y la empresa Melki, con ayuda de
@@ -103,6 +106,43 @@ está en rojo, qué hacer ahora) y da tours guiados.
   entiende un pedido de acción, lo dice y da ejemplos. A «¿cómo dejo la mayor cobertura posible?» responde con
   recomendaciones para el escenario (sitios altos, línea de vista, malla con respaldo, gateway al centro, SF y antena) y
   el botón para proponer la opción de máxima cobertura; «dame la mayor cobertura posible» la calcula de una vez
+- **Pitch del modelo de negocio** (v13; botón «Pitch» de la barra de arriba, o «Melki, preséntame el modelo de
+  negocio»): el robot de Melki, en vectores, vuela por el mapa de capítulo en capítulo (la cámara lo sigue), señala cada
+  antena con un anillo que late y cuenta el guion en voz alta mientras una tarjeta muestra las cifras. Todo sale de la
+  red que esté en el mapa y de los precios del documento de Trama; no inventa ingresos:
+  - Portada, el problema (adultos rurales sin canal digital en el departamento de la red y en el país) y la solución
+  - Antena por antena (hasta 8): dónde está (coordenadas y municipio), a qué altura va y por qué: el enlace con su
+    margen y si tiene línea de vista, la altura recomendada (6 m como mínimo; 9 o 12 m, o una loma más alta, si el
+    enlace queda inestable), el área que cubre, la gente que entra por ella y si es un punto crítico
+  - La cobertura con el relieve real y la capacidad real (la prueba de estrés, persona por persona, o el diseño de
+    Trama: 150 usuarios por frecuencia en SF11)
+  - La inversión (CAPEX: sitios gateway, repetidores, billeteras, instalación y transporte, con la logística del
+    departamento), la operación (OPEX: Starlink, mantenimiento de sitios, baterías y visitas, soporte) y la red completa
+    al mes, con la inversión repartida en 5 años
+  - El punto de equilibrio: el costo por usuario al mes y la comisión por pago que cubre toda la red. Con la comisión
+    que se quiera probar («prueba una comisión de 300 pesos» o el campo de la tarjeta) da los ingresos al mes, lo que
+    queda tras la operación, en cuántos meses se recupera la inversión y desde cuántos usuarios se paga sola. Con pocas
+    personas en el mapa (una muestra), cuenta la red llena
+  - Cómo escala al departamento y al país (con el 30 % de adopción) y el cierre: del simulador al piloto
+  - Se maneja con los botones, el teclado (← → espacio Esc) o la voz: «siguiente», «anterior», «pausa», «sigue»,
+    «repite», «ve a la inversión», «termina la presentación». Avanza solo al terminar cada capítulo (o a mano). Con la
+    IA conectada lo narra la IA con sus palabras y responde preguntas en medio; si le hablan encima, pausa
+- **Conversar con IA: Gemini Live, gratis** (v13; Ajustes de voz → «Conversar con IA (Gemini Live)»): con la opción
+  encendida, el Asistente Melki conversa con un modelo de voz en vivo de Google. Oye el audio del micrófono directamente
+  (no un texto), contesta con voz natural, se le puede hablar encima y hace en el simulador lo que se le pida con las
+  mismas órdenes de Melki. Sus herramientas: ejecutar una orden, leer el estado de la red y sus costos, consultar el
+  conocimiento del proyecto, manejar el pitch y despedirse. No inventa cifras: las toma del simulador.
+  - La clave gratuita de Google AI Studio (aistudio.google.com/apikey) se pega una vez y queda solo en ese navegador,
+    nunca en el código ni en el repositorio. «Probar conexión» la verifica; se elige el modelo (Gemini 3.8 Live o
+    3.1 Flash Live) y la voz
+  - «Hola Melki» abre la conversación; con «adiós» o tras un minuto sin hablar la cierra y vuelve a esperar su nombre
+  - Google corta cada conexión a los 10 minutos (y la red se puede caer): Melki la reanuda sola en otra, con la misma
+    conversación; si narraba un capítulo del pitch, se lo pide otra vez
+  - Sin clave, sin internet, con la clave mala o sin cupo, sigue con su cerebro local y lo avisa
+  - Costo: la capa gratuita no cobra (tiene límites por día); en la de pago, unos US$0,005 por minuto de audio que
+    entra y US$0,018 por minuto de voz del modelo. Otras opciones que se miraron: GPT-Live-1 de OpenAI (unos
+    US$0,05 por minuto, sin capa gratuita), Vapi (US$0,05 por minuto más cada servicio) y Whisper (solo pasa la voz
+    a texto; ya lo usa el dictado privado)
 - **Asistente Melki** por voz (tipo Jarvis; botón «Asistente Melki» de la barra de arriba, ícono de ondas del chat o
   «activa el asistente»): Melki escucha todo el tiempo y se activa con su nombre: «Hola Melki», «Oye Melki», «Hey
   Melki» o «Hello Melki» y el pedido de corrido; reconoce el nombre como lo escribe el reconocimiento («Melky»,
@@ -280,7 +320,11 @@ src/
                             (dictado.ts: escucha seguida que se vuelve a encender sola, frases sin duplicados y con su
                             hora, micrófono abierto y nivel de la voz);
                             Asistente Melki (manos-libres.ts: llamado, controles, frases de mayordomo, resumen para la
-                            voz y eco; numeros.ts: números en palabras → cifras; hud-voz.tsx: la barra del asistente)
+                            voz y eco; numeros.ts: números en palabras → cifras; hud-voz.tsx: la barra del asistente);
+                            conversar con IA (ia-live.ts: la conexión con Gemini Live y su reanudación; audio-ia.ts: el
+                            micrófono a PCM de 16 kHz y la voz del modelo; herramientas-ia.ts: lo que la IA puede hacer
+                            y quién es Melki para ella); el pitch (robot.tsx: el robot en vectores; presentacion.tsx:
+                            la presentación que recorre el mapa)
   datos/geo/                límites, nombres y ríos de referencia (ver LEEME.md: fuentes y licencias)
   lib/autoria.ts            autoría, titulares y licencia (los usan «Acerca del simulador», Melki y la versión HTML)
   lib/geo/                  consultas locales: municipio de un punto, búsqueda de lugares, contorno de un municipio
@@ -300,9 +344,12 @@ src/
                             panel-capacidad.tsx (Poblar personas y Prueba de carga), panel-estres.tsx (Zonas de
                             popularidad y Prueba de estrés); components/melki/capacidad.ts (órdenes de gente,
                             zonas, estrés, carga y Trama)
+  lib/negocio/pitch.ts      el pitch del modelo de negocio: capítulos con la red del mapa, CAPEX, OPEX y punto de
+                            equilibrio, y los pedidos de la presentación por voz o por escrito
   lib/config.ts             fuentes de mapas y relieve (reemplazables con variables de entorno)
 scripts/                    versión HTML, paquetes de avance y compresor ZIP
-tests/                      pruebas del motor y de extremo a extremo
+tests/                      pruebas del motor, de Melki y de extremo a extremo (con un servidor de voz en vivo de
+                            mentira que habla el protocolo de Gemini Live: tests/e2e/ia-de-mentira.mjs)
 ```
 
 ## Modelo de propagación
@@ -506,6 +553,8 @@ piloto.
 - La mezcla del tráfico: la prueba de estrés usa 2,4 mensajes por persona al día con el tamaño de un pago; cuántos
   WhatsApp y consultas a la IA manda cada persona, y su tamaño, cambian la capacidad (se ajusta con «Mensajes por
   persona al día» o el multiplicador).
+- Los supuestos del pitch: 2,4 pagos por persona al día, el 30 % de adopción para escalar, la inversión repartida en
+  5 años y la comisión real por pago.
 - Del gateway medido: el preset de módem (la ficha lo deja pendiente; se supone LongFast), qué parte de los
   mensajes son consultas a la IA (se supone el 5 %, con respuestas de ~640 B en 4 partes y 4 a 12 s de la IA) y si los
   equipos mandan su telemetría a la malla (depende de la versión del firmware; en la prueba se puede apagar).
@@ -542,6 +591,12 @@ solo arranca si el micrófono ya está permitido (nunca pide permiso por sorpres
 deja el micrófono abierto para medir el nivel de la voz dentro de la página (ese audio no se guarda ni se envía) y se ve con el oído verde en el botón
 de Melki; «Melki, apaga el micrófono» lo apaga del todo y en Ajustes de voz se quita («Escucharme siempre en esta
 página»). «Melki, deja de escuchar» o la X de la barra lo devuelven al reposo.
+
+**Conversar con IA (opcional, v13):** solo con la opción encendida y una clave puesta. Mientras la conversación está
+abierta, el audio del micrófono, un resumen del escenario (piezas, posiciones, cobertura y costos) y los resultados de
+lo que se pide van a Google (Gemini Live) por una conexión cifrada; en la capa gratuita Google puede usar ese contenido
+para mejorar sus productos. La clave queda solo en el almacenamiento local del navegador (se borra con «Borrar la
+clave»); no va en el código, en el repositorio ni en los escenarios exportados. Sin la opción o sin clave no sale nada.
 
 ## Autoría y licencia
 
