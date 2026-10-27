@@ -4,7 +4,8 @@
 // 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
 
 // Estado de la aplicación: escenario (nodos + parámetros + mediciones), vista del mapa y preferencias.
-import { EQUIPOS, LIMITE_SALTOS_DEFECTO, LIMITE_SALTOS_MAXIMO, PRESETS, type EquipoId } from "@/lib/radio/constantes";
+import { EQUIPOS, LIMITE_SALTOS_DEFECTO, LIMITE_SALTOS_MAXIMO, PRESETS, presetPorId, type EquipoId } from "@/lib/radio/constantes";
+import { PROTOCOLOS } from "@/lib/radio/protocolos";
 import { ENTORNOS } from "@/lib/radio/entorno";
 import type { Pieza } from "@/lib/radio/estado-red";
 import type { ClimaItm } from "@/lib/radio/itm";
@@ -476,7 +477,10 @@ export function validarEscenario(x: unknown): Escenario | null {
     ubicacionesPct: numero(p.ubicacionesPct, d.ubicacionesPct, 1, 99),
     situacionesPct: numero(p.situacionesPct, d.situacionesPct, 1, 99),
     entorno: ENTORNOS.some((x) => x.id === p.entorno) ? (p.entorno as Parametros["entorno"]) : d.entorno,
+    ...(p.usuariosRepiten === false ? { usuariosRepiten: false } : {}),
   };
+  // Meshtastic admite hasta 7 saltos
+  if (presetPorId(parametros.preset).protocolo === "meshtastic") parametros.limiteSaltos = Math.min(parametros.limiteSaltos, PROTOCOLOS.meshtastic.saltosMax);
   // El suelo con nombre fija sus constantes eléctricas
   const suelo = SUELOS.find((x) => x.id === parametros.suelo);
   if (suelo) {

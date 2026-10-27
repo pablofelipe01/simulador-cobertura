@@ -17,6 +17,7 @@ import { relieveDesdeHgt, relieveDesdeTeselas, relievePlano, type CargarTesela, 
 import { cajaDiseno, disenar, type Diseno, type PedidoDiseno } from "./diseno";
 import { cajaSiembra, sembrar as proponerSiembra, type PedidoSiembra, type Siembra } from "./siembra";
 import { ajustar, cajaAjuste, type Ajuste, type PedidoAjuste } from "./ajuste";
+import { cajaOptimizar, optimizar, type PedidoOptimizar, type ResultadoOptimizar } from "./optimizar";
 import { coberturaEnArea, porcentajeSobre } from "./area";
 import type { Antena, AreaObjetivo, Caja, CoberturaAreaObjetivo, FuenteRelieve, InformeEnlace, Parametros, Perfil, PerfilTerreno, PuntoPerfil, ResultadoSimulacion } from "./tipos";
 import { geometriaTrayecto, perdidasTrayecto } from "./trayecto";
@@ -299,6 +300,12 @@ function coberturaObjetivo(r: Pick<ResultadoSimulacion, "malla" | "mejor" | "seg
 export async function ajustarRed(pedido: PedidoAjuste, fuente: FuenteRelieve, ctx: Contexto): Promise<Ajuste> {
   const relieve = await obtenerRelieve(cajaAjuste(pedido), fuente, ctx);
   return ajustar(pedido, relieve);
+}
+
+/** Optimiza la red para la carga de la prueba de estrés (con el relieve de la zona para los nodos de apoyo). */
+export async function optimizarRed(pedido: PedidoOptimizar, fuente: FuenteRelieve, ctx: Contexto, progreso?: (avance: number) => void): Promise<ResultadoOptimizar> {
+  const relieve = await obtenerRelieve(cajaOptimizar(pedido.estres.antenas.filter((a) => a.activa)), fuente, ctx);
+  return optimizar(pedido, relieve, progreso);
 }
 
 /** Diseño de la malla por área: gateway y repetidores para cubrir el polígono con la señal pedida. */

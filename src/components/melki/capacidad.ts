@@ -10,7 +10,9 @@
 // por número de usuarios, con los precios y supuestos del documento del Inge.
 import type { CurvaCargaResultado, ResultadoCarga } from "@/lib/radio/carga";
 import { presetPorId } from "@/lib/radio/constantes";
-import { PAGOS_PERSONA_DIA_TRAMA, TOPE_CICLO_PCT, type ResultadoEstres, type ZonaEstres } from "@/lib/radio/estres";
+import { CAUSAS_USUARIO, ESTADOS_USUARIO, ESTRES_MEDIDO, PAGOS_PERSONA_DIA_TRAMA, TOPE_CICLO_PCT, type ResultadoEstres, type ZonaEstres } from "@/lib/radio/estres";
+import type { ResultadoOptimizar } from "@/lib/radio/optimizar";
+import { FICHA_GATEWAY, PROTOCOLOS } from "@/lib/radio/protocolos";
 import {
   CAPACIDAD_TRAMA,
   DEPARTAMENTOS_TRAMA,
@@ -28,7 +30,7 @@ import {
 import type { Parametros, ResultadoSimulacion } from "@/lib/radio/tipos";
 
 import type { OpcionesCarga, PedidoPoblar } from "../simulador/panel-capacidad";
-import { MAX_POR_ZONA, MUESTRA_PUNTO, textoLimite, textoLlenado, textoZonas, ZONA_DEFECTO, type CentroZona, type OpcionesEstres, type PedidoZonas } from "../simulador/panel-estres";
+import { MAX_POR_ZONA, MUESTRA_PUNTO, textoLimite, textoLlenado, textoOptimizacion, textoPropuesta, textoUsuarios, textoZonas, ZONA_DEFECTO, type CentroZona, type OpcionesEstres, type PedidoZonas } from "../simulador/panel-estres";
 import type { Respuesta } from "./cerebro";
 import type { Api, Orden, ResultadoOrden } from "./ordenes";
 
@@ -201,7 +203,10 @@ function ejecutarCarga(o: Extract<Orden, { tipo: "carga" }>, api: Api): Resultad
       ? `Simulo ${n} ${unidad} por hora durante una hora`
       : `Simulo ${n} ${unidad} saliendo al tiempo (en ${seg(ventana)})`;
   return {
-    texto: `${quePrueba}, paquete por paquete como MeshCore: cada repetidor escucha antes de hablar, espera su turno al azar, los acuses vuelven y si no llegan se reintenta (3 por la ruta y el último por inundación). Tardo unos segundos.`,
+    texto:
+      presetPorId(api.parametros().preset).protocolo === "meshtastic"
+        ? `${quePrueba}, paquete por paquete como Meshtastic: cada nodo escucha antes de hablar, los que repiten esperan según la señal con que lo oyeron y cancelan si otro ya lo repitió, el destino acusa y si no llega se reenvía (hasta 3 envíos, el último por inundación). Tardo unos segundos.`
+        : `${quePrueba}, paquete por paquete como MeshCore: cada repetidor escucha antes de hablar, espera su turno al azar, los acuses vuelven y si no llegan se reintenta (3 por la ruta y el último por inundación). Tardo unos segundos.`,
     luego: api.probarCarga(o.opciones, o.curva).then(
       (x): Respuesta =>
         x
@@ -252,6 +257,10 @@ function centrosNombrados(tn: string, centros: CentroZona[]): CentroZona[] {
 /** Opciones de la prueba de estrés que trae el texto: rampa, comparar ajustes, día de mercado, mensajes al día, multiplicador. */
 function opcionesEstres(tn: string): Partial<OpcionesEstres> {
   const o: Partial<OpcionesEstres> = { rampa: PIDE_RAMPA.test(tn), comparar: PIDE_COMPARAR.test(tn) };
+  // Lo medido en el gateway: el largo real de los mensajes, su ritmo y la fila de a uno
+  if (/\b(medid[oa]s?|datos reales|valores reales|ficha( tecnica)?|como (en |el )?(el )?gateway real|trafico real)\b/.test(tn) || FICHA_GATEWAY.claves.some((c) => tn.includes(c))) Object.assign(o, { perfil: "medido", pagosPersonaDia: ESTRES_MEDIDO.pagosPersonaDia, horaPicoPct: ESTRES_MEDIDO.horaPicoPct });
+  if (/\b(enlaces? (medidos?|de campo|reales)|curva (de campo|medida))\b/.test(tn)) o.curva = "campo";
+  else if (/\b(curva del diseno|enlaces? del diseno|conservador\w*)\b/.test(tn)) o.curva = "diseno";
   if (/\b(dia de mercado|mercado|feria|quincena|dia de pago)\b/.test(tn)) o.horaPicoPct = CAPACIDAD_TRAMA.horaPicoMercadoPct;
   const dia = tn.match(/(\d{1,2}(?:[.,]\d+)?)\s*(?:pagos?|mensajes?|whatsapps?|consultas?)\s*(?:por|al|cada|a el)\s*(?:persona|usuario|dia)/);
   if (dia) o.pagosPersonaDia = Math.min(50, Math.max(0.1, numero(dia[1])));
@@ -323,6 +332,7 @@ const estadoTxt = (e: ZonaEstres["estado"]) => ({ aguanta: "aguanta", lento: "ag
 const LIMITES: Record<ZonaEstres["limites"][number], string> = {
   canal: "canal lleno",
   ciclo: `al tope del ciclo de trabajo (${TOPE_CICLO_PCT} %)`,
+  recorte: "canal sobre el 25 %: Meshtastic recorta posiciones y telemetría",
   cola: "cola llena (descarta paquetes)",
   choques: "muchos choques",
   alcance: "pierde alcance con la carga",
@@ -381,12 +391,14 @@ export function textoEstres(r: ResultadoEstres): string {
     if (r.rampa?.usuariosMax) consejos.push(`o menos personas por frecuencia (~${ent(r.rampa.usuariosMax)} en esta red)`);
     partes.push(`Para que aguante: ${consejos.join(", ")}.`);
   }
+  if (r.resumenUsuarios?.total) partes.push(textoUsuarios(r));
+  if (r.gateway?.modo === "secuencial") partes.push(`El gateway atiende de a uno (lo medido en ${FICHA_GATEWAY.enFrase}): la fila llega a ${seg(r.gateway.esperaP95S)} para el 95 % y está ocupado el ${pct(r.gateway.ocupadoPct)} % del tiempo.`);
   partes.push("Son estimaciones para planear; se validan midiendo el canal en una red piloto.");
   return partes.join("\n");
 }
 
 const textoQuePruebo = (o: Partial<OpcionesEstres>) =>
-  `${o.rampa ? "Subo la carga de la hora pico (×0,5, ×1, ×2, ×4…) hasta que cada zona se reviente" : "Simulo la hora pico"}${o.horaPicoPct === CAPACIDAD_TRAMA.horaPicoMercadoPct ? " de un día de mercado" : ""}: cada persona manda sus ${f1(o.pagosPersonaDia ?? PAGOS_PERSONA_DIA_TRAMA, 1)} mensajes al día (pagos, WhatsApp y consultas a la IA) y el ${o.horaPicoPct ?? CAPACIDAD_TRAMA.horaPicoNormalPct} % cae en esa hora; mido en cada gateway y repetidor los mensajes completos, la espera, el canal, el ciclo de trabajo, las colas, el alcance con carga y la energía${o.comparar ? ", y repito con los otros ajustes de radio" : ""}`;
+  `${o.rampa ? "Subo la carga de la hora pico (×0,5, ×1, ×2, ×4…) hasta que cada zona se reviente" : "Simulo la hora pico"}${o.horaPicoPct === CAPACIDAD_TRAMA.horaPicoMercadoPct ? " de un día de mercado" : ""}${o.perfil === "medido" ? ` con lo medido en ${FICHA_GATEWAY.enFrase} (comandos de ${FICHA_GATEWAY.mensaje.minimo} a ${FICHA_GATEWAY.mensaje.maximo} caracteres, el gateway atiende de a uno)` : ""}: cada persona manda sus ${f1(o.pagosPersonaDia ?? PAGOS_PERSONA_DIA_TRAMA, 1)} mensajes al día (pagos, WhatsApp y consultas a la IA) y el ${o.horaPicoPct ?? CAPACIDAD_TRAMA.horaPicoNormalPct} % cae en esa hora; mido en cada gateway y repetidor los mensajes completos, la espera, el canal, el ciclo de trabajo, las colas, el alcance con carga y la energía, y a cada persona si le funciona${o.comparar ? ", y repito con los otros ajustes de radio" : ""}`;
 
 /** Después de poner las zonas: simula su conexión y, si se pidió, la prueba de estrés. */
 export async function seguirConZonas(pedido: PedidoZonas, estres: Partial<OpcionesEstres> | null, api: Api): Promise<Respuesta> {
@@ -419,7 +431,7 @@ function ejecutarZonas(o: Extract<Orden, { tipo: "zonas" }>, api: Api): Resultad
     };
   })();
   return {
-    texto: `Listo: ${textoZonas(x).replace(/^Puse/, "puse")} Cada una lleva su billetera (companion: no retransmite) a 1,5 m. ${o.estres ? `Simulo la conexión y después: ${textoQuePruebo(o.estres).charAt(0).toLowerCase() + textoQuePruebo(o.estres).slice(1)}. Tardo unos segundos.` : "Simulo cuántas quedan conectadas…"}`,
+    texto: `Listo: ${textoZonas(x).replace(/^Puse/, "puse")} Cada una lleva su ${presetPorId(api.parametros().preset).protocolo === "meshtastic" ? (api.parametros().usuariosRepiten === false ? "radio Meshtastic (CLIENT_MUTE: no repite)" : "radio Meshtastic (CLIENT: repite lo que oye)") : "billetera (companion: no retransmite)"} a 1,5 m. ${o.estres ? `Simulo la conexión y después: ${textoQuePruebo(o.estres).charAt(0).toLowerCase() + textoQuePruebo(o.estres).slice(1)}. Tardo unos segundos.` : "Simulo cuántas quedan conectadas…"}`,
     deshacer: antes,
     luego,
   };
@@ -427,7 +439,7 @@ function ejecutarZonas(o: Extract<Orden, { tipo: "zonas" }>, api: Api): Resultad
 
 function ejecutarEstres(o: Extract<Orden, { tipo: "estres" }>, api: Api): ResultadoOrden {
   return {
-    texto: `${textoQuePruebo(o.opciones)}. Paquete por paquete, como MeshCore. Tardo unos segundos.`,
+    texto: `${textoQuePruebo(o.opciones)}. Paquete por paquete, como ${PROTOCOLOS[presetPorId(api.parametros().preset).protocolo].nombre}. Tardo unos segundos.`,
     luego: api.probarEstres(o.opciones).then(
       (e): Respuesta =>
         e
@@ -628,12 +640,116 @@ function ejecutarTrama(o: Extract<Orden, { tipo: "trama-departamento" | "trama-d
 /* ───────────── Entrada única ───────────── */
 
 /** Órdenes de población, capacidad y dimensionamiento de Trama (null si el texto no es de esto). */
-export function interpretarCapacidad(texto: string, tn: string, api: Api): Orden | null {
-  return interpretarLimite(texto, tn, api) ?? interpretarZonas(texto, tn, api) ?? interpretarEstres(texto, tn) ?? interpretarCarga(texto, tn) ?? interpretarPoblar(texto, tn, api) ?? interpretarTrama(texto, tn, api);
+/* ───────────── Persona por persona y optimización para la carga ───────────── */
+
+/** «¿Qué usuarios no funcionan?», «¿a quiénes no les funciona?», «¿quiénes tienen dificultades?». */
+function interpretarUsuarios(tn: string): Orden | null {
+  const pide =
+    /\b(que|cuales|cuantos?|cuantas|quienes|a quienes|a cuales)\s+(usuarios?|personas?|clientes?|billeteras?)?\s*(no\s+(les?\s+)?(funciona\w*|sirve\w*)|tienen (dificultad\w*|problemas?)|fallan|estan mal|les va mal|funcionan|les funciona)\b/.test(tn) ||
+    /\b(usuarios?|personas?|clientes?) (que|a los que|a las que) no (les )?(funciona\w*|sirve\w*)\b/.test(tn) ||
+    /\b(usuario por usuario|persona por persona|cada (usuario|persona) (en|de) la prueba)\b/.test(tn);
+  if (!pide) return null;
+  return { tipo: "usuarios-estres", opciones: opcionesEstres(tn) };
 }
 
-export function ejecutarCapacidad(o: Extract<Orden, { tipo: "poblar" | "quitar-pobladas" | "carga" | "zonas" | "quitar-zonas" | "estres" | "limite" | "trama-departamento" | "trama-dimensionar" }>, api: Api): ResultadoOrden {
+/** «Optimiza la red para la carga», «recomiéndame gateways de apoyo», «¿qué hago para que aguante la hora pico?». */
+function interpretarOptimizar(tn: string): Orden | null {
+  if (/\b(aplic\w*|acept\w*|pon\w*|hazl[oa])\b.*\b(optimizacion|propuesta de optimizacion|lo que propusiste|la propuesta|todo junto|esa propuesta|esa mejora)\b/.test(tn) && !/\b(ajuste|factible)\b/.test(tn)) {
+    const n = tn.match(/\b(primera|segunda|tercera|cuarta|1|2|3|4)\b/);
+    const indice = n ? ({ primera: 0, segunda: 1, tercera: 2, cuarta: 3, "1": 0, "2": 1, "3": 2, "4": 3 } as Record<string, number>)[n[1]] : -1;
+    return { tipo: "aplicar-optimizacion", indice, combinada: /\btodo junto|todas|combinad\w*\b/.test(tn) };
+  }
+  const apoyo = /\b(gateways? de (apoyo|respaldo)|getways? de (apoyo|pollo|respaldo)|gateway (extra|adicional) para (la )?carga)\b/.test(tn);
+  const verbo = /\b(optimiz\w*|mejor\w*|arregl\w*|descongestion\w*|desatur\w*|recomiend\w*|propon\w*|sugi\w*|que hago|como hago|como logro|que necesito|que le falta)\b/.test(tn);
+  const carga = /\b(carga|cargad\w*|estres\w*|saturad\w*|sobrecargad\w*|congestion\w*|popularidad|hora pico|trafico|capacidad|aguant\w*|colaps\w*|revient\w*|no les? funciona|dificultades|usuarios|personas)\b/.test(tn);
+  if (apoyo || (verbo && carga && !/\b(cobertura|factible|costo|barat\w*)\b/.test(tn))) {
+    if (/^(que|como|para que|por que)\s+(es|son|significa)\b/.test(tn)) return null;
+    return { tipo: "optimizar", opciones: opcionesEstres(tn) };
+  }
+  return null;
+}
+
+export function interpretarCapacidad(texto: string, tn: string, api: Api): Orden | null {
+  return interpretarOptimizar(tn) ?? interpretarUsuarios(tn) ?? interpretarLimite(texto, tn, api) ?? interpretarZonas(texto, tn, api) ?? interpretarEstres(texto, tn) ?? interpretarCarga(texto, tn) ?? interpretarPoblar(texto, tn, api) ?? interpretarTrama(texto, tn, api);
+}
+
+/** Las personas que peor la pasan, con su causa. */
+function textoPeores(r: ResultadoEstres, n = 5): string {
+  const malos = (r.porUsuario ?? []).filter((u) => u.estado !== "bien" && u.estado !== "funciona").sort((a, b) => a.exitoPct - b.exitoPct);
+  if (!malos.length) return "";
+  return `Las que peor la pasan:\n${malos
+    .slice(0, n)
+    .map((u) => `• ${u.nombre}: ${ESTADOS_USUARIO[u.estado].nombre.toLowerCase()}, le vuelve el ${pct(u.exitoPct)} % y espera hasta ${seg(u.esperaP95S)}${u.causa ? ` (${CAUSAS_USUARIO[u.causa]})` : ""}. ${u.porque}`)
+    .join("\n")}${malos.length > n ? `\n• y ${ent(malos.length - n)} más (en el mapa, con el contorno de su color)` : ""}`;
+}
+
+function ejecutarUsuarios(o: Extract<Orden, { tipo: "usuarios-estres" }>, api: Api): ResultadoOrden {
+  const ya = !Object.keys(o.opciones).some((k) => (o.opciones as Record<string, unknown>)[k]) ? (api.estres?.() ?? null) : null;
+  const responder = (e: ResultadoEstres | null): Respuesta =>
+    !e
+      ? { texto: "No pude hacer la prueba de la hora pico (falta simular la red o el motor se detuvo)." }
+      : e.motivo
+        ? { texto: e.motivo, acciones: [{ texto: "Poner 250 personas en cada repetidor", accion: "orden", orden: { tipo: "zonas", pedido: { n: 250 }, estres: {} } }] }
+        : {
+            texto: `${textoUsuarios(e)}\n${textoPeores(e)}\nEn el mapa cada persona lleva el color de su estado en el contorno: verde oscuro le funciona bien, verde claro le funciona, amarillo a medias, naranja con dificultades y rojo no le funciona.`,
+            acciones: e.resumenUsuarios.funcionanPct < 95 ? [{ texto: "Optimizar la red para esta carga", accion: "orden", orden: { tipo: "optimizar", opciones: {} } }] : undefined,
+          };
+  if (ya) return { texto: responder(ya).texto, acciones: responder(ya).acciones };
+  return { texto: `${textoQuePruebo(o.opciones)}. Después le digo persona por persona a quién le funciona y a quién no.`, luego: api.probarEstres(o.opciones).then(responder) };
+}
+
+function accionesOptimizacion(x: ResultadoOptimizar): Respuesta["acciones"] {
+  const acciones: NonNullable<Respuesta["acciones"]> = [];
+  if (x.combinada) acciones.push({ texto: "Aplicar todo junto", accion: "orden", orden: { tipo: "aplicar-optimizacion", indice: -1, combinada: true } });
+  const primera = x.propuestas.findIndex((p) => p.aplicable);
+  if (primera >= 0) acciones.push({ texto: `Aplicar «${x.propuestas[primera].titulo}»`, accion: "orden", orden: { tipo: "aplicar-optimizacion", indice: primera, combinada: false } });
+  return acciones.length ? acciones : undefined;
+}
+
+function ejecutarOptimizar(o: Extract<Orden, { tipo: "optimizar" }>, api: Api): ResultadoOrden {
+  if (!api.optimizarRed) return { texto: "La optimización no está disponible en esta pantalla." };
+  const p = presetPorId(api.parametros().preset);
+  return {
+    texto: `Busco cómo hacer que la red aguante esta carga (${PROTOCOLOS[p.protocolo].nombre}): miro a quién no le funciona y por qué, y pruebo gateways de apoyo, antenas de apoyo y ajustes del protocolo, cada uno con la misma carga, paquete por paquete. Tardo unos segundos.`,
+    luego: api.optimizarRed(o.opciones).then((x): Respuesta => {
+      if (!x) return { texto: "No pude optimizar la red (falta simular o el motor se detuvo). Intente de nuevo en un momento." };
+      const otras = x.propuestas.slice(x.combinada ? 0 : 1, 4).map((p) => `• ${textoPropuesta(p)}`);
+      return { texto: `${textoOptimizacion(x)}${otras.length ? `\nOtras que ayudan:\n${otras.join("\n")}` : ""}`, acciones: accionesOptimizacion(x) };
+    }),
+  };
+}
+
+function ejecutarAplicarOptimizacion(o: Extract<Orden, { tipo: "aplicar-optimizacion" }>, api: Api): ResultadoOrden {
+  const x = api.optimizacion?.() ?? null;
+  if (!x || !api.aplicarOptimizacion) return { texto: "No tengo una optimización al día para aplicar. Pídame «optimiza la red para la carga».", acciones: [{ texto: "Optimizar la red para esta carga", accion: "orden", orden: { tipo: "optimizar", opciones: {} } }] };
+  const pr = o.combinada && x.combinada ? x.combinada : o.indice >= 0 ? x.propuestas[o.indice] : (x.combinada ?? x.propuestas.find((p) => p.aplicable));
+  if (!pr) return { texto: "Esa propuesta no está en la lista." };
+  if (!pr.aplicable) return { texto: `«${pr.titulo}» se hace en campo, no en el mapa: ${pr.que}` };
+  const antes = api.instantanea();
+  return {
+    texto: `Aplico «${pr.titulo}» y vuelvo a probar la hora pico con la red nueva…`,
+    deshacer: antes,
+    luego: api.aplicarOptimizacion(pr).then((ok): Respuesta => {
+      const e = ok ? (api.estres?.() ?? null) : null;
+      return {
+        texto: ok ? `Listo: apliqué «${pr.titulo}». ${e && !e.motivo ? textoUsuarios(e) : ""}` : "No pude aplicar la propuesta.",
+        acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }],
+      };
+    }),
+  };
+}
+
+export function ejecutarCapacidad(
+  o: Extract<Orden, { tipo: "poblar" | "quitar-pobladas" | "carga" | "zonas" | "quitar-zonas" | "estres" | "limite" | "trama-departamento" | "trama-dimensionar" | "optimizar" | "aplicar-optimizacion" | "usuarios-estres" }>,
+  api: Api,
+): ResultadoOrden {
   switch (o.tipo) {
+    case "optimizar":
+      return ejecutarOptimizar(o, api);
+    case "aplicar-optimizacion":
+      return ejecutarAplicarOptimizacion(o, api);
+    case "usuarios-estres":
+      return ejecutarUsuarios(o, api);
     case "limite":
       return ejecutarLimite(o, api);
     case "zonas":

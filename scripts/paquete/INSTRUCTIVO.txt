@@ -1,7 +1,7 @@
-SIMULADOR DE COBERTURA · Red MeshCore de Trama: pagos, WhatsApp e IA · LoRa 915–928 MHz · avance del {{FECHA}}
+SIMULADOR DE COBERTURA · Red MeshCore o Meshtastic de Trama: pagos, WhatsApp e IA · LoRa 915–928 MHz · avance del {{FECHA}}
 ================================================================================================
 
-Herramienta para planear la red por radio de Trama (MeshCore), que lleva
+Herramienta para planear la red por radio de Trama (MeshCore o Meshtastic), que lleva
 la comunicación a donde normalmente no llega: por ella viajan pagos,
 mensajes de WhatsApp por texto y consultas a la inteligencia artificial
 en los lugares sin señal, y todo ese tráfico comparte el mismo canal.
@@ -152,6 +152,35 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
       - Pruebe a cambiar el ajuste de radio en el modo avanzado
         (Parámetros: SF11, SF10 o SF9 de Trama) y vuelva a probar: SF9
         aguanta unas 3 veces más mensajes, con menos alcance.
+      - Persona por persona (en el resultado de la prueba de estrés): a
+        cuántas personas les funciona y a quiénes no, con su causa (sin
+        cobertura, saltos, señal débil, canal ocupado, choques, cola
+        llena o la fila del gateway). En el mapa el contorno de cada
+        persona toma el color de su estado, como los rangos de señal:
+        verde oscuro le funciona bien, verde claro le funciona,
+        amarillo a medias, naranja con dificultades y rojo no le
+        funciona; la leyenda dice cuántas hay de cada una. La rampa da
+        la "Capacidad real": el máximo de personas atendidas.
+      - "Tráfico: Medido en ...": la prueba usa lo medido en un
+        gateway real (comandos de 15 a 56 caracteres, 5,8 por
+        equipo al día, el 24 % en la hora pico, respuestas de hasta
+        200 bytes por parte y el gateway que atiende de a uno) y los
+        enlaces "Medidos en campo" (cerca de la mitad de los paquetes
+        pasa con SNR de −12 dB).
+      - "Optimizar" (en el resultado de la prueba): busca gateways de
+        apoyo (un repetidor convertido en gateway, un segundo gateway o
+        uno en otra frecuencia), antenas de apoyo para la gente sin
+        señal, un ajuste de radio más rápido y, en Meshtastic, los
+        equipos en CLIENT_MUTE; prueba cada uno con la misma carga y
+        dice cuántas personas más quedan atendidas. "Aplicar al mapa"
+        lo pone (con "Deshacer"); los de otra frecuencia o del servicio
+        del gateway dicen "Se hace en campo".
+      - Protocolo: en el modo avanzado, Parámetros > Radio LoRa >
+        "Protocolo de la malla": MeshCore o Meshtastic (LongFast y sus
+        otros presets; los equipos de las personas repiten o no). Con
+        Meshtastic, la prueba de estrés simula la inundación
+        administrada: todos repiten salvo los mudos y cancelan si oyen
+        que otro ya lo repitió.
  c) Tours guiados: toque "Tours" (arriba a la derecha) o pídale a
     Melki "hazme un tour". Melki pregunta cuál quiere:
       - Tutorial básico (3 min, recomendado para empezar): su primera
@@ -199,6 +228,12 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
         1?", "llena el gateway hasta su límite", "pon 700 personas en el
         Repetidor 2 y mira la estabilidad", "el límite de personas de
         cada punto", "llena cada repetidor hasta su límite"
+      - Protocolos, personas y optimizar: "cambia a Meshtastic", "usa
+        MeshCore", "que los clientes no repitan", "¿qué usuarios no
+        funcionan?", "prueba la hora pico con lo medido en el gateway",
+        "optimiza la red para la carga", "recomiéndame gateways de
+        apoyo", "aplica la optimización", "¿qué es Meshtastic?", "¿qué
+        se midió en el gateway?"
       - Trama: "¿cuánto cuesta la red para el Chocó?", "¿y con el 50 %
         de adopción y SF10?", "¿cuánto cuesta cubrir todo el país?",
         "dimensiona 5.000 usuarios en 800 km² de sabana", "¿cuánto
@@ -366,10 +401,12 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
 
 3. BUENO SABER
 --------------
-- El protocolo es MeshCore: solo los repetidores retransmiten; las
-  billeteras y las radios del gateway son companion. El primer paquete
-  hacia un destino se inunda y desde ahí los mensajes van directos por la
-  ruta aprendida. El ajuste de radio por defecto es el de Trama: SF11 /
+- El protocolo por defecto es MeshCore: solo los repetidores
+  retransmiten; las billeteras y las radios del gateway son companion.
+  El primer paquete hacia un destino se inunda y desde ahí los mensajes
+  van directos por la ruta aprendida. Con Meshtastic repiten todos (salvo
+  los CLIENT_MUTE), el paquete lleva su límite de saltos (3, hasta 7) y
+  los mensajes directos aprenden el siguiente salto. El ajuste de radio por defecto es el de Trama: SF11 /
   250 kHz (un pago ≈ 9,5 s de aire a 2 saltos), en 920 MHz; las otras
   frecuencias de Trama son 921,5, 924 y 925,5 MHz. La ANE reconoce el
   uso libre de 915 a 928 MHz: el documento de Trama menciona 902–928
@@ -381,8 +418,9 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
 - La prueba de carga y la de estrés son estimaciones: miden cada
   mensaje con el tamaño de un pago (118 bytes de ida, 126 de vuelta y
   un aviso de 126 para quien recibe; un WhatsApp largo o una respuesta
-  larga de la IA ocupan más aire) y 1,5 s del banco; entre
-  billeteras estiman quién oye a quién sobre terreno plano; la energía
+  larga de la IA ocupan más aire) y 1,5 s del banco (o lo medido en el
+  gateway medido); entre billeteras estiman quién oye a quién
+  sobre terreno plano con Longley-Rice (hasta ~8 km); la energía
   del repetidor solar supone 0,45 W al transmitir, 0,03 W escuchando y
   ~14 Wh al día del panel de 5 W. La prueba usa una sola frecuencia: el
   sitio de Trama lleva 4 radios y, repartiendo los repetidores entre

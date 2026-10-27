@@ -9,6 +9,7 @@ import type { Entrada, Fase, PuntoDestino, Salida } from "./protocolo";
 import type { Ajuste, PedidoAjuste } from "./ajuste";
 import type { CurvaCargaResultado, PedidoCarga, ResultadoCarga } from "./carga";
 import type { PedidoEstres, ResultadoEstres } from "./estres";
+import type { PedidoOptimizar, ResultadoOptimizar } from "./optimizar";
 import type { Diseno, PedidoDiseno } from "./diseno";
 import type { PedidoSiembra, Siembra } from "./siembra";
 import type { Inspeccion } from "./simulacion";
@@ -73,6 +74,9 @@ export class MotorCobertura {
       case "estres":
         p.resolver(m.estres);
         break;
+      case "optimizacion":
+        p.resolver(m.optimizacion);
+        break;
       case "hgt":
         p.resolver({ archivos: m.archivos, errores: m.errores });
         break;
@@ -126,6 +130,11 @@ export class MotorCobertura {
   /** Prueba de estrés de la hora pico, repetidor por repetidor (y la rampa hasta que cada zona se revienta). */
   estres(pedido: PedidoEstres, progreso?: (avance: number) => void) {
     return this.enviar<ResultadoEstres>({ tipo: "estres", pedido }, [], progreso ? (_f, a) => progreso(a) : undefined);
+  }
+
+  /** Optimiza una red sobrecargada para la carga de la prueba de estrés: gateways y antenas de apoyo, y ajustes. */
+  optimizar(pedido: PedidoOptimizar, relieve: FuenteRelieve, progreso?: (avance: number) => void) {
+    return this.enviar<ResultadoOptimizar>({ tipo: "optimizar", pedido, relieve }, [], progreso ? (_f, a) => progreso(a) : undefined);
   }
 
   /** Diseña la malla para cubrir un área (gateway y repetidores) con el relieve real. */

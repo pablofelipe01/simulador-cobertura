@@ -5,12 +5,13 @@
 
 // Cerebro local de Melki: temas con palabras clave y respuestas que usan el estado actual del simulador.
 // No envía nada a internet. Más adelante se puede conectar a un modelo de IA (ver variables de entorno).
-import { CLASES, presetPorId } from "@/lib/radio/constantes";
+import { CLASES, presetEquivalente, presetPorId } from "@/lib/radio/constantes";
 import { entornoPorId, ENTORNOS, perdidaEntorno } from "@/lib/radio/entorno";
 import { anchosHaz, esDireccional, PATRONES, patronPorId } from "@/lib/radio/patron";
 import { consejoRed, type EstadoRed } from "@/lib/radio/estado-red";
 import { airePagoMs, bytesDatos, esperaRetransmision, INTENTOS, tiempoEnAireMs } from "@/lib/radio/mensaje";
-import { ENERGIA_P1, PAGOS_PERSONA_DIA_TRAMA, TOPE_CICLO_PCT } from "@/lib/radio/estres";
+import { ENERGIA_P1, ESTADOS_USUARIO, ESTRES_MEDIDO, ORDEN_ESTADOS_USUARIO, PAGOS_PERSONA_DIA_TRAMA, TOPE_CICLO_PCT } from "@/lib/radio/estres";
+import { FICHA_GATEWAY, PROTOCOLOS } from "@/lib/radio/protocolos";
 import { CAPACIDAD_TRAMA, CATALOGO, COTIZADOR, DEPARTAMENTOS_TRAMA, OPERACION_TRAMA, PRECIOS, SF_TRAMA, TERRENOS_TRAMA, unitarioCop, type SfTrama } from "@/lib/radio/trama";
 import { esReferencia, resumenRed as resumenParametros } from "@/lib/radio/red";
 import { DERECHOS, CREDITO, TITULARIDAD } from "@/lib/autoria";
@@ -381,11 +382,74 @@ const TEMAS: Tema[] = [
     },
   },
   {
+    id: "protocolos",
+    claves: ["meshtastic", "mesh tastic", "mestastic", "meshcore o meshtastic", "diferencia entre meshcore", "protocolo", "protocolos", "inundacion administrada", "managed flooding", "client mute", "hop limit", "longfast", "long fast"],
+    responder: (c) => {
+      const p = presetPorId(c.parametros.preset);
+      const mc = PROTOCOLOS.meshcore;
+      const mt = PROTOCOLOS.meshtastic;
+      return {
+        texto: [
+          `El simulador trabaja con los dos protocolos de malla sobre LoRa; ahora está en ${PROTOCOLOS[p.protocolo].nombre} (${p.nombre}). Se cambia en Parámetros → Radio LoRa, o pídamelo: «cambia a Meshtastic», «usa MeshCore».`,
+          `MeshCore: ${mc.quienRetransmite.toLowerCase()}. ${mc.ruteo} Cabecera de 2 bytes, carga útil de ${mc.cargaMaxima} B, texto de ${mc.textoMaximo} B (las tildes ocupan 2), acuses de 4 B, hasta ${mc.saltosMax} saltos y 3 reintentos (el último por inundación).`,
+          `Meshtastic: ${mt.quienRetransmite.toLowerCase()}. ${mt.ruteo} Cabecera de 16 bytes, carga útil de ~${mt.cargaMaxima} B, hasta ${mt.saltosMax} saltos (3 por defecto), ${mt.envios} envíos por mensaje directo, y con el canal sobre el ${mt.canalAlertaPct} % recorta posiciones y telemetría.`,
+          "En la prueba de popularidad la diferencia pesa: en Meshtastic cada mensaje que se inunda lo repiten muchos equipos (aunque cancelan cuando oyen a otro), así que en zonas con mucha gente el canal se llena antes; con los equipos en CLIENT_MUTE solo repiten los ROUTER y se parece más a MeshCore.",
+        ].join("\n"),
+        acciones: [{ texto: p.protocolo === "meshtastic" ? "Cambiar a MeshCore" : "Cambiar a Meshtastic", accion: "orden", orden: { tipo: "parametros", cambios: { preset: presetEquivalente(c.parametros.preset, p.protocolo === "meshtastic" ? "meshcore" : "meshtastic"), limiteSaltos: Math.min(c.parametros.limiteSaltos, p.protocolo === "meshtastic" ? mc.saltosMax : mt.saltosMax) }, descripcion: `el protocolo a ${p.protocolo === "meshtastic" ? "MeshCore" : "Meshtastic"}` } }],
+      };
+    },
+  },
+  {
+    id: "gateway-medido",
+    claves: ["se midio", "midio", "ficha tecnica", "gateway medido", "lo medido", "valores medidos", "datos medidos", "gateway real", "router solar", ...FICHA_GATEWAY.claves],
+    responder: () => {
+      const g = FICHA_GATEWAY;
+      const ant = g.antenas.map((a) => `${a.nombre} (${a.nodo ? `${a.nodo}, ` : ""}${a.radio}${a.distanciaKm ? `, ${f(a.distanciaKm, 1)} km` : ""}${a.snrDb !== null ? `, SNR ${f(a.snrDb, 1)} dB` : ""}): responde el ${a.respuestaPct} %`).join("; ");
+      return {
+        texto: [
+          `La prueba de popularidad puede usar lo medido en ${g.enFrase} (${g.semana}): ${g.equipo}, Meshtastic. Atiende de a uno (~${g.proceso.porMensajeS} s por mensaje; hasta ${g.proceso.peorS} s si la base de datos no responde), con respuestas de hasta ${g.respuestaParte} B por parte.`,
+          `Tráfico: ${g.picos.dia} mensajes al día entre ${g.nodos.conocidos} equipos (${g.nodos.activos} activos), picos de ${g.picos.minuto} por minuto y ${g.picos.hora} por hora; mensajes de ${g.mensaje.minimo} a ${g.mensaje.maximo} caracteres (mediana ${g.mensaje.mediana}). Canal ocupado del ${g.canalPct.min} al ${g.canalPct.max} % y ${f(g.erroresPct, 1)} % de paquetes con error.`,
+          `Antenas (últimos 100 sondeos): ${ant}.`,
+          `Con eso calibro la curva de entrega por enlace «medida en campo» (cerca de la mitad de los paquetes pasa con SNR de −12 dB) y el perfil de tráfico «${g.medidoEn}». Pídame «prueba la hora pico con lo medido».`,
+        ].join("\n"),
+        acciones: [{ texto: "Probar la hora pico con lo medido", accion: "orden", orden: { tipo: "estres", opciones: { perfil: "medido", pagosPersonaDia: ESTRES_MEDIDO.pagosPersonaDia, horaPicoPct: ESTRES_MEDIDO.horaPicoPct } } }],
+      };
+    },
+  },
+  {
+    id: "usuarios-prueba",
+    claves: ["contorno", "colores de las personas", "persona por persona", "usuario por usuario", "le funciona", "a medias", "con dificultades", "capacidad real", "capacidad maxima real"],
+    responder: () => ({
+      texto: [
+        "En la prueba de estrés evalúo a cada persona: para cada enlace de su ruta (ida y vuelta) la probabilidad de que el paquete pase con su margen, por lo que se perdió en cada nodo de su ruta (choques, mientras transmitía o por cola llena), con los reintentos del protocolo; lo ajusto con lo que completó su zona y con sus propios mensajes simulados.",
+        `En el mapa el contorno de cada persona toma el color de su estado, con la paleta de los rangos de señal: ${ORDEN_ESTADOS_USUARIO.map((e) => `${ESTADOS_USUARIO[e].nombre.toLowerCase()} (${ESTADOS_USUARIO[e].descripcion.charAt(0).toLowerCase()}${ESTADOS_USUARIO[e].descripcion.slice(1, -1)})`).join("; ")}.`,
+        "Y le digo por qué: sin cobertura, más saltos que el límite, señal débil, canal ocupado, choques, cola llena en un nodo, la fila del gateway o espera larga. Con «¿hasta dónde aguanta cada repetidor?» sale la capacidad real: el máximo de personas atendidas (a las que les funciona) al subir la carga.",
+      ].join("\n"),
+      acciones: [{ texto: "¿A quiénes no les funciona?", accion: "orden", orden: { tipo: "usuarios-estres", opciones: {} } }],
+    }),
+  },
+  {
+    id: "optimizar-carga",
+    claves: ["gateway de apoyo", "gateways de apoyo", "getway de apoyo", "optimizar la carga", "red sobrecargada", "sobrecarga", "red estresada", "boton de optimizacion"],
+    responder: () => ({
+      texto: [
+        "Con «Optimizar» (en el resultado de la prueba de estrés, o pidiéndomelo) miro a quién no le funciona y por qué, y pruebo arreglos con la misma carga, paquete por paquete:",
+        "• Gateways de apoyo: convertir el repetidor de una zona cargada en gateway (con internet), un segundo gateway cerca de la gente que más sufre, o uno en otra frecuencia que se lleva a la gente de esa zona (dos canales que no se estorban).",
+        "• Antenas de apoyo para la gente sin cobertura o con señal débil (busco la cadena con el relieve real).",
+        "• Ajustes del protocolo: un ajuste de radio más rápido, en Meshtastic los equipos en CLIENT_MUTE y sin telemetría a la malla, y atender en paralelo en el gateway.",
+        "Cada propuesta trae el antes y el después (personas atendidas, mensajes completos, canal) y la que combina las que suman; las aplico al mapa con un botón y se pueden deshacer.",
+      ].join("\n"),
+      acciones: [{ texto: "Optimizar la red para esta carga", accion: "orden", orden: { tipo: "optimizar", opciones: {} } }],
+    }),
+  },
+  {
     id: "roles",
     claves: ["rol", "roles", "repeater", "companion", "room server", "router", "client", "cliente", "silencioso", "no retransmite"],
-    responder: () => ({
+    responder: (c) => ({
       texto:
-        "MeshCore tiene tres roles: Repetidor (pasa los paquetes de los demás; son los P1 de Trama en sus tubos), Companion (la billetera de la persona o la radio del gateway por USB: envía y recibe lo suyo y no retransmite) y Room server (guarda los mensajes de un grupo; por defecto no retransmite). Solo los repetidores sirven de puente: si una persona queda entre dos repetidores, no ayuda a pasar los mensajes de otros.",
+        presetPorId(c.parametros.preset).protocolo === "meshtastic"
+          ? "En Meshtastic los roles que importan aquí son ROUTER (siempre repite y no cancela: los repetidores de la red), CLIENT (el de fábrica: repite lo que oye, pero si oye que otro ya lo repitió, cancela el suyo) y CLIENT_MUTE (no repite nunca). Con mucha gente, dejar las personas en CLIENT_MUTE evita que cada mensaje se repita decenas de veces."
+          : "MeshCore tiene tres roles: Repetidor (pasa los paquetes de los demás; son los P1 de Trama en sus tubos), Companion (la billetera de la persona o la radio del gateway por USB: envía y recibe lo suyo y no retransmite) y Room server (guarda los mensajes de un grupo; por defecto no retransmite). Solo los repetidores sirven de puente: si una persona queda entre dos repetidores, no ayuda a pasar los mensajes de otros.",
     }),
   },
   {

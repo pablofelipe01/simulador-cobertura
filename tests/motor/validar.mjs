@@ -24,13 +24,16 @@ export { perdidaEntorno } from "./src/lib/radio/entorno";
 export { dbmAUv, dbmADbuvm, desdeDbm, aDbm } from "./src/lib/radio/unidades";
 export { textoInforme } from "./src/lib/radio/informe";
 export { tiempoEnAireMs, simularMensaje, probabilidadEnlace, esperaRetransmision, esperaAcuseMs, snrLimite, preambuloSimbolos, airePagoMs, bytesDatos, INTENTOS } from "./src/lib/radio/mensaje";
-export { simularCarga, curvaCarga, PEDIDO_CARGA_DEFECTO } from "./src/lib/radio/carga";
-export { estresMalla, PEDIDO_ESTRES_DEFECTO, PAGOS_PERSONA_DIA_TRAMA, TOPE_PERSONAS_PUNTO } from "./src/lib/radio/estres";
+export { simularCarga, simularCargaDetalle, curvaCarga, PEDIDO_CARGA_DEFECTO } from "./src/lib/radio/carga";
+export { estresMalla, PEDIDO_ESTRES_DEFECTO, PAGOS_PERSONA_DIA_TRAMA, TOPE_PERSONAS_PUNTO, ESTRES_MEDIDO, estadoUsuario } from "./src/lib/radio/estres";
+export { entregaPorMargen, PROTOCOLOS, FICHA_GATEWAY, TRAFICO_MEDIDO } from "./src/lib/radio/protocolos";
+export { optimizar, cajaOptimizar } from "./src/lib/radio/optimizar";
+export { bytesDatosMt, esperaAcuseMt, retardoRetransmisionMt, ranuraMtMs } from "./src/lib/radio/mensaje";
 export { analizarMalla } from "./src/lib/radio/malla";
 export { puntosAlAzar, personasPorDensidad, generador } from "./src/lib/radio/poblar";
 export { dimensionarTrama, dimensionarDepartamento, DEPARTAMENTOS_TRAMA, PRECIOS, pesosTrama } from "./src/lib/radio/trama";
 export { calcularEnlaces, retransmite } from "./src/lib/radio/malla";
-export { presetPorId } from "./src/lib/radio/constantes";
+export { presetPorId, presetsDe, presetEquivalente } from "./src/lib/radio/constantes";
 export { sembrar, cajaSiembra } from "./src/lib/radio/siembra";
 export { estadoRed, piezaDe, consejoRed } from "./src/lib/radio/estado-red";
 export { alcancePlanoKm } from "./src/lib/radio/alcance-plano";
@@ -360,6 +363,116 @@ caso("Sin D, todas conectadas", sinD.nodos.every((n) => n.saltos !== null));
   const lG = m.estresMalla(pedido(pocas, rPocas, { foco: "G" })).limite;
   caso("Límite de un punto: también el gateway", lG && !lG.motivo && lG.pieza === "gateway" && lG.personasSeguro > 40, `~${lG?.personasSeguro} personas; falla primero ${lG?.falla?.nombres.join(", ")}`);
   caso("Límite de un punto: una persona no es un punto", Boolean(m.estresMalla(pedido(pocas, rPocas, { foco: "R1-p0" })).limite?.motivo));
+
+  // v12.9 · Persona por persona: estados, causas y coherencia con su zona
+  const ev = e1.porUsuario;
+  const porEstado = e1.resumenUsuarios.porEstado;
+  caso("Persona por persona: las 160 personas tienen estado y suman", ev.length === 160 && Object.values(porEstado).reduce((s, x) => s + x, 0) === 160 && e1.resumenUsuarios.funcionanPct >= 90, JSON.stringify(porEstado));
+  const malas = m.estresMalla(pedido(muchas, rMuchas, {}));
+  const zonaMala = malas.zonas.find((z) => z.usuarios > 0);
+  const deZona = malas.porUsuario.filter((u) => u.zona === zonaMala.id);
+  const media = deZona.reduce((s, u) => s + u.exitoPct, 0) / deZona.length;
+  caso("Persona por persona: con la red reventada casi a nadie le funciona y la causa es la congestión", malas.resumenUsuarios.funcionanPct < 20 && malas.porUsuario.filter((u) => u.causa === "canal" || u.causa === "choques" || u.causa === "cola").length > 0.5 * malas.porUsuario.length, JSON.stringify(malas.resumenUsuarios.porCausa));
+  caso("Persona por persona: lo de sus personas cuadra con lo que completó su zona (±12 puntos)", Math.abs(media - zonaMala.completosPct) < 12, `${zonaMala.nombre}: personas ${media.toFixed(0)} % · zona ${zonaMala.completosPct.toFixed(0)} %`);
+  caso("Estados: 95 % en 30 s le funciona bien; 92 % en 50 s le funciona; 80 % a medias; 50 % con dificultades; 20 % no", m.estadoUsuario(96, 20) === "bien" && m.estadoUsuario(92, 50) === "funciona" && m.estadoUsuario(80, 20) === "medias" && m.estadoUsuario(92, 90) === "medias" && m.estadoUsuario(50, 20) === "dificultad" && m.estadoUsuario(20, 10) === "no");
+  caso("La rampa da la capacidad real (personas atendidas)", e1.rampa.capacidadReal && e1.rampa.capacidadReal.personas >= 160 && e1.rampa.puntos.every((x) => x.funcionanPct >= 0 && x.funcionanPct <= 100), JSON.stringify(e1.rampa.capacidadReal));
+  // Una persona lejos, sin cobertura: no le funciona y la causa es la cobertura
+  const lejos = m.desplazar(4.2, -73.37, 60000, 270);
+  const conLejana = [...pocas, { id: "lejana", nombre: "Persona lejana", tipo: "nodo", lat: lejos.lat, lon: lejos.lon, alturaM: 1.5, potenciaDbm: 22, gananciaDbi: 2, perdidaCableDb: 0, equipo: "xiao", rol: "COMPANION", pasarela: false, activa: true }];
+  const rLejana = await m.simular(24, conLejana, pT, { tipo: "plano" }, ctx);
+  const eLejana = m.estresMalla(pedido(conLejana, rLejana, {}));
+  const ul = eLejana.porUsuario.find((u) => u.id === "lejana");
+  caso("Una persona sin cobertura: no le funciona, por cobertura (y no carga la red)", ul?.estado === "no" && ul.causa === "cobertura" && eLejana.usuarios === 160 && eLejana.personas === 161, JSON.stringify(ul?.porque));
+
+  // v12.9 · Meshtastic: inundación administrada, clientes que repiten o mudos, y la fila del gateway
+  const pMt = { ...pT, preset: "MT_LONG_FAST" };
+  const rMt = await m.simular(25, pocas, pMt, { tipo: "plano" }, ctx);
+  const cargaMt = (extra = {}, params = pMt) => m.simularCargaDetalle({ ...m.PEDIDO_CARGA_DEFECTO, antenas: pocas, enlaces: rMt.enlaces, nodos: rMt.nodos, parametros: params, tipo: "texto", caracteres: 40, mensajes: 1, rutaConocida: false, semilla: 3, ...extra }).resultado;
+  const inund = cargaMt();
+  caso("Meshtastic: un mensaje inundado llega y la inundación administrada cancela retransmisiones", inund.protocolo === "meshtastic" && inund.completos === 1 && inund.cancelados > 20 && inund.transmisiones < 40, `${inund.transmisiones} transmisiones, ${inund.cancelados} canceladas`);
+  const mudo = cargaMt({}, { ...pMt, usuariosRepiten: false });
+  caso("Meshtastic con CLIENT_MUTE: no cancela nada (solo repiten los ROUTER) y transmite menos", mudo.completos === 1 && mudo.cancelados === 0 && mudo.transmisiones < inund.transmisiones, `${mudo.transmisiones} transmisiones`);
+  const eMt = m.estresMalla({ ...m.PEDIDO_ESTRES_DEFECTO, antenas: pocas, enlaces: rMt.enlaces, nodos: rMt.nodos, parametros: pMt, fondo: false });
+  const eMtMudo = m.estresMalla({ ...m.PEDIDO_ESTRES_DEFECTO, antenas: pocas, enlaces: rMt.enlaces, nodos: rMt.nodos, parametros: { ...pMt, usuariosRepiten: false }, fondo: false });
+  caso("Meshtastic: con los clientes repitiendo el canal se llena más que con MeshCore y que con CLIENT_MUTE", eMt.protocolo === "meshtastic" && eMt.canalGatewayPct > e1.canalGatewayPct && eMt.canalGatewayPct > eMtMudo.canalGatewayPct, `MeshCore ${e1.canalGatewayPct.toFixed(0)} % · Meshtastic ${eMt.canalGatewayPct.toFixed(0)} % · mudos ${eMtMudo.canalGatewayPct.toFixed(0)} %`);
+  const conFondo = m.estresMalla({ ...m.PEDIDO_ESTRES_DEFECTO, antenas: pocas, enlaces: rMt.enlaces, nodos: rMt.nodos, parametros: { ...pMt, usuariosRepiten: false }, pagosPersonaDia: 1 });
+  const sinFondo = m.estresMalla({ ...m.PEDIDO_ESTRES_DEFECTO, antenas: pocas, enlaces: rMt.enlaces, nodos: rMt.nodos, parametros: { ...pMt, usuariosRepiten: false }, pagosPersonaDia: 1, fondo: false });
+  caso("Meshtastic: la telemetría y el NodeInfo de cada equipo ocupan canal", conFondo.canalGatewayPct > sinFondo.canalGatewayPct + 1, `${sinFondo.canalGatewayPct.toFixed(1)} % → ${conFondo.canalGatewayPct.toFixed(1)} %`);
+  caso("Meshtastic: comparar ajustes usa los presets de Meshtastic", m.estresMalla({ ...m.PEDIDO_ESTRES_DEFECTO, antenas: pocas, enlaces: rMt.enlaces, nodos: rMt.nodos, parametros: { ...pMt, usuariosRepiten: false }, comparar: true, fondo: false }).ajustes.every((a) => a.preset.startsWith("MT_")));
+  // Personas en fila hacia el sur, cada 4 km, desde donde el gateway apenas las oye: en Meshtastic las pasan los
+  // clientes (entre billeteras, Longley-Rice: se oyen hasta ~8 km sobre plano), hasta 3 repetidores
+  const cadena = [...lista];
+  for (let k = 0; k < 6; k++) {
+    const q = m.desplazar(4.2, -73.37, 42000 + 4000 * k, 180);
+    cadena.push({ id: `c${k}`, nombre: `Persona c${k}`, tipo: "nodo", lat: q.lat, lon: q.lon, alturaM: 1.5, potenciaDbm: 22, gananciaDbi: 2, perdidaCableDb: 0, equipo: "xiao", rol: "COMPANION", pasarela: false, activa: true });
+  }
+  const rCad = await m.simular(26, cadena, pMt, { tipo: "plano" }, ctx);
+  const rCadMc = await m.simular(27, cadena, pT, { tipo: "plano" }, ctx);
+  const dCad = (params, r) => m.simularCargaDetalle({ ...m.PEDIDO_CARGA_DEFECTO, antenas: cadena, enlaces: r.enlaces, nodos: r.nodos, parametros: params, mensajes: 1 }).detalle;
+  const idx = (d, id) => d.ids.indexOf(id);
+  const dMt = dCad(pMt, rCad);
+  const dMudo = dCad({ ...pMt, usuariosRepiten: false }, rCad);
+  const dMc = dCad(pT, rCadMc);
+  const enFila = ["c0", "c1", "c2", "c3", "c4", "c5"];
+  const con = (d) => enFila.filter((id) => d.rutas.has(idx(d, id)));
+  caso(
+    "Meshtastic: las que no alcanzan la infraestructura llegan por otras personas (CLIENT); con CLIENT_MUTE o en MeshCore, no",
+    con(dMudo).join() === "c0" && con(dMc).length === 0 && ["c1", "c2", "c3"].every((id) => con(dMt).includes(id)),
+    `CLIENT: ${con(dMt).join(", ")} · CLIENT_MUTE: ${con(dMudo).join(", ")} · MeshCore: ${con(dMc).join(", ") || "ninguna"}`,
+  );
+  const dUno = dCad({ ...pMt, limiteSaltos: 1 }, rCad);
+  const relevos = con(dMt).map((id) => dMt.rutas.get(idx(dMt, id)).length - 2);
+  caso(
+    "Meshtastic: el límite de saltos manda (con 3 nadie pasa por más de 3; con 1 llegan menos)",
+    relevos.every((x) => x <= 3) && con(dUno).length < con(dMt).length && con(dUno).every((id) => dUno.rutas.get(idx(dUno, id)).length - 2 <= 1),
+    `con 3: ${con(dMt).map((id) => dMt.rutas.get(idx(dMt, id)).map((k) => dMt.ids[k]).join("→")).join("; ")} · con 1: ${con(dUno).join(", ")}`,
+  );
+  // El gateway que atiende de a uno (lo medido): una ráfaga hace fila
+  const fila = m.simularCarga({ ...m.PEDIDO_CARGA_DEFECTO, antenas: pocas, enlaces: rPocas.enlaces, nodos: rPocas.nodos, parametros: pT, perfil: "medido", atencion: { modo: "secuencial", procesoMs: 4000, lentoPct: 0, lentoMs: [4000, 4000] }, mensajes: 12, ventanaS: 5, semilla: 5 });
+  const paralelo = m.simularCarga({ ...m.PEDIDO_CARGA_DEFECTO, antenas: pocas, enlaces: rPocas.enlaces, nodos: rPocas.nodos, parametros: pT, perfil: "medido", mensajes: 12, ventanaS: 5, semilla: 5 });
+  caso("El gateway que atiende de a uno hace fila; en paralelo no", fila.gateway.modo === "secuencial" && fila.gateway.esperaMaxS > 4 && fila.gateway.atendidos > 0 && paralelo.gateway.esperaMaxS === 0, `fila hasta ${fila.gateway.esperaMaxS.toFixed(1)} s, ocupado ${fila.gateway.ocupadoPct.toFixed(0)} %`);
+  const largas = m.simularCarga({ ...m.PEDIDO_CARGA_DEFECTO, antenas: pocas, enlaces: rPocas.enlaces, nodos: rPocas.nodos, parametros: pT, perfil: "medido", mensajes: 200, modo: "continua", duracionMin: 120, semilla: 9 });
+  caso("Perfil medido: las respuestas largas de la IA van en partes", largas.partes > largas.entregados && largas.tipo === "texto", `${largas.partes} partes para ${largas.entregados} mensajes`);
+
+  // v12.9 · Optimizar la red sobrecargada: gateways de apoyo, otra frecuencia y ajustes, probados con la misma carga
+  const qMuchas = pedido(muchas, rMuchas, {});
+  const t4 = performance.now();
+  const opt = m.optimizar({ estres: qMuchas, resultado: malas }, m.relievePlano(m.cajaOptimizar(muchas)));
+  const tOpt = performance.now() - t4;
+  const tipos = new Set(opt.propuestas.map((x) => x.tipo));
+  caso("Optimizar: propone gateways de apoyo (en otra frecuencia o convirtiendo un repetidor) y otro ajuste, y todos ayudan", !opt.motivo && (tipos.has("otra-frecuencia") || tipos.has("gateway-zona")) && opt.propuestas.every((x) => x.gananciaAtendidas > 0 && x.despues.atendidas > x.antes.atendidas) && tOpt < 60000, `${opt.propuestas.map((x) => `${x.titulo} +${Math.round(x.gananciaAtendidas)}`).join(" · ")} (${tOpt.toFixed(0)} ms)`);
+  caso("Optimizar: la otra frecuencia se hace en campo; convertir un repetidor en gateway se aplica al mapa", opt.propuestas.filter((x) => x.tipo === "otra-frecuencia").every((x) => !x.aplicable) && opt.propuestas.filter((x) => x.tipo === "gateway-zona").every((x) => x.aplicable && x.editar[0]?.cambios.pasarela === true));
+  caso("Optimizar: el diagnóstico dice a cuántas les funciona y qué zonas se revientan", /le funciona a/.test(opt.diagnostico[0]) && opt.diagnostico.some((d) => /se revienta/.test(d)));
+  const optBien = m.optimizar({ estres: pedido(pocas, rPocas, {}), resultado: m.estresMalla(pedido(pocas, rPocas, {})) }, m.relievePlano(m.cajaOptimizar(pocas)));
+  caso("Optimizar una red que aguanta: lo dice y no inventa arreglos", optBien.propuestas.length === 0 && optBien.diagnostico.some((d) => /aguanta esta carga/.test(d)), optBien.diagnostico.join(" "));
+  // Un caserío a 30 km: el gateway lo oye débil (sin servicio) y le falta una antena de apoyo
+  const caserio = m.desplazar(4.2, -73.37, 30000, 270);
+  const conCaserio = [...pocas];
+  m.puntosAlAzar(m.poligonoCirculo(caserio.lat, caserio.lon, 600, 24), { n: 5, semilla: 31 }).forEach((q, k) => conCaserio.push({ id: `cs${k}`, nombre: `Caserío ${k + 1}`, tipo: "nodo", lat: q.lat, lon: q.lon, alturaM: 1.5, potenciaDbm: 22, gananciaDbi: 2, perdidaCableDb: 0, equipo: "xiao", rol: "COMPANION", pasarela: false, activa: true }));
+  const rCas = await m.simular(28, conCaserio, pT, { tipo: "plano" }, ctx);
+  const eCas = m.estresMalla(pedido(conCaserio, rCas, {}));
+  const optCas = m.optimizar({ estres: pedido(conCaserio, rCas, {}), resultado: eCas }, m.relievePlano(m.cajaOptimizar(conCaserio)));
+  const apoyo = optCas.propuestas.find((x) => x.tipo === "antena-apoyo") ?? null;
+  caso(
+    "Optimizar: al caserío sin servicio le propone una antena de apoyo (la cadena con el relieve) y lo atiende",
+    eCas.porUsuario.filter((u) => u.id.startsWith("cs")).every((u) => u.estado === "no") && Boolean(apoyo) && apoyo.agregar.every((a) => a.rol === "REPETIDOR") && apoyo.gananciaAtendidas >= 3,
+    apoyo ? `${apoyo.titulo}: ${apoyo.que} (+${apoyo.gananciaAtendidas.toFixed(1)} atendidas)` : JSON.stringify(optCas.descartadas),
+  );
+}
+
+// v12.9 · Protocolos: los ajustes de cada uno, el paquete de Meshtastic y la curva medida en el gateway
+{
+  caso("MeshCore tiene 7 ajustes y Meshtastic 6", m.presetsDe("meshcore").length === 7 && m.presetsDe("meshtastic").length === 6);
+  caso("El equivalente: SF11 · 250 kHz ↔ LongFast; MediumFast ↔ SF9 · 250 kHz; sin pareja, el de fábrica", m.presetEquivalente("SF11_250", "meshtastic") === "MT_LONG_FAST" && m.presetEquivalente("MT_MEDIUM_FAST", "meshcore") === "SF9_250" && m.presetEquivalente("SF7_62", "meshtastic") === "MT_LONG_FAST");
+  const lf = m.presetPorId("MT_LONG_FAST");
+  const aire = m.tiempoEnAireMs(m.bytesDatosMt(40), lf);
+  caso("Meshtastic LongFast: un mensaje directo de 40 caracteres ≈ 0,8 s en el aire (cabecera de 16 B, preámbulo de 16)", aire > 700 && aire < 900, `${aire.toFixed(0)} ms`);
+  caso("Meshtastic: la ranura de LongFast ≈ 28 ms y un ROUTER sale antes que un CLIENT", Math.abs(m.ranuraMtMs(lf) - 28.1) < 1 && m.retardoRetransmisionMt(0, true, lf, 0.99) < m.retardoRetransmisionMt(0, false, lf, 0));
+  caso("Meshtastic: el que oyó más débil (más lejos) repite antes", m.retardoRetransmisionMt(-15, false, lf, 0.99) < m.retardoRetransmisionMt(8, false, lf, 0.99));
+  const espera = m.esperaAcuseMt(aire, lf);
+  caso("Meshtastic: espera el acuse ~7–10 s antes de reenviar (LongFast)", espera > 6000 && espera < 11000, `${(espera / 1000).toFixed(1)} s`);
+  caso("Curva medida: ~48 % de los paquetes con 5,5 dB de margen (SNR −12 dB en SF11), 85 % con 10 dB y 96 % con 20 dB", Math.abs(m.entregaPorMargen(5.5) - 0.482) < 0.01 && Math.abs(m.entregaPorMargen(10) - 0.85) < 0.02 && m.entregaPorMargen(20) > 0.95 && m.entregaPorMargen(20) < 0.97);
+  caso("Ficha del gateway: 185 mensajes al día entre 32 equipos → 5,8 por equipo y el 24 % en la hora pico", m.TRAFICO_MEDIDO.mensajesPersonaDia === 5.8 && m.TRAFICO_MEDIDO.horaPicoPct === 24 && m.FICHA_GATEWAY.antenas.length === 5);
 }
 
 // Sembrado automático: cadena de repetidores sobre terreno plano hacia un punto a 30 km

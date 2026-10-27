@@ -9,16 +9,17 @@
 import { FolderOpen, RotateCcw, Trash } from "lucide-react";
 import { useId, useRef, type Dispatch } from "react";
 
-import { BANDA_LIBRE_MHZ, LIMITE_SALTOS_MAXIMO, PRESETS, presetPorId, RESOLUCIONES, type PresetId, type ResolucionId } from "@/lib/radio/constantes";
+import { BANDA_LIBRE_MHZ, presetEquivalente, presetPorId, presetsDe, RESOLUCIONES, type PresetId, type ProtocoloId, type ResolucionId } from "@/lib/radio/constantes";
 import { ENTORNOS, entornoPorId, perdidaEntorno } from "@/lib/radio/entorno";
-import { airePagoMs } from "@/lib/radio/mensaje";
+import { aireIdaVueltaMs } from "@/lib/radio/mensaje";
+import { PROTOCOLOS } from "@/lib/radio/protocolos";
 import { CAPACIDAD_TRAMA } from "@/lib/radio/trama";
 import type { ClimaItm } from "@/lib/radio/itm";
 import { camposVariabilidad, CLIMAS, CONFIABILIDADES, confiabilidadDe, esReferencia, RED_REFERENCIA, SUELOS, VARIABILIDADES, type ConfiabilidadId } from "@/lib/radio/red";
 import type { EntornoId, ModeloId, PolarizacionId, SueloId, VariabilidadId } from "@/lib/radio/tipos";
 
 import type { Accion, Estado, TipoRelieve } from "./estado";
-import { Boton, CampoNumero, fmt, Segmentado, Titulo } from "./ui";
+import { Boton, CampoNumero, fmt, Interruptor, Segmentado, Titulo } from "./ui";
 
 type Props = {
   estado: Estado;
@@ -33,6 +34,14 @@ export function PanelParametros({ estado, despachar, archivosHgt, onCargarHgt, o
   const p = estado.escenario.parametros;
   const cambiar = (cambios: Partial<typeof p>) => despachar({ tipo: "parametros", cambios });
   const preset = presetPorId(p.preset);
+  const protocolo = preset.protocolo;
+  const perfil = PROTOCOLOS[protocolo];
+  const mt = protocolo === "meshtastic";
+  /** Cambia de protocolo: el ajuste equivalente (mismo SF y ancho de banda) y el límite de saltos que admite. */
+  const cambiarProtocolo = (x: ProtocoloId) => {
+    if (x === protocolo) return;
+    cambiar({ preset: presetEquivalente(p.preset, x), limiteSaltos: Math.min(p.limiteSaltos, PROTOCOLOS[x].saltosMax) });
+  };
   const fueraBanda = p.frecuenciaMhz < BANDA_LIBRE_MHZ.min || p.frecuenciaMhz > BANDA_LIBRE_MHZ.max;
   const idPreset = useId();
   const idEntorno = useId();
@@ -50,26 +59,51 @@ export function PanelParametros({ estado, despachar, archivosHgt, onCargarHgt, o
     <div className="space-y-5">
       <section data-tour="radio">
         <Titulo>Radio LoRa</Titulo>
+        <div className="mb-2.5" data-tour="protocolo">
+          <span className="mb-1 block text-[13px] text-carbon-2">Protocolo de la malla</span>
+          <Segmentado
+            etiqueta="Protocolo de la malla"
+            valor={protocolo}
+            onCambio={cambiarProtocolo}
+            opciones={[
+              { valor: "meshcore", texto: "MeshCore", titulo: PROTOCOLOS.meshcore.quienRetransmite },
+              { valor: "meshtastic", texto: "Meshtastic", titulo: PROTOCOLOS.meshtastic.quienRetransmite },
+            ]}
+          />
+          <span className="mt-1 block text-[12px] leading-snug text-tenue">
+            {perfil.quienRetransmite}. {perfil.ruteo} Carga útil de hasta {perfil.cargaMaxima} bytes; texto de hasta {perfil.textoMaximo} por parte.
+          </span>
+        </div>
         <label htmlFor={idPreset} className="block">
-          <span className="mb-1 block text-[13px] text-carbon-2">Ajuste de radio MeshCore</span>
+          <span className="mb-1 block text-[13px] text-carbon-2">Ajuste de radio {perfil.nombre}</span>
           <select id={idPreset} className="campo" value={p.preset} onChange={(e) => cambiar({ preset: e.target.value as PresetId })}>
-            {PRESETS.map((x) => (
+            {presetsDe(protocolo).map((x) => (
               <option key={x.id} value={x.id}>
                 {x.nombre} · SF{x.sf} / {x.anchoBandaKhz} kHz
               </option>
             ))}
           </select>
           <span className="mt-1 block text-[12px] text-tenue">
-            {preset.uso} Sensibilidad {fmt(preset.sensibilidadDbm)} dBm · ≈ {fmt(preset.velocidadKbps, 2)} kbps · un pago (o un mensaje corto de ida y vuelta) ocupa ≈ {fmt(airePagoMs(preset) / 1000, 1)} s de aire. Todos los nodos de una frecuencia usan el mismo ajuste.
+            {preset.uso} Sensibilidad {fmt(preset.sensibilidadDbm)} dBm · ≈ {fmt(preset.velocidadKbps, 2)} kbps · un pago (o un mensaje corto de ida y vuelta) ocupa ≈ {fmt(aireIdaVueltaMs(preset, 2, 118, [126, 126]) / 1000, 1)} s de aire. Todos los nodos de una frecuencia usan el mismo ajuste.
           </span>
         </label>
+        {mt && (
+          <div className="mt-2" data-tour="clientes-repiten">
+            <Interruptor
+              etiqueta="Los equipos de las personas repiten (CLIENT)"
+              activo={p.usuariosRepiten !== false}
+              onCambio={(v) => cambiar({ usuariosRepiten: v ? undefined : false })}
+              detalle="Así vienen de fábrica: ayudan a llegar más lejos, pero en zonas con mucha gente cada mensaje se repite muchas veces. Apagado (CLIENT_MUTE), solo repiten los ROUTER."
+            />
+          </div>
+        )}
         <div className="mt-2.5 grid grid-cols-2 gap-2">
           <CampoNumero etiqueta="Frecuencia" unidad="MHz" valor={p.frecuenciaMhz} min={860} max={960} paso={0.025} onCambio={(v) => cambiar({ frecuenciaMhz: v })} />
           <CampoNumero
             etiqueta="Límite de saltos"
             valor={p.limiteSaltos}
             min={1}
-            max={LIMITE_SALTOS_MAXIMO}
+            max={perfil.saltosMax}
             onCambio={(v) => cambiar({ limiteSaltos: Math.round(v) })}
             tour="saltos"
           />
@@ -88,7 +122,9 @@ export function PanelParametros({ estado, despachar, archivosHgt, onCargarHgt, o
           ))}
         </div>
         <p className="mt-1.5 text-[12px] leading-snug text-tenue">
-          El límite de saltos es el del diseño (los pagos y mensajes de Trama van a 1–3 saltos); MeshCore deja hasta {LIMITE_SALTOS_MAXIMO} y solo los repetidores retransmiten.
+          {mt
+            ? `El límite de saltos viaja en cada paquete (hop limit): Meshtastic trae 3 y admite hasta ${perfil.saltosMax}; cada salto de más multiplica las retransmisiones de la inundación.`
+            : `El límite de saltos es el del diseño (los pagos y mensajes de Trama van a 1–3 saltos); MeshCore deja hasta ${perfil.saltosMax} y solo los repetidores retransmiten.`}
         </p>
         {fueraBanda && (
           <p className="mt-2 rounded-md bg-baja/15 px-2.5 py-1.5 text-[12px] leading-snug text-carbon">

@@ -11,13 +11,19 @@
 // alcance sin carga y cuánta energía gasta el repetidor solar. La rampa multiplica la carga hasta encontrar dónde se
 // revienta cada zona y cuántas personas aguanta. Con `foco`, busca el límite de un solo punto: sube la gente de ese
 // gateway o repetidor (con el resto de la red como está) hasta que el punto o la red dejan de aguantar sin demora.
+// Además evalúa a cada persona: con la física de su ruta (el margen de cada enlace), lo que se perdió por choques,
+// por estar transmitiendo o por cola llena en cada nodo por el que pasa, y sus propios mensajes simulados, estima qué
+// parte de sus mensajes vuelve y cuánto espera, y dice si le funciona, a medias o no, y por qué (cobertura, saltos,
+// señal débil, canal, choques, cola o la fila del gateway). Con el perfil medido usa lo del gateway medido:
+// el largo real de los mensajes, el ritmo, la fila de a uno y la curva de entrega por enlace medida.
 // Son estimaciones para planear; se validan midiendo una red piloto.
-import { ESPERA_MAXIMA_S, simularCargaDetalle, UMBRAL_COMPLETOS_PCT, BYTES_PAGO, type DetalleCarga, type PedidoCarga } from "./carga";
-import { PRESETS, presetPorId, type PresetId } from "./constantes";
+import { aireDeMensaje, ESPERA_MAXIMA_S, simularCargaDetalle, UMBRAL_COMPLETOS_PCT, BYTES_PAGO, type DetalleCarga, type GatewayCarga, type PedidoCarga } from "./carga";
+import { CLASES, presetPorId, presetsDe, type PresetId, type ProtocoloId } from "./constantes";
 import { distanciaM } from "./geo";
 import { analizarMalla } from "./malla";
-import { airePagoMs } from "./mensaje";
+import { snrLimite } from "./mensaje";
 import { claseEnlace } from "./modelo";
+import { GATEWAY_MEDIDO, PROTOCOLOS, TRAFICO_MEDIDO, type AtencionGateway, type CurvaEnlace, type PerfilTrafico } from "./protocolos";
 import { CAPACIDAD_TRAMA, SF_TRAMA } from "./trama";
 import type { Antena, Enlace, NodoMalla, Parametros } from "./tipos";
 
@@ -59,7 +65,24 @@ export type PedidoEstres = {
   comparar: boolean;
   /** Buscar el límite de este punto (id de un gateway o repetidor): cuántas personas aguanta con el resto como está. */
   foco?: string | null;
+  /**
+   * Tráfico: «trama» (pagos de 118 B con comprobante y aviso de 126 B; el servidor contesta en paralelo) o «medido»
+   * (comandos de texto como los del gateway medido, que los atiende de a uno).
+   */
+  perfil?: PerfilTrafico;
+  /** Curva de entrega por enlace (sin valor: la medida en campo con el perfil medido y la del diseño con el de Trama). */
+  curva?: CurvaEnlace;
+  /** Meshtastic: contar la telemetría y el NodeInfo que difunde cada equipo (sin valor: sí). */
+  fondo?: boolean;
+  /** Cómo atiende el gateway (sin valor: de a uno con el perfil medido y en paralelo con el de Trama). */
+  atencion?: AtencionGateway;
 };
+
+/** Ritmo medido en el gateway: 185 mensajes al día entre 32 equipos (≈ 5,8) y el 24 % en la hora pico. */
+export const ESTRES_MEDIDO = { pagosPersonaDia: TRAFICO_MEDIDO.mensajesPersonaDia, horaPicoPct: TRAFICO_MEDIDO.horaPicoPct } as const;
+
+/** Curva de entrega por enlace que usa la prueba. */
+export const curvaDe = (q: Pick<PedidoEstres, "curva" | "perfil">): CurvaEnlace => q.curva ?? (q.perfil === "medido" ? "campo" : "diseno");
 
 /** Tope de personas en un punto (zona de popularidad) y en la búsqueda de su límite. */
 export const TOPE_PERSONAS_PUNTO = 2000;
@@ -78,8 +101,11 @@ export const PEDIDO_ESTRES_DEFECTO: Omit<PedidoEstres, "antenas" | "enlaces" | "
 
 export type EstadoZona = "aguanta" | "lento" | "revienta" | "sin-pagos";
 
-/** Lo que limita a una zona: canal lleno, tope del ciclo de trabajo, cola llena, choques, alcance o energía. */
-export type LimiteZona = "canal" | "ciclo" | "cola" | "choques" | "alcance" | "energia";
+/**
+ * Lo que limita a una zona: canal lleno, tope del ciclo de trabajo (MeshCore), canal sobre el 25 % en que Meshtastic
+ * recorta el tráfico no esencial, cola llena, choques, alcance o energía.
+ */
+export type LimiteZona = "canal" | "ciclo" | "recorte" | "cola" | "choques" | "alcance" | "energia";
 
 export type EnergiaZona = {
   /** Consumo al día (Wh) con la carga de esta prueba repartida en el día. */
@@ -133,6 +159,75 @@ export type ZonaEstres = {
   pagosHoraMax?: number | null;
   /** La rampa no alcanzó a reventarla: aguanta al menos `usuariosMax`. */
   aguantaTodo?: boolean;
+  /** Personas de la zona a las que les funciona (bien o del todo). */
+  funcionan?: number;
+};
+
+/* ───────────── Cada persona ───────────── */
+
+export type EstadoUsuario = "bien" | "funciona" | "medias" | "dificultad" | "no";
+
+/** Por qué no le funciona del todo a una persona. */
+export type CausaUsuario = "cobertura" | "saltos" | "senal" | "canal" | "choques" | "cola" | "gateway" | "espera";
+
+/** Estados de una persona en la prueba, con la paleta de los rangos de señal. */
+export const ESTADOS_USUARIO: Record<EstadoUsuario, { nombre: string; color: string; descripcion: string }> = {
+  bien: { nombre: "Le funciona bien", color: CLASES[0].color, descripcion: "El 95 % o más de sus mensajes vuelve, y en menos de 30 s." },
+  funciona: { nombre: "Le funciona", color: CLASES[1].color, descripcion: "El 90 % o más vuelve, en menos de un minuto." },
+  medias: { nombre: "A medias", color: CLASES[2].color, descripcion: "Vuelve del 75 al 90 %, o tarda más de un minuto." },
+  dificultad: { nombre: "Con dificultades", color: CLASES[3].color, descripcion: "Vuelve solo del 40 al 75 %: tiene que reintentar seguido." },
+  no: { nombre: "No le funciona", color: CLASES[4].color, descripcion: "Vuelve menos del 40 %, o no tiene ruta al gateway." },
+};
+
+export const ORDEN_ESTADOS_USUARIO: EstadoUsuario[] = ["bien", "funciona", "medias", "dificultad", "no"];
+
+export const CAUSAS_USUARIO: Record<CausaUsuario, string> = {
+  cobertura: "sin cobertura",
+  saltos: "más saltos que el límite",
+  senal: "señal débil",
+  canal: "canal ocupado",
+  choques: "choques de paquetes",
+  cola: "cola llena en un nodo",
+  gateway: "fila del gateway",
+  espera: "espera larga",
+};
+
+export type UsuarioEstres = {
+  id: string;
+  nombre: string;
+  lat: number;
+  lon: number;
+  /** Nodo por el que entra a la malla (id y nombre), o null si no tiene ruta. */
+  zona: string | null;
+  zonaNombre: string | null;
+  /** Enlaces hasta el gateway. */
+  saltos: number | null;
+  /** El enlace más débil de su ruta: margen (dB) y SNR estimada (dB). */
+  margenDb: number | null;
+  snrDb: number | null;
+  /** Parte de sus mensajes que vuelve completa (%): física de la ruta × pérdidas medidas en cada nodo, ajustada con sus mensajes simulados. */
+  exitoPct: number;
+  /** Solo la física de su ruta, sin la congestión (%). */
+  fisicaPct: number;
+  /** Espera típica y del 95 % (s). */
+  esperaS: number;
+  esperaP95S: number;
+  /** Sus mensajes simulados y cuántos volvieron. */
+  mensajes: number;
+  completos: number;
+  estado: EstadoUsuario;
+  causa: CausaUsuario | null;
+  /** La causa en palabras, con el nodo y el número. */
+  porque: string;
+};
+
+export type ResumenUsuarios = {
+  total: number;
+  porEstado: Record<EstadoUsuario, number>;
+  /** Les funciona (bien o del todo) y qué parte son (%). */
+  funcionan: number;
+  funcionanPct: number;
+  porCausa: Partial<Record<CausaUsuario, number>>;
 };
 
 export type PuntoRampa = {
@@ -145,6 +240,9 @@ export type PuntoRampa = {
   p95S: number;
   canalPct: number;
   zonasRotas: number;
+  /** Parte de las personas a las que les funciona (%) y personas atendidas (las equivalentes a las que les funciona). */
+  funcionanPct: number;
+  atendidas: number;
 };
 
 export type PuntoLimite = {
@@ -212,6 +310,18 @@ export type ResultadoEstres = {
   factor: number;
   duracionMin: number;
   preset: { id: PresetId; nombre: string; velocidadKbps: number };
+  protocolo: ProtocoloId;
+  perfil: PerfilTrafico;
+  curva: CurvaEnlace;
+  /** Todas las personas de la red (con y sin ruta). */
+  personas: number;
+  /** El gateway: cómo atiende y la espera en su fila. */
+  gateway: GatewayCarga;
+  /** Meshtastic: retransmisiones canceladas por la inundación administrada (por corrida). */
+  cancelados: number;
+  /** Cada persona: si le funciona, cuánto vuelve, cuánto espera y por qué. */
+  porUsuario: UsuarioEstres[];
+  resumenUsuarios: ResumenUsuarios;
   /** Personas con ruta al gateway. */
   usuarios: number;
   pedidosHora: number;
@@ -239,6 +349,8 @@ export type ResultadoEstres = {
     maxEntregadosHora: number;
     /** La zona que se revienta primero. */
     primera: string | null;
+    /** Capacidad real: el máximo de personas atendidas (a las que les funciona), con qué multiplicador y qué parte les funciona. */
+    capacidadReal: { personas: number; factor: number; funcionanPct: number } | null;
   };
   ajustes: AjusteEstres[] | null;
   /** Límite de un punto (con `foco`). */
@@ -262,12 +374,17 @@ function pagosSimulados(q: PedidoEstres, usuarios: number, factor: number) {
 }
 
 function pedidoCarga(q: PedidoEstres, mensajes: number, semilla: number, parametros = q.parametros, enlaces = q.enlaces, nodos = q.nodos): PedidoCarga {
+  const medido = q.perfil === "medido";
   return {
     antenas: q.antenas,
     enlaces,
     nodos,
     parametros,
-    tipo: "pago",
+    tipo: medido ? "texto" : "pago",
+    perfil: medido ? "medido" : "trama",
+    ...(q.atencion ? { atencion: q.atencion } : medido ? { atencion: GATEWAY_MEDIDO } : {}),
+    curva: curvaDe(q),
+    fondo: q.fondo !== false,
     mensajes,
     modo: "continua",
     ventanaS: 10,
@@ -281,13 +398,27 @@ function pedidoCarga(q: PedidoEstres, mensajes: number, semilla: number, paramet
   };
 }
 
-type Corrida = { detalle: DetalleCarga; completosPct: number; p50S: number; p95S: number; canalGatewayPct: number; pagos: number; completos: number; airePorPagoS: number; remitentes: number; motivo: string | null };
+type Corrida = {
+  detalle: DetalleCarga;
+  completosPct: number;
+  p50S: number;
+  p95S: number;
+  canalGatewayPct: number;
+  pagos: number;
+  completos: number;
+  airePorPagoS: number;
+  remitentes: number;
+  personas: number;
+  gateway: GatewayCarga;
+  cancelados: number;
+  motivo: string | null;
+};
 
 function correr(q: PedidoEstres, factor: number, repeticiones: number, parametros = q.parametros, enlaces = q.enlaces, nodos = q.nodos): Corrida[] {
   const salida: Corrida[] = [];
   // Cuántas personas tienen ruta (lo dice la primera corrida, con un pago de prueba)
   const sonda = simularCargaDetalle(pedidoCarga(q, 1, q.semilla, parametros, enlaces, nodos));
-  if (sonda.resultado.motivo) return [{ detalle: sonda.detalle, completosPct: 0, p50S: 0, p95S: 0, canalGatewayPct: 0, pagos: 0, completos: 0, airePorPagoS: 0, remitentes: 0, motivo: sonda.resultado.motivo }];
+  if (sonda.resultado.motivo) return [{ ...corridaDe(sonda), completosPct: 0, p50S: 0, p95S: 0, canalGatewayPct: 0, pagos: 0, completos: 0, airePorPagoS: 0, remitentes: 0, motivo: sonda.resultado.motivo }];
   const { n } = pagosSimulados(q, sonda.resultado.remitentes, factor);
   for (let k = 0; k < repeticiones; k++) salida.push(corridaDe(simularCargaDetalle(pedidoCarga(q, Math.max(1, n), q.semilla + 977 * k + Math.round(factor * 1000), parametros, enlaces, nodos))));
   return salida;
@@ -304,22 +435,30 @@ function corridaDe(x: ReturnType<typeof simularCargaDetalle>): Corrida {
     completos: x.resultado.completos,
     airePorPagoS: x.resultado.airePorPagoS,
     remitentes: x.resultado.remitentes,
+    personas: x.resultado.personas,
+    gateway: x.resultado.gateway,
+    cancelados: x.resultado.cancelados,
     motivo: x.resultado.motivo,
   };
+}
+
+/** Bytes del mensaje y de lo que vuelve, según el perfil de tráfico. */
+function bytesPerfil(q: PedidoEstres): { ida: number; vueltas: number[] } {
+  if (q.perfil === "medido") return { ida: 40, vueltas: [TRAFICO_MEDIDO.respuestaBytes] };
+  return { ida: BYTES_PAGO.orden, vueltas: [BYTES_PAGO.comprobante, ...(q.conAviso ? [BYTES_PAGO.aviso] : [])] };
 }
 
 /** Métricas por zona (gateway o repetidor) de una o varias corridas con la misma carga. */
 function zonas(q: PedidoEstres, corridas: Corrida[], factor: number): ZonaEstres[] {
   const d0 = corridas[0].detalle;
   const porId = new Map(q.antenas.map((a) => [a.id, a]));
-  const nodosMalla = new Map(q.nodos.map((n) => [n.id, n]));
-  const preset = presetPorId(q.parametros.preset);
+  const protocolo = d0.protocolo;
   const indices = d0.ids.map((id, i) => ({ id, i, a: porId.get(id)! })).filter((x) => x.a && (x.a.rol === "REPETIDOR" || x.a.pasarela));
   // Personas por zona (primer salto) y por ruta
   const usuarios = new Map<number, number[]>();
   for (const [rem, z] of d0.zonaDe) usuarios.set(z, [...(usuarios.get(z) ?? []), rem]);
   const enRuta = new Map<string, number>();
-  for (const rem of d0.zonaDe.keys()) for (const id of nodosMalla.get(d0.ids[rem])?.ruta.slice(1) ?? []) enRuta.set(id, (enRuta.get(id) ?? 0) + 1);
+  for (const rem of d0.zonaDe.keys()) for (const k of d0.rutas.get(rem)?.slice(1) ?? []) enRuta.set(d0.ids[k], (enRuta.get(d0.ids[k]) ?? 0) + 1);
   const distancia = (rem: number, z: number) => {
     const a = porId.get(d0.ids[rem])!;
     const b = porId.get(d0.ids[z])!;
@@ -387,9 +526,10 @@ function zonas(q: PedidoEstres, corridas: Corrida[], factor: number): ZonaEstres
       }
       if (todos) alcanceCargaKm = alcanceKm;
     }
-    // Aire de una persona en la hora pico: sus pagos por hora × el aire de un pago por su ruta
-    const saltosMedios = suyos.length ? suyos.reduce((s, rem) => s + Math.max(1, (nodosMalla.get(d0.ids[rem])?.ruta.length ?? 2) - 1), 0) / suyos.length : 1;
-    const airePago = airePagoMs(preset, Math.max(1, Math.round(saltosMedios)), BYTES_PAGO.orden, BYTES_PAGO.comprobante, q.conAviso ? BYTES_PAGO.aviso : 0) / 1000;
+    // Aire de una persona en la hora pico: sus pagos (o mensajes) por hora × el aire de cada uno por su ruta
+    const saltosMedios = suyos.length ? suyos.reduce((s, rem) => s + Math.max(1, (d0.rutas.get(rem)?.length ?? 2) - 1), 0) / suyos.length : 1;
+    const bp = bytesPerfil(q);
+    const airePago = aireDeMensaje(q.parametros, Math.max(1, Math.round(saltosMedios)), bp.ida, bp.vueltas);
     const pagosPersonaHora = q.pagosPersonaDia * (q.horaPicoPct / 100) * factor;
     const airePersonaS = pagosPersonaHora * airePago;
     // Energía del repetidor solar: la transmisión de la hora pico es el `horaPicoPct` del día
@@ -405,7 +545,8 @@ function zonas(q: PedidoEstres, corridas: Corrida[], factor: number): ZonaEstres
     const estado = estadoDe(pagos, completosPct, p95S);
     const limites: LimiteZona[] = [];
     if (canalPct >= 60) limites.push("canal");
-    if (txPct >= TOPE_CICLO_PCT * 0.9) limites.push("ciclo");
+    else if (protocolo === "meshtastic" && canalPct >= PROTOCOLOS.meshtastic.canalAlertaPct) limites.push("recorte");
+    if (protocolo === "meshcore" && txPct >= TOPE_CICLO_PCT * 0.9) limites.push("ciclo");
     if (perdidasCola > 0) limites.push("cola");
     if (pagos && colisiones / reps > pagos / reps) limites.push("choques");
     // Pierde alcance: los cercanos completan y los lejanos no (si ni los cercanos completan, es el canal, no la distancia)
@@ -438,6 +579,252 @@ function zonas(q: PedidoEstres, corridas: Corrida[], factor: number): ZonaEstres
       limites,
     } satisfies ZonaEstres;
   });
+}
+
+/** Estado de una persona según la parte de sus mensajes que vuelve (%) y la espera del 95 % (s). */
+export function estadoUsuario(exitoPct: number, esperaP95S: number): EstadoUsuario {
+  if (exitoPct >= 95 && esperaP95S <= 30) return "bien";
+  if (exitoPct >= UMBRAL_COMPLETOS_PCT && esperaP95S <= ESPERA_MAXIMA_S) return "funciona";
+  if (exitoPct >= 75) return "medias";
+  if (exitoPct >= 40) return "dificultad";
+  return "no";
+}
+
+const fmt1 = (x: number, d = 0) => (Math.round(x * 10 ** d) / 10 ** d).toString().replace(".", ",");
+
+/** Peso (en mensajes) de lo que dice la física de la ruta frente a los mensajes simulados de la persona. */
+const PESO_PREVIO = 4;
+
+/**
+ * Evalúa a cada persona. Para cada enlace de su ruta (ida y vuelta): la probabilidad de que el paquete pase con su
+ * margen (la curva escogida) × lo que se perdió en el receptor por choques o por estar transmitiendo × lo que botó el
+ * transmisor por cola llena (medido en la simulación). Con los envíos del protocolo, la probabilidad de que el mensaje
+ * llegue y la respuesta vuelva; ese es el punto de partida, que se ajusta con sus propios mensajes simulados (como
+ * cuatro mensajes de peso). La espera es la de sus mensajes o la de su zona, y la causa es lo que más le resta.
+ */
+function evaluarUsuarios(q: PedidoEstres, corridas: Corrida[], zs: ZonaEstres[]): { lista: UsuarioEstres[]; resumen: ResumenUsuarios } {
+  const d0 = corridas[0].detalle;
+  const preset = presetPorId(q.parametros.preset);
+  const perfil = PROTOCOLOS[d0.protocolo];
+  const mt = d0.protocolo === "meshtastic";
+  const porId = new Map(q.antenas.map((a) => [a.id, a]));
+  const N = d0.ids.length;
+  const rec = new Float64Array(N);
+  const choques = new Float64Array(N);
+  const sordos = new Float64Array(N);
+  const enc = new Float64Array(N);
+  const botados = new Float64Array(N);
+  const obs = new Map<number, { n: number; ok: number; lat: number[] }>();
+  const latZona = new Map<number, number[]>();
+  const latTodas: number[] = [];
+  const esperasGw: number[] = [];
+  for (const c of corridas) {
+    c.detalle.nodos.forEach((dn, k) => {
+      rec[k] += dn.recepciones;
+      choques[k] += dn.colisiones;
+      sordos[k] += dn.sordos;
+      enc[k] += dn.encolados;
+      botados[k] += dn.perdidasCola;
+    });
+    for (const m of c.detalle.mensajes) {
+      let o = obs.get(m.remitente);
+      if (!o) obs.set(m.remitente, (o = { n: 0, ok: 0, lat: [] }));
+      o.n++;
+      if (m.latS !== null) {
+        o.ok++;
+        o.lat.push(m.latS);
+        latTodas.push(m.latS);
+        if (m.zona >= 0) latZona.set(m.zona, [...(latZona.get(m.zona) ?? []), m.latS]);
+      }
+    }
+    for (const x of c.detalle.esperasGateway) esperasGw.push(x / 1000);
+  }
+  const perdida = (k: number) => (rec[k] ? Math.min(1, (choques[k] + sordos[k]) / rec[k]) : 0);
+  const cola = (k: number) => (enc[k] + botados[k] ? botados[k] / (enc[k] + botados[k]) : 0);
+  const gwP95 = percentil(esperasGw, 95);
+  const p50Todas = percentil(latTodas, 50);
+  const p95Todas = percentil(latTodas, 95);
+  const zonaPorIndice = new Map(zs.map((z) => [d0.ids.indexOf(z.id), z]));
+  const nombre = (k: number) => porId.get(d0.ids[k])?.nombre ?? d0.ids[k];
+  type Base = {
+    i: number;
+    a: Antena;
+    ruta: number[] | undefined;
+    o: { n: number; ok: number; lat: number[] };
+    previo: number;
+    fisica: number;
+    margenDb: number | null;
+    peor: [number, number] | null;
+    culpable: { k: number; tipo: "choques" | "cola"; valor: number } | null;
+  };
+  const bases: Base[] = [];
+  for (const i of d0.personas) {
+    const a = porId.get(d0.ids[i]);
+    if (!a) continue;
+    const ruta = d0.rutas.get(i);
+    const o = obs.get(i) ?? { n: 0, ok: 0, lat: [] };
+    let previo = 0;
+    let fisica = 0;
+    let margenDb: number | null = null;
+    let peor: [number, number] | null = null;
+    // El nodo de la ruta que más pierde (choques o semidúplex al recibir, o cola llena al transmitir)
+    let culpable: { k: number; tipo: "choques" | "cola"; valor: number } | null = null;
+    if (ruta) {
+      let qIda = 1;
+      let qVuelta = 1;
+      let fIda = 1;
+      let fVuelta = 1;
+      for (let s = 0; s + 1 < ruta.length; s++) {
+        const x = ruta[s];
+        const y = ruta[s + 1];
+        const mIda = d0.margen(x, y);
+        const mVuelta = d0.margen(y, x);
+        const m = Math.min(mIda, mVuelta);
+        if (margenDb === null || m < margenDb) {
+          margenDb = m;
+          peor = mIda <= mVuelta ? [x, y] : [y, x];
+        }
+        const eIda = d0.exito(mIda);
+        const eVuelta = d0.exito(mVuelta);
+        fIda *= eIda;
+        fVuelta *= eVuelta;
+        qIda *= eIda * (1 - perdida(y)) * (1 - cola(x));
+        qVuelta *= eVuelta * (1 - perdida(x)) * (1 - cola(y));
+        for (const k of [x, y]) {
+          if (perdida(k) > (culpable?.valor ?? 0.02)) culpable = { k, tipo: "choques", valor: perdida(k) };
+          if (cola(k) > (culpable?.valor ?? 0.02)) culpable = { k, tipo: "cola", valor: cola(k) };
+        }
+      }
+      // Meshtastic: los que ya pasaron el paquete no repiten el reenvío (mismo identificador): pasados el primer salto,
+      // ayudan el primer envío y el último (por inundación)
+      const envios = mt && ruta.length > 2 ? 2 : d0.envios;
+      const conReintentos = (x: number) => 1 - (1 - x) ** envios;
+      previo = conReintentos(qIda) * conReintentos(qVuelta);
+      fisica = conReintentos(fIda) * conReintentos(fVuelta);
+    }
+    bases.push({ i, a, ruta, o, previo, fisica, margenDb, peor, culpable });
+  }
+  // Calibración por zona: la física dice quién está mejor o peor dentro de la zona; la simulación, cuánto completa la
+  // zona. Se corre la curva de cada persona (en escala logística) lo mismo para todas las de la zona, hasta que sus
+  // mensajes simulados completen lo que completaron.
+  const logit = (x: number) => {
+    const y = Math.min(1 - 1e-4, Math.max(1e-4, x));
+    return Math.log(y / (1 - y));
+  };
+  const sigmoide = (x: number) => 1 / (1 + Math.exp(-x));
+  const porZona = new Map<number, Base[]>();
+  for (const b of bases) {
+    const z = b.ruta ? d0.zonaDe.get(b.i) : undefined;
+    if (z !== undefined && b.previo > 0) porZona.set(z, [...(porZona.get(z) ?? []), b]);
+  }
+  for (const grupo of porZona.values()) {
+    const n = grupo.reduce((s, b) => s + b.o.n, 0);
+    if (n < 4) continue;
+    const ok = grupo.reduce((s, b) => s + b.o.ok, 0);
+    // Suavizado: medio mensaje bueno y medio malo
+    const meta = ((ok + 0.5) / (n + 1)) * n;
+    const suma = (d: number) => grupo.reduce((s, b) => s + b.o.n * sigmoide(logit(b.previo) + d), 0);
+    let lo = -12;
+    let hi = 12;
+    for (let k = 0; k < 40; k++) {
+      const mid = (lo + hi) / 2;
+      if (suma(mid) < meta) lo = mid;
+      else hi = mid;
+    }
+    const d = (lo + hi) / 2;
+    for (const b of grupo) b.previo = sigmoide(logit(b.previo) + d);
+  }
+  const lista: UsuarioEstres[] = [];
+  for (const { i, a, ruta, o, previo, fisica, margenDb, peor, culpable } of bases) {
+    const exitoPct = (100 * (PESO_PREVIO * previo + o.ok)) / (PESO_PREVIO + o.n);
+    const zona = ruta ? (d0.zonaDe.get(i) ?? null) : null;
+    const lz = zona !== null ? (latZona.get(zona) ?? []) : [];
+    const esperaS = o.lat.length ? percentil(o.lat, 50) : lz.length ? percentil(lz, 50) : p50Todas;
+    const esperaP95S = Math.max(o.lat.length >= 3 ? percentil(o.lat, 95) : 0, lz.length ? percentil(lz, 95) : p95Todas);
+    const estado = estadoUsuario(exitoPct, esperaP95S);
+    let causa: CausaUsuario | null = null;
+    let porque = "";
+    if (!ruta) {
+      const oyen = d0.alcanzables[i] ?? 0;
+      const mejor = d0.mejorMargen[i];
+      if (estado === "bien" || estado === "funciona") porque = "Llega por la inundación aunque no tiene una ruta fija.";
+      else if (oyen === 0 && !(mejor >= 0)) {
+        causa = "cobertura";
+        porque = `Ningún repetidor ni el gateway lo oye${mt ? ", ni otra persona que repita" : ""}${Number.isFinite(mejor) ? ` (el más cercano le llega con ${fmt1(mejor, 1)} dB)` : ""}.`;
+      } else if (mt) {
+        causa = "saltos";
+        porque = `Lo oyen ${oyen} ${oyen === 1 ? "nodo" : "nodos"}, pero el gateway queda a más de ${Math.min(perfil.saltosMax, q.parametros.limiteSaltos)} saltos (límite de saltos de Meshtastic).`;
+      } else {
+        causa = "senal";
+        porque = `El nodo más cercano lo oye con ${fmt1(mejor, 1)} dB: por debajo de los 20 dB de servicio, sin ruta al gateway.`;
+      }
+    } else if (estado !== "bien") {
+      const perdFisica = 1 - fisica;
+      const perdCongestion = Math.max(0, fisica - previo);
+      const zonaZ = zona !== null ? zonaPorIndice.get(zona) : undefined;
+      if (exitoPct >= UMBRAL_COMPLETOS_PCT && esperaP95S > 30) {
+        if (gwP95 > 0.4 * esperaP95S && gwP95 > 3) {
+          causa = "gateway";
+          porque = `La fila del gateway: atiende de a uno y la espera en la fila llega a ${fmt1(gwP95)} s.`;
+        } else {
+          causa = "espera";
+          porque = `${ruta.length - 1} ${ruta.length === 2 ? "salto" : "saltos"}${zonaZ ? ` y el canal de ${zonaZ.nombre} ocupado el ${fmt1(zonaZ.canalPct)} %` : ""}: el 95 % de sus mensajes tarda hasta ${fmt1(esperaP95S)} s.`;
+        }
+      } else if (perdFisica >= perdCongestion && peor && margenDb !== null) {
+        causa = "senal";
+        porque = `Su enlace más débil (${nombre(peor[0])} → ${nombre(peor[1])}) tiene ${fmt1(margenDb, 1)} dB de margen (SNR ≈ ${fmt1(margenDb + snrLimite(preset.sf), 1)} dB): con su ruta sola volvería el ${fmt1(100 * fisica)} %.`;
+      } else if (culpable) {
+        const canal = zonaPorIndice.get(culpable.k)?.canalPct ?? zonaZ?.canalPct ?? 0;
+        if (culpable.tipo === "cola") {
+          causa = "cola";
+          porque = `${nombre(culpable.k)} bota el ${fmt1(100 * culpable.valor)} % de lo que debe transmitir: su cola de ${perfil.colaRadio} paquetes se llena.`;
+        } else if (canal >= perfil.canalAlertaPct) {
+          causa = "canal";
+          porque =
+            culpable.k === i
+              ? `El canal ${zonaZ ? `en la zona de ${zonaZ.nombre}` : "donde está"} está ocupado el ${fmt1(canal)} % del tiempo: se le pierde el ${fmt1(100 * culpable.valor)} % de lo que le mandan.`
+              : `El canal en ${nombre(culpable.k)} está ocupado el ${fmt1(canal)} % del tiempo y pierde el ${fmt1(100 * culpable.valor)} % de lo que le llega.`;
+        } else {
+          causa = "choques";
+          porque =
+            culpable.k === i
+              ? `Se le pierde el ${fmt1(100 * culpable.valor)} % de lo que le mandan: paquetes que se pisan con otros o que llegan mientras transmite.`
+              : `En ${nombre(culpable.k)} se pierde el ${fmt1(100 * culpable.valor)} % de lo que le llega: paquetes que se pisan o que llegan mientras transmite.`;
+        }
+      } else if (peor && margenDb !== null) {
+        causa = "senal";
+        porque = `Su enlace más débil (${nombre(peor[0])} → ${nombre(peor[1])}) tiene ${fmt1(margenDb, 1)} dB de margen.`;
+      }
+    }
+    lista.push({
+      id: a.id,
+      nombre: a.nombre,
+      lat: a.lat,
+      lon: a.lon,
+      zona: zona !== null ? d0.ids[zona] : null,
+      zonaNombre: zona !== null ? nombre(zona) : null,
+      saltos: ruta ? ruta.length - 1 : null,
+      margenDb: margenDb !== null && Number.isFinite(margenDb) ? margenDb : null,
+      snrDb: margenDb !== null && Number.isFinite(margenDb) ? margenDb + snrLimite(preset.sf) : null,
+      exitoPct,
+      fisicaPct: 100 * fisica,
+      esperaS,
+      esperaP95S,
+      mensajes: o.n,
+      completos: o.ok,
+      estado,
+      causa,
+      porque,
+    });
+  }
+  const porEstado: Record<EstadoUsuario, number> = { bien: 0, funciona: 0, medias: 0, dificultad: 0, no: 0 };
+  const porCausa: Partial<Record<CausaUsuario, number>> = {};
+  for (const u of lista) {
+    porEstado[u.estado]++;
+    if (u.causa) porCausa[u.causa] = (porCausa[u.causa] ?? 0) + 1;
+  }
+  const funcionan = porEstado.bien + porEstado.funciona;
+  return { lista, resumen: { total: lista.length, porEstado, funcionan, funcionanPct: lista.length ? (100 * funcionan) / lista.length : 0, porCausa } };
 }
 
 function resumen(corridas: Corrida[]) {
@@ -481,6 +868,14 @@ export function estresMalla(q: PedidoEstres, progreso?: (avance: number) => void
     factor: q.factor,
     duracionMin: q.duracionMin,
     preset: { id: preset.id, nombre: preset.nombre, velocidadKbps: preset.velocidadKbps },
+    protocolo: preset.protocolo,
+    perfil: q.perfil ?? "trama",
+    curva: curvaDe(q),
+    personas: c0.personas,
+    gateway: c0.gateway,
+    cancelados: 0,
+    porUsuario: [],
+    resumenUsuarios: { total: 0, porEstado: { bien: 0, funciona: 0, medias: 0, dificultad: 0, no: 0 }, funcionan: 0, funcionanPct: 0, porCausa: {} },
     usuarios: 0,
     pedidosHora: 0,
     entregadosHora: 0,
@@ -504,7 +899,8 @@ export function estresMalla(q: PedidoEstres, progreso?: (avance: number) => void
   const { porHora } = pagosSimulados(q, usuarios, q.factor);
   const g = resumen(base);
   const horas = q.duracionMin / 60;
-  const bitsPago = 8 * (BYTES_PAGO.orden + BYTES_PAGO.comprobante + (q.conAviso ? BYTES_PAGO.aviso : 0));
+  const bp = bytesPerfil(q);
+  const bitsPago = 8 * (bp.ida + bp.vueltas.reduce((s, x) => s + x, 0));
   const res: ResultadoEstres = {
     ...vacio,
     usuarios,
@@ -519,8 +915,15 @@ export function estresMalla(q: PedidoEstres, progreso?: (avance: number) => void
     airePorPagoS: c0.airePorPagoS,
     estado: estadoDe(Math.round(g.pagos), g.completosPct, g.p95S),
     zonas: zonas(q, base, q.factor),
+    gateway: gatewayDe(base),
+    cancelados: base.reduce((s, c) => s + c.cancelados, 0) / base.length,
   };
-  const pasosComparar = q.comparar ? PRESETS.length : 0;
+  const ev = evaluarUsuarios(q, base, res.zonas);
+  res.porUsuario = ev.lista;
+  res.resumenUsuarios = ev.resumen;
+  contarPorZona(res.zonas, ev.lista);
+  const otrosAjustes = presetsDe(preset.protocolo);
+  const pasosComparar = q.comparar ? otrosAjustes.length : 0;
   let hechos = 1;
   const pasosFoco = q.foco ? 36 : 0;
   const total = 1 + (q.rampa ? 10 : 0) + pasosComparar + pasosFoco;
@@ -538,6 +941,7 @@ export function estresMalla(q: PedidoEstres, progreso?: (avance: number) => void
       const cs = f === q.factor ? base : correr(q, f, repeticiones);
       const r = resumen(cs);
       const zs = f === q.factor ? res.zonas : zonas(q, cs, f);
+      const funcionanPct = f === q.factor ? ev.resumen.funcionanPct : evaluarUsuarios(q, cs, zs).resumen.funcionanPct;
       const punto: PuntoRampa = {
         factor: f,
         usuarios: usuarios * f,
@@ -547,6 +951,8 @@ export function estresMalla(q: PedidoEstres, progreso?: (avance: number) => void
         p95S: r.p95S,
         canalPct: r.canalPct,
         zonasRotas: zs.filter((z) => z.estado === "revienta").length,
+        funcionanPct,
+        atendidas: (usuarios * f * funcionanPct) / 100,
       };
       puntos.set(f, { punto, zonas: zs });
       hechos++;
@@ -610,6 +1016,8 @@ export function estresMalla(q: PedidoEstres, progreso?: (avance: number) => void
     }
     const conQuiebre = res.zonas.filter((z) => z.factorQuiebre !== null && z.factorQuiebre !== undefined && z.usuarios > 0);
     const primera = conQuiebre.sort((a, b) => a.factorQuiebre! - b.factorQuiebre! || a.completosPct - b.completosPct)[0] ?? null;
+    // Capacidad real: el punto de la rampa con más personas atendidas (a las que les funciona)
+    const tope = lista.reduce<PuntoRampa | null>((m, x) => (!m || x.atendidas > m.atendidas ? x : m), null);
     res.rampa = {
       puntos: lista,
       factorSeguro,
@@ -618,12 +1026,13 @@ export function estresMalla(q: PedidoEstres, progreso?: (avance: number) => void
       usuariosMax: factorSeguro !== null ? Math.round(usuarios * factorSeguro) : null,
       maxEntregadosHora: Math.max(...lista.map((x) => x.entregadosHora)),
       primera: primera?.nombre ?? null,
+      capacidadReal: tope && tope.atendidas > 0 ? { personas: Math.round(tope.atendidas), factor: tope.factor, funcionanPct: tope.funcionanPct } : null,
     };
   }
 
   if (q.comparar) {
     const ajustes: AjusteEstres[] = [];
-    for (const otro of [...PRESETS].sort((a, b) => b.velocidadKbps - a.velocidadKbps)) {
+    for (const otro of [...otrosAjustes].sort((a, b) => b.velocidadKbps - a.velocidadKbps)) {
       const parametros = { ...q.parametros, preset: otro.id };
       const enlaces = enlacesCon(q.enlaces, preset.id, otro.id);
       const nodos = otro.id === preset.id ? q.nodos : analizarMalla(q.antenas.filter((a) => a.activa), enlaces, q.parametros.limiteSaltos).nodos;
@@ -647,6 +1056,24 @@ export function estresMalla(q: PedidoEstres, progreso?: (avance: number) => void
   }
   progreso?.(1);
   return res;
+}
+
+/** El gateway en las corridas: la espera en su fila (la mayor de las corridas) y su ocupación media. */
+function gatewayDe(corridas: Corrida[]): GatewayCarga {
+  const g0 = corridas[0].gateway;
+  return {
+    modo: g0.modo,
+    atendidos: corridas.reduce((s, c) => s + c.gateway.atendidos, 0) / corridas.length,
+    esperaP50S: corridas.reduce((s, c) => s + c.gateway.esperaP50S, 0) / corridas.length,
+    esperaP95S: Math.max(...corridas.map((c) => c.gateway.esperaP95S)),
+    esperaMaxS: Math.max(...corridas.map((c) => c.gateway.esperaMaxS)),
+    ocupadoPct: corridas.reduce((s, c) => s + c.gateway.ocupadoPct, 0) / corridas.length,
+  };
+}
+
+/** Cuántas personas de cada zona les funciona. */
+function contarPorZona(zs: ZonaEstres[], lista: UsuarioEstres[]) {
+  for (const z of zs) z.funcionan = lista.filter((u) => u.zona === z.id && (u.estado === "bien" || u.estado === "funciona")).length;
 }
 
 const peorEstado = (xs: EstadoZona[]): EstadoZona => (xs.includes("revienta") ? "revienta" : xs.includes("lento") ? "lento" : "aguanta");

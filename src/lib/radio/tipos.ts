@@ -87,6 +87,11 @@ export type Parametros = {
   ubicacionesPct: number;
   situacionesPct: number;
   entorno: EntornoId;
+  /**
+   * Meshtastic: los equipos de las personas repiten lo que oyen (rol CLIENT, el de fábrica) o no (CLIENT_MUTE). El
+   * protocolo lo da el ajuste de radio (`preset`); en MeshCore solo repiten los repetidores.
+   */
+  usuariosRepiten?: boolean;
 };
 
 export type TipoMedicion = "linea" | "trayecto" | "area";

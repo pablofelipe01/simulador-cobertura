@@ -10,6 +10,7 @@ import { Crosshair, Flag, Hand, Layers, MapPin, Ruler, Smartphone, X } from "luc
 import { useEffect, useRef, useState, type Dispatch } from "react";
 
 import { CLASES, ENLACES, presetPorId } from "@/lib/radio/constantes";
+import { ESTADOS_USUARIO, ORDEN_ESTADOS_USUARIO, type ResumenUsuarios } from "@/lib/radio/estres";
 import { aGMS } from "@/lib/radio/geo";
 import type { Inspeccion } from "@/lib/radio/simulacion";
 import type { Antena, ResultadoSimulacion, TipoNodo } from "@/lib/radio/tipos";
@@ -279,7 +280,25 @@ function MenuCapas({ estado, despachar }: { estado: Estado; despachar: Dispatch<
   );
 }
 
-export function Leyenda({ estado, resultado, antenas }: { estado: Estado; resultado: ResultadoSimulacion | null; antenas: Antena[] }) {
+/** Personas en la prueba de estrés: el color del contorno de cada una y cuántas hay en cada estado. */
+function BloqueUsuarios({ r }: { r: ResumenUsuarios }) {
+  return (
+    <div className="mt-2 border-t border-linea pt-1.5" data-tour="leyenda-usuarios">
+      <p className="text-[11.5px] text-tenue">Personas en la prueba de estrés (contorno)</p>
+      <ul className="mt-1 space-y-0.5 text-[12px] leading-tight">
+        {ORDEN_ESTADOS_USUARIO.map((e) => (
+          <li key={e} className="flex items-center gap-2" title={ESTADOS_USUARIO[e].descripcion}>
+            <span className="h-3 w-3 shrink-0 rounded-full border-2" style={{ borderColor: ESTADOS_USUARIO[e].color, background: `${ESTADOS_USUARIO[e].color}55` }} />
+            <span className="min-w-0 flex-1 truncate">{ESTADOS_USUARIO[e].nombre}</span>
+            <span className="text-tenue tabular-nums">{r.porEstado[e].toLocaleString("es-CO")}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export function Leyenda({ estado, resultado, antenas, usuarios }: { estado: Estado; resultado: ResultadoSimulacion | null; antenas: Antena[]; usuarios?: ResumenUsuarios | null }) {
   // En pantallas pequeñas la leyenda empieza plegada para no tapar el mapa
   const [abierta, setAbierta] = useState(() => typeof window === "undefined" || window.matchMedia("(min-width: 640px)").matches);
   if (!resultado) return null;
@@ -303,7 +322,7 @@ export function Leyenda({ estado, resultado, antenas }: { estado: Estado; result
         ? resultado.antenas.map((a, i) => ({ color: COLORES_ANTENA[i % COLORES_ANTENA.length], texto: antenas.find((x) => x.id === a.id)?.nombre ?? a.nombre, rango: "" }))
         : COLORES_REDUNDANCIA.map((c) => ({ color: c.color, texto: c.nombre, rango: "" }));
   const titulo = modo === "senal" ? "Nivel de señal" : modo === "servidor" ? "Nodo antena con mejor señal" : "Nodos antena con servicio";
-  if (estado.modo === "sembrar") return <LeyendaSembrar abierta={abierta} onAbrir={setAbierta} filas={escala === "clases" ? filas : CLASES.map((c) => ({ color: c.color, texto: c.nombre, rango: "" }))} />;
+  if (estado.modo === "sembrar") return <LeyendaSembrar abierta={abierta} onAbrir={setAbierta} filas={escala === "clases" ? filas : CLASES.map((c) => ({ color: c.color, texto: c.nombre, rango: "" }))} usuarios={usuarios} />;
   if (!abierta) {
     return (
       <button
@@ -386,12 +405,13 @@ export function Leyenda({ estado, resultado, antenas }: { estado: Estado; result
           ))}
         </ul>
       )}
+      {usuarios && usuarios.total > 0 && <BloqueUsuarios r={usuarios} />}
     </div>
   );
 }
 
 /** Leyenda corta del modo «Sembrar la malla»: qué significa cada color de las piezas y del mapa. */
-function LeyendaSembrar({ abierta, onAbrir, filas }: { abierta: boolean; onAbrir: (v: boolean) => void; filas: { color: string; texto: string }[] }) {
+function LeyendaSembrar({ abierta, onAbrir, filas, usuarios }: { abierta: boolean; onAbrir: (v: boolean) => void; filas: { color: string; texto: string }[]; usuarios?: ResumenUsuarios | null }) {
   const punto = (color: string) => <span className="h-3.5 w-3.5 shrink-0 rounded-full border-2 bg-[#10201d]" style={{ borderColor: color, boxShadow: `0 0 6px ${color}` }} />;
   if (!abierta)
     return (
@@ -443,6 +463,7 @@ function LeyendaSembrar({ abierta, onAbrir, filas }: { abierta: boolean; onAbrir
           <span>Sin servicio</span>
         </div>
       </div>
+      {usuarios && usuarios.total > 0 && <BloqueUsuarios r={usuarios} />}
     </div>
   );
 }
