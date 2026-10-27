@@ -10,13 +10,14 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { desviarTeselas } from "./teselas-prueba.mjs";
+import { iniciarIADeMentira } from "./ia-de-mentira.mjs";
 
 const [, , salida = "dist/e2e"] = process.argv;
 fs.mkdirSync(salida, { recursive: true });
 const base = process.env.BASE ?? "http://localhost:3000/";
 const navegador = await chromium.launch(
   process.env.CHROME_PATH
-    ? { executablePath: process.env.CHROME_PATH, args: ["--use-gl=swiftshader", "--enable-webgl", "--ignore-gpu-blocklist", "--disable-background-networking"] }
+    ? { executablePath: process.env.CHROME_PATH, args: ["--use-gl=swiftshader", "--enable-webgl", "--ignore-gpu-blocklist", "--disable-background-networking", "--autoplay-policy=no-user-gesture-required"] }
     : { channel: "msedge" },
 );
 const resultados = [];
@@ -1802,7 +1803,8 @@ await flujo(
     await ajustes.getByRole("radio", { name: "Señora" }).click();
     afirmar((await ajustes.getByRole("switch", { name: /Activarme al abrir el simulador/ }).getAttribute("aria-checked")) === "true", "El interruptor de activarse al abrir debería estar encendido");
     afirmar(/Micrófono permitido/.test(await ajustes.innerText()), "Debería decir que el micrófono está permitido");
-    await ajustes.getByRole("button", { name: "Probar" }).click();
+    // (exacto: en los mismos ajustes está «Probar conexión» de la IA)
+    await ajustes.getByRole("button", { name: "Probar", exact: true }).click();
     await page.waitForFunction(() => /Hola, señora\. Así sonará mi voz/.test(window.__voz.dicho.join(" ")), null, { timeout: 15000 });
     await foto("ajustes");
     await page.getByRole("button", { name: "Apagar el Asistente Melki" }).first().click();
@@ -1824,6 +1826,240 @@ await flujo(
     },
   },
 );
+
+// v13: el pitch del modelo de negocio (el robot de Melki recorre el mapa) y la conversación con IA (Gemini Live de
+// mentira: el mismo protocolo, sin internet)
+/** Un micrófono de mentira (un tono) para la IA: sin dispositivo real en el navegador de pruebas. */
+const microfonoDeMentira = () => {
+  navigator.mediaDevices.getUserMedia = async () => {
+    const ctx = new AudioContext();
+    const o = ctx.createOscillator();
+    o.frequency.value = 180;
+    const d = ctx.createMediaStreamDestination();
+    o.connect(d);
+    o.start();
+    return d.stream;
+  };
+};
+
+await flujo(
+  "pitch",
+  async (page, foto) => {
+    await esperarRed(page);
+    await cargarMalla(page);
+    await page.getByRole("button", { name: "Presentar el modelo de negocio (pitch)" }).click();
+    const pitch = page.locator("[data-tour=pitch]");
+    await pitch.waitFor({ timeout: 10000 });
+    const tarjeta = () => pitch.innerText();
+    await pitch.getByText(/^Pitch · 1 de \d+$/).waitFor();
+    await pitch.getByRole("heading", { name: /Trama: pagos, WhatsApp e IA/ }).waitFor();
+    // A mano (sin avanzar solo), para revisar cada capítulo desde la portada
+    await pitch.getByRole("button", { name: /^Avanza solo/ }).click();
+    await pitch.getByRole("button", { name: /^Capítulo 1: / }).click();
+    await pitch.getByText(/^Pitch · 1 de \d+$/).waitFor();
+    // El robot está en el mapa y saluda mientras narra; la narración sale por la voz del equipo
+    await pitch.locator("[data-robot]").waitFor();
+    await page.waitForFunction(() => /soy Melki, el asistente del simulador/.test(window.__voz.dicho.join(" ")), null, { timeout: 20000 });
+    afirmar(/Gateways/.test(await tarjeta()) && /Repetidores/.test(await tarjeta()), "La portada no trae las cifras de la red");
+    // Los paneles se ocultan para dejar el mapa libre
+    afirmar(!(await page.locator("aside[aria-label=Resultados]").isVisible()), "El panel de resultados debería ocultarse en el pitch");
+    await foto("portada");
+    // Flechas: el problema, la solución y cada antena (con su altura y su ubicación)
+    await page.keyboard.press("ArrowRight");
+    await pitch.getByRole("heading", { name: /El problema/ }).waitFor();
+    await page.keyboard.press("ArrowRight");
+    await pitch.getByRole("heading", { name: /La solución/ }).waitFor();
+    await page.keyboard.press("ArrowRight");
+    await pitch.getByRole("heading", { name: "Gateway", exact: true }).waitFor();
+    await page.waitForTimeout(2900);
+    afirmar(/Altura de la antena/.test(await tarjeta()) && /Ubicación/.test(await tarjeta()), "El capítulo de la antena no dice altura y ubicación");
+    afirmar(await pitch.locator("[data-robot=senalando], [data-robot=volando], [data-robot=flotando]").count() === 1, "El robot debería señalar la antena");
+    await foto("antena");
+    // Pausa con el espacio y sigue
+    await page.keyboard.press(" ");
+    await pitch.getByRole("button", { name: "Seguir (espacio)" }).waitFor();
+    await page.keyboard.press(" ");
+    await pitch.getByRole("button", { name: "Pausar (espacio)" }).waitFor();
+    // Por Melki: probar una comisión (va al punto de equilibrio y dice en cuánto se recupera)
+    await page.getByRole("button", { name: /Abrir a Melki/ }).click();
+    const chat = page.getByRole("region", { name: "Conversación con Melki" });
+    await chat.getByRole("textbox").fill("prueba una comisión de 300 pesos");
+    await chat.getByRole("textbox").press("Enter");
+    await pitch.getByRole("heading", { name: "Punto de equilibrio" }).waitFor({ timeout: 10000 });
+    await pitch.getByText("Con una comisión de $300 por pago").waitFor();
+    afirmar(/Recupera la inversión/.test(await tarjeta()) && /Comisión de equilibrio/.test(await tarjeta()), "El equilibrio no trae la recuperación");
+    // La comisión también se escribe en la tarjeta
+    await pitch.getByRole("textbox", { name: "Comisión por pago en pesos" }).fill("800");
+    await pitch.getByRole("button", { name: "Calcular" }).click();
+    await pitch.getByText("Con una comisión de $800 por pago").waitFor();
+    await foto("equilibrio");
+    // Por voz con su nombre: «Melki, siguiente» (aunque esté narrando)
+    await chat.getByRole("textbox").fill("siguiente");
+    await chat.getByRole("textbox").press("Enter");
+    await pitch.getByRole("heading", { name: "Cómo escala" }).waitFor({ timeout: 10000 });
+    afirmar(/País: inversión/.test(await tarjeta()), "La escala no trae el país");
+    // Esc termina y devuelve los paneles (con el foco fuera de la caja de texto)
+    await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
+    await page.keyboard.press("Escape");
+    await pitch.waitFor({ state: "detached" });
+    // El cerebro explica el pitch y ofrece empezarlo
+    await chat.getByRole("textbox").fill("¿qué es el pitch?");
+    await chat.getByRole("textbox").press("Enter");
+    await chat.getByText(/En el pitch recorro el mapa con mi robot/).waitFor();
+    await chat.getByRole("button", { name: "Empezar el pitch" }).click();
+    await pitch.waitFor({ timeout: 10000 });
+    await pitch.getByRole("button", { name: "Salir de la presentación (Esc)" }).click();
+    await pitch.waitFor({ state: "detached" });
+  },
+  { sembrar: true, preparar: (page) => page.addInitScript(manosLibresDeMentira) },
+);
+
+const ia = await iniciarIADeMentira();
+await flujo(
+  "ia-en-vivo",
+  async (page, foto) => {
+    await esperarRed(page);
+    await cargarMalla(page);
+    const estado = ia.estado;
+    // Ajustes → Conversar con IA: la clave queda solo en el navegador; probar la conexión
+    await page.getByRole("button", { name: /Abrir a Melki/ }).click();
+    const chat = page.getByRole("region", { name: "Conversación con Melki" });
+    await chat.getByRole("button", { name: "Ajustes de voz" }).click();
+    const sec = chat.locator("[data-tour=ajustes-ia]");
+    await sec.waitFor();
+    await sec.getByLabel("Clave de Google AI Studio").fill("clave-de-prueba-e2e");
+    await sec.getByRole("button", { name: "Guardar" }).click();
+    afirmar((await page.evaluate(() => localStorage.getItem("simulador-cobertura-melki-ia-clave"))) === "clave-de-prueba-e2e", "La clave no quedó en el navegador");
+    afirmar((await sec.getByRole("switch", { name: /Usar la IA en el Asistente Melki/ }).getAttribute("aria-checked")) === "true", "Al guardar la clave se enciende la IA");
+    await sec.getByRole("button", { name: /Probar conexión/ }).click();
+    await sec.getByText(/Conectado con Gemini 3\.8 Live/).waitFor({ timeout: 15000 });
+    afirmar(estado.claves.at(-1) === "clave-de-prueba-e2e" && estado.setups.at(-1)?.model === "models/gemini-3.8-live", `La conexión no lleva la clave o el modelo: ${JSON.stringify(estado.setups.at(-1)?.model)}`);
+    await foto("ajustes-ia");
+    await chat.getByRole("button", { name: "Cerrar conversación" }).click();
+    // Activar el asistente: conversa con la IA (oye el audio del micrófono y contesta con voz)
+    await page.getByRole("button", { name: "Activar el Asistente Melki" }).first().click();
+    const hud = page.locator("[data-tour=hud-voz]");
+    await hud.waitFor({ timeout: 15000 });
+    await page.locator("[data-tour=hud-voz][data-ia=si]").waitFor({ timeout: 15000 });
+    await hud.getByText("IA en vivo").waitFor();
+    for (let k = 0; k < 60 && !estado.textos.some((t) => /^\(El usuario te acaba de llamar/.test(t)); k++) await page.waitForTimeout(250);
+    afirmar(estado.textos.some((t) => /^\(El usuario te acaba de llamar/.test(t)), "La IA no recibió el saludo");
+    const s = estado.setups.at(-1);
+    const nombres = (s.tools?.[0]?.functionDeclarations ?? []).map((f) => f.name);
+    afirmar(["ejecutar_orden", "estado_simulador", "consultar_melki", "presentacion", "terminar_conversacion"].every((n) => nombres.includes(n)), `Faltan herramientas: ${nombres}`);
+    afirmar(/Eres Melki/.test(s.systemInstruction.parts[0].text) && /Estado del simulador al empezar/.test(s.systemInstruction.parts[0].text), "Las instrucciones no traen quién es Melki ni el estado");
+    afirmar(s.generationConfig.responseModalities[0] === "AUDIO" && s.inputAudioTranscription && s.outputAudioTranscription, "La sesión no pide voz y subtítulos");
+    await page.waitForFunction(() => document.querySelector("[data-tour=hud-voz]")?.getAttribute("data-estado") === "atento", null, { timeout: 15000 });
+    await page.waitForTimeout(1200);
+    afirmar(estado.audios >= 5, `El micrófono no manda audio a la IA (${estado.audios} trozos)`);
+    // La voz local no suena encima de la IA
+    afirmar(!/Soy Melki con inteligencia artificial/.test(await page.evaluate(() => window.__voz.dicho.join(" "))), "La voz del equipo no debería repetir lo que dice la IA");
+    await foto("conversando");
+    // Una orden: la IA llama a ejecutar_orden y el simulador la hace (con el intérprete de Melki)
+    const antes = await page.locator("[data-tour=lista-piezas] li").count();
+    afirmar(ia.decir("pon un repetidor en 4.235, -73.335"), "No había conversación abierta");
+    await page.waitForFunction((n) => document.querySelectorAll("[data-tour=lista-piezas] li").length > n, antes, { timeout: 30000 });
+    await page.waitForFunction(() => /Listo, señor/.test(document.querySelector("[data-tour=hud-voz]")?.textContent ?? ""), null, { timeout: 30000 }).catch(() => {});
+    afirmar(estado.respuestas.some((r) => r.name === "ejecutar_orden" && /repetidor|nodo|pieza/i.test(String(r.response?.resultado))), `La orden no devolvió el resultado: ${JSON.stringify(estado.respuestas.at(-1))}`);
+    // Una pregunta con números: los toma del estado del simulador (no los inventa)
+    ia.decir("¿cuánto cuesta la red?");
+    await page.waitForFunction(() => /pesos de inversión/.test(document.querySelector("[data-tour=hud-voz]")?.textContent ?? ""), null, { timeout: 20000 }).catch(() => {});
+    await page.waitForFunction(() => true, null);
+    for (let k = 0; k < 40 && !estado.respuestas.some((r) => r.name === "estado_simulador"); k++) await page.waitForTimeout(250);
+    const est = estado.respuestas.find((r) => r.name === "estado_simulador")?.response?.estado;
+    afirmar(est?.costos?.inversionTotal > 0 && est.repetidores >= 2 && est.infraestructura?.length >= 3, `El estado no trae la red y sus costos: ${JSON.stringify(est?.costos)}`);
+    // Lo conversado queda escrito
+    await page.getByRole("button", { name: /Abrir a Melki/ }).click();
+    await chat.getByText("¿cuánto cuesta la red?").waitFor({ timeout: 10000 });
+    await chat.getByText(/Soy Melki con inteligencia artificial/).waitFor();
+    await chat.getByText(/pesos de inversión/).waitFor({ timeout: 10000 });
+    await chat.getByRole("button", { name: "Cerrar conversación" }).click();
+    // Google cierra cada conexión a los 10 minutos (avisa antes): Melki sigue la misma conversación en otra
+    // (cuenta las configuraciones: la conexión ya abrió y mandó con qué manija reanuda)
+    const esperarConexion = async (n, que) => {
+      for (let k = 0; k < 60 && estado.setups.length < n; k++) await page.waitForTimeout(250);
+      afirmar(estado.setups.length >= n, `No se abrió la conexión nueva (${que})`);
+      afirmar(/^manija-\d+$/.test(estado.setups.at(-1)?.sessionResumption?.handle ?? ""), `La conexión nueva no reanuda la conversación (${que}): ${JSON.stringify(estado.setups.at(-1)?.sessionResumption)}`);
+      for (let k = 0; k < 40 && !estado.abierta; k++) await page.waitForTimeout(100);
+    };
+    afirmar(estado.setups.at(-1)?.sessionResumption && !estado.setups.at(-1).sessionResumption.handle, "La primera conexión pide manijas para reanudar");
+    let conexiones = estado.setups.length;
+    ia.adios();
+    await esperarConexion(conexiones + 1, "aviso de Google");
+    await page.locator("[data-tour=hud-voz][data-ia=si]").waitFor();
+    let r0 = estado.respuestas.length;
+    ia.decir("¿cuánto cuesta la red?");
+    for (let k = 0; k < 60 && estado.respuestas.length === r0; k++) await page.waitForTimeout(250);
+    afirmar(estado.respuestas.length > r0, "Tras reanudar, la IA no siguió usando el simulador");
+    // Si la red se cae de golpe, también reanuda
+    await page.waitForFunction(() => document.querySelector("[data-tour=hud-voz]")?.getAttribute("data-estado") === "atento", null, { timeout: 15000 });
+    conexiones = estado.setups.length;
+    ia.cortar();
+    await esperarConexion(conexiones + 1, "corte de la red");
+    await page.locator("[data-tour=hud-voz][data-ia=si]").waitFor();
+    r0 = estado.respuestas.length;
+    ia.decir("¿cuánto cuesta la red?");
+    for (let k = 0; k < 60 && estado.respuestas.length === r0; k++) await page.waitForTimeout(250);
+    afirmar(estado.respuestas.length > r0, "Tras el corte, la IA no siguió usando el simulador");
+    await page.waitForFunction(() => document.querySelector("[data-tour=hud-voz]")?.getAttribute("data-estado") === "atento", null, { timeout: 15000 });
+    // El pitch narrado por la IA: avanza cuando la IA termina cada capítulo
+    ia.decir("preséntame el modelo de negocio");
+    const pitch = page.locator("[data-tour=pitch]");
+    try {
+      await pitch.waitFor({ timeout: 15000 });
+    } catch {
+      throw new Error(`No se abrió el pitch: ${JSON.stringify(estado.respuestas.slice(-2)).slice(0, 400)} · textos ${JSON.stringify(estado.textos.slice(-3))}`);
+    }
+    await page.waitForFunction(() => /Pitch · 2 de/.test(document.querySelector("[data-tour=pitch]")?.textContent ?? ""), null, { timeout: 40000 });
+    afirmar(estado.narrados >= 1, "La IA no narró el capítulo");
+    afirmar(!(await pitch.getByRole("button", { name: /Silenciar la voz|Oír la voz/ }).count()), "Con la IA narrando no se usa la voz del equipo");
+    await foto("pitch-ia");
+    // Si la conexión se cae a mitad de un capítulo: reanuda, le pide el capítulo otra vez y la presentación sigue
+    const capitulo = async () => Number((await pitch.textContent())?.match(/Pitch · (\d+) de/)?.[1] ?? 0);
+    estado.pausaNarrar = 6000;
+    const n0 = estado.narrados;
+    for (let k = 0; k < 80 && estado.narrados === n0; k++) await page.waitForTimeout(150);
+    afirmar(estado.narrados > n0, "La IA no empezó a narrar el capítulo siguiente");
+    await page.waitForTimeout(400);
+    const enCorte = await capitulo();
+    conexiones = estado.setups.length;
+    const n1 = estado.narrados;
+    estado.pausaNarrar = 0;
+    ia.cortar();
+    await esperarConexion(conexiones + 1, "corte a mitad del pitch");
+    for (let k = 0; k < 60 && estado.narrados === n1; k++) await page.waitForTimeout(250);
+    afirmar(estado.narrados > n1, "Tras el corte no pidió de nuevo el capítulo que narraba");
+    await page.waitForFunction((c) => Number(document.querySelector("[data-tour=pitch]")?.textContent?.match(/Pitch · (\d+) de/)?.[1] ?? 0) > c, enCorte, { timeout: 20000 });
+    await page.keyboard.press("Escape");
+    await pitch.waitFor({ state: "detached" });
+    // Se despide: cierra la conversación y vuelve a esperar su nombre
+    ia.decir("adiós, eso es todo");
+    await page.locator("[data-tour=hud-voz][data-ia=si]").waitFor({ state: "detached", timeout: 20000 });
+    await page.waitForFunction(() => ["dormido", "apagado", null].includes(document.querySelector("[data-tour=hud-voz]")?.getAttribute("data-estado") ?? null), null, { timeout: 20000 });
+    // Si la clave no sirve, lo dice y sigue con su cerebro local
+    estado.rechazar = "API key not valid. Please pass a valid API key.";
+    await page.getByRole("button", { name: /Activar el Asistente Melki|Apagar el Asistente Melki/ }).first().click();
+    await page.waitForFunction(() => /No pude conectar con la IA/.test(document.body.innerText), null, { timeout: 20000 });
+    afirmar(/no es válida/.test(await page.evaluate(() => document.body.innerText)), "El aviso no explica que la clave no es válida");
+    await page.waitForFunction(() => /Bienvenido|Hola, señor/.test(window.__voz.dicho.join(" ")), null, { timeout: 20000 });
+    await foto("sin-ia");
+    estado.rechazar = null;
+  },
+  {
+    sembrar: true,
+    preparar: async (page) => {
+      await page.addInitScript(manosLibresDeMentira);
+      await page.addInitScript(microfonoDeMentira);
+      await page.addInitScript((url) => {
+        window.__melkiIA = { url };
+        const consultar = navigator.permissions.query.bind(navigator.permissions);
+        navigator.permissions.query = (d) => (d.name === "microphone" ? Promise.resolve({ state: "granted" }) : consultar(d));
+      }, ia.url);
+    },
+  },
+);
+await ia.cerrar();
+
 
 let fallos = 0;
 for (const r of resultados) {
