@@ -20,6 +20,10 @@ torre de 12 m con 4 radios Heltec T114, billeteras XIAO o T1000-E,
 Starlink) e incluye las funciones de Radio Mobile, una regla para medir
 distancias y áreas, un mapa con departamentos, municipios y ríos, y a
 Melki, el asistente que ejecuta pedidos escritos con sus palabras.
+Novedad: el "Pitch" del modelo de negocio, con el robot de Melki que
+vuela por el mapa y presenta cada antena, la inversión, la operación y
+el punto de equilibrio; y, con una clave gratuita de Google, Melki
+conversa como un modelo de inteligencia artificial (Gemini Live).
 No hay que instalar nada.
 
 © 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero.
@@ -397,6 +401,44 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
     refractividad, entorno (vegetación o edificios), antenas
     direccionales con azimut, escala en dBm, µV o dBµV/m, e informe de
     radioenlace como "Radio Link".
+ q) Pitch del modelo de negocio: toque "Pitch" en la barra de arriba
+    (o dígale a Melki "preséntame el modelo de negocio"). El robot de
+    Melki vuela por el mapa de capítulo en capítulo, señala cada antena
+    y lo cuenta en voz alta; la tarjeta de la izquierda muestra las
+    cifras. Capítulos: el problema (adultos rurales sin canal digital
+    en el departamento y en el país), la solución, cada antena (dónde
+    está, a qué altura va y por qué: su enlace, la línea de vista, la
+    altura recomendada, el área que cubre y la gente que entra por
+    ella), la cobertura, la capacidad real, la inversión (CAPEX), la
+    operación al mes (OPEX), el punto de equilibrio, cómo escala y el
+    cierre. Todo sale de la red del mapa y de los precios de Trama.
+    En el punto de equilibrio escriba una comisión por pago (por
+    ejemplo 300) y toque "Calcular": dice los ingresos al mes, lo que
+    queda tras la operación, en cuántos meses se recupera la inversión
+    y desde cuántos usuarios se paga sola. Controles: las flechas,
+    espacio (pausa) y Esc (salir), los botones de abajo o la voz:
+    "siguiente", "anterior", "pausa", "sigue", "repite", "ve a la
+    inversión", "prueba una comisión de 500 pesos", "termina la
+    presentación". Consejo: antes del pitch, simule y haga la prueba de
+    estrés para que la capacidad salga persona por persona.
+ r) Conversar con IA (Gemini Live, gratis): en la conversación con
+    Melki toque la tuerca (Ajustes de voz) y baje a "Conversar con IA".
+    1) Toque "Conseguir una clave gratis": abre Google AI Studio
+       (aistudio.google.com/apikey); entre con su cuenta de Google y
+       cree la clave ("Create API key").
+    2) Péguela en "Clave de Google AI Studio" y toque "Guardar"; luego
+       "Probar conexión" debe decir "Conectado con Gemini 3.8 Live".
+    3) Active el Asistente Melki: la barra dice "IA en vivo". Háblele
+       normal ("¿cuánto cuesta la red?", "pon un repetidor en 4.235,
+       -73.335", "preséntame el modelo de negocio"); le contesta con voz
+       natural y hace los cambios en el simulador. Se le puede hablar
+       encima. Con "adiós" o tras un minuto en silencio cierra y vuelve
+       a esperar "Hola Melki".
+    La clave queda solo en ese navegador. Si la clave no sirve, no hay
+    internet o se acabó el cupo del día, Melki lo avisa y sigue con su
+    cerebro local. Mientras conversa, la voz y un resumen del escenario
+    van a Google; en la capa gratuita Google puede usarlos para mejorar
+    sus productos. "Borrar la clave" la quita.
 
 
 3. BUENO SABER
@@ -438,6 +480,11 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
   entiende y ejecuta los pedidos aquí mismo, sin internet. Con manos
   libres en el modo "Con el navegador", el audio del micrófono va a
   Edge o Chrome mientras está activo; en "Privado" no sale del equipo.
+- Conversar con IA: la capa gratuita de Google no cobra (tiene límites
+  por día). Si algún día se pasa a la de pago, cuesta unos US$0,005
+  por minuto de audio que entra y US$0,018 por minuto de voz del
+  modelo. Google corta cada conexión a los 10 minutos: Melki la
+  reanuda solo, sin perder la conversación.
 - Si abre la versión HTML con doble clic y el navegador pide permiso
   del micrófono a cada rato, elija "Permitir" o use el modo "Privado"
   en Ajustes de voz, que pide el permiso una sola vez.
