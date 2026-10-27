@@ -24,11 +24,12 @@ export { numerosEnPalabras } from "./src/components/melki/numeros";
 export { detectarActivacion, controlDeVoz, limpiarComando, textoParaVoz, pareceEco, empiezaConNombre, AYUDA_VOZ, SALUDO_MANOS_LIBRES, esNombre, frases, elegirAlternativa } from "./src/components/melki/manos-libres";
 export { buscarLugares, cargarReferencia, pareceNombre, reconocerLugares, decidirLugar, contornoLugar, nombresParaVoz, textoUbicacion } from "./src/lib/geo/referencia";
 export { costoRedTrama } from "./src/lib/radio/trama";
-export { paraHablar, puntajeVoz } from "./src/components/melki/voz";
+export { paraHablar, puntajeVoz, trozosVoz } from "./src/components/melki/voz";
 export { estadoInicial, reductor } from "./src/components/simulador/estado";
 export { estadoRed } from "./src/lib/radio/estado-red";
 export { FICHA_GATEWAY } from "./src/lib/radio/protocolos";
 export { pedidoPitch } from "./src/lib/negocio/pitch";
+export { pedidoRecorrido } from "./src/lib/negocio/recorrido-red";
 export { SesionLive, mensajeSetup, motivoCierre, cierreRecuperable, aBase64, deBase64, pcmDeBytes, bytesDePcm, MODELO_IA_DEFECTO } from "./src/components/melki/ia-live";
 export { aPcm16k } from "./src/components/melki/audio-ia";
 export { HERRAMIENTAS_IA, instruccionesMelki, estadoParaIA } from "./src/components/melki/herramientas-ia";
@@ -1068,6 +1069,23 @@ function crearApi(antenas) {
   const voz = m.paraHablar("El enlace tiene 12,5 dB a 3,2 km con SF11; ≈ 1.035.000 pesos y 99,9 % · 250 B");
   caso("La voz dice unidades y números sin deletrear símbolos", /12 coma 5 decibeles/.test(voz) && /3 coma 2 kilómetros/.test(voz) && /S F 11/.test(voz) && /unos 1035000/.test(voz) && /99 coma 9 por ciento/.test(voz) && /250 bytes/.test(voz) && !/[≈·%]/.test(voz), voz);
 
+  // La voz va en trozos cortos (las voces en línea de Chrome se cortan solas en textos largos), sin perder nada
+  const ayudaHablada = m.paraHablar(m.AYUDA_VOZ);
+  const trozos = m.trozosVoz(ayudaHablada);
+  caso(
+    "Un texto largo se dice en trozos de hasta 150 letras, completo y en orden",
+    trozos.length >= 5 && trozos.every((x) => x.length > 0 && x.length <= 150) && trozos.join(" ").replace(/\s+/g, " ") === ayudaHablada.replace(/\s+/g, " "),
+    trozos.map((x) => x.length).join(", "),
+  );
+  caso("Una frase corta va en un solo trozo", m.trozosVoz("Listo, simulé la red.").length === 1 && m.trozosVoz("Listo, simulé la red.")[0] === "Listo, simulé la red.");
+  const sinPuntos = Array.from({ length: 80 }, (_, i) => `palabra${i}`).join(" ");
+  const porPalabras = m.trozosVoz(sinPuntos);
+  caso("Una frase muy larga sin puntos ni comas se parte por palabras", porPalabras.length >= 4 && porPalabras.every((x) => x.length <= 150) && porPalabras.join(" ") === sinPuntos);
+  const frasesCortas = m.trozosVoz("Hola. Soy Melki. Le ayudo con la red.");
+  caso("Las frases cortas seguidas van juntas (menos pausas)", frasesCortas.length === 1);
+  caso("El cuadrito ■ de los botones no se lee en voz alta", !/■/.test(m.paraHablar("toque el cuadrito ■ de mi barra")) && /cuadrito de mi barra/.test(m.paraHablar("toque el cuadrito ■ de mi barra")));
+  caso("La ayuda por voz explica cómo callarlo con parlantes y el modo con audífonos", /parlantes/.test(m.AYUDA_VOZ) && /audífonos/.test(m.AYUDA_VOZ));
+
   caso("Reconoce el eco de su propia voz", m.pareceEco("diga hola Melki y su pedido", m.SALUDO_MANOS_LIBRES) && m.pareceEco("le dejé el detalle escrito", "La red cubre el 82 %. Le dejé el detalle escrito."));
   caso("Lo que dice el usuario no es eco", !m.pareceEco("pon el gateway en Cumaral", m.SALUDO_MANOS_LIBRES) && !m.pareceEco("conecta a los que faltan", "Listo, simulé la red: llegan 40 de 45 personas."));
 
@@ -1409,12 +1427,15 @@ function crearApi(antenas) {
   const navOriginal = Object.getOwnPropertyDescriptor(globalThis, "navigator");
   fijarAgente("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Edg/141.0");
   const escuchar = async (opciones = { continuo: true }) => {
-    const r = { frases: [], infos: [], estados: [], errores: [], textos: [], parciales: [] };
+    const r = { frases: [], infos: [], estados: [], detalles: [], errores: [], textos: [], parciales: [] };
     const s = await m.iniciarDictado(
       "navegador",
       {
         onTexto: (f, p) => r.textos.push([f, p]),
-        onEstado: (e) => r.estados.push(e),
+        onEstado: (e, d) => {
+          r.estados.push(e);
+          r.detalles.push(d);
+        },
         onError: (e) => r.errores.push(e),
         onFrase: (f, info) => {
           r.frases.push(f);
@@ -1456,16 +1477,52 @@ function crearApi(antenas) {
   await dormir(150);
   caso("Al detenerla termina de verdad (no se vuelve a encender)", e.estados.at(-1) === "inactivo" && sesiones.length === m0, e.estados.join(","));
 
-  // Sin internet: reintenta con espera creciente y, tras varios fallos seguidos, avisa y se detiene
+  // Sin internet: reintenta con espera creciente; tras varios fallos seguidos avisa una sola vez y sigue intentando, más
+  // despacio (no se rinde: al volver el internet vuelve a oír sin que haya que activarlo de nuevo)
   e = await escuchar();
   const reales = globalThis.setTimeout;
   globalThis.setTimeout = (f, ms, ...a) => reales(f, Math.min(ms ?? 0, 5), ...a);
-  for (let k = 0; k < 8 && e.estados.at(-1) !== "inactivo"; k++) {
+  const antesRed = sesiones.length;
+  for (let k = 0; k < 10; k++) {
     ultima().cortar("network");
     await dormir(20);
   }
   globalThis.setTimeout = reales;
-  caso("Sin internet reintenta varias veces y luego avisa una vez y se detiene (sin bucle)", e.errores.length === 1 && /internet/.test(e.errores[0]) && e.estados.at(-1) === "inactivo", `${e.errores.length} · ${e.estados.join(",")}`);
+  const avisoRed = e.detalles[e.estados.lastIndexOf("preparando")] ?? "";
+  caso(
+    "Sin internet reintenta, avisa una sola vez y sigue intentando (no se rinde ni repite el aviso)",
+    e.errores.length === 0 && e.estados.filter((x) => x === "preparando").length === 1 && /internet/.test(avisoRed) && sesiones.length >= antesRed + 10 && e.estados.at(-1) === "preparando",
+    `${e.errores.length} · ${e.estados.join(",")} · ${sesiones.length - antesRed}`,
+  );
+  ultima().final("hola Melki");
+  ultima().cortar();
+  await dormir(20);
+  caso("…y al volver el internet vuelve a «escuchando» y entrega lo que oye", e.estados.at(-1) === "escuchando" && e.frases.at(-1) === "hola Melki", e.estados.join(","));
+  e.s.cancelar();
+
+  // El micrófono ocupado un momento (otra app, el celular cambiando de audio): reintenta sin dar error
+  e = await escuchar();
+  const antesCaptura = sesiones.length;
+  ultima().cortar("audio-capture");
+  await dormir(400);
+  caso("Si el micrófono se ocupa un momento, vuelve a escuchar sin dar error", e.errores.length === 0 && sesiones.length === antesCaptura + 1 && e.estados.at(-1) === "escuchando", `${e.errores.join(" ")} · ${sesiones.length - antesCaptura}`);
+  e.s.cancelar();
+
+  // En pausa (con parlantes, mientras Melki habla): no oye ni entrega nada y no se vuelve a encender; al quitar la
+  // pausa vuelve a escuchar enseguida
+  e = await escuchar();
+  const enPausa = ultima();
+  e.s.pausar(true);
+  await dormir(200);
+  const sesionesPausa = sesiones.length;
+  enPausa.final("lo que dice Melki por los parlantes");
+  await dormir(150);
+  caso("En pausa no entrega lo que se oye ni vuelve a encender la escucha", !e.frases.includes("lo que dice Melki por los parlantes") && sesiones.length === sesionesPausa && e.errores.length === 0, `${e.frases.join(" | ")} · ${sesiones.length - sesionesPausa}`);
+  e.s.pausar(false);
+  await dormir(200);
+  ultima().final("pon un repetidor");
+  caso("…y al quitar la pausa vuelve a escuchar y entrega lo nuevo", sesiones.length === sesionesPausa + 1 && e.frases.at(-1) === "pon un repetidor" && e.estados.join(",") === "escuchando", `${sesiones.length - sesionesPausa} · ${e.estados.join(",")}`);
+  e.s.cancelar();
   // Sin permiso: se detiene enseguida, sin reintentar
   e = await escuchar();
   const m1 = sesiones.length;
@@ -1589,6 +1646,38 @@ function crearApi(antenas) {
   caso("Ir a un capítulo y terminar", pp("ve a la inversión", true)?.capitulo === "inversion" && pp("vamos a la cobertura", true)?.capitulo === "cobertura" && pp("termina la presentación", true)?.accion === "terminar" && pp("termina la presentación") === null);
 }
 
+// v13.1 · El recorrido de la red por voz o por escrito: empezar, ir a un punto, «¿por qué quedó así?», avanzar y terminar
+{
+  const pr = (t, enCurso = false) => m.pedidoRecorrido(t, enCurso);
+  caso(
+    "«Explícame la red», «hazme un recorrido por la red», «recorre la red punto por punto» y «Melki, hazme un recorrido» lo empiezan",
+    ["explícame la red", "hazme un recorrido por la red", "recorre la red punto por punto", "Melki, hazme un recorrido", "explícame cada antena", "cuéntame de la red"].every((x) => pr(x)?.accion === "empezar" && !pr(x).parada),
+  );
+  caso(
+    "«¿Por qué la red quedó así?» va a la conclusión; «¿por qué pusiste el repetidor 2 ahí?» y «explícame el repetidor dos», a ese punto",
+    pr("¿Por qué la red quedó así?")?.parada === "cierre" && pr("¿por qué quedó así la red?")?.parada === "cierre" && pr("¿por qué la red quedó así?", true)?.accion === "ir" && /repetidor 2/.test(pr("¿por qué pusiste el repetidor 2 ahí?")?.parada ?? "") && pr("explícame el repetidor dos")?.accion === "empezar",
+  );
+  caso(
+    "No se confunde: los tours guiados, el pitch, «muéstrame toda la red» y las preguntas siguen en lo suyo",
+    pr("hazme un recorrido guiado") === null && pr("hazme el tour de la malla") === null && pr("explícame el modelo de negocio") === null && pr("muéstrame toda la red") === null && pr("explícame cómo funciona la red mesh") === null && pr("¿qué es el recorrido?") === null && pr("termina el recorrido") === null,
+  );
+  caso("Los tours ya no toman «recorrido» solo; «recorrido guiado» y «tour» sí", m.pedidoDeTour("hazme un recorrido por la red") === null && m.pedidoDeTour("hazme un recorrido") === null && m.pedidoDeTour("hazme un recorrido guiado") !== null && m.pedidoDeTour("hazme el tour de la malla") !== null);
+  caso(
+    "Con el recorrido abierto: siguiente, anterior, pausa, sigue, repite, «ve al gateway» y «termina el recorrido»",
+    pr("siguiente") === null &&
+      pr("siguiente", true)?.accion === "siguiente" &&
+      pr("siguiente punto", true)?.accion === "siguiente" &&
+      pr("anterior", true)?.accion === "anterior" &&
+      pr("pausa", true)?.accion === "pausar" &&
+      pr("sigue", true)?.accion === "seguir" &&
+      pr("repite", true)?.accion === "repetir" &&
+      pr("ve al gateway", true)?.accion === "ir" &&
+      /gateway/.test(pr("llévame al gateway", true)?.parada ?? "") &&
+      pr("termina el recorrido", true)?.accion === "terminar" &&
+      pr("Melki, sal del recorrido", true)?.accion === "terminar",
+  );
+}
+
 // v13 · Conversar con la IA (Gemini Live): la conexión, el audio, las herramientas y la reanudación
 {
   const tick = (ms = 5) => new Promise((ok) => setTimeout(ok, ms));
@@ -1625,10 +1714,17 @@ function crearApi(antenas) {
   const setup = m.mensajeSetup({ clave: "k", instrucciones: "Eres Melki", herramientas: m.HERRAMIENTAS_IA, voz: "Charon" }).setup;
   caso(
     "La configuración pide voz, subtítulos, herramientas, conversaciones largas y manijas para reanudar",
-    setup.model === `models/${m.MODELO_IA_DEFECTO}` && setup.generationConfig.responseModalities.join() === "AUDIO" && setup.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName === "Charon" && setup.tools[0].functionDeclarations.length === 5 && setup.inputAudioTranscription && setup.outputAudioTranscription && setup.contextWindowCompression.slidingWindow && setup.sessionResumption && !setup.sessionResumption.handle && setup.systemInstruction.parts[0].text === "Eres Melki",
+    setup.model === `models/${m.MODELO_IA_DEFECTO}` && setup.generationConfig.responseModalities.join() === "AUDIO" && setup.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName === "Charon" && setup.tools[0].functionDeclarations.length === 6 && setup.inputAudioTranscription && setup.outputAudioTranscription && setup.contextWindowCompression.slidingWindow && setup.sessionResumption && !setup.sessionResumption.handle && setup.systemInstruction.parts[0].text === "Eres Melki",
   );
   const sinVoz = m.mensajeSetup({ clave: "k", instrucciones: "x", modelo: "models/otro", reanudar: "h-1" }).setup;
   caso("Sin voz elegida usa la del modelo; con manija, reanuda", sinVoz.model === "models/otro" && !sinVoz.generationConfig.speechConfig && !sinVoz.tools && sinVoz.sessionResumption.handle === "h-1");
+  // Con parlantes: no se deja interrumpir por lo que oye (su propia voz) y le cuesta más «oír» que alguien empezó a hablar
+  const conParlantes = m.mensajeSetup({ clave: "k", instrucciones: "x", parlantes: true }).setup;
+  caso(
+    "Con parlantes la IA no se interrumpe con su propio eco",
+    conParlantes.realtimeInputConfig?.activityHandling === "NO_INTERRUPTION" && conParlantes.realtimeInputConfig?.automaticActivityDetection?.startOfSpeechSensitivity === "START_SENSITIVITY_LOW",
+  );
+  caso("Con audífonos se le puede hablar encima (lo normal del servicio)", !setup.realtimeInputConfig);
 
   const ev = { audios: [], usuario: "", modelo: "", turnos: 0, interr: 0, herr: [], adios: [], cerradas: [] };
   const s = new m.SesionLive(
@@ -1710,7 +1806,13 @@ function crearApi(antenas) {
 
   // Quién es Melki para la IA y qué puede hacer en el simulador
   const nombres = m.HERRAMIENTAS_IA.map((h) => h.name);
-  caso("Las herramientas de la IA: órdenes, estado, conocimiento, presentación y despedida", nombres.join() === "ejecutar_orden,estado_simulador,consultar_melki,presentacion,terminar_conversacion" && m.HERRAMIENTAS_IA.every((h) => h.description.length > 40) && m.HERRAMIENTAS_IA.find((h) => h.name === "presentacion").parameters.properties.accion.enum.includes("empezar"));
+  caso(
+    "Las herramientas de la IA: órdenes, estado, conocimiento, presentación, recorrido de la red y despedida",
+    nombres.join() === "ejecutar_orden,estado_simulador,consultar_melki,presentacion,recorrido_red,terminar_conversacion" &&
+      m.HERRAMIENTAS_IA.every((h) => h.description.length > 40) &&
+      m.HERRAMIENTAS_IA.find((h) => h.name === "presentacion").parameters.properties.accion.enum.includes("empezar") &&
+      m.HERRAMIENTAS_IA.find((h) => h.name === "recorrido_red").parameters.properties.accion.enum.includes("ir"),
+  );
   const ins = m.instruccionesMelki("senor", "Estado: {}");
   caso("Las instrucciones: trato, no inventar cifras, usar las herramientas y el estado al final", /«señor»/.test(ins) && /Nunca inventes cifras/.test(ins) && /estado_simulador/.test(ins) && ins.endsWith("Estado: {}") && /«señora»/.test(m.instruccionesMelki("senora")) && /de usted/.test(m.instruccionesMelki("neutro")));
   const gw = base("g", "Gateway", 4.2, -73.37, { pasarela: true, rol: "COMPANION" });
@@ -1726,6 +1828,14 @@ function crearApi(antenas) {
   const c = { antenas: [gw, rep], parametros: { ...PARAMETROS, preset: "SF11_250" }, resultado: null, desactualizado: false, relieve: "teselas", modo: "sembrar" };
   const rp = m.responder("¿qué es el pitch?", c);
   caso("«¿Qué es el pitch?» lo explica y ofrece empezarlo", /En el pitch recorro el mapa con mi robot/.test(rp.texto) && rp.acciones?.some((a) => a.accion === "pitch"));
+  const rr = m.responder("¿qué es el recorrido de la red?", c);
+  const rr2 = m.responder("¿cómo funciona el recorrido?", c);
+  caso(
+    "«¿Qué es el recorrido?» explica la nube de cada punto y ofrece empezarlo (no es el menú de tours)",
+    /punto por punto/.test(rr.texto) && /nube/.test(rr.texto) && rr.acciones?.some((a) => a.accion === "recorrido-red") && rr2.acciones?.some((a) => a.accion === "recorrido-red"),
+    rr2.texto.slice(0, 100),
+  );
+  caso("La ayuda por voz cuenta el recorrido de la red", /explícame la red/.test(m.AYUDA_VOZ));
   const ri = m.responder("¿puedes hablar como chat gpt con gemini live?", c);
   caso("Hablar como una IA: Gemini Live gratis con la clave, y ofrece abrir los ajustes", /Gemini Live de Google/.test(ri.texto) && /gratis/.test(ri.texto) && ri.acciones?.some((a) => a.accion === "ajustes-ia"), ri.texto.slice(0, 120));
 }
