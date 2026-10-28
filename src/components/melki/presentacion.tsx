@@ -7,12 +7,14 @@
 
 // La presentación del modelo de negocio: el robot de Melki vuela por el mapa de capítulo en capítulo (la cámara lo
 // sigue), señala cada antena, cuenta el guion en voz alta (con la voz del equipo o la de la IA) y muestra las cifras en
-// una tarjeta. Se controla con los botones, el teclado (← → espacio Esc) o la voz («siguiente», «pausa»…).
+// una tarjeta. En el computador, lo que cuenta de cada antena sale escrito en una nube desde la antena (como en el
+// recorrido de la red). Se controla con los botones, el teclado (← → espacio Esc) o la voz («siguiente», «pausa»…).
 import { ChevronLeft, ChevronRight, Pause, Play, Repeat, Volume2, VolumeX, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { CapituloPitch, IdCapitulo, MapaPitch, PedidoPitch } from "@/lib/negocio/pitch";
 
+import { anchoNube, NubeMapa } from "./nube-mapa";
 import { RobotMelki, type GestoRobot } from "./robot";
 
 /** Cómo se narra un capítulo: devuelve cómo cortarlo. `alTerminar` se llama una vez al acabar. */
@@ -27,6 +29,10 @@ const TONOS: Record<NonNullable<CapituloPitch["cifras"][number]["tono"]>, string
 };
 
 const frasesDe = (t: string) => t.split(/(?<=[.!?])\s+/).filter(Boolean);
+/** Las frases en párrafos de dos (para la nube). */
+const parrafosDe = (frases: string[]) => frases.reduce<string[]>((ps, f, k) => (k % 2 ? [...ps.slice(0, -1), `${ps[ps.length - 1]} ${f}`] : [...ps, f]), []);
+/** ¿Este capítulo va con nube? Las antenas, en un computador con espacio para la tarjeta, la antena y la nube. */
+const conNube = (c: CapituloPitch | undefined, ancho: number) => !!c && c.foco.tipo === "punto" && ancho >= 1100;
 /** Tiempo de lectura en voz alta estimado (ms). */
 const duracionLectura = (t: string) => Math.max(2500, t.length * 68);
 
@@ -62,10 +68,15 @@ export function PresentacionPitch({
   const [frase, setFrase] = useState(0);
   const [pos, setPos] = useState<{ x: number; y: number; mirando: "derecha" | "izquierda" } | null>(null);
   const [anillo, setAnillo] = useState<{ x: number; y: number } | null>(null);
+  const [zonaTam, setZonaTam] = useState<{ ancho: number; alto: number } | null>(null);
+  /** El capítulo (y repetición) al que ya llegó la cámara: la nube sale solo entonces. */
+  const [llego, setLlego] = useState<string | null>(null);
   const [repeticion, setRepeticion] = useState(0);
   const [textoComision, setTextoComision] = useState("");
   const zona = useRef<HTMLDivElement>(null);
   const tarjeta = useRef<HTMLDivElement>(null);
+  /** El primer vuelo espera a que el mapa termine de agrandarse (se acaban de ocultar los paneles). */
+  const primerVuelo = useRef(true);
   const cortar = useRef<(() => void) | null>(null);
   const cap = capitulos[Math.min(i, capitulos.length - 1)];
   const frases = useMemo(() => frasesDe(cap?.guion ?? ""), [cap]);
@@ -82,6 +93,7 @@ export function PresentacionPitch({
     if (!c || !z) return;
     const ancho = z.clientWidth;
     const alto = z.clientHeight;
+    setZonaTam((x) => (x && x.ancho === ancho && x.alto === alto ? x : { ancho, alto }));
     const celular = ancho < 640;
     const t = tarjeta.current;
     const bordeTarjeta = t && !celular ? t.offsetLeft + t.offsetWidth : 0;
@@ -103,31 +115,41 @@ export function PresentacionPitch({
     if (!cap) return;
     cortar.current?.();
     cortar.current = null;
-    const z = zona.current;
-    const celular = (z?.clientWidth ?? 1200) < 640;
-    const t = tarjeta.current;
-    const margen = celular
-      ? { izquierda: 20, derecha: 20, arriba: 60, abajo: Math.min(360, (z?.clientHeight ?? 800) * 0.5) }
-      : { izquierda: (t ? t.offsetLeft + t.offsetWidth : 460) + 60, derecha: 60, arriba: 70, abajo: 110 };
-    const ms = mapa ? mapa.volar(cap.foco, margen) : 0;
+    const esta = `${cap.clave}-${repeticion}`;
     let vigente = true;
-    const fin = window.setTimeout(
-      () => {
-        if (!vigente) return;
-        setVolando(false);
-        anclar();
-      },
-      Math.max(60, ms + 80),
-    );
+    let fin = 0;
+    const volar = () => {
+      if (!vigente) return;
+      const z = zona.current;
+      const celular = (z?.clientWidth ?? 1200) < 640;
+      const t = tarjeta.current;
+      const ancho = z?.clientWidth ?? 1200;
+      const margen = celular
+        ? { izquierda: 20, derecha: 20, arriba: 60, abajo: Math.min(360, (z?.clientHeight ?? 800) * 0.5) }
+        : { izquierda: (t ? t.offsetLeft + t.offsetWidth : 460) + 60, derecha: conNube(cap, ancho) ? anchoNube(ancho) + 90 : 60, arriba: 70, abajo: 110 };
+      const ms = mapa ? mapa.volar(cap.foco, margen) : 0;
+      fin = window.setTimeout(
+        () => {
+          if (!vigente) return;
+          setVolando(false);
+          setLlego(esta);
+          anclar();
+        },
+        Math.max(60, ms + 80),
+      );
+    };
+    const espera = window.setTimeout(volar, primerVuelo.current ? 350 : 0);
+    primerVuelo.current = false;
     // Mientras vuela, el robot va hacia donde quedará su destino
     const r = window.requestAnimationFrame(() => {
       setNarrando(false);
       setFrase(0);
-      setVolando(ms > 0);
+      setVolando(true);
       anclar();
     });
     return () => {
       vigente = false;
+      window.clearTimeout(espera);
       window.clearTimeout(fin);
       window.cancelAnimationFrame(r);
     };
@@ -285,6 +307,9 @@ export function PresentacionPitch({
 
   if (!cap) return null;
   const gesto: GestoRobot = volando ? "volando" : narrando ? (cap.id === "portada" ? "saludando" : cap.foco.tipo === "punto" ? "senalando" : "hablando") : "flotando";
+  const nube = conNube(cap, zonaTam?.ancho ?? 0);
+  // El borde derecho de la tarjeta en el computador (left-4, ancho min(440 px, 42 %)): la nube no la tapa
+  const bordeTarjeta = zonaTam ? 16 + Math.min(440, zonaTam.ancho * 0.42) : 12;
 
   return (
     <div ref={zona} className="pointer-events-none absolute inset-0 z-[35]" role="region" aria-label="Presentación del modelo de negocio" data-tour="pitch">
@@ -297,6 +322,20 @@ export function PresentacionPitch({
         <div className="pitch-robot absolute top-0 left-0" style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }} data-robot={gesto}>
           <RobotMelki gesto={gesto} hablando={narrando} mirando={pos.mirando} className="h-32 w-[6.4rem] sm:h-44 sm:w-36" titulo={`Melki ${narrando ? "presentando" : "en la presentación"}`} />
         </div>
+      )}
+      {/* Lo que cuenta de la antena, escrito en una nube que sale de ella */}
+      {nube && anillo && !volando && llego === `${cap.clave}-${repeticion}` && zonaTam && (
+        <NubeMapa
+          key={`${cap.clave}-${repeticion}`}
+          ancla={anillo}
+          zona={zonaTam}
+          izquierdaMin={bordeTarjeta + 16}
+          paso={`Pitch · ${i + 1} de ${capitulos.length}`}
+          etiqueta={cap.subtitulo}
+          titulo={cap.titulo}
+          parrafos={parrafosDe(frases)}
+          escribir
+        />
       )}
       {/* La tarjeta del capítulo */}
       <div
@@ -321,13 +360,17 @@ export function PresentacionPitch({
             ))}
           </dl>
         )}
-        <p className="mt-3 text-[14px] leading-relaxed text-carbon-2">
-          {frases.map((f, k) => (
-            <span key={k} className={narradorIA || !narrando ? "" : k === frase ? "rounded bg-melki-clara text-carbon" : k < frase ? "" : "text-tenue"}>
-              {f}{" "}
-            </span>
-          ))}
-        </p>
+        {nube ? (
+          <p className="mt-3 text-[12.5px] leading-snug text-tenue">Lo que cuento de esta antena sale escrito en la nube, junto a ella en el mapa.</p>
+        ) : (
+          <p className="mt-3 text-[14px] leading-relaxed text-carbon-2">
+            {frases.map((f, k) => (
+              <span key={k} className={narradorIA || !narrando ? "" : k === frase ? "rounded bg-melki-clara text-carbon" : k < frase ? "" : "text-tenue"}>
+                {f}{" "}
+              </span>
+            ))}
+          </p>
+        )}
         {cap.id === "equilibrio" && (
           <form
             className="mt-3 flex items-end gap-2"
@@ -408,7 +451,7 @@ export function PresentacionPitch({
   );
 }
 
-function BotonCtl({ titulo, onClick, children, deshabilitado = false, activo }: { titulo: string; onClick: () => void; children: React.ReactNode; deshabilitado?: boolean; activo?: boolean }) {
+export function BotonCtl({ titulo, onClick, children, deshabilitado = false, activo }: { titulo: string; onClick: () => void; children: React.ReactNode; deshabilitado?: boolean; activo?: boolean }) {
   return (
     <button
       type="button"

@@ -16,9 +16,10 @@ Trama del Inge. Incluye a **Melki**, un asistente local que ejecuta pedidos en e
 «¿cuántas personas aguanta el Repetidor 1?», «llena el gateway hasta su límite», «envía 25 pagos al tiempo», «¿cuánto
 cuesta la red para el Chocó?», «conecta a los que faltan»), responde preguntas (cómo viaja un mensaje, por qué una persona
 está en rojo, qué hacer ahora) y da tours guiados. Con una clave gratuita de Google AI Studio, Melki también **conversa
-como un modelo de inteligencia artificial** (Gemini Live: oye la voz directamente y contesta con voz natural) y presenta
-el **pitch del modelo de negocio** con su robot volando por el mapa: cada antena, la inversión, la operación y el punto
-de equilibrio.
+como un modelo de inteligencia artificial** (Gemini Live: oye la voz directamente y contesta con voz natural), presenta
+el **pitch del modelo de negocio** con su robot volando por el mapa (cada antena, la inversión, la operación y el punto
+de equilibrio) y hace el **recorrido de la red**: va punto por punto y en una nube que sale de cada antena escribe qué se
+instaló, por qué ahí, qué papel cumple y, al final, por qué la red quedó así.
 
 > **© 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero. Todos los derechos reservados.**
 > Creado por Giancarlo González Guerrero para el Ingeniero Pablo Felipe Acevedo y la empresa Melki, con ayuda de
@@ -108,8 +109,9 @@ de equilibrio.
   el botón para proponer la opción de máxima cobertura; «dame la mayor cobertura posible» la calcula de una vez
 - **Pitch del modelo de negocio** (v13; botón «Pitch» de la barra de arriba, o «Melki, preséntame el modelo de
   negocio»): el robot de Melki, en vectores, vuela por el mapa de capítulo en capítulo (la cámara lo sigue), señala cada
-  antena con un anillo que late y cuenta el guion en voz alta mientras una tarjeta muestra las cifras. Todo sale de la
-  red que esté en el mapa y de los precios del documento de Trama; no inventa ingresos:
+  antena con un anillo que late y cuenta el guion en voz alta mientras una tarjeta muestra las cifras; en el computador,
+  lo que cuenta de cada antena sale escrito en una nube desde la antena (v13.1). Todo sale de la red que esté en el mapa
+  y de los precios del documento de Trama; no inventa ingresos:
   - Portada, el problema (adultos rurales sin canal digital en el departamento de la red y en el país) y la solución
   - Antena por antena (hasta 8): dónde está (coordenadas y municipio), a qué altura va y por qué: el enlace con su
     margen y si tiene línea de vista, la altura recomendada (6 m como mínimo; 9 o 12 m, o una loma más alta, si el
@@ -127,11 +129,39 @@ de equilibrio.
   - Se maneja con los botones, el teclado (← → espacio Esc) o la voz: «siguiente», «anterior», «pausa», «sigue»,
     «repite», «ve a la inversión», «termina la presentación». Avanza solo al terminar cada capítulo (o a mano). Con la
     IA conectada lo narra la IA con sus palabras y responde preguntas en medio; si le hablan encima, pausa
+- **Recorrido de la red** (v13.1; botón «Recorrido» de la barra de arriba, o «Melki, explícame la red», «hazme un
+  recorrido por la red», «recorre la red punto por punto»): el robot de Melki va por el mapa un punto a la vez, siguiendo
+  el camino de la señal (el gateway y sus repetidores rama por rama, en el sentido del reloj), y de cada punto sale una
+  nube de vidrio translúcido, con una línea que lo señala, que escribe su explicación como una máquina de escribir (el
+  texto oscuro sobre el vidrio claro se lee sobre cualquier color del mapa). La voz dice solo lo breve; el detalle va
+  escrito. Todo sale de la red del mapa y de la simulación al día:
+  - La red de un vistazo: piezas, lugar, protocolo y cobertura
+  - El gateway: qué se instaló (radio, antena y altura, mini PC con UPS, Starlink y energía solar), por qué ahí (en la
+    red, en el terreno y por sus enlaces directos, con distancia, margen y línea de vista) y su papel: cuántas personas
+    salen por él a internet y qué pasa si se apaga
+  - Cada repetidor: su equipo, antena y mástil; el suelo frente al promedio de las antenas (en lo alto, en lo bajo o en
+    el promedio); el enlace con el que se une (distancia, línea de vista o difracción, margen y qué tan firme es); dónde
+    está su gente; si es troncal (por él pasa el tráfico de otros repetidores), de acceso o un punto crítico, y si tiene
+    respaldo; la altura recomendada. Recorre hasta 10 antenas y cuenta las demás al final
+  - Las personas: cuántas llegan, en cuántos saltos y por cuál punto entran; la prueba de estrés, si la hay
+  - Lo que falta (gente sin cobertura, repetidores sin camino, enlaces débiles, puntos críticos), con un botón que se lo
+    pide a Melki: «Conecta a los que faltan», «Ajústamelo» o «Sugiéreme antenas de apoyo»
+  - Por qué la red quedó así: la estructura y la distancia entre repetidores, el reparto de la carga, la solidez de los
+    enlaces (línea de vista, el más débil, los de sobra), la cobertura y la calificación, y el costo de la
+    infraestructura (sitios y repetidores, con instalación y transporte; el negocio completo está en el pitch)
+  - Se maneja con los botones, el teclado (← → espacio Esc) o pidiéndoselo a Melki: «siguiente», «anterior», «pausa»,
+    «sigue», «repite», «ve al gateway», «ve al Repetidor 2», «el tercer repetidor», «ve a lo que falta», «¿por qué la
+    red quedó así?», «¿por qué pusiste el Repetidor 2 ahí?», «explícame el repetidor dos», «termina el recorrido».
+    Avanza solo cuando hay tiempo de leer cada nube (o a mano). Al terminar o al salir, deja todo escrito en la
+    conversación. Con la IA conectada, la IA dice lo breve con su voz y usa la herramienta del recorrido
+  - En el celular la nube va abajo, como una hoja, y el punto queda arriba. Si el texto no cabe (en el celular o en una
+    pantalla baja), la nube baja sola con lo que va escribiendo. Un toque en la nube la termina de escribir
 - **Conversar con IA: Gemini Live, gratis** (v13; Ajustes de voz → «Conversar con IA (Gemini Live)»): con la opción
   encendida, el Asistente Melki conversa con un modelo de voz en vivo de Google. Oye el audio del micrófono directamente
-  (no un texto), contesta con voz natural, se le puede hablar encima y hace en el simulador lo que se le pida con las
-  mismas órdenes de Melki. Sus herramientas: ejecutar una orden, leer el estado de la red y sus costos, consultar el
-  conocimiento del proyecto, manejar el pitch y despedirse. No inventa cifras: las toma del simulador.
+  (no un texto), contesta con voz natural (con audífonos se le puede hablar encima; con parlantes se le calla con ■) y
+  hace en el simulador lo que se le pida con las mismas órdenes de Melki. Sus herramientas: ejecutar una orden, leer el
+  estado de la red y sus costos, consultar el conocimiento del proyecto, manejar el pitch y el recorrido de la red y
+  despedirse. No inventa cifras: las toma del simulador.
   - La clave gratuita de Google AI Studio (aistudio.google.com/apikey) se pega una vez y queda solo en ese navegador,
     nunca en el código ni en el repositorio. «Probar conexión» la verifica; se elige el modelo (Gemini 3.8 Live o
     3.1 Flash Live) y la voz
@@ -242,12 +272,28 @@ de equilibrio.
     - La escucha se vuelve a encender sola en 60 ms, sin que la barra cambie ni avise.
     - En el computador, con el micrófono ya permitido, lo deja abierto entre una escucha y otra, así el aviso del
       navegador y el de Windows no parpadean.
-    - Si falla seguido (sin internet), espera cada vez más: 0,25 s, 0,5 s, 1 s… Tras seis fallos avisa una sola vez.
-      Melki reintenta cada 4 s y a la tercera se apaga con un aviso claro.
+    - Si falla seguido (sin internet), espera cada vez más: 0,25 s, 0,5 s, 1 s… Tras seis fallos avisa una sola vez y
+      sigue intentando cada 8 s; no se rinde (v13.1): al volver el internet, la pestaña o el foco, vuelve a escuchar
+      enseguida y la barra vuelve a «escuchando». Si el micrófono se ocupa un momento (otra app, el celular cambiando de
+      audio), reintenta sin dar error.
     - El dictado de la caja tampoco se corta solo: sigue escuchando hasta que se toque el micrófono o tras 15 s de
       silencio.
   - Oído atento: en el computador mide el nivel de la voz. Las barritas del orbe siguen la voz que oye, y si la
     persona sigue hablando espera hasta 1,5 s más antes de hacer el pedido, para no cortarle la frase.
+- **Audio estable con parlantes o con audífonos** (v13.1):
+  - Con parlantes (lo normal, «Uso audífonos» apagado en Ajustes de voz) Melki no escucha mientras habla: la escucha
+    queda en pausa desde antes de que empiece su voz (la suya, la de un tour, el pitch o el recorrido) y vuelve 0,45 s
+    después de que calla. Así no se oye a sí mismo, no se responde ni se interrumpe, y en el celular el reconocimiento
+    no le corta la voz. Para callarlo, el cuadrito ■ de su barra (su ayuda lo dice). Con «Uso audífonos» escucha
+    mientras habla y se le puede hablar encima («Melki, silencio»); el eco que se cuele lo filtran las reglas de
+    siempre.
+  - La voz va en trozos cortos (hasta 150 letras, por frases, comas o palabras): las voces en línea de Chrome y Edge se
+    cortan solas en textos largos. Un trozo a la vez, cada uno con su tiempo de guardia por si el navegador no avisa
+    que terminó; si la voz en línea falla por la red, sigue con una voz del equipo y repite ese trozo.
+  - Con la IA y parlantes: mientras suena su voz (y 0,45 s después) el micrófono le manda silencio, y la sesión le pide
+    al modelo que no se deje interrumpir por lo que oye y que le cueste más «oír» que alguien empezó a hablar. Su voz
+    sale con un colchón de 0,22 s (0,12 s tras un corte) para que no se entrecorte, y si el navegador suspende el
+    audio, vuelve al tocar la página o al volver a la pestaña. Si el micrófono se desconecta, lo vuelve a abrir solo.
 - **Red sostenible y viable** (v12.6): «hazme una red sostenible económica y técnicamente viable en Barranca de Upía
   de 11.226 hectáreas» diseña la malla en el municipio (señal media o mejor en el 95 % del área) y la presenta con su
   viabilidad técnica (factibilidad, cobertura, enlaces y saltos), la inversión y la operación mensual con los precios
@@ -324,7 +370,8 @@ src/
                             conversar con IA (ia-live.ts: la conexión con Gemini Live y su reanudación; audio-ia.ts: el
                             micrófono a PCM de 16 kHz y la voz del modelo; herramientas-ia.ts: lo que la IA puede hacer
                             y quién es Melki para ella); el pitch (robot.tsx: el robot en vectores; presentacion.tsx:
-                            la presentación que recorre el mapa)
+                            la presentación que recorre el mapa); el recorrido de la red (recorrido-red.tsx: el robot
+                            punto por punto; nube-mapa.tsx: la nube de vidrio que sale de un punto y escribe)
   datos/geo/                límites, nombres y ríos de referencia (ver LEEME.md: fuentes y licencias)
   lib/autoria.ts            autoría, titulares y licencia (los usan «Acerca del simulador», Melki y la versión HTML)
   lib/geo/                  consultas locales: municipio de un punto, búsqueda de lugares, contorno de un municipio
@@ -346,6 +393,8 @@ src/
                             zonas, estrés, carga y Trama)
   lib/negocio/pitch.ts      el pitch del modelo de negocio: capítulos con la red del mapa, CAPEX, OPEX y punto de
                             equilibrio, y los pedidos de la presentación por voz o por escrito
+  lib/negocio/recorrido-red.ts  el recorrido de la red: las paradas (qué se instaló, por qué ahí, su papel, lo que
+                            falta y por qué quedó así), su resumen escrito y los pedidos por voz o por escrito
   lib/config.ts             fuentes de mapas y relieve (reemplazables con variables de entorno)
 scripts/                    versión HTML, paquetes de avance y compresor ZIP
 tests/                      pruebas del motor, de Melki y de extremo a extremo (con un servidor de voz en vivo de

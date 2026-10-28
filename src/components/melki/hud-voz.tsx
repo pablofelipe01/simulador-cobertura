@@ -161,6 +161,7 @@ export function HudVoz({
   onApagar,
   nivel,
   ia = false,
+  parlantes = false,
 }: {
   estado: EstadoManosLibres;
   /** Lo que va reconociendo (en vivo). */
@@ -184,6 +185,8 @@ export function HudVoz({
   nivel?: () => number | null;
   /** Conversa con la IA (Gemini Live): lo dice con una insignia. */
   ia?: boolean;
+  /** Con parlantes no escucha mientras habla (para no oírse a sí mismo): se le calla con el botón. */
+  parlantes?: boolean;
 }) {
   const [pos, setPos] = useState<Posicion>(() => leerHud().pos);
   const [mini, setMini] = useState(() => leerHud().mini);
@@ -219,6 +222,7 @@ export function HudVoz({
   if (estado === "apagado" || estado === "dormido") return null;
 
   const pequena = mini || (reposo && quieto);
+  const tituloCallar = parlantes ? "Callar (con parlantes no le oigo mientras hablo: use este botón)" : "Callar (o diga «Melki, para»)";
   const linea =
     aviso ??
     (estado === "hablando"
@@ -297,7 +301,7 @@ export function HudVoz({
         <Orbe estado={estado} pequeno nivel={nivel} />
         <span className="max-w-[240px] min-w-0 truncate pr-1 text-[12.5px] text-white/90">{etiquetaPequena}</span>
         {estado === "hablando" && (
-          <Boton etiqueta="Callar a Melki" titulo="Callar (o diga «Melki, para»)" onClick={onCallar} fondo>
+          <Boton etiqueta="Callar a Melki" titulo={tituloCallar} onClick={onCallar} fondo>
             <Square size={12} fill="currentColor" />
           </Boton>
         )}
@@ -337,7 +341,7 @@ export function HudVoz({
           <p className={`mt-1 line-clamp-2 text-[13.5px] leading-snug ${aviso ? "text-[#ffd2b8]" : estado === "atento" || estado === "pensando" ? "text-white italic" : "text-white/95"}`}>{linea}</p>
         </div>
         {estado === "hablando" && (
-          <Boton etiqueta="Callar a Melki" titulo="Callar (o diga «Melki, para»)" onClick={onCallar} fondo>
+          <Boton etiqueta="Callar a Melki" titulo={tituloCallar} onClick={onCallar} fondo>
             <Square size={12} fill="currentColor" />
           </Boton>
         )}

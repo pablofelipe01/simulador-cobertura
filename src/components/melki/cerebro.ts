@@ -23,7 +23,7 @@ import { accionAjuste, textoCoberturaUtil, textoRed, type Orden } from "./ordene
 import { TOURS, type IdTour } from "./tours";
 
 /** «recorrido» empieza el tour indicado; «tours» muestra el menú de tours; «manos-libres» activa la escucha por voz; «acerca» abre la autoría y la licencia. */
-export type AccionMelki = "recorrido" | "tours" | "simular" | "ejemplo" | "agregar" | "inspeccionar" | "parametros" | "resultados" | "kmz" | "regla" | "orden" | "deshacer" | "manos-libres" | "acerca" | "herramientas" | "pitch" | "ajustes-ia";
+export type AccionMelki = "recorrido" | "tours" | "simular" | "ejemplo" | "agregar" | "inspeccionar" | "parametros" | "resultados" | "kmz" | "regla" | "orden" | "deshacer" | "manos-libres" | "acerca" | "herramientas" | "pitch" | "recorrido-red" | "ajustes-ia";
 
 /** Con «detalle», la acción se muestra como una opción de menú (título y una línea). */
 export type AccionRespuesta = { texto: string; accion: AccionMelki; orden?: Orden; escenario?: Escenario; tour?: IdTour; detalle?: string };
@@ -462,6 +462,21 @@ const TEMAS: Tema[] = [
     }),
   },
   {
+    id: "recorrido-red",
+    claves: ["recorrido", "el recorrido", "recorrido de la red", "recorrido por la red", "explicame la red", "explica la red", "nube", "nubes", "nubecitas", "letrero", "letreros", "punto por punto", "antena por antena", "por que quedo asi"],
+    responder: () => ({
+      texto: [
+        "En el recorrido de la red mi robot va por el mapa punto por punto, siguiendo el camino de la señal, y en cada uno sale una nube con lo que escribo:",
+        "• El gateway: qué se instaló, por qué quedó ahí (en la red, en el terreno y por sus enlaces) y cuántas personas salen por él a internet.",
+        "• Cada repetidor, rama por rama: su equipo y su altura, el suelo frente al resto de la red, el enlace con el que se une (distancia, línea de vista y margen), a quién atiende y si es troncal, de acceso o un punto crítico.",
+        "• Las personas: cuántas llegan, en cuántos saltos y por cuál repetidor.",
+        "• Lo que falta, con el pedido que lo resuelve, y al final por qué la red quedó así: la estructura, el reparto de la carga, la solidez de los enlaces, la cobertura y el costo de la infraestructura.",
+        "Va un punto a la vez y en voz digo solo lo breve; al terminar le dejo todo escrito aquí. Se maneja con las flechas, el espacio y Esc, o diciéndome «siguiente», «ve al gateway», «¿por qué pusiste el Repetidor 2 ahí?» o «termina el recorrido».",
+      ].join("\n"),
+      acciones: [{ texto: "Empezar el recorrido", accion: "recorrido-red" }],
+    }),
+  },
+  {
     id: "ia-voz",
     claves: ["gemini", "gemini live", "inteligencia artificial de verdad", "chatgpt", "chat gpt", "como chatgpt", "como chat gpt", "gpt live", "gpt-live", "vapi", "whisper", "conectar la ia", "conectarte a una ia", "clave de api", "ai studio", "modelo de voz", "hablar como una ia"],
     responder: () => ({
@@ -740,7 +755,7 @@ const TEMAS: Tema[] = [
         "• Se activa con el botón «Asistente Melki» de la barra de arriba, con el ícono de ondas de esta conversación o diciéndome por escrito «activa el asistente». Al activarme oculto el panel de herramientas y el de resultados para dejarle el mapa libre; cuando un resultado se vea mejor en un panel, le pregunto si se lo muestro, y vuelven al apagarme. Arriba del mapa ve lo que le entiendo, lo que le digo y mis sugerencias.",
         "• En reposo, como Siri o el Asistente de Google: con el micrófono permitido me quedo escuchando solo mi nombre aunque la barra esté cerrada; diga «Hey Melki», «Hola Melki» o «Hello Melki» y me activo sin tocar ningún botón. «Deja de escuchar» me devuelve al reposo y «apaga el micrófono» me apaga del todo.",
         "• Mi barra se arrastra a cualquier parte del mapa (doble clic la devuelve a su sitio), se achica sola mientras espero mi nombre y crece cuando me hablan; también puede dejarla siempre pequeña.",
-        "• Con parlantes no me respondo a mí mismo: lo que oigo de mi propia voz, mientras hablo o justo después, no lo tomo como pedido, y no repito la misma respuesta ni me disculpo dos veces seguidas por mi eco. Cada frase la tomo una sola vez, aunque el navegador la mande repetida. Si el navegador deja de escuchar tras un silencio, vuelvo a escuchar solo, sin prender y apagar el micrófono; las barritas de mi orbe siguen su voz.",
+        "• Con parlantes no me respondo a mí mismo: mientras hablo dejo de escuchar y vuelvo un instante después de callar (así mi voz no entra por el micrófono ni se corta); para callarme, toque el cuadrito ■ de mi barra. Si usa audífonos, active «Uso audífonos» en Ajustes de voz y podrá hablarme encima. Lo que se cuele de mi voz justo después tampoco lo tomo como pedido, y no repito la misma respuesta ni me disculpo dos veces seguidas por mi eco. Cada frase la tomo una sola vez, aunque el navegador la mande repetida. Si el navegador deja de escuchar tras un silencio o se va el internet, vuelvo a escuchar solo, sin prender y apagar el micrófono; las barritas de mi orbe siguen su voz.",
         "• En Ajustes de voz elige cómo le hablo (señor, señora o sin tratamiento), la voz (la más natural que tenga su equipo; en Edge hay voces neuronales como Salomé de Colombia), si le escucho siempre en reposo y si me activo solo al abrir el simulador, con el micrófono permitido.",
         "• Si me pide algo que se sale del simulador, se lo digo con respeto y retomamos la red; y si me pide «una red sostenible y viable en Barranca de Upía de 11.226 hectáreas», la diseño y le cuento su viabilidad técnica y su costo con los precios de Trama.",
         "• Entiendo los municipios aunque el dictado los escriba mal al hablar rápido («barranca de UPA meta», «barranco vía meta» → Barranca de Upía, Meta): comparo cómo suenan y uso el departamento que se dice o el que se ve en el mapa. Si dudo entre varios, le pregunto «¿se refiere a…?» («sí», «la segunda» o el nombre); si no le entiendo, le pido con gusto que me lo repita.",
@@ -985,7 +1000,7 @@ const TEMAS: Tema[] = [
   },
   {
     id: "recorrido",
-    claves: ["recorrido", "tour", "tours", "guia", "guiame", "muestrame", "ensename", "tutorial", "ayuda", "paso a paso", "aprender"],
+    claves: ["recorrido guiado", "tour", "tours", "guia", "guiame", "muestrame", "ensename", "tutorial", "ayuda", "paso a paso", "aprender"],
     responder: () => menuTours(),
   },
   {
@@ -1057,6 +1072,8 @@ const TEMA_TOUR: [IdTour, RegExp][] = [
 export function pedidoDeTour(pregunta: string): Respuesta | null {
   const t = ` ${normalizar(pregunta)} `;
   if (!PIDE_TOUR.test(t)) return null;
+  // «El recorrido de la red» no es un tour: es el robot explicando cada punto (salvo «recorrido guiado», «tutorial»…)
+  if (/\brecorr\w*\b/.test(t) && !/\b(tour|tours|tutorial|guia|guiame|guiado|guiados|ensename|ensenar|ensenarme|aprender)\b/.test(t)) return null;
   const tema = TEMA_TOUR.find(([, re]) => re.test(t))?.[0] ?? (/\btutorial\b/.test(t) ? "basico" : null);
   if (!tema) return menuTours();
   const x = TOURS.find((q) => q.id === tema)!;
@@ -1163,7 +1180,7 @@ export function responder(pregunta: string, c: ContextoMelki): Respuesta {
   return {
     texto:
       "No estoy seguro de haber entendido. Puedo sembrar la red (gateway, repetidores y gente), poblar la zona y probar cuántos pagos, WhatsApp y consultas a la IA aguanta, dimensionar la red de un departamento, medir distancias, llevarlo a un municipio, explicar los colores, los enlaces y los saltos, o decirle por qué un nodo no llega al gateway. Pruebe: «¿qué puedes hacer?».",
-    acciones: [{ texto: "Hacer el recorrido", accion: "recorrido" }],
+    acciones: [{ texto: "Ver los tours guiados", accion: "tours" }],
   };
 }
 

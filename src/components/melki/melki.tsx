@@ -17,12 +17,14 @@ import { consejoRed, estadoRed, piezaDe } from "@/lib/radio/estado-red";
 import type { Escenario, ResultadoSimulacion } from "@/lib/radio/tipos";
 import { nombresParaVoz, type Lugar } from "@/lib/geo/referencia";
 import { armarPitch, pedidoPitch, type PedidoPitch } from "@/lib/negocio/pitch";
+import { armarRecorrido, pedidoRecorrido, resumenRecorrido, type ParadaRecorrido, type PedidoRecorrido } from "@/lib/negocio/recorrido-red";
 
 import { abrirMicrofonoIA, ReproductorIA, type MicrofonoIA } from "./audio-ia";
 import { MelkiAvatar } from "./avatar";
 import { estadoParaIA, HERRAMIENTAS_IA, instruccionesMelki } from "./herramientas-ia";
 import { MODELO_IA_DEFECTO, MODELOS_IA, SesionLive, VOCES_IA, type LlamadaFuncion } from "./ia-live";
 import { PresentacionPitch, type ControlPitch, type Narrador } from "./presentacion";
+import { RecorridoRed, type ControlRecorrido } from "./recorrido-red";
 import { HudVoz, type SugerenciaHud } from "./hud-voz";
 import {
   AYUDA_VOZ,
@@ -78,8 +80,13 @@ const f1 = (x: number, d = 1) => x.toFixed(d).replace(".", ",");
  * ocultar los paneles al activarse, activarse al abrir el simulador, escuchar en reposo su nombre (como Siri, con el
  * micrófono ya permitido), el trato (señor, señora o ninguno) y la voz.
  */
-type PreferenciasManos = { seguir: boolean; completo: boolean; sonido: boolean; ocultar: boolean; siempre: boolean; pasiva: boolean; trato: Trato; voz: string | null };
-const MANOS_DEFECTO: PreferenciasManos = { seguir: true, completo: false, sonido: true, ocultar: true, siempre: false, pasiva: true, trato: "senor", voz: null };
+type PreferenciasManos = { seguir: boolean; completo: boolean; sonido: boolean; ocultar: boolean; siempre: boolean; pasiva: boolean; trato: Trato; voz: string | null; audifonos: boolean };
+const MANOS_DEFECTO: PreferenciasManos = { seguir: true, completo: false, sonido: true, ocultar: true, siempre: false, pasiva: true, trato: "senor", voz: null, audifonos: false };
+/**
+ * Con parlantes, lo que suena (su voz) entra por el micrófono: mientras habla no escucha, y vuelve a escuchar un instante
+ * después (lo que tarda en apagarse el sonido en la sala). Con audífonos se le puede hablar encima.
+ */
+const COLA_ECO_MS = 450;
 
 type Lado = "izquierdo" | "derecho";
 type Paneles = { izquierdo: boolean; derecho: boolean };
@@ -385,7 +392,14 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   const pitchPendiente = useRef<PedidoPitch | null>(null);
   /** La presentación está abierta (al momento, sin esperar a que la pantalla se entere). */
   const pitchAbierto = useRef(false);
+  /** Los paneles que estaban abiertos antes de la presentación o del recorrido (vuelven al salir). */
   const panelesPitch = useRef<Paneles | null>(null);
+  /* Recorrido de la red (el robot explica cada punto en una nube) */
+  const [recorrido, setRecorrido] = useState<{ desde?: string } | null>(null);
+  const controlRecorrido = useRef<ControlRecorrido | null>(null);
+  const recorridoAbierto = useRef(false);
+  /** Ya quedó por escrito en la conversación el recorrido de esta vez. */
+  const recorridoEscrito = useRef(false);
   /** Lo que Melki responde mientras la IA espera el resultado de una orden. */
   const captura = useRef<string[] | null>(null);
   /** Órdenes que siguen calculando (sembrado, diseño, prueba de estrés…). */
@@ -454,6 +468,9 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     pasivaApagada: false,
     /** El dictado de la caja pausó la escucha en reposo: se retoma al terminar. */
     reanudarTrasDictado: false,
+    /** Con parlantes: la escucha está en pausa porque suena su voz, y cuándo sonó por última vez. */
+    pausada: false,
+    ultimaVozSonando: 0,
   });
   const actual = useRef({ abierto, vozActiva, api, mensajes, manos, usados, paneles, contexto, iaPref });
   useEffect(() => {
@@ -693,6 +710,21 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     if (m.estado !== "hablando") siguienteVoz();
   };
 
+  /**
+   * Con parlantes: la escucha queda en pausa ya, antes de que empiece a sonar la voz (así ni el primer instante de su
+   * voz entra al micrófono). El vigía de abajo la devuelve un momento después de que calla.
+   */
+  const pausarPorVoz = () => {
+    const m = ml.current;
+    const s = m.sesion;
+    if (actual.current.manos.audifonos || !s?.pausar || !m.activo) return;
+    m.ultimaVozSonando = reloj();
+    if (!m.pausada) {
+      m.pausada = true;
+      s.pausar(true);
+    }
+  };
+
   const siguienteVoz = () => {
     const m = ml.current;
     const t = m.cola.shift();
@@ -731,6 +763,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     m.conVoz = true;
     m.hablandoDesde = reloj();
     setHablando(true);
+    pausarPorVoz();
     hablar(
       t,
       () => {
@@ -757,6 +790,12 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
 
   /** Con el primer toque de la persona ya puede hablar: dice lo que tenía pendiente (el saludo). */
   const desbloquearVoz = () => {
+    // Conversando con la IA: el toque despierta su audio (lo que estaba en cola suena enseguida)
+    if (ia.current.activa) {
+      ia.current.rep?.preparar();
+      setVozBloqueada(false);
+      return;
+    }
     const m = ml.current;
     const t = m.bloqueada;
     m.bloqueada = "";
@@ -766,8 +805,9 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
 
   const callarYa = () => {
     const m = ml.current;
-    // «Melki, para» en la presentación: la pausa (no salta al capítulo siguiente)
+    // «Melki, para» en la presentación o en el recorrido: los pausa (no salta al siguiente)
     if (pitchAbierto.current) controlPitch.current?.pedir({ accion: "pausar" });
+    if (recorridoAbierto.current) controlRecorrido.current?.pedir({ accion: "pausar" });
     m.cola = [];
     callar();
     setHablando(false);
@@ -828,8 +868,14 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     if (esSuVoz(nuevo, inicio)) {
       const a = detectarActivacion(nuevo);
       if (a.activado && controlDeVoz(a.resto)?.tipo === "callar" && !esEco(nuevo, inicio || reloj())) callarYa();
-      // En la presentación, «Melki, siguiente» o «Melki, pausa» funcionan aunque esté narrando
-      else if (a.activado && pitchAbierto.current && !esEco(nuevo, inicio || reloj())) {
+      // En la presentación o en el recorrido, «Melki, siguiente» o «Melki, pausa» funcionan aunque esté narrando
+      else if (a.activado && recorridoAbierto.current && !esEco(nuevo, inicio || reloj())) {
+        const pr = pedidoRecorrido(a.resto, true);
+        if (pr) {
+          const t = pedirRecorrido(pr);
+          setMensajes((x) => [...x, { id: siguiente.current++, de: "usuario", texto: a.resto, voz: true }, { id: siguiente.current++, de: "melki", texto: t }]);
+        }
+      } else if (a.activado && pitchAbierto.current && !esEco(nuevo, inicio || reloj())) {
         const pp = pedidoPitch(a.resto, true);
         if (pp) {
           const t = pedirPitch(pp);
@@ -1007,6 +1053,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
         setSubtitulo(t);
         if (actual.current.vozActiva || m.encendioVoz) {
           m.hablandoDesde = reloj();
+          pausarPorVoz();
           hablar(t, () => registrarVoz(t));
         }
         onManosLibres(false);
@@ -1055,7 +1102,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     }
     const texto = limpiarComando(dicho);
     // Con la IA lista, el pedido lo atiende ella (conversa, ejecuta y explica)
-    if (iaDisponible() && !pedidoPitch(texto, pitchAbierto.current)) {
+    if (iaDisponible() && !pedidoPitch(texto, pitchAbierto.current) && !pedidoRecorrido(texto, recorridoAbierto.current)) {
       void iaRef.current.iniciarIA(texto);
       return;
     }
@@ -1140,6 +1187,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       if (c.cancelado) s.cancelar();
       else {
         m.sesion = s;
+        m.pausada = false;
         setMotorVoz(s.motor === "navegador" ? "con el navegador" : "en este equipo");
       }
     } catch (e) {
@@ -1151,25 +1199,51 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   };
 
   /**
-   * La escucha se cayó del todo (ya reintentó sola varias veces; por ejemplo, sin internet): espera unos segundos y
-   * vuelve a empezar, sin prender y apagar el micrófono a cada momento; a la tercera vez seguida, avisa y se apaga.
+   * La escucha se cayó del todo (la escucha ya reintenta sola; esto es si terminó, por ejemplo sin internet): espera unos
+   * segundos y vuelve a empezar, sin prender y apagar el micrófono a cada momento. No se rinde: tras varias veces seguidas
+   * avisa y sigue intentando más despacio (al volver el internet, vuelve a oír sin que haya que activarlo de nuevo).
    */
   const reanudar = (modo: ModoDictado) => {
     const m = ml.current;
     m.sesion = null;
+    m.pausada = false;
     m.caidas++;
-    if (m.caidas > 3) {
-      setAvisoVoz("No logro escuchar. Revise el internet y el micrófono, y vuelva a activarme. Sin internet, use el dictado privado (en Ajustes de voz).");
-      m.activo = false;
-      if (!m.despierto) vozRef.current.apagarTodo();
-      else window.setTimeout(() => onManosLibres(false), 5000);
-      return;
-    }
+    if (m.caidas > 3) setAvisoVoz("No logro escuchar: sigo intentando cada 15 segundos. Revise el internet y el micrófono. Sin internet, use el dictado privado (en Ajustes de voz).");
     const c = m.control;
-    window.setTimeout(() => {
-      if (ml.current.activo && ml.current.control === c) void vozRef.current.arrancarEscucha(modo);
-    }, 4000);
+    window.setTimeout(
+      () => {
+        if (ml.current.activo && ml.current.control === c) void vozRef.current.arrancarEscucha(modo);
+      },
+      m.caidas > 3 ? 15000 : 4000,
+    );
   };
+
+  /**
+   * Con parlantes: mientras suena una voz (la de Melki, un tour, el pitch o el recorrido) la escucha queda en pausa,
+   * y vuelve un instante después de que calla. Así el micrófono no le entrega su propia voz (no se responde a sí mismo,
+   * no se interrumpe ni entra en bucles). Con audífonos no hace falta: se le puede hablar encima.
+   */
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const m = ml.current;
+      const s = m.sesion;
+      if (!s?.pausar || !m.activo) return;
+      const conParlantes = !actual.current.manos.audifonos;
+      const ahora = reloj();
+      const suena = sonando() || (m.estado === "hablando" && m.conVoz);
+      if (conParlantes && suena) {
+        m.ultimaVozSonando = ahora;
+        if (!m.pausada) {
+          m.pausada = true;
+          s.pausar(true);
+        }
+      } else if (m.pausada && (!conParlantes || ahora - m.ultimaVozSonando > COLA_ECO_MS)) {
+        m.pausada = false;
+        s.pausar(false);
+      }
+    }, 100);
+    return () => window.clearInterval(id);
+  }, []);
 
   const listoParaEscuchar = () => {
     const m = ml.current;
@@ -1559,6 +1633,19 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     if (!deIA && (sesion.current || control.current)) cortarDictado();
     setMensajes((m) => [...m, { id: siguiente.current++, de: "usuario", texto: pregunta, voz: deVoz || deIA || undefined }]);
     if (!deVoz && !deIA) setTexto("");
+    // El recorrido de la red: «explícame la red», «hazme un recorrido por la red», «¿por qué la red quedó así?»,
+    // y mientras está abierto «siguiente», «ve al gateway», «termina el recorrido»…
+    const pr = pedidoRecorrido(pregunta, recorridoAbierto.current);
+    if (pr && (recorridoAbierto.current || !pr.parada || hayRedEnMapa())) {
+      const t = pedirRecorrido(pr);
+      setMensajes((m) => [...m, { id: siguiente.current++, de: "melki", texto: t }]);
+      if (captura.current) captura.current.push(t);
+      if (ml.current.activo && ml.current.despierto) {
+        window.clearTimeout(ml.current.pensando);
+        quedarAtento();
+      }
+      return;
+    }
     // La presentación del modelo de negocio: «preséntame el modelo de negocio», «siguiente», «pausa»…
     const pp = pedidoPitch(pregunta, pitchAbierto.current);
     if (pp) {
@@ -1732,6 +1819,11 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
           };
           return { resultado: pedirPitch(p) };
         }
+        case "recorrido_red": {
+          const accion = String(f.args.accion ?? "empezar") as PedidoRecorrido["accion"];
+          const parada = f.args.punto ? String(f.args.punto) : undefined;
+          return { resultado: pedirRecorrido({ accion, ...(parada ? { parada } : {}) }) };
+        }
         case "terminar_conversacion":
           ia.current.cerrarAlTerminar = true;
           // Si no alcanza a despedirse en voz, cierra igual
@@ -1777,6 +1869,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     if (!x.activa || !x.rep || x.silenciado) return;
     x.turnoCompleto = false;
     x.rep.encolar(pcm);
+    if (x.rep.bloqueado) setVozBloqueada(true);
     x.ultimaActividad = reloj();
     if (x.estado !== "hablando") {
       fijarEstadoIA("hablando");
@@ -1820,10 +1913,11 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     const x = ia.current;
     x.rep?.callar();
     setHablando(false);
-    // Le hablaron encima mientras narraba el pitch: se pausa (para responder la pregunta)
+    // Le hablaron encima mientras narraba el pitch o el recorrido: se pausa (para responder la pregunta)
     if (x.alNarrar) {
       x.alNarrar = null;
       controlPitch.current?.pedir({ accion: "pausar" });
+      controlRecorrido.current?.pedir({ accion: "pausar" });
     }
     fijarEstadoIA("atento");
   };
@@ -1851,8 +1945,8 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   /** Si nadie habla en un minuto (y no está presentando), cierra para no gastar el cupo y vuelve a esperar su nombre. */
   const vigilarIA = () => {
     const x = ia.current;
-    if (!x.activa || x.rep?.sonando || x.estado === "pensando" || pitchAbierto.current) return;
-    if (reloj() - x.ultimaActividad > 60000) terminarIA(true);
+    if (!x.activa || x.rep?.sonando || x.estado === "pensando" || pitchAbierto.current || recorridoAbierto.current) return;
+    if (reloj() - x.ultimaActividad > 90000) terminarIA(true);
   };
 
   /** Cierra la conversación con la IA; con `volver`, vuelve al reposo (o se apaga), y con `silencioso` no hace nada más. */
@@ -1944,13 +2038,9 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
         return;
       }
       const mic = await abrirMicrofonoIA(
-        // A la conexión de turno (si se reanudó en otra, el micrófono sigue igual)
-        (pcm) => ia.current.sesion?.enviarAudio(pcm),
-        (n) => {
-          const y = ia.current;
-          y.nivel = n;
-          if (n > 0.12) y.ultimaActividad = reloj();
-        },
+        (pcm) => iaRef.current.enviarMicIA(pcm),
+        (n) => iaRef.current.nivelMicIA(n),
+        () => void iaRef.current.reabrirMicIA(),
       );
       if (!ia.current.activa || ia.current.sesion !== s) {
         mic.cerrar();
@@ -1974,6 +2064,52 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     }
   };
 
+  /**
+   * El audio del micrófono a la conexión de turno (si se reanudó en otra, el micrófono sigue igual). Con parlantes,
+   * mientras suena la voz de la IA (y un instante después) va silencio: el modelo no se oye a sí mismo, así no se
+   * interrumpe solo ni se responde.
+   */
+  const enviarMicIA = (pcm: Int16Array) => {
+    const y = ia.current;
+    const s = y.sesion;
+    if (!s) return;
+    const eco = !actual.current.manos.audifonos && (y.rep?.silencioMs() ?? Number.POSITIVE_INFINITY) < COLA_ECO_MS;
+    s.enviarAudio(eco ? new Int16Array(pcm.length) : pcm);
+  };
+
+  const nivelMicIA = (n: number) => {
+    const y = ia.current;
+    y.nivel = n;
+    if (n > 0.12) y.ultimaActividad = reloj();
+  };
+
+  /** El micrófono se desconectó (audífonos que se quitan, otra app que lo tomó): se abre de nuevo sin cortar la conversación. */
+  const reabrirMicIA = async () => {
+    const x = ia.current;
+    if (!x.activa) return;
+    x.mic?.cerrar();
+    x.mic = null;
+    setAvisoIA("El micrófono se desconectó: lo abro de nuevo…");
+    await espera(700);
+    if (!ia.current.activa) return;
+    try {
+      const mic = await abrirMicrofonoIA(
+        (pcm) => iaRef.current.enviarMicIA(pcm),
+        (n) => iaRef.current.nivelMicIA(n),
+        () => void iaRef.current.reabrirMicIA(),
+      );
+      if (!ia.current.activa) {
+        mic.cerrar();
+        return;
+      }
+      ia.current.mic = mic;
+      setAvisoIA(null);
+    } catch (e) {
+      avisoChat(`Perdí el micrófono: ${e instanceof Error ? e.message : String(e)} Diga «Hola Melki» cuando esté listo.`);
+      terminarIA(true);
+    }
+  };
+
   /** Un aviso de la IA en la conversación (y el puntico de «sin leer» si está cerrada). */
   const avisoChat = (texto: string) => {
     setMensajes((l) => [...l, { id: siguiente.current++, de: "melki", texto }]);
@@ -1993,7 +2129,16 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     // Lo que llegue por una conexión que ya se reemplazó no cuenta
     const mia = () => yo !== null && ia.current.sesion === yo;
     const s = new SesionLive(
-      { clave, modelo: pref.modelo, voz: pref.voz, instrucciones: instruccionesMelki(actual.current.manos.trato, contextoInicialIA()), herramientas: HERRAMIENTAS_IA, url: urlIAPruebas(), reanudar },
+      {
+        clave,
+        modelo: pref.modelo,
+        voz: pref.voz,
+        instrucciones: instruccionesMelki(actual.current.manos.trato, contextoInicialIA()),
+        herramientas: HERRAMIENTAS_IA,
+        url: urlIAPruebas(),
+        reanudar,
+        parlantes: !actual.current.manos.audifonos,
+      },
       {
         onAudio: (pcm) => mia() && iaRef.current.alAudioIA(pcm),
         onTextoModelo: (t) => {
@@ -2133,14 +2278,39 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   /* ───────────── Presentación del modelo de negocio (pitch) ───────────── */
 
   const [versionPitch, setVersionPitch] = useState(0);
-  // Si la red cambia mientras presenta (una orden, una simulación), el pitch se rehace con lo nuevo
+  // Si la red cambia mientras presenta o recorre (una orden, una simulación), se rehace con lo nuevo
   useEffect(
     () =>
       suscribir(() => {
-        if (pitchAbierto.current) setVersionPitch((v) => v + 1);
+        if (pitchAbierto.current || recorridoAbierto.current) setVersionPitch((v) => v + 1);
       }),
     [suscribir],
   );
+
+  /** ¿Hay red en el mapa (un gateway o un repetidor activo)? */
+  const hayRedEnMapa = () => actual.current.api.antenas().some((x) => x.activa && (x.tipo ?? "antena") === "antena");
+
+  /** Deja el mapa libre para el robot: sin paneles, sin la conversación y sin la tarjeta del nodo seleccionado. */
+  const liberarMapa = () => {
+    const a = actual.current.api;
+    if (esEscritorio()) {
+      if (!panelesPitch.current) panelesPitch.current = { ...actual.current.paneles };
+      if (actual.current.paneles.izquierdo) a.paneles({ izquierdo: false });
+      if (actual.current.paneles.derecho) a.paneles({ derecho: false });
+    } else a.paneles({ izquierdo: false, derecho: false });
+    setAbierto(false);
+    if (a.seleccion()) a.seleccionar(null);
+  };
+
+  /** Devuelve los paneles que estaban abiertos antes de la presentación o del recorrido. */
+  const devolverPanelesPresentacion = () => {
+    const pa = panelesPitch.current;
+    panelesPitch.current = null;
+    if (pa && esEscritorio()) {
+      if (pa.izquierdo) actual.current.api.paneles({ izquierdo: true });
+      if (pa.derecho) actual.current.api.paneles({ derecho: true });
+    }
+  };
 
   /** Abre la presentación o le pasa el pedido (siguiente, pausa…); devuelve qué hizo. */
   const pedirPitch = (p: PedidoPitch): string => {
@@ -2150,15 +2320,10 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     if (!a.datosPitch || !a.mapaPitch?.()) return "Ahora no puedo presentar: el mapa no está listo.";
     if (!a.antenas().some((x) => x.activa && (x.tipo ?? "antena") === "antena")) return "Para presentar necesito una red en el mapa: ponga el gateway y los repetidores, o pídame «ármame una red que cubra todo el municipio».";
     pitchPendiente.current = p;
-    // Deja el mapa libre: sin paneles ni la conversación encima
-    if (esEscritorio()) {
-      panelesPitch.current = { ...actual.current.paneles };
-      if (actual.current.paneles.izquierdo) a.paneles({ izquierdo: false });
-      if (actual.current.paneles.derecho) a.paneles({ derecho: false });
-    } else a.paneles({ izquierdo: false, derecho: false });
-    setAbierto(false);
-    // Sin la tarjeta del nodo seleccionado encima del mapa
-    if (a.seleccion()) a.seleccionar(null);
+    // Una cosa a la vez: si el recorrido estaba abierto, se cierra (los paneles siguen guardados)
+    if (recorridoAbierto.current) cerrarRecorrido({ devolver: false, escribir: false });
+    // Deja el mapa libre: sin paneles, sin la conversación ni la tarjeta del nodo encima
+    liberarMapa();
     // La presentación se oye (si el equipo tiene voz)
     if (!actual.current.vozActiva && vozDisponible() && !ia.current.activa) onVoz(true);
     pitchAbierto.current = true;
@@ -2168,21 +2333,18 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     return "Empiezo la presentación del modelo de negocio. Use las flechas o dígame «siguiente», «pausa» o «termina la presentación».";
   };
 
-  const cerrarPitch = () => {
+  /** Cierra la presentación; con `devolver` (lo normal) vuelven los paneles que estaban abiertos. */
+  const cerrarPitch = (devolver = true) => {
     pitchAbierto.current = false;
     setPitch(false);
     controlPitch.current = null;
     pitchPendiente.current = null;
     callar();
-    const pa = panelesPitch.current;
-    panelesPitch.current = null;
-    if (pa && esEscritorio()) {
-      if (pa.izquierdo) actual.current.api.paneles({ izquierdo: true });
-      if (pa.derecho) actual.current.api.paneles({ derecho: true });
-    }
+    if (devolver) devolverPanelesPresentacion();
   };
 
-  const mapaPitch = useMemo(() => (pitch ? (api.mapaPitch?.() ?? null) : null), [pitch, api]);
+  const conRobot = pitch || recorrido !== null;
+  const mapaPitch = useMemo(() => (conRobot ? (api.mapaPitch?.() ?? null) : null), [conRobot, api]);
 
   const armarCapitulos = useCallback(
     (comision: number | null) => {
@@ -2193,8 +2355,8 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     [versionPitch], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
-  /** Narra un capítulo: con la IA (su voz) si está conversando; si no, con la voz del equipo (o el tiempo de leerlo). */
-  const narrarPitch: Narrador = (texto, fin) => {
+  /** Narra un texto: con la IA (su voz, con `pedidoIA` delante) si está conversando; si no, con la voz del equipo o el tiempo de leerlo. */
+  const narrarCon = (pedidoIA: string, texto: string, fin: () => void): (() => void) => {
     const x = ia.current;
     let hecho = false;
     const terminar = () => {
@@ -2205,7 +2367,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     const tiempo = Math.max(2500, texto.length * 68);
     if (x.activa && x.sesion) {
       x.alNarrar = terminar;
-      const pedido = `(Capítulo de la presentación para el público. Nárralo con tus palabras, con tono de pitch profesional, en unos 30 a 50 segundos y sin agregar cifras que no estén aquí:) ${texto}`;
+      const pedido = `${pedidoIA} ${texto}`;
       x.narracion = { texto: pedido, sesion: x.sesion };
       x.sesion.enviarTexto(pedido);
       return () => {
@@ -2225,6 +2387,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     }
     const m = ml.current;
     m.hablandoDesde = reloj();
+    pausarPorVoz();
     let fallo = false;
     let t = 0;
     const parar = hablar(
@@ -2244,6 +2407,79 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       window.clearTimeout(t);
       parar();
     };
+  };
+
+  /** Narra un capítulo: con la IA (su voz) si está conversando; si no, con la voz del equipo (o el tiempo de leerlo). */
+  const narrarPitch: Narrador = (texto, fin) => narrarCon("(Capítulo de la presentación para el público. Nárralo con tus palabras, con tono de pitch profesional, en unos 30 a 50 segundos y sin agregar cifras que no estén aquí:)", texto, fin);
+  /** Lo breve de cada punto del recorrido (el detalle va escrito en la nube). */
+  const narrarRecorrido: Narrador = (texto, fin) => narrarCon("(Punto del recorrido de la red. Dilo en voz alta con tus palabras, en 10 a 20 segundos, sin agregar cifras que no estén aquí; el detalle ya está escrito en pantalla:)", texto, fin);
+
+  /* ───────────── Recorrido de la red ───────────── */
+
+  /** Abre el recorrido o le pasa el pedido (siguiente, «ve al gateway»…); devuelve qué hizo. */
+  const pedirRecorrido = (p: PedidoRecorrido): string => {
+    if (recorridoAbierto.current && controlRecorrido.current) return controlRecorrido.current.pedir(p);
+    if (p.accion !== "empezar" && p.accion !== "ir") return "El recorrido no está abierto. Pídame «explícame la red» o «hazme un recorrido por la red».";
+    const a = actual.current.api;
+    if (!a.datosPitch || !a.mapaPitch?.()) return "Ahora no puedo hacer el recorrido: el mapa no está listo.";
+    if (!hayRedEnMapa()) return "Para el recorrido necesito una red en el mapa: ponga el gateway y los repetidores, o pídame «ármame una red que cubra todo el municipio».";
+    // Una cosa a la vez: si la presentación estaba abierta, se cierra (los paneles siguen guardados)
+    if (pitchAbierto.current) cerrarPitch(false);
+    liberarMapa();
+    // Lo breve se oye (si el equipo tiene voz); el detalle va escrito en cada nube
+    if (!actual.current.vozActiva && vozDisponible() && !ia.current.activa) onVoz(true);
+    recorridoAbierto.current = true;
+    recorridoEscrito.current = false;
+    setRecorrido({ desde: p.parada });
+    // Con la red al día (si faltaba simular, el recorrido se rehace cuando termine)
+    void a.esperarResultado().then(() => setVersionPitch((v) => v + 1));
+    return p.parada && p.parada !== "cierre"
+      ? "Le explico ese punto de la red. Use las flechas o dígame «siguiente», «anterior», «ve al gateway» o «termina el recorrido»."
+      : p.parada === "cierre"
+        ? "Le explico por qué la red quedó así. Use las flechas para ver cada punto, o dígame «ve al gateway» o «termina el recorrido»."
+        : "Empiezo el recorrido de la red: voy punto por punto y en cada uno le escribo qué se instaló, por qué ahí y qué papel cumple. Use las flechas o dígame «siguiente», «pausa», «ve al Repetidor 1» o «termina el recorrido».";
+  };
+
+  /**
+   * Cierra el recorrido. Lo normal: vuelven los paneles que estaban abiertos y queda por escrito en la conversación
+   * (si no quedó ya al llegar al final); al pasar al pitch o a un pedido desde una nube, no.
+   */
+  const cerrarRecorrido = ({ devolver = true, escribir = true }: { devolver?: boolean; escribir?: boolean } = {}) => {
+    if (!recorridoAbierto.current) return;
+    recorridoAbierto.current = false;
+    setRecorrido(null);
+    controlRecorrido.current = null;
+    callar();
+    if (devolver) devolverPanelesPresentacion();
+    if (escribir && !recorridoEscrito.current) {
+      const paradas = armarParadas();
+      if (paradas.length) alTerminarRecorrido(paradas);
+    }
+  };
+
+  const armarParadas = useCallback(
+    () => {
+      const d = actual.current.api.datosPitch?.();
+      return d ? armarRecorrido(d) : [];
+    },
+    // Se rehace cuando cambia la red (versionPitch)
+    [versionPitch], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  /** Llegó al final (o lo cerraron): deja por escrito el recorrido completo en la conversación, una sola vez. */
+  const alTerminarRecorrido = (paradas: ParadaRecorrido[]) => {
+    if (recorridoEscrito.current) return;
+    recorridoEscrito.current = true;
+    setMensajes((x) => [...x, { id: siguiente.current++, de: "melki", texto: resumenRecorrido(paradas) }]);
+    if (!actual.current.abierto) setNoLeido(true);
+  };
+
+  /** Un pedido desde una nube («conecta a los que faltan»): cierra el recorrido y se lo pide a Melki. */
+  const pedirDesdeNube = (pedido: string) => {
+    cerrarRecorrido({ escribir: false });
+    setAbierto(true);
+    setNoLeido(false);
+    preguntar(pedido);
   };
 
   /** Muestra el menú de tours (sin repetirlo si es lo último que dijo). */
@@ -2269,6 +2505,12 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     if (a.accion === "pitch") {
       setUsados((u) => new Set(u).add(clave));
       const t = pedirPitch({ accion: "empezar" });
+      setMensajes((x) => [...x, { id: siguiente.current++, de: "melki", texto: t }]);
+      return;
+    }
+    if (a.accion === "recorrido-red") {
+      setUsados((u) => new Set(u).add(clave));
+      const t = pedirRecorrido({ accion: "empezar" });
       setMensajes((x) => [...x, { id: siguiente.current++, de: "melki", texto: t }]);
       return;
     }
@@ -2305,11 +2547,11 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   // Encender y apagar el asistente
   const manosRef = useRef({ iniciarManosLibres, detenerManosLibres, apagarTodo });
   // La IA y la presentación siempre usan la versión de ahora de estas funciones
-  const iaRef = useRef({ iniciarIA, terminarIA, terminarTurnoIA, alAudioIA, alTurnoIA, alInterrumpirIA, alHerramientasIA, vigilarIA, reconectarIA });
+  const iaRef = useRef({ iniciarIA, terminarIA, terminarTurnoIA, alAudioIA, alTurnoIA, alInterrumpirIA, alHerramientasIA, vigilarIA, reconectarIA, enviarMicIA, nivelMicIA, reabrirMicIA });
   useEffect(() => {
     vozRef.current = { oirFrase, oirParcial, oirNivel, sigueHablando, ejecutarVoz, preguntar, pulsarAccion, arrancarEscucha, reanudar, listoParaEscuchar, bloqueoVoz, desbloquearVoz, iniciarPasiva, apagarTodo, puntosComprension };
     manosRef.current = { iniciarManosLibres, detenerManosLibres, apagarTodo };
-    iaRef.current = { iniciarIA, terminarIA, terminarTurnoIA, alAudioIA, alTurnoIA, alInterrumpirIA, alHerramientasIA, vigilarIA, reconectarIA };
+    iaRef.current = { iniciarIA, terminarIA, terminarTurnoIA, alAudioIA, alTurnoIA, alInterrumpirIA, alHerramientasIA, vigilarIA, reconectarIA, enviarMicIA, nivelMicIA, reabrirMicIA };
   });
   // La IA y la presentación siempre usan la versión de ahora de estas funciones
   // Al salir de la página: cierra la conversación con la IA
@@ -2445,13 +2687,33 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
           setHablando(false);
           fijarEstadoIA("atento");
           if (pitchAbierto.current) controlPitch.current?.pedir({ accion: "pausar" });
+          if (recorridoAbierto.current) controlRecorrido.current?.pedir({ accion: "pausar" });
         } else callarYa();
       }}
       onSugerencia={sugerenciaHud}
       onOirme={desbloquearVoz}
       onApagar={() => onManosLibres(false)}
       nivel={nivelVoz}
+      parlantes={!manos.audifonos}
     />
+    {recorrido && (
+      <RecorridoRed
+        armar={armarParadas}
+        mapa={mapaPitch}
+        narrar={narrarRecorrido}
+        voz={vozActiva || modoIA}
+        onVoz={(v) => {
+          onVoz(v);
+          if (!v) callar();
+        }}
+        onSalir={() => cerrarRecorrido()}
+        onTerminado={alTerminarRecorrido}
+        onPedir={pedirDesdeNube}
+        controlRef={controlRecorrido}
+        narradorIA={modoIA}
+        desde={recorrido.desde}
+      />
+    )}
     {pitch && (
       <PresentacionPitch
         armar={armarCapitulos}
@@ -2462,7 +2724,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
           onVoz(v);
           if (!v) callar();
         }}
-        onSalir={cerrarPitch}
+        onSalir={() => cerrarPitch()}
         control={controlPitch}
         narradorIA={modoIA}
       />
@@ -2757,6 +3019,16 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
                   }}
                   titulo="Activarme al abrir el simulador"
                   detalle={`Al entrar le saludo («${frases(manos.trato).bienvenida(true).split(/(?<=\.) /).slice(0, 2).join(" ")}») y quedo atento a «Hola Melki», sin tocar nada.`}
+                />
+                <Interruptor
+                  activo={manos.audifonos}
+                  onCambiar={(v) => fijarManos({ audifonos: v })}
+                  titulo="Uso audífonos (puede hablarme encima)"
+                  detalle={
+                    manos.audifonos
+                      ? "Le escucho también mientras hablo: diga «Melki, para» para callarme. Con parlantes apáguelo, o me oiré a mí mismo."
+                      : "Con parlantes no le escucho mientras hablo (así no me respondo a mí mismo ni me interrumpo); para callarme, toque ■ en la barra."
+                  }
                 />
                 <Interruptor activo={manos.seguir} onCambiar={(v) => fijarManos({ seguir: v })} titulo="Seguir la conversación" detalle="Después de responder me quedo atento unos segundos: no hace falta repetir mi nombre." />
                 <Interruptor activo={manos.completo} onCambiar={(v) => fijarManos({ completo: v })} titulo="Leer las respuestas completas" detalle="Si está apagado, digo lo principal y dejo el detalle escrito (diga «más detalle» para oírlo)." />

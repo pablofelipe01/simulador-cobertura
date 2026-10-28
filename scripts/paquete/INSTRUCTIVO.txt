@@ -20,10 +20,14 @@ torre de 12 m con 4 radios Heltec T114, billeteras XIAO o T1000-E,
 Starlink) e incluye las funciones de Radio Mobile, una regla para medir
 distancias y áreas, un mapa con departamentos, municipios y ríos, y a
 Melki, el asistente que ejecuta pedidos escritos con sus palabras.
-Novedad: el "Pitch" del modelo de negocio, con el robot de Melki que
-vuela por el mapa y presenta cada antena, la inversión, la operación y
-el punto de equilibrio; y, con una clave gratuita de Google, Melki
-conversa como un modelo de inteligencia artificial (Gemini Live).
+Novedad: el "Recorrido" de la red: el robot de Melki va punto por
+punto y en una nube que sale de cada antena escribe qué se instaló, por
+qué ahí, qué papel cumple y, al final, por qué la red quedó así. Además,
+el audio quedó estable con parlantes (Melki no se oye a sí mismo ni se
+le corta la voz), el "Pitch" del modelo de negocio con el robot que
+presenta cada antena, la inversión, la operación y el punto de
+equilibrio, y, con una clave gratuita de Google, Melki conversa como un
+modelo de inteligencia artificial (Gemini Live).
 No hay que instalar nada.
 
 © 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero.
@@ -383,13 +387,20 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
     para ver hasta qué punto aguanta antes de quebrarse", después del
     diseño pone 250 personas por punto y hace la prueba de estrés
     subiendo la carga. "¿Dónde estamos?" dice el municipio que se ve.
-    Sin eco ni bucles: con parlantes, lo que Melki oye de su propia voz
-    (mientras habla o justo después) no lo toma como pedido, y no repite
-    la misma respuesta ni se disculpa dos veces seguidas por su eco.
-    Cada frase llega una sola vez (sin el texto duplicado del navegador
-    o del celular). Si Edge deja de escuchar tras un silencio, vuelve a
-    escuchar solo, sin que el micrófono se prenda y se apague; las
-    barritas del orbe siguen su voz.
+    Con parlantes o con audífonos: con parlantes (lo normal) Melki no
+    escucha mientras habla, y vuelve a escuchar un instante después de
+    callar; así no se oye a sí mismo ni se le corta la voz. Para
+    callarlo mientras habla, toque el cuadrito (■) de su barra. Si usa
+    audífonos, active "Uso audífonos" en Ajustes de voz: entonces lo
+    escucha mientras habla y puede decirle "Melki, silencio".
+    Sin eco ni bucles: lo que Melki oye de su propia voz justo después
+    de hablar no lo toma como pedido, y no repite la misma respuesta ni
+    se disculpa dos veces seguidas por su eco. Cada frase llega una sola
+    vez (sin el texto duplicado del navegador o del celular). Si Edge
+    deja de escuchar tras un silencio, vuelve a escuchar solo, sin que
+    el micrófono se prenda y se apague; si se va el internet, avisa una
+    vez y sigue intentando: al volver, vuelve a escuchar sin tocar nada.
+    Las respuestas largas las dice por partes, sin cortarse.
     Consejos: Edge o Chrome actualizados, el micrófono cerca o
     audífonos, y hablar de corrido justo después de "Melki".
  p) Pantalla limpia: el botón junto a "Modo avanzado" oculta el panel
@@ -420,7 +431,9 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
     "siguiente", "anterior", "pausa", "sigue", "repite", "ve a la
     inversión", "prueba una comisión de 500 pesos", "termina la
     presentación". Consejo: antes del pitch, simule y haga la prueba de
-    estrés para que la capacidad salga persona por persona.
+    estrés para que la capacidad salga persona por persona. En el
+    computador, lo que cuenta de cada antena sale escrito en una nube
+    junto a ella.
  r) Conversar con IA (Gemini Live, gratis): en la conversación con
     Melki toque la tuerca (Ajustes de voz) y baje a "Conversar con IA".
     1) Toque "Conseguir una clave gratis": abre Google AI Studio
@@ -431,14 +444,42 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
     3) Active el Asistente Melki: la barra dice "IA en vivo". Háblele
        normal ("¿cuánto cuesta la red?", "pon un repetidor en 4.235,
        -73.335", "preséntame el modelo de negocio"); le contesta con voz
-       natural y hace los cambios en el simulador. Se le puede hablar
-       encima. Con "adiós" o tras un minuto en silencio cierra y vuelve
-       a esperar "Hola Melki".
+       natural y hace los cambios en el simulador. Con audífonos se le
+       puede hablar encima; con parlantes, mientras habla no se oye a sí
+       misma (para callarla, el cuadrito ■ de la barra). Con "adiós" o
+       tras un minuto en silencio cierra y vuelve a esperar "Hola Melki".
     La clave queda solo en ese navegador. Si la clave no sirve, no hay
     internet o se acabó el cupo del día, Melki lo avisa y sigue con su
     cerebro local. Mientras conversa, la voz y un resumen del escenario
     van a Google; en la capa gratuita Google puede usarlos para mejorar
     sus productos. "Borrar la clave" la quita.
+ s) Recorrido de la red: con una red en el mapa (por ejemplo "Ejemplo
+    de malla", al final del panel izquierdo), toque "Recorrido" en la
+    barra de arriba o dígale a Melki "explícame la red" o "hazme un
+    recorrido por la red". El robot de Melki va por el mapa un punto a
+    la vez, siguiendo el camino de la señal: primero la red de un
+    vistazo, luego el gateway y cada repetidor (rama por rama), las
+    personas, lo que falta y, al final, por qué la red quedó así. De
+    cada punto sale una nube de vidrio, con una línea que lo señala, que
+    va escribiendo:
+      - qué se instaló (equipo, antena, altura, energía solar),
+      - por qué ahí (el terreno frente al resto de la red, su enlace:
+        distancia, línea de vista y margen, y dónde está su gente),
+      - qué papel cumple (entrada a internet, repetidor troncal o de
+        acceso, punto crítico o con respaldo) y la altura recomendada.
+    En voz dice solo lo breve; el detalle queda escrito. Toque la nube
+    para que termine de escribir. En el celular la nube va abajo y, si
+    el texto no cabe, baja sola con lo que va escribiendo (si usted la
+    mueve con el dedo, se queda quieta). En "Lo que falta" un botón se
+    lo pide a Melki ("Conecta a los que faltan", "Ajústamelo").
+    Controles: las flechas, espacio (pausa) y Esc (salir), los botones
+    de abajo o la voz: "siguiente", "anterior", "pausa", "ve al
+    gateway", "ve al Repetidor 1", "ve a lo que falta", "¿por qué la
+    red quedó así?", "¿por qué pusiste el Repetidor 1 ahí?", "termina
+    el recorrido". Al terminar o al salir, todo queda escrito en la
+    conversación con Melki. Consejo: simule antes (y la prueba de
+    estrés, si quiere que también cuente cómo le va a cada persona en
+    la hora pico).
 
 
 3. BUENO SABER
@@ -488,6 +529,11 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
 - Si abre la versión HTML con doble clic y el navegador pide permiso
   del micrófono a cada rato, elija "Permitir" o use el modo "Privado"
   en Ajustes de voz, que pide el permiso una sola vez.
+- Audio: con parlantes deje apagado "Uso audífonos" (Ajustes de voz):
+  Melki deja de escuchar mientras habla, para no oírse a sí mismo. Si
+  la voz de Melki no suena, toque la página una vez (el navegador lo
+  pide) o revise el volumen; si una voz "en línea" falla por la red,
+  Melki sigue con una voz del equipo.
 - La demostración es genérica: no contiene datos de ningún cliente.
 
 

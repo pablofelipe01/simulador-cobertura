@@ -188,7 +188,7 @@ export function departamentoTrama(nombre: string | null | undefined): Departamen
 }
 
 /** La caja que encierra los puntos, con un borde. */
-function cajaDe(puntos: { lat: number; lon: number }[]): Caja | null {
+export function cajaDe(puntos: { lat: number; lon: number }[]): Caja | null {
   if (!puntos.length) return null;
   let o = Infinity,
     s = Infinity,

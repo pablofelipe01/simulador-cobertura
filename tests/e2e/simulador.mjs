@@ -76,6 +76,12 @@ const mapaCentro = async (page) => {
   return { x: b.x + b.width / 2, y: b.y + b.height / 2, b };
 };
 const nodosEnLista = (page) => page.locator("[data-tour=lista-antenas] > li").count();
+/** Con parlantes el micrófono queda en pausa mientras Melki habla: espera a que calle y vuelva a escuchar. */
+const escuchaTrasHablar = async (page, timeout = 20000) => {
+  await page.waitForFunction(() => !window.speechSynthesis.speaking, null, { timeout });
+  await page.waitForFunction(() => Boolean(window.__voz.activo), null, { timeout: 5000 }).catch(() => {});
+  return page.evaluate(() => Boolean(window.__voz.activo));
+};
 
 await flujo("inicio", async (page, foto) => {
   await esperarSimulacion(page);
@@ -1325,9 +1331,11 @@ const manosLibresDeMentira = () => {
       return;
     }
     sonando = true;
+    voz.alSonar?.();
     empiezaEco(u);
     setTimeout(() => {
       if (cola[0] !== u) return;
+      voz.alSonar?.();
       cola.shift();
       terminaEco(u);
       u.onend?.();
@@ -1424,12 +1432,16 @@ await flujo(
     await esperarEstado(/^(atento|esperando)$/);
     await callado();
 
-    // Lo que empieza a oírse mientras Melki habla es su propia voz (eco): no lo toma como pedido
+    // Con parlantes (lo de siempre), mientras Melki habla el micrófono queda en pausa: lo que suena es su propia voz y no
+    // lo toma como pedido. Vuelve a escuchar un instante después de callar.
     await decir("Hola Melki, ¿qué puedes hacer?");
     await esperarEstado(/^hablando$/);
-    await decir("Hola Melki, inscribe un nodo antena en 4.3, -73.4");
+    await page.waitForFunction(() => !window.__voz.activo, null, { timeout: 3000 });
+    afirmar(!(await page.evaluate(() => window.__voz.decir("Hola Melki, inscribe un nodo antena en 4.3, -73.4"))), "Con parlantes no debería escuchar mientras habla");
+    afirmar(/con parlantes no le oigo/i.test((await hud.getByRole("button", { name: "Callar a Melki" }).first().getAttribute("title")) ?? ""), "El botón ■ debería explicar que con parlantes se calla con él");
     await esperarEstado(/^(atento|esperando)$/);
     await callado();
+    await page.waitForFunction(() => Boolean(window.__voz.activo), null, { timeout: 3000 });
     afirmar((await nodosEnLista(page)) === nodos + 1, "No debería tomar como pedido lo que se oyó mientras hablaba");
     afirmar(/Le dejé el detalle escrito/.test(await dicho()), "La respuesta larga debería ir resumida en voz");
 
@@ -1481,7 +1493,7 @@ await flujo(
     await hud.waitFor({ state: "detached", timeout: 15000 });
     afirmar(/Con su permiso, señor\. Quedo en reposo/.test(await dicho()), "Debería despedirse y quedar en reposo");
     afirmar((await page.getByRole("button", { name: "Activar el Asistente Melki" }).first().getAttribute("aria-pressed")) === "false", "El botón de la barra debería quedar apagado");
-    afirmar(await page.evaluate(() => Boolean(window.__voz.activo)), "En reposo el micrófono sigue escuchando su nombre");
+    afirmar(await escuchaTrasHablar(page), "En reposo el micrófono sigue escuchando su nombre");
     await page.locator("[data-tour=melki-reposo]").waitFor({ timeout: 5000 });
     await panel.waitFor({ state: "visible", timeout: 5000 });
     await resultados.waitFor({ state: "visible", timeout: 5000 });
@@ -1570,7 +1582,7 @@ await flujo(
     await decir("Melki, deja de escuchar");
     await hud.waitFor({ state: "detached", timeout: 15000 });
     await panel.waitFor({ state: "visible", timeout: 5000 });
-    afirmar(/Quedo en reposo/.test(await dicho()) && (await page.evaluate(() => Boolean(window.__voz.activo))), "Debería quedar en reposo escuchando");
+    afirmar(/Quedo en reposo/.test(await dicho()) && (await escuchaTrasHablar(page)), "Debería quedar en reposo escuchando");
     await page.waitForTimeout(1500);
     // Solo su nombre: se activa y contesta como un mayordomo
     await decir("Hola Melki");
@@ -1580,7 +1592,7 @@ await flujo(
     await foto("llamado");
     await hud.getByRole("button", { name: "Apagar el Asistente Melki" }).first().click();
     await hud.waitFor({ state: "detached", timeout: 10000 });
-    afirmar(await page.evaluate(() => Boolean(window.__voz.activo)), "La X lo deja en reposo");
+    afirmar(await escuchaTrasHablar(page), "La X lo deja en reposo");
   },
   {
     preparar: async (page) => {
@@ -1603,7 +1615,7 @@ await flujo(
     const decir = async (texto) => afirmar(await page.evaluate((x) => window.__voz.decir(x), texto), `El micrófono no estaba escuchando al decir «${texto}»`);
     const oido = async (re, timeout = 20000) => {
       try {
-        await page.waitForFunction((r) => new RegExp(r).test(window.__voz.dicho.join(" | ")), re.source, { timeout });
+        await page.waitForFunction((r) => new RegExp(r).test(window.__voz.dicho.join(" ")), re.source, { timeout });
       } catch {
         throw new Error(`No dijo ${re} · dijo: ${(await page.evaluate(() => window.__voz.dicho.slice(-3).join(" | "))).slice(0, 500)}`);
       }
@@ -1658,9 +1670,11 @@ await flujo(
   },
 );
 
-// v12.8: con parlantes Melki se oye a sí mismo, Edge deja de escuchar tras unos segundos de silencio y el navegador a
-// veces manda dos veces la misma frase. Melki no se responde a sí mismo, no entra en bucles, no hace dos veces el mismo
-// pedido y el micrófono no se prende y apaga a la vista; el dictado de la caja tampoco se corta solo.
+// v12.8: Melki se oye a sí mismo, Edge deja de escuchar tras unos segundos de silencio y el navegador a veces manda dos
+// veces la misma frase. Melki no se responde a sí mismo, no entra en bucles, no hace dos veces el mismo pedido y el
+// micrófono no se prende y apaga a la vista; el dictado de la caja tampoco se corta solo. (v13.1: con «Uso audífonos»
+// escucha mientras habla, así que aquí se prueban los filtros del eco en el caso más difícil; con parlantes, ver
+// «voz-con-parlantes».)
 await flujo(
   "voz-sin-eco",
   async (page, foto) => {
@@ -1674,7 +1688,7 @@ await flujo(
     const veces = (re) => page.evaluate((r) => window.__voz.dicho.filter((x) => new RegExp(r).test(x)).length, re.source);
     const oido = async (re, timeout = 20000) => {
       try {
-        await page.waitForFunction((r) => new RegExp(r).test(window.__voz.dicho.join(" | ")), re.source, { timeout });
+        await page.waitForFunction((r) => new RegExp(r).test(window.__voz.dicho.join(" ")), re.source, { timeout });
       } catch {
         throw new Error(`No dijo ${re} · dijo: ${(await page.evaluate(() => window.__voz.dicho.slice(-3).join(" | "))).slice(0, 500)}`);
       }
@@ -1774,6 +1788,127 @@ await flujo(
       await page.addInitScript(() => {
         const consultar = navigator.permissions.query.bind(navigator.permissions);
         navigator.permissions.query = (d) => (d.name === "microphone" ? Promise.resolve({ state: "granted" }) : consultar(d));
+        // Con audífonos: escucha mientras habla (el eco que se cuele lo filtran las reglas de siempre)
+        const clave = "simulador-cobertura-melki-v1";
+        const p = JSON.parse(localStorage.getItem(clave) ?? "{}");
+        localStorage.setItem(clave, JSON.stringify({ ...p, manos: { ...p.manos, audifonos: true } }));
+      });
+    },
+  },
+);
+
+// v13.1: con parlantes (sin audífonos), mientras Melki habla el micrófono queda en pausa y vuelve un instante después:
+// no se oye a sí mismo aunque el eco suene fuerte, no se corta su voz y se le calla con el botón ■. Con «Uso audífonos»
+// en los Ajustes escucha mientras habla (se le puede hablar encima).
+await flujo(
+  "voz-con-parlantes",
+  async (page, foto) => {
+    await esperarSimulacion(page);
+    const hud = page.locator("[data-tour=hud-voz]");
+    const decir = async (texto) => {
+      await page.waitForFunction(() => Boolean(window.__voz.activo), null, { timeout: 5000 }).catch(() => {});
+      afirmar(await page.evaluate((x) => window.__voz.decir(x), texto), `El micrófono no estaba escuchando al decir «${texto}»`);
+    };
+    const veces = (re) => page.evaluate((r) => window.__voz.dicho.filter((x) => new RegExp(r).test(x)).length, re.source);
+    const oido = async (re, timeout = 20000) => {
+      try {
+        await page.waitForFunction((r) => new RegExp(r).test(window.__voz.dicho.join(" ")), re.source, { timeout });
+      } catch {
+        throw new Error(`No dijo ${re} · dijo: ${(await page.evaluate(() => window.__voz.dicho.slice(-3).join(" | "))).slice(0, 500)}`);
+      }
+    };
+    const callado = async () => {
+      await page.waitForFunction(() => !window.speechSynthesis.speaking, null, { timeout: 30000 });
+      await page.waitForTimeout(900);
+    };
+    const esperarEstado = (re, timeout = 20000) =>
+      page.waitForFunction((s) => new RegExp(s).test(document.querySelector("[data-tour=hud-voz]")?.getAttribute("data-estado") ?? ""), re.source, { timeout });
+    await page.locator("[data-tour=melki-reposo]").waitFor({ timeout: 15000 });
+    // El eco más fuerte: empieza a oírse mientras habla y el navegador duplica las frases
+    await page.evaluate(() => Object.assign(window.__voz, { eco: "durante", duplicar: true }));
+    // Mientras habla, ¿el micrófono escucha? Se mide al empezar y al terminar cada trozo de voz, y cada 50 ms mientras
+    // suena (en un equipo lento los relojes se atrasan y una frase corta casi no alcanza a medirse)
+    await page.evaluate(() => {
+      window.__oyeHablando = 0;
+      window.__pausaHablando = 0;
+      const medir = () => {
+        if (window.__voz.activo) window.__oyeHablando++;
+        else window.__pausaHablando++;
+      };
+      window.__voz.alSonar = medir;
+      setInterval(() => {
+        if (window.speechSynthesis.speaking) medir();
+      }, 50);
+    });
+
+    await decir("Hey Melki, llévame a Villavicencio");
+    await hud.waitFor({ timeout: 10000 });
+    await oido(/Lo llevé a Villavicencio/);
+    await callado();
+    await page.waitForFunction(() => Boolean(window.__voz.activo), null, { timeout: 3000 });
+    await page.waitForTimeout(4000);
+    await callado();
+    afirmar((await veces(/Lo llevé a Villavicencio/)) === 1, `Respondió más de una vez: ${await veces(/Lo llevé a Villavicencio/)}`);
+    const medida = await page.evaluate(() => ({ oye: window.__oyeHablando, pausa: window.__pausaHablando }));
+    afirmar(medida.pausa >= 2 && medida.oye <= 3, `Con parlantes no debería escuchar mientras habla (escuchando ${medida.oye}, en pausa ${medida.pausa})`);
+    await foto("pausa-al-hablar");
+
+    // Una respuesta larga se dice en trozos cortos (las voces del navegador se cortan solas en frases muy largas); el
+    // botón ■ la calla del todo y Melki vuelve a escuchar
+    await decir("Melki, ¿qué puedo decir?");
+    await esperarEstado(/^hablando$/);
+    const inicioAyuda = await page
+      .waitForFunction(() => {
+        const i = window.__voz.dicho.findIndex((x) => /^Soy el Asistente Melki/.test(x));
+        return i >= 0 && window.__voz.dicho.length > i + 1 ? i : false;
+      }, null, { timeout: 15000 })
+      .then((h) => h.jsonValue());
+    const trozos = await page.evaluate((i) => window.__voz.dicho.slice(i), inicioAyuda);
+    afirmar(trozos.every((x) => x.length <= 150), `Cada trozo de voz debería ser corto: ${trozos.map((x) => x.length).join(", ")}`);
+    await hud.getByRole("button", { name: "Callar a Melki" }).first().click();
+    await page.waitForFunction(() => !window.speechSynthesis.speaking, null, { timeout: 5000 });
+    const tras = await page.evaluate(() => window.__voz.dicho.length);
+    await page.waitForFunction(() => Boolean(window.__voz.activo), null, { timeout: 3000 });
+    await esperarEstado(/^(atento|esperando)$/);
+    await page.waitForTimeout(1500);
+    afirmar((await page.evaluate(() => window.__voz.dicho.length)) === tras, "Callado con ■ no debería seguir diciendo el resto");
+
+    // Con audífonos (en Ajustes de voz) escucha mientras habla
+    await page.getByRole("button", { name: /^Abrir a Melki/ }).click();
+    await page.getByRole("button", { name: "Ajustes de voz" }).click();
+    const ajustes = page.getByRole("group", { name: "Ajustes de voz" });
+    const audifonos = ajustes.getByRole("switch", { name: /Uso audífonos/ });
+    afirmar((await audifonos.getAttribute("aria-checked")) === "false", "Sin audífonos debería ser lo de siempre");
+    await audifonos.click();
+    afirmar((await audifonos.getAttribute("aria-checked")) === "true", "El interruptor de audífonos debería encenderse");
+    await foto("ajuste-audifonos");
+    await page.getByRole("button", { name: "Ajustes de voz" }).click();
+    await page.evaluate(() => Object.assign(window.__voz, { eco: null, duplicar: false }));
+    await callado();
+    await page.evaluate(() => {
+      window.__oyeHablando = 0;
+      window.__pausaHablando = 0;
+    });
+    await decir("Melki, ¿dónde estamos?");
+    await oido(/Estamos viendo Villavicencio/);
+    await callado();
+    const conAudifonos = await page.evaluate(() => ({ oye: window.__oyeHablando, pausa: window.__pausaHablando }));
+    afirmar(conAudifonos.oye >= 3 && conAudifonos.pausa <= 2, `Con audífonos debería escuchar mientras habla (escuchando ${conAudifonos.oye}, en pausa ${conAudifonos.pausa})`);
+    // Con audífonos se le puede callar también de palabra
+    await decir("Melki, ¿qué puedo decir?");
+    await esperarEstado(/^hablando$/);
+    afirmar(/o diga «Melki, para»/.test((await hud.getByRole("button", { name: "Callar a Melki" }).first().getAttribute("title")) ?? ""), "Con audífonos el botón ■ debería decir que también se le calla de palabra");
+    await page.waitForTimeout(300);
+    await decir("Melki, silencio");
+    await page.waitForFunction(() => !window.speechSynthesis.speaking, null, { timeout: 5000 });
+    await esperarEstado(/^(atento|esperando)$/);
+  },
+  {
+    preparar: async (page) => {
+      await page.addInitScript(manosLibresDeMentira);
+      await page.addInitScript(() => {
+        const consultar = navigator.permissions.query.bind(navigator.permissions);
+        navigator.permissions.query = (d) => (d.name === "microphone" ? Promise.resolve({ state: "granted" }) : consultar(d));
       });
     },
   },
@@ -1795,7 +1930,7 @@ await flujo(
     await oirme.click();
     await page.waitForFunction(() => /Hola, señor\. Bienvenido\./.test(window.__voz.dicho.join(" ")), null, { timeout: 15000 });
     await oirme.waitFor({ state: "detached", timeout: 5000 });
-    afirmar(await page.evaluate(() => Boolean(window.__voz.activo)), "Debería quedar escuchando");
+    afirmar(await escuchaTrasHablar(page), "Debería quedar escuchando");
     // Ajustes del asistente: trato, voz, activarse al abrir y el permiso del micrófono
     await page.getByRole("button", { name: /^Abrir a Melki/ }).click();
     await page.getByRole("button", { name: "Ajustes de voz" }).click();
@@ -1870,9 +2005,13 @@ await flujo(
     await page.keyboard.press("ArrowRight");
     await pitch.getByRole("heading", { name: /La solución/ }).waitFor();
     await page.keyboard.press("ArrowRight");
-    await pitch.getByRole("heading", { name: "Gateway", exact: true }).waitFor();
+    await pitch.getByRole("heading", { name: "Gateway", exact: true }).first().waitFor();
     await page.waitForTimeout(2900);
     afirmar(/Altura de la antena/.test(await tarjeta()) && /Ubicación/.test(await tarjeta()), "El capítulo de la antena no dice altura y ubicación");
+    // Lo que cuenta de la antena sale escrito en una nube desde su punto
+    const nubePitch = pitch.locator(".nube-mapa");
+    await nubePitch.waitFor({ timeout: 10000 });
+    afirmar(/Pitch · 4 de \d+/.test(await nubePitch.textContent()) && /aquí entra internet por Starlink/.test(await nubePitch.textContent()), `La nube de la antena no trae lo que se cuenta: ${(await nubePitch.textContent()).slice(0, 160)}`);
     afirmar(await pitch.locator("[data-robot=senalando], [data-robot=volando], [data-robot=flotando]").count() === 1, "El robot debería señalar la antena");
     await foto("antena");
     // Pausa con el espacio y sigue
@@ -1914,6 +2053,120 @@ await flujo(
   { sembrar: true, preparar: (page) => page.addInitScript(manosLibresDeMentira) },
 );
 
+// v13.1: el recorrido de la red. El robot va punto por punto y de cada uno sale una nube que escribe qué se instaló, por
+// qué ahí y su papel; se maneja con las flechas o pidiéndoselo a Melki; al salir, queda por escrito en la conversación.
+await flujo(
+  "recorrido-red",
+  async (page, foto) => {
+    await esperarRed(page);
+    await cargarMalla(page);
+    await page.getByRole("button", { name: "Recorrido de la red con Melki" }).click();
+    const rec = page.locator("[data-tour=recorrido-red]");
+    await rec.waitFor({ timeout: 10000 });
+    const nube = rec.locator(".nube-mapa");
+    const escrita = () => rec.locator(".nube-mapa[data-escrito=si]").waitFor({ timeout: 25000 });
+    // A mano, para revisar cada punto
+    await rec.getByRole("button", { name: /^Avanza solo/ }).click();
+    // 1 · El panorama: la nube sale del robot y escribe; los paneles se ocultan
+    await escrita();
+    afirmar(/Recorrido · 1 de 6/.test(await nube.textContent()), `El panorama no dice el paso: ${(await nube.textContent()).slice(0, 80)}`);
+    afirmar(/El recorrido sigue el camino de la señal/.test(await nube.textContent()), "El panorama no explica el recorrido");
+    afirmar(!(await page.locator("aside[aria-label=Resultados]").isVisible()), "El panel de resultados debería ocultarse");
+    await page.waitForFunction(() => /Le muestro la red punto por punto/.test(window.__voz.dicho.join(" ")), null, { timeout: 15000 });
+    await foto("panorama");
+    // 2 · El gateway: la nube sale de su punto, con la línea que lo señala, y escribe qué se instaló, por qué ahí y su papel
+    await page.keyboard.press("ArrowRight");
+    await page.locator("[data-tour=recorrido-red][data-parada^=gateway]").waitFor({ timeout: 10000 });
+    await escrita();
+    const tGw = await nube.textContent();
+    afirmar(/Se instaló el sitio gateway/.test(tGw) && /Starlink/.test(tGw) && /Altura de la antena/.test(tGw) && /enlaza directo con/.test(tGw), `La nube del gateway no está completa: ${tGw.slice(0, 200)}`);
+    afirmar((await rec.locator(".nube-linea path").count()) >= 1, "Falta la línea que señala el punto");
+    afirmar((await rec.locator("[data-robot]").count()) === 1, "Falta el robot junto al gateway");
+    const vidrio = await nube.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { filtro: s.backdropFilter || s.webkitBackdropFilter || "", fondo: s.backgroundImage, color: s.color };
+    });
+    afirmar(/blur/.test(vidrio.filtro) && /rgba/.test(vidrio.fondo) && vidrio.color === "rgb(43, 47, 46)", `La nube debería ser de vidrio translúcido con el texto oscuro: ${JSON.stringify(vidrio)}`);
+    const mapa = await page.locator("[data-tour=mapa]").boundingBox();
+    const caja = await nube.boundingBox();
+    afirmar(caja.x >= mapa.x - 1 && caja.x + caja.width <= mapa.x + mapa.width + 1 && caja.y >= mapa.y - 1 && caja.y + caja.height <= mapa.y + mapa.height + 1, "La nube debería quedar dentro del mapa");
+    await page.waitForFunction(() => /la puerta de la red a internet/.test(window.__voz.dicho.join(" ")), null, { timeout: 15000 });
+    await foto("gateway");
+    // 3 · El repetidor: su enlace con el gateway y su papel
+    await page.keyboard.press("ArrowRight");
+    await page.locator("[data-tour=recorrido-red][data-parada^=repetidor]").waitFor({ timeout: 10000 });
+    await escrita();
+    afirmar(/Se instaló un repetidor solar/.test(await nube.textContent()) && /dB de margen/.test(await nube.textContent()), "La nube del repetidor no dice su enlace");
+    await foto("repetidor");
+    // Por Melki: «ve a lo que falta» y «¿por qué la red quedó así?»
+    await page.getByRole("button", { name: /Abrir a Melki/ }).click();
+    const chat = page.getByRole("region", { name: "Conversación con Melki" });
+    await chat.getByRole("textbox").fill("ve a lo que falta");
+    await chat.getByRole("textbox").press("Enter");
+    await page.locator("[data-tour=recorrido-red][data-parada=pendiente]").waitFor({ timeout: 10000 });
+    await escrita();
+    afirmar(/no llega al gateway/.test(await nube.textContent()) && (await nube.getByRole("button", { name: "Conecta a los que faltan" }).isVisible()), "«Lo que falta» debería señalar a la persona sin cobertura y ofrecer conectarla");
+    await foto("lo-que-falta");
+    await chat.getByRole("textbox").fill("¿por qué la red quedó así?");
+    await chat.getByRole("textbox").press("Enter");
+    await page.locator("[data-tour=recorrido-red][data-parada=cierre]").waitFor({ timeout: 10000 });
+    await escrita();
+    const tCierre = await nube.textContent();
+    afirmar(/Es una malla de 1 gateway y 1 repetidor/.test(tCierre) && /Montar esta infraestructura/.test(tCierre), `La conclusión no explica la red: ${tCierre.slice(0, 200)}`);
+    await foto("conclusion");
+    // Al salir queda todo por escrito en la conversación y vuelven los paneles
+    await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
+    await page.keyboard.press("Escape");
+    await rec.waitFor({ state: "detached", timeout: 5000 });
+    // (la conversación quedó abierta: con ella se le pidió «ve a lo que falta»)
+    await chat.getByText(/Le dejo por escrito el recorrido de la red \(6 paradas\)/).waitFor({ timeout: 10000 });
+    await page.locator("aside[aria-label=Resultados]").waitFor({ state: "visible", timeout: 5000 });
+    // Desde una nube: «Conecta a los que faltan» cierra el recorrido y se lo pide a Melki
+    await chat.getByRole("textbox").fill("explícame la red");
+    await chat.getByRole("textbox").press("Enter");
+    await rec.waitFor({ timeout: 10000 });
+    await rec.getByRole("button", { name: "Punto 5: Lo que falta" }).click();
+    await escrita();
+    await nube.getByRole("button", { name: "Conecta a los que faltan" }).click();
+    await rec.waitFor({ state: "detached", timeout: 5000 });
+    await chat.getByText(/conecta a los que faltan/i).first().waitFor({ timeout: 10000 });
+  },
+  { sembrar: true, preparar: (page) => page.addInitScript(manosLibresDeMentira) },
+);
+
+await flujo(
+  "recorrido-movil",
+  async (page, foto) => {
+    // En el celular el panel va en una hoja que sube desde abajo: ahí está el ejemplo de malla
+    const hoja = page.getByRole("region", { name: "Panel" });
+    await page.getByRole("navigation", { name: "Paneles" }).getByRole("button", { name: "Sembrar" }).click();
+    await hoja.locator("[data-tour=guia-sembrar]").waitFor();
+    await esperarRed(page);
+    await hoja.getByRole("button", { name: "Ejemplo de malla" }).click();
+    await page.waitForTimeout(400);
+    await esperarRed(page);
+    await page.getByRole("button", { name: "Recorrido de la red con Melki" }).click();
+    const rec = page.locator("[data-tour=recorrido-red]");
+    await rec.waitFor({ timeout: 10000 });
+    await rec.getByRole("button", { name: /^Avanza solo/ }).click();
+    await page.getByRole("button", { name: "Siguiente (→)" }).click();
+    const nube = rec.locator(".nube-mapa");
+    await rec.locator(".nube-mapa[data-escrito=si]").waitFor({ timeout: 25000 });
+    const b = await nube.boundingBox();
+    afirmar(b.x >= 0 && b.x + b.width <= 390 && b.height <= 844 * 0.5, `En el celular la nube debería caber abajo (${Math.round(b.x)}, ${Math.round(b.width)} × ${Math.round(b.height)})`);
+    const ancho = await page.evaluate(() => document.documentElement.scrollWidth);
+    afirmar(ancho <= 390, `La página no debe desbordarse a lo ancho (${ancho})`);
+    // Si el texto no cabe, la nube baja sola con lo que va escribiendo hasta el final (el botón queda a la vista)
+    await page.waitForTimeout(900);
+    const sc = await nube.evaluate((el) => ({ alto: el.scrollHeight, visible: el.clientHeight, arriba: Math.round(el.scrollTop) }));
+    afirmar(sc.alto <= sc.visible + 2 || sc.arriba + sc.visible >= sc.alto - 6, `En el celular la nube debería seguir lo que escribe hasta el final (${JSON.stringify(sc)})`);
+    await foto("gateway");
+    await page.getByRole("button", { name: "Salir del recorrido (Esc)" }).click();
+    await rec.waitFor({ state: "detached", timeout: 5000 });
+  },
+  { sembrar: true, tamano: { width: 390, height: 844 }, preparar: (page) => page.addInitScript(manosLibresDeMentira) },
+);
+
 const ia = await iniciarIADeMentira();
 await flujo(
   "ia-en-vivo",
@@ -1949,9 +2202,17 @@ await flujo(
     afirmar(["ejecutar_orden", "estado_simulador", "consultar_melki", "presentacion", "terminar_conversacion"].every((n) => nombres.includes(n)), `Faltan herramientas: ${nombres}`);
     afirmar(/Eres Melki/.test(s.systemInstruction.parts[0].text) && /Estado del simulador al empezar/.test(s.systemInstruction.parts[0].text), "Las instrucciones no traen quién es Melki ni el estado");
     afirmar(s.generationConfig.responseModalities[0] === "AUDIO" && s.inputAudioTranscription && s.outputAudioTranscription, "La sesión no pide voz y subtítulos");
+    // Con parlantes (lo de siempre) la IA no se deja interrumpir por lo que oye: sería su propia voz
+    afirmar(s.realtimeInputConfig?.activityHandling === "NO_INTERRUPTION", `Con parlantes la IA no debería interrumpirse con su eco: ${JSON.stringify(s.realtimeInputConfig)}`);
     await page.waitForFunction(() => document.querySelector("[data-tour=hud-voz]")?.getAttribute("data-estado") === "atento", null, { timeout: 15000 });
     await page.waitForTimeout(1200);
     afirmar(estado.audios >= 5, `El micrófono no manda audio a la IA (${estado.audios} trozos)`);
+    // Mientras sonaba su saludo, el micrófono mandó silencio; ahora que calla, manda la voz de la persona
+    afirmar(estado.silencios >= 2, `Mientras habla la IA, el micrófono debería mandar silencio (${estado.silencios} de ${estado.audios})`);
+    const silenciosAntes = estado.silencios;
+    const audiosAntes = estado.audios;
+    await page.waitForTimeout(800);
+    afirmar(estado.audios - audiosAntes >= 3 && estado.silencios === silenciosAntes, `Callada la IA, el micrófono debería mandar la voz (${estado.audios - audiosAntes} trozos, ${estado.silencios - silenciosAntes} en silencio)`);
     // La voz local no suena encima de la IA
     afirmar(!/Soy Melki con inteligencia artificial/.test(await page.evaluate(() => window.__voz.dicho.join(" "))), "La voz del equipo no debería repetir lo que dice la IA");
     await foto("conversando");
@@ -2032,6 +2293,17 @@ await flujo(
     await page.waitForFunction((c) => Number(document.querySelector("[data-tour=pitch]")?.textContent?.match(/Pitch · (\d+) de/)?.[1] ?? 0) > c, enCorte, { timeout: 20000 });
     await page.keyboard.press("Escape");
     await pitch.waitFor({ state: "detached" });
+    // El recorrido de la red por la IA: lo abre con su herramienta y dice lo breve de cada punto con su voz
+    const puntos0 = estado.puntos;
+    ia.decir("explícame la red");
+    const rec = page.locator("[data-tour=recorrido-red]");
+    await rec.waitFor({ timeout: 15000 });
+    afirmar(estado.respuestas.some((r) => r.name === "recorrido_red" && /recorrido/i.test(String(r.response?.resultado))), `La IA no abrió el recorrido: ${JSON.stringify(estado.respuestas.at(-1))}`);
+    for (let k = 0; k < 80 && estado.puntos === puntos0; k++) await page.waitForTimeout(150);
+    afirmar(estado.puntos > puntos0, "La IA no dijo el primer punto del recorrido");
+    afirmar(!(await rec.getByRole("button", { name: /Silenciar la voz|Oír la voz/ }).count()), "Con la IA no se usa la voz del equipo");
+    await page.keyboard.press("Escape");
+    await rec.waitFor({ state: "detached" });
     // Se despide: cierra la conversación y vuelve a esperar su nombre
     ia.decir("adiós, eso es todo");
     await page.locator("[data-tour=hud-voz][data-ia=si]").waitFor({ state: "detached", timeout: 20000 });
