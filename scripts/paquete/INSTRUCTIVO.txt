@@ -20,11 +20,12 @@ torre de 12 m con 4 radios Heltec T114, billeteras XIAO o T1000-E,
 Starlink) e incluye las funciones de Radio Mobile, una regla para medir
 distancias y áreas, un mapa con departamentos, municipios y ríos, y a
 Melki, el asistente que ejecuta pedidos escritos con sus palabras.
-Novedad: el "Recorrido" de la red: el robot de Melki va punto por
-punto y en una nube que sale de cada antena escribe qué se instaló, por
-qué ahí, qué papel cumple y, al final, por qué la red quedó así. Además,
-el audio quedó estable con parlantes (Melki no se oye a sí mismo ni se
-le corta la voz), el "Pitch" del modelo de negocio con el robot que
+Novedad: Melki ya no habla en voz alta: escucha todo el tiempo, hace
+lo que se le pide y deja la respuesta escrita (si algún día quiere
+oírlo, dígale "háblame"). Además, el "Recorrido" de la red: el robot de
+Melki va punto por punto y en una nube que sale de cada antena escribe
+qué se instaló, por qué ahí, qué papel cumple y, al final, por qué la
+red quedó así; el "Pitch" del modelo de negocio con el robot que
 presenta cada antena, la inversión, la operación y el punto de
 equilibrio, y, con una clave gratuita de Google, Melki conversa como un
 modelo de inteligencia artificial (Gemini Live).
@@ -333,26 +334,25 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
         "Hey Melki, ¿cuántas personas aguanta el Repetidor 1?"
         "Hola Melki, ¿cómo dejo la mayor cobertura posible?"
         "Oye Melki, pantalla limpia"
-    Lo hace, le contesta en voz alta (lo principal; el detalle queda
-    escrito en la conversación) y se queda atento unos segundos: siga
-    hablando sin repetir su nombre. También entiende "para", "repite",
-    "más detalle", "sí, hazlo" o "la segunda" (los botones de su
-    respuesta), "deshaz" y "deja de escuchar". Si solo dice "Hola
-    Melki", contesta "Hola, mi señor. Le escucho; estoy atento y presto
-    a seguir sus órdenes". Sin su nombre no hace nada. Cuando un
-    resultado se ve mejor en un panel, pregunta si se lo muestra ("sí"
-    lo abre); la barra sobre el mapa muestra lo que entiende, lo que
-    dice y los botones "Mostrar resultados", "Mostrar herramientas",
-    "¿Qué hago ahora?" y "¿Qué puedo decir?"; con la X vuelve al
-    reposo y los paneles vuelven. En Ajustes de voz (la tuerca de la
-    conversación): cómo le habla (señor, señora o sin tratamiento), la voz (elige la
-    más natural; en Edge hay voces neuronales como Salomé de Colombia,
-    con "Probar" para oírla), dejar el mapa libre, "Activarme al abrir
-    el simulador" (con el micrófono permitido, saluda solo al entrar;
-    si el navegador pide un toque antes de hablar, aparece "Toque aquí
-    para oír mi voz"), seguir la conversación, leer las respuestas
-    completas, el sonido al activarse y "Dar acceso" al micrófono para
-    que el navegador no vuelva a preguntar.
+    Lo hace y le deja la respuesta escrita, sin hablar (lo principal
+    en su barra y todo en la conversación), y se queda atento unos
+    segundos: siga hablando sin repetir su nombre. También entiende
+    "para", "repite", "más detalle", "sí, hazlo" o "la segunda" (los
+    botones de su respuesta), "deshaz" y "deja de escuchar". Si solo
+    dice "Hola Melki", contesta "Hola, mi señor. Le escucho; estoy
+    atento y presto a seguir sus órdenes". Sin su nombre no hace nada.
+    Cuando un resultado se ve mejor en un panel, pregunta si se lo
+    muestra ("sí" lo abre); la barra sobre el mapa muestra lo que
+    entiende, lo que responde y los botones "Mostrar resultados",
+    "Mostrar herramientas", "¿Qué hago ahora?" y "¿Qué puedo decir?";
+    con la X vuelve al reposo y los paneles vuelven. En Ajustes de voz
+    (la tuerca de la conversación): cómo le trata (señor, señora o sin
+    tratamiento), "Hablar en voz alta" (apagado: no habla; encendido
+    aparecen la voz, "Probar", "Uso audífonos" y leer las respuestas
+    completas), dejar el mapa libre, "Activarme al abrir el simulador"
+    (con el micrófono permitido, saluda por escrito al entrar), seguir
+    la conversación, el sonido al activarse y "Dar acceso" al
+    micrófono para que el navegador no vuelva a preguntar.
     En reposo, como Siri: con el micrófono permitido una vez, mientras
     la página esté abierta Melki queda en reposo (sin barra; un oído
     verde en su botón) y se activa solo al decir "Hola Melki", "Hey
@@ -387,11 +387,13 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
     para ver hasta qué punto aguanta antes de quebrarse", después del
     diseño pone 250 personas por punto y hace la prueba de estrés
     subiendo la carga. "¿Dónde estamos?" dice el municipio que se ve.
-    Con parlantes o con audífonos: con parlantes (lo normal) Melki no
-    escucha mientras habla, y vuelve a escuchar un instante después de
-    callar; así no se oye a sí mismo ni se le corta la voz. Para
-    callarlo mientras habla, toque el cuadrito (■) de su barra. Si usa
-    audífonos, active "Uso audífonos" en Ajustes de voz: entonces lo
+    Melki no habla: le escucha todo el tiempo, sin pausas, hace lo que
+    le pide y le deja la respuesta escrita. Si quiere oírlo, dígale
+    "háblame", toque el parlante de la conversación o active "Hablar
+    en voz alta" en Ajustes de voz; "no hables" lo vuelve a callar y al
+    recargar la página vuelve a no hablar. Con la voz encendida y
+    parlantes, no escucha mientras habla (así no se oye a sí mismo) y
+    se le calla con el cuadrito (■) de su barra; con "Uso audífonos" lo
     escucha mientras habla y puede decirle "Melki, silencio".
     Sin eco ni bucles: lo que Melki oye de su propia voz justo después
     de hablar no lo toma como pedido, y no repite la misma respuesta ni
@@ -415,14 +417,15 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
  q) Pitch del modelo de negocio: toque "Pitch" en la barra de arriba
     (o dígale a Melki "preséntame el modelo de negocio"). El robot de
     Melki vuela por el mapa de capítulo en capítulo, señala cada antena
-    y lo cuenta en voz alta; la tarjeta de la izquierda muestra las
-    cifras. Capítulos: el problema (adultos rurales sin canal digital
-    en el departamento y en el país), la solución, cada antena (dónde
-    está, a qué altura va y por qué: su enlace, la línea de vista, la
-    altura recomendada, el área que cubre y la gente que entra por
-    ella), la cobertura, la capacidad real, la inversión (CAPEX), la
-    operación al mes (OPEX), el punto de equilibrio, cómo escala y el
-    cierre. Todo sale de la red del mapa y de los precios de Trama.
+    y la tarjeta de la izquierda muestra lo que cuenta y las cifras
+    (con el parlante de la presentación, además lo narra). Capítulos:
+    el problema (adultos rurales sin canal digital en el departamento
+    y en el país), la solución, cada antena (dónde está, a qué altura
+    va y por qué: su enlace, la línea de vista, la altura recomendada,
+    el área que cubre y la gente que entra por ella), la cobertura, la
+    capacidad real, la inversión (CAPEX), la operación al mes (OPEX),
+    el punto de equilibrio, cómo escala y el cierre. Todo sale de la
+    red del mapa y de los precios de Trama.
     En el punto de equilibrio escriba una comisión por pago (por
     ejemplo 300) y toque "Calcular": dice los ingresos al mes, lo que
     queda tras la operación, en cuántos meses se recupera la inversión
@@ -443,11 +446,12 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
        "Probar conexión" debe decir "Conectado con Gemini 3.8 Live".
     3) Active el Asistente Melki: la barra dice "IA en vivo". Háblele
        normal ("¿cuánto cuesta la red?", "pon un repetidor en 4.235,
-       -73.335", "preséntame el modelo de negocio"); le contesta con voz
-       natural y hace los cambios en el simulador. Con audífonos se le
-       puede hablar encima; con parlantes, mientras habla no se oye a sí
-       misma (para callarla, el cuadrito ■ de la barra). Con "adiós" o
-       tras un minuto en silencio cierra y vuelve a esperar "Hola Melki".
+       -73.335", "preséntame el modelo de negocio"); hace los cambios
+       en el simulador y le deja la respuesta escrita, sin hablar (con
+       "Hablar en voz alta" contesta con voz natural: con audífonos se
+       le puede hablar encima y con parlantes se calla con el cuadrito
+       ■ de la barra). Con "adiós" o tras un minuto en silencio cierra y
+       vuelve a esperar "Hola Melki".
     La clave queda solo en ese navegador. Si la clave no sirve, no hay
     internet o se acabó el cupo del día, Melki lo avisa y sigue con su
     cerebro local. Mientras conversa, la voz y un resumen del escenario
@@ -467,11 +471,12 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
         distancia, línea de vista y margen, y dónde está su gente),
       - qué papel cumple (entrada a internet, repetidor troncal o de
         acceso, punto crítico o con respaldo) y la altura recomendada.
-    En voz dice solo lo breve; el detalle queda escrito. Toque la nube
-    para que termine de escribir. En el celular la nube va abajo y, si
-    el texto no cabe, baja sola con lo que va escribiendo (si usted la
-    mueve con el dedo, se queda quieta). En "Lo que falta" un botón se
-    lo pide a Melki ("Conecta a los que faltan", "Ajústamelo").
+    No habla: todo queda escrito (con el parlante del recorrido,
+    además dice lo breve en voz alta). Toque la nube para que termine
+    de escribir. En el celular la nube va abajo y, si el texto no cabe,
+    baja sola con lo que va escribiendo (si usted la mueve con el dedo,
+    se queda quieta). En "Lo que falta" un botón se lo pide a Melki
+    ("Conecta a los que faltan", "Ajústamelo").
     Controles: las flechas, espacio (pausa) y Esc (salir), los botones
     de abajo o la voz: "siguiente", "anterior", "pausa", "ve al
     gateway", "ve al Repetidor 1", "ve a lo que falta", "¿por qué la
@@ -529,9 +534,10 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
 - Si abre la versión HTML con doble clic y el navegador pide permiso
   del micrófono a cada rato, elija "Permitir" o use el modo "Privado"
   en Ajustes de voz, que pide el permiso una sola vez.
-- Audio: con parlantes deje apagado "Uso audífonos" (Ajustes de voz):
-  Melki deja de escuchar mientras habla, para no oírse a sí mismo. Si
-  la voz de Melki no suena, toque la página una vez (el navegador lo
+- Audio: lo normal es que Melki no hable (responde por escrito). Si
+  enciende su voz, con parlantes deje apagado "Uso audífonos" (Ajustes
+  de voz): Melki deja de escuchar mientras habla, para no oírse a sí
+  mismo. Si su voz no suena, toque la página una vez (el navegador lo
   pide) o revise el volumen; si una voz "en línea" falla por la red,
   Melki sigue con una voz del equipo.
 - La demostración es genérica: no contiene datos de ningún cliente.
