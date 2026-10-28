@@ -6,8 +6,8 @@
 "use client";
 
 // El recorrido de la red con el robot de Melki: vuela de punto en punto (la cámara lo sigue), señala cada antena y de
-// ella sale una nube que escribe qué se instaló, por qué ahí y qué papel cumple; la voz dice solo lo breve. Un punto a
-// la vez, sin llenar el mapa. Se maneja con los botones, el teclado (← → espacio Esc) o pidiéndoselo a Melki
+// ella sale una nube que escribe qué se instaló, por qué ahí y qué papel cumple. No habla (lo normal); con la voz
+// encendida (el parlante) dice solo lo breve. Un punto a la vez, sin llenar el mapa. Se maneja con los botones, el teclado (← → espacio Esc) o pidiéndoselo a Melki
 // («siguiente», «ve al gateway», «¿por qué la red quedó así?», «termina el recorrido»).
 import { ChevronLeft, ChevronRight, Pause, Play, Repeat, Volume2, VolumeX, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -307,7 +307,7 @@ export function RecorridoRed({
       {punto && !volando && <span className="pitch-anillo absolute h-16 w-16 rounded-full border-4 border-melki" style={{ left: punto.x, top: punto.y }} aria-hidden="true" />}
       {pos && (
         <div className="pitch-robot absolute top-0 left-0" style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }} data-robot={gesto}>
-          <RobotMelki gesto={gesto} hablando={narrando} mirando={pos.mirando} className="h-32 w-[6.4rem] sm:h-44 sm:w-36" titulo={`Melki ${narrando ? "explicando la red" : "en el recorrido de la red"}`} />
+          <RobotMelki gesto={gesto} hablando={narrando && (voz || narradorIA)} mirando={pos.mirando} className="h-32 w-[6.4rem] sm:h-44 sm:w-36" titulo={`Melki ${narrando ? "explicando la red" : "en el recorrido de la red"}`} />
         </div>
       )}
       {!volando && zonaTam && anclaNube && (

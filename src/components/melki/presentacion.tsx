@@ -6,8 +6,8 @@
 "use client";
 
 // La presentación del modelo de negocio: el robot de Melki vuela por el mapa de capítulo en capítulo (la cámara lo
-// sigue), señala cada antena, cuenta el guion en voz alta (con la voz del equipo o la de la IA) y muestra las cifras en
-// una tarjeta. En el computador, lo que cuenta de cada antena sale escrito en una nube desde la antena (como en el
+// sigue), señala cada antena y muestra el guion y las cifras en una tarjeta (lo narra en voz alta solo si se enciende la
+// voz: con la del equipo o la de la IA). En el computador, lo que cuenta de cada antena sale escrito en una nube desde la antena (como en el
 // recorrido de la red). Se controla con los botones, el teclado (← → espacio Esc) o la voz («siguiente», «pausa»…).
 import { ChevronLeft, ChevronRight, Pause, Play, Repeat, Volume2, VolumeX, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -320,7 +320,7 @@ export function PresentacionPitch({
       {/* El robot */}
       {pos && (
         <div className="pitch-robot absolute top-0 left-0" style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }} data-robot={gesto}>
-          <RobotMelki gesto={gesto} hablando={narrando} mirando={pos.mirando} className="h-32 w-[6.4rem] sm:h-44 sm:w-36" titulo={`Melki ${narrando ? "presentando" : "en la presentación"}`} />
+          <RobotMelki gesto={gesto} hablando={narrando && (voz || narradorIA)} mirando={pos.mirando} className="h-32 w-[6.4rem] sm:h-44 sm:w-36" titulo={`Melki ${narrando ? "presentando" : "en la presentación"}`} />
         </div>
       )}
       {/* Lo que cuenta de la antena, escrito en una nube que sale de ella */}
