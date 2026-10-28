@@ -25,7 +25,9 @@ const afirmar = (condicion, mensaje) => {
   if (!condicion) throw new Error(mensaje);
 };
 
-async function flujo(nombre, fn, { tamano = { width: 1440, height: 900 }, conMelki = false, sembrar = false, preparar } = {}) {
+// `hablar`: la voz de Melki encendida desde el principio (lo normal es que no hable: escucha, hace lo que se le pide y
+// responde por escrito); las pruebas de la voz, del eco y de la IA con voz la encienden así.
+async function flujo(nombre, fn, { tamano = { width: 1440, height: 900 }, conMelki = false, sembrar = false, hablar = false, preparar } = {}) {
   // SOLO=flujo1,flujo2 corre solo esos flujos
   if (process.env.SOLO && !process.env.SOLO.split(",").includes(nombre)) return;
   const context = await navegador.newContext({ viewport: tamano, locale: "es-CO", acceptDownloads: true });
@@ -51,6 +53,10 @@ async function flujo(nombre, fn, { tamano = { width: 1440, height: 900 }, conMel
     },
     { melki: conMelki, sembrar },
   );
+  if (hablar)
+    await page.addInitScript(() => {
+      window.__melkiPruebas = { voz: true };
+    });
   let ok = true;
   let error = "";
   try {
@@ -1504,7 +1510,7 @@ await flujo(
     await page.locator("[data-tour=melki-reposo]").waitFor({ state: "detached", timeout: 5000 });
     await hud.waitFor({ state: "detached", timeout: 15000 });
   },
-  { preparar: (page) => page.addInitScript(manosLibresDeMentira) },
+  { hablar: true, preparar: (page) => page.addInitScript(manosLibresDeMentira) },
 );
 
 await flujo(
@@ -1527,7 +1533,7 @@ await flujo(
     await page.getByRole("button", { name: "Apagar el Asistente Melki" }).first().click();
     await hud.waitFor({ state: "detached" });
   },
-  { tamano: { width: 390, height: 844 }, preparar: (page) => page.addInitScript(manosLibresDeMentira) },
+  { tamano: { width: 390, height: 844 }, hablar: true, preparar: (page) => page.addInitScript(manosLibresDeMentira) },
 );
 
 // Escucha en reposo, como Siri: con el micrófono ya permitido, Melki oye su nombre sin tocar el botón; la barra se mueve
@@ -1595,6 +1601,7 @@ await flujo(
     afirmar(await escuchaTrasHablar(page), "La X lo deja en reposo");
   },
   {
+    hablar: true,
     preparar: async (page) => {
       await page.addInitScript(manosLibresDeMentira);
       await page.addInitScript(() => {
@@ -1660,6 +1667,7 @@ await flujo(
     await foto("municipio");
   },
   {
+    hablar: true,
     preparar: async (page) => {
       await page.addInitScript(manosLibresDeMentira);
       await page.addInitScript(() => {
@@ -1783,6 +1791,7 @@ await flujo(
     await chat.getByText(/Escuchando…/).waitFor({ state: "detached" });
   },
   {
+    hablar: true,
     preparar: async (page) => {
       await page.addInitScript(manosLibresDeMentira);
       await page.addInitScript(() => {
@@ -1904,6 +1913,7 @@ await flujo(
     await esperarEstado(/^(atento|esperando)$/);
   },
   {
+    hablar: true,
     preparar: async (page) => {
       await page.addInitScript(manosLibresDeMentira);
       await page.addInitScript(() => {
@@ -1946,6 +1956,7 @@ await flujo(
     await hud.waitFor({ state: "detached" });
   },
   {
+    hablar: true,
     preparar: async (page) => {
       await page.addInitScript(manosLibresDeMentira);
       await page.addInitScript(() => {
@@ -1957,6 +1968,91 @@ await flujo(
         window.addEventListener("pointerup", () => (tocado = true), { capture: true });
         window.addEventListener("keydown", () => (tocado = true), { capture: true });
         Object.defineProperty(navigator, "userActivation", { configurable: true, value: { get hasBeenActive() { return tocado; }, get isActive() { return tocado; } } });
+      });
+    },
+  },
+);
+
+// v13.2: Melki no habla (lo normal). Escucha todo el tiempo, hace lo que se le pide y deja la respuesta escrita en su
+// barra y en la conversación; solo habla si se lo piden («háblame» o el parlante) y «no hables» lo vuelve a callar.
+await flujo(
+  "solo-escucha",
+  async (page, foto) => {
+    await esperarSimulacion(page);
+    const hud = page.locator("[data-tour=hud-voz]");
+    const decir = async (texto) => afirmar(await page.evaluate((x) => window.__voz.decir(x), texto), `El micrófono no estaba escuchando al decir «${texto}»`);
+    const dichos = () => page.evaluate(() => window.__voz.dicho.length);
+    const lo = () => page.evaluate(() => window.__voz.dicho.join(" | ").slice(0, 200));
+    // ¿Escucha mientras muestra la respuesta? (se mide cada 50 ms mientras la barra responde)
+    await page.evaluate(() => {
+      window.__oyeRespondiendo = 0;
+      window.__sordoRespondiendo = 0;
+      setInterval(() => {
+        if (document.querySelector("[data-tour=hud-voz]")?.getAttribute("data-estado") !== "hablando") return;
+        if (window.__voz.activo) window.__oyeRespondiendo++;
+        else window.__sordoRespondiendo++;
+      }, 50);
+    });
+    await page.locator("[data-tour=melki-reposo]").waitFor({ timeout: 15000 });
+    // «Hey Melki, …»: se activa, hace el pedido y lo deja escrito en su barra, sin hablar
+    await decir("Hey Melki, llévame a Villavicencio");
+    await hud.waitFor({ timeout: 10000 });
+    await page.waitForFunction(
+      () => {
+        const h = document.querySelector("[data-tour=hud-voz]");
+        return h?.getAttribute("data-estado") === "hablando" && /Lo llevé a Villavicencio/.test(h.textContent ?? "");
+      },
+      null,
+      { timeout: 15000 },
+    );
+    afirmar(/Le respondo por escrito/.test(await hud.textContent()), "La barra debería decir que responde por escrito");
+    afirmar((await hud.getByRole("button", { name: "Callar a Melki" }).count()) === 0, "Sin voz no hay nada que callar");
+    afirmar((await hud.getByRole("button", { name: "Toque aquí para oír mi voz" }).count()) === 0, "Sin voz no pide un toque para hablar");
+    afirmar(await page.evaluate(() => Boolean(window.__voz.activo)), "Mientras responde por escrito debería seguir escuchando");
+    await foto("respuesta-escrita");
+    // Ya escucha la siguiente orden y la hace
+    await decir("Melki, muéstrame los resultados");
+    await page.locator("aside[aria-label=Resultados]").waitFor({ state: "visible", timeout: 10000 });
+    await page.waitForTimeout(1500);
+    afirmar((await dichos()) === 0, `Melki no debería hablar: ${await lo()}`);
+    const oido = await page.evaluate(() => ({ oye: window.__oyeRespondiendo, sordo: window.__sordoRespondiendo }));
+    afirmar(oido.oye >= 3 && oido.sordo <= 2, `Mientras responde por escrito el micrófono debería seguir escuchando (escuchando ${oido.oye}, sin escuchar ${oido.sordo})`);
+    // Lo respondido queda escrito en la conversación; el parlante está apagado y «Hablar en voz alta» también
+    await page.getByRole("button", { name: /^Abrir a Melki/ }).click();
+    const chat = page.getByRole("region", { name: "Conversación con Melki" });
+    await chat.getByText(/Lo llevé a Villavicencio/).first().waitFor({ timeout: 10000 });
+    afirmar((await chat.getByRole("button", { name: "Escuchar las respuestas" }).getAttribute("aria-pressed")) === "false", "El parlante de la conversación debería estar apagado");
+    await chat.getByRole("button", { name: "Ajustes de voz" }).click();
+    const ajustes = page.getByRole("group", { name: "Ajustes de voz" });
+    afirmar((await ajustes.getByRole("switch", { name: /Hablar en voz alta/ }).getAttribute("aria-checked")) === "false", "«Hablar en voz alta» debería estar apagado");
+    afirmar((await ajustes.getByRole("button", { name: "Probar", exact: true }).count()) === 0 && (await ajustes.getByRole("switch", { name: /Uso audífonos/ }).count()) === 0, "Sin voz no se muestran los ajustes de la voz");
+    await foto("ajustes");
+    await chat.getByRole("button", { name: "Ajustes de voz" }).click();
+    // «Háblame» la enciende (lo siguiente se oye) y «no hables» la vuelve a apagar (ni su confirmación suena)
+    await chat.getByRole("textbox").fill("háblame");
+    await chat.getByRole("textbox").press("Enter");
+    await chat.getByText(/ahora le leo en voz alta/).waitFor({ timeout: 10000 });
+    await chat.getByRole("textbox").fill("¿dónde estamos?");
+    await chat.getByRole("textbox").press("Enter");
+    await page.waitForFunction(() => /Estamos viendo Villavicencio/.test(window.__voz.dicho.join(" ")), null, { timeout: 15000 });
+    await chat.getByRole("textbox").fill("no hables");
+    await chat.getByRole("textbox").press("Enter");
+    await chat.getByText(/ya no hablo en voz alta/).waitFor({ timeout: 10000 });
+    await page.waitForTimeout(800);
+    afirmar(!/ya no hablo en voz alta/.test(await page.evaluate(() => window.__voz.dicho.join(" "))), "La confirmación de «no hables» no debería sonar");
+    const conVoz = await dichos();
+    await chat.getByRole("textbox").fill("¿dónde estamos?");
+    await chat.getByRole("textbox").press("Enter");
+    await chat.getByText(/Estamos viendo Villavicencio/).nth(1).waitFor({ timeout: 10000 });
+    await page.waitForTimeout(2500);
+    afirmar((await dichos()) === conVoz, `Después de «no hables» no debería volver a hablar: ${await lo()}`);
+  },
+  {
+    preparar: async (page) => {
+      await page.addInitScript(manosLibresDeMentira);
+      await page.addInitScript(() => {
+        const consultar = navigator.permissions.query.bind(navigator.permissions);
+        navigator.permissions.query = (d) => (d.name === "microphone" ? Promise.resolve({ state: "granted" }) : consultar(d));
       });
     },
   },
@@ -1992,9 +2088,11 @@ await flujo(
     await pitch.getByRole("button", { name: /^Avanza solo/ }).click();
     await pitch.getByRole("button", { name: /^Capítulo 1: / }).click();
     await pitch.getByText(/^Pitch · 1 de \d+$/).waitFor();
-    // El robot está en el mapa y saluda mientras narra; la narración sale por la voz del equipo
+    // El robot está en el mapa y saluda; lo que cuenta queda escrito en la tarjeta. Melki no habla (lo normal)
     await pitch.locator("[data-robot]").waitFor();
-    await page.waitForFunction(() => /soy Melki, el asistente del simulador/.test(window.__voz.dicho.join(" ")), null, { timeout: 20000 });
+    await pitch.getByText(/soy Melki, el asistente del simulador/).waitFor({ timeout: 20000 });
+    await page.waitForTimeout(1500);
+    afirmar((await page.evaluate(() => window.__voz.dicho.length)) === 0, `Sin encender la voz, la presentación no debería hablar: ${await page.evaluate(() => window.__voz.dicho.join(" | ").slice(0, 200))}`);
     afirmar(/Gateways/.test(await tarjeta()) && /Repetidores/.test(await tarjeta()), "La portada no trae las cifras de la red");
     // Los paneles se ocultan para dejar el mapa libre
     afirmar(!(await page.locator("aside[aria-label=Resultados]").isVisible()), "El panel de resultados debería ocultarse en el pitch");
@@ -2072,7 +2170,8 @@ await flujo(
     afirmar(/Recorrido · 1 de 6/.test(await nube.textContent()), `El panorama no dice el paso: ${(await nube.textContent()).slice(0, 80)}`);
     afirmar(/El recorrido sigue el camino de la señal/.test(await nube.textContent()), "El panorama no explica el recorrido");
     afirmar(!(await page.locator("aside[aria-label=Resultados]").isVisible()), "El panel de resultados debería ocultarse");
-    await page.waitForFunction(() => /Le muestro la red punto por punto/.test(window.__voz.dicho.join(" ")), null, { timeout: 15000 });
+    // Melki no habla (lo normal): todo va escrito en la nube
+    afirmar((await page.evaluate(() => window.__voz.dicho.length)) === 0, `Sin encender la voz, el recorrido no debería hablar: ${await page.evaluate(() => window.__voz.dicho.join(" | ").slice(0, 200))}`);
     await foto("panorama");
     // 2 · El gateway: la nube sale de su punto, con la línea que lo señala, y escribe qué se instaló, por qué ahí y su papel
     await page.keyboard.press("ArrowRight");
@@ -2090,13 +2189,16 @@ await flujo(
     const mapa = await page.locator("[data-tour=mapa]").boundingBox();
     const caja = await nube.boundingBox();
     afirmar(caja.x >= mapa.x - 1 && caja.x + caja.width <= mapa.x + mapa.width + 1 && caja.y >= mapa.y - 1 && caja.y + caja.height <= mapa.y + mapa.height + 1, "La nube debería quedar dentro del mapa");
-    await page.waitForFunction(() => /la puerta de la red a internet/.test(window.__voz.dicho.join(" ")), null, { timeout: 15000 });
+    afirmar((await page.evaluate(() => window.__voz.dicho.length)) === 0, "Sin encender la voz, el gateway tampoco se dice en voz alta");
     await foto("gateway");
-    // 3 · El repetidor: su enlace con el gateway y su papel
+    // 3 · El repetidor: su enlace con el gateway y su papel. Con el parlante del recorrido, además dice lo breve
+    await rec.getByRole("button", { name: "Oír la voz" }).click();
     await page.keyboard.press("ArrowRight");
     await page.locator("[data-tour=recorrido-red][data-parada^=repetidor]").waitFor({ timeout: 10000 });
     await escrita();
     afirmar(/Se instaló un repetidor solar/.test(await nube.textContent()) && /dB de margen/.test(await nube.textContent()), "La nube del repetidor no dice su enlace");
+    await page.waitForFunction(() => window.__voz.dicho.length > 0, null, { timeout: 15000 });
+    await rec.getByRole("button", { name: "Silenciar la voz" }).click();
     await foto("repetidor");
     // Por Melki: «ve a lo que falta» y «¿por qué la red quedó así?»
     await page.getByRole("button", { name: /Abrir a Melki/ }).click();
@@ -2319,6 +2421,7 @@ await flujo(
   },
   {
     sembrar: true,
+    hablar: true,
     preparar: async (page) => {
       await page.addInitScript(manosLibresDeMentira);
       await page.addInitScript(microfonoDeMentira);
@@ -2326,6 +2429,74 @@ await flujo(
         window.__melkiIA = { url };
         const consultar = navigator.permissions.query.bind(navigator.permissions);
         navigator.permissions.query = (d) => (d.name === "microphone" ? Promise.resolve({ state: "granted" }) : consultar(d));
+      }, ia.url);
+    },
+  },
+);
+
+// v13.2: con la IA y sin voz (lo normal), la IA oye, hace las órdenes y su respuesta queda escrita; su audio no suena,
+// el micrófono no se calla nunca y se le puede hablar encima.
+await flujo(
+  "ia-por-escrito",
+  async (page, foto) => {
+    await esperarRed(page);
+    await cargarMalla(page);
+    const estado = ia.estado;
+    const setups0 = estado.setups.length;
+    const silencios0 = estado.silencios;
+    const audios0 = estado.audios;
+    await page.getByRole("button", { name: "Activar el Asistente Melki" }).first().click();
+    const hud = page.locator("[data-tour=hud-voz][data-ia=si]");
+    await hud.waitFor({ timeout: 15000 });
+    for (let k = 0; k < 60 && estado.setups.length === setups0; k++) await page.waitForTimeout(250);
+    const s = estado.setups.at(-1);
+    afirmar(estado.setups.length > setups0 && /NO oye tu voz/.test(s.systemInstruction.parts[0].text), "Sin voz, la IA debería saber que su respuesta va escrita");
+    afirmar(!s.realtimeInputConfig, `Sin voz no hay eco: la IA debería dejarse interrumpir (${JSON.stringify(s.realtimeInputConfig)})`);
+    // Su saludo queda escrito en la barra (el tiempo de leerlo)
+    await page.waitForFunction(() => /Soy Melki con inteligencia artificial/.test(document.querySelector("[data-tour=hud-voz]")?.textContent ?? ""), null, { timeout: 15000 });
+    // Una orden: la hace y lo confirma por escrito
+    const antes = await page.locator("[data-tour=lista-piezas] li").count();
+    afirmar(ia.decir("pon un repetidor en 4.235, -73.335"), "No había conversación abierta");
+    await page.waitForFunction((n) => document.querySelectorAll("[data-tour=lista-piezas] li").length > n, antes, { timeout: 30000 });
+    await page.waitForFunction(() => /Listo, señor/.test(document.querySelector("[data-tour=hud-voz]")?.textContent ?? ""), null, { timeout: 30000 });
+    afirmar(/Le respondo por escrito/.test(await hud.textContent()), "La barra debería decir que responde por escrito");
+    await foto("orden");
+    await page.waitForTimeout(1500);
+    const fuentes = await page.evaluate(() => window.__fuentesAudio ?? 0);
+    afirmar(fuentes === 0, `Sin voz, el audio de la IA no debería sonar (${fuentes} trozos)`);
+    afirmar(estado.audios - audios0 >= 5 && estado.silencios === silencios0, `Sin voz, el micrófono manda siempre la voz de la persona (${estado.audios - audios0} trozos, ${estado.silencios - silencios0} en silencio)`);
+    afirmar((await page.evaluate(() => window.__voz.dicho.length)) === 0, "La voz del equipo tampoco debería hablar");
+    // Queda escrito en la conversación
+    await page.getByRole("button", { name: /Abrir a Melki/ }).click();
+    const chat = page.getByRole("region", { name: "Conversación con Melki" });
+    await chat.getByText(/Soy Melki con inteligencia artificial/).waitFor({ timeout: 10000 });
+    await chat.getByText(/Listo, señor/).first().waitFor({ timeout: 10000 });
+    await chat.getByRole("button", { name: "Cerrar conversación" }).click();
+    // Se despide: cierra la conversación con la IA
+    ia.decir("adiós, eso es todo");
+    await hud.waitFor({ state: "detached", timeout: 20000 });
+  },
+  {
+    sembrar: true,
+    preparar: async (page) => {
+      await page.addInitScript(manosLibresDeMentira);
+      await page.addInitScript(microfonoDeMentira);
+      await page.addInitScript((url) => {
+        window.__melkiIA = { url };
+        // La clave ya guardada y la IA encendida
+        localStorage.setItem("simulador-cobertura-melki-ia-clave", "clave-de-prueba-e2e");
+        const k = "simulador-cobertura-melki-v1";
+        const p = JSON.parse(localStorage.getItem(k) ?? "{}");
+        localStorage.setItem(k, JSON.stringify({ ...p, visto: true, ia: { ...(p.ia ?? {}), activa: true } }));
+        const consultar = navigator.permissions.query.bind(navigator.permissions);
+        navigator.permissions.query = (d) => (d.name === "microphone" ? Promise.resolve({ state: "granted" }) : consultar(d));
+        // Cuenta los trozos de audio que suenan (la voz de la IA)
+        window.__fuentesAudio = 0;
+        const empezar = AudioBufferSourceNode.prototype.start;
+        AudioBufferSourceNode.prototype.start = function (...a) {
+          window.__fuentesAudio++;
+          return empezar.apply(this, a);
+        };
       }, ia.url);
     },
   },
