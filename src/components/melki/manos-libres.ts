@@ -4,9 +4,9 @@
 // 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
 
 // Asistente Melki (por voz, tipo Jarvis): Melki escucha todo el tiempo y se activa con su nombre («Hola Melki», «Oye
-// Melki», «Hey Melki», «Hello Melky»…, en las formas en que el reconocimiento lo escribe); ejecuta la orden, contesta
-// en voz alta, con el trato cortés de un mayordomo, y se queda atento unos segundos para seguir la conversación sin
-// repetir su nombre. Aquí está lo que no depende de la pantalla: reconocer el llamado, los controles de voz («para»,
+// Melki», «Hey Melki», «Hello Melky»…, en las formas en que el reconocimiento lo escribe); ejecuta la orden, deja la
+// respuesta escrita (con el trato cortés de un mayordomo; en voz alta solo si se lo piden) y se queda atento unos
+// segundos para seguir la conversación sin repetir su nombre. Aquí está lo que no depende de la pantalla: reconocer el llamado, los controles de voz («para»,
 // «repite», «más detalle», «sí, hazlo», «la segunda», «deja de escuchar»), limpiar lo dicho, resumir la respuesta para
 // leerla y las frases del asistente.
 import { normalizarDictado } from "./dictado";
@@ -262,7 +262,7 @@ export function frases(trato: Trato) {
 export const SALUDO_MANOS_LIBRES = frases("senor").bienvenida(true);
 
 export const AYUDA_VOZ =
-  "Soy el Asistente Melki: por voz entiendo lo mismo que por escrito. Dígame «Hola Melki», «Oye Melki» o «Hey Melki» y su pedido; por ejemplo: «pon el gateway en Cumaral», «conecta a los que faltan», «puebla la zona con doscientas cincuenta personas», «¿cuántas personas aguanta el Repetidor 1?», «¿cómo dejo la mayor cobertura posible?», «muestra el panel de resultados» o «pantalla limpia». Después de responder me quedo atento unos segundos: siga hablando sin repetir mi nombre. Para usar mis botones diga «sí, hazlo» o «la segunda»; también entiendo «para», «repite», «más detalle», «deshaz», «deja de escuchar» (quedo en reposo, atento a «Hola Melki») y «apaga el micrófono». Mi barra se arrastra a cualquier parte del mapa y se achica sola mientras espero. Entiendo los municipios aunque se oigan mal («ubícame en Barranca de Upía, Meta»); si dudo, le pregunto «¿se refiere a…?», y si no le entiendo, le pido que me lo repita. También: «ármame una red que cubra todo el municipio», «la zona norte del municipio», «¿dónde estamos?», y «explícame la red»: mi robot la recorre punto por punto y le escribo por qué quedó así. Con parlantes, mientras hablo no escucho (así no me oigo a mí mismo): para callarme, toque el cuadrito ■ de mi barra; si usa audífonos, actívelo en Ajustes de voz y podrá hablarme encima.";
+  "Soy el Asistente Melki: por voz entiendo lo mismo que por escrito. Dígame «Hola Melki», «Oye Melki» o «Hey Melki» y su pedido; por ejemplo: «pon el gateway en Cumaral», «conecta a los que faltan», «puebla la zona con doscientas cincuenta personas», «¿cuántas personas aguanta el Repetidor 1?», «¿cómo dejo la mayor cobertura posible?», «muestra el panel de resultados» o «pantalla limpia». Después de responder me quedo atento unos segundos: siga hablando sin repetir mi nombre. Para usar mis botones diga «sí, hazlo» o «la segunda»; también entiendo «para», «repite», «más detalle», «deshaz», «deja de escuchar» (quedo en reposo, atento a «Hola Melki») y «apaga el micrófono». Mi barra se arrastra a cualquier parte del mapa y se achica sola mientras espero. Entiendo los municipios aunque se oigan mal («ubícame en Barranca de Upía, Meta»); si dudo, le pregunto «¿se refiere a…?», y si no le entiendo, le pido que me lo repita. También: «ármame una red que cubra todo el municipio», «la zona norte del municipio», «¿dónde estamos?», y «explícame la red»: mi robot la recorre punto por punto y le escribo por qué quedó así. No hablo en voz alta: le escucho todo el tiempo, hago lo que me pida y le dejo la respuesta escrita en mi barra y en la conversación. Si quiere oírme, diga «háblame» o toque el parlante de la conversación; «no hables» me vuelve a callar.";
 
 /** Palabras del simulador que ayudan a elegir entre lo que el reconocimiento cree haber oído. */
 const TERMINOS =

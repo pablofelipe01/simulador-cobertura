@@ -1084,7 +1084,7 @@ function crearApi(antenas) {
   const frasesCortas = m.trozosVoz("Hola. Soy Melki. Le ayudo con la red.");
   caso("Las frases cortas seguidas van juntas (menos pausas)", frasesCortas.length === 1);
   caso("El cuadrito ■ de los botones no se lee en voz alta", !/■/.test(m.paraHablar("toque el cuadrito ■ de mi barra")) && /cuadrito de mi barra/.test(m.paraHablar("toque el cuadrito ■ de mi barra")));
-  caso("La ayuda por voz explica cómo callarlo con parlantes y el modo con audífonos", /parlantes/.test(m.AYUDA_VOZ) && /audífonos/.test(m.AYUDA_VOZ));
+  caso("La ayuda por voz dice que no habla (escucha y responde por escrito) y cómo oírlo si se quiere", /No hablo en voz alta/.test(m.AYUDA_VOZ) && /respuesta escrita/.test(m.AYUDA_VOZ) && /«háblame»/.test(m.AYUDA_VOZ) && /«no hables»/.test(m.AYUDA_VOZ));
 
   caso("Reconoce el eco de su propia voz", m.pareceEco("diga hola Melki y su pedido", m.SALUDO_MANOS_LIBRES) && m.pareceEco("le dejé el detalle escrito", "La red cubre el 82 %. Le dejé el detalle escrito."));
   caso("Lo que dice el usuario no es eco", !m.pareceEco("pon el gateway en Cumaral", m.SALUDO_MANOS_LIBRES) && !m.pareceEco("conecta a los que faltan", "Listo, simulé la red: llegan 40 de 45 personas."));
@@ -1381,7 +1381,7 @@ function crearApi(antenas) {
   caso("Empieza con su nombre: «Melki, …» y «Hola Melki, …» sí; «…, Melki» al final no", m.empiezaConNombre("Melki, ármame una red") && m.empiezaConNombre("Hola Melki, ubícame en Cumaral") && !m.empiezaConNombre("ármame una red que cubra todo, Melki"));
   const cD = { antenas: [], parametros: PARAMETROS, resultado: null, desactualizado: false, relieve: "teselas", modo: "sembrar", porVoz: true, trato: "senor" };
   const disc = m.respuestaNoEntendi(cD, "barranco loco pla xyz");
-  caso("«¿Por qué el micrófono se prende y se apaga?» → explica la escucha sin eco ni cortes", /Con parlantes no me respondo a mí mismo/.test(m.responder("¿por qué el micrófono se prende y se apaga?", { ...cD, porVoz: false }).texto) && !/Con parlantes/.test(m.responder("hazme una red sostenible económica en Cumaral", { ...cD, porVoz: false }).texto));
+  caso("«¿Por qué el micrófono se prende y se apaga?» → explica que no habla, que escucha sin pausas y el caso con voz", /No hablo en voz alta: le escucho todo el tiempo, sin pausas/.test(m.responder("¿por qué el micrófono se prende y se apaga?", { ...cD, porVoz: false }).texto) && /con parlantes, mientras hablo dejo de escuchar/.test(m.responder("¿por qué el micrófono se prende y se apaga?", { ...cD, porVoz: false }).texto) && !/No hablo en voz alta/.test(m.responder("hazme una red sostenible económica en Cumaral", { ...cD, porVoz: false }).texto));
   caso("La disculpa por voz no repite en voz lo que oyó (haría eco); lo deja escrito", disc.voz === "Discúlpeme, señor, no le entendí bien. ¿Me lo repite, por favor?" && /Escuché: «barranco loco pla xyz»/.test(disc.texto));
 
   // La escucha seguida, con un reconocimiento de mentira que se porta como Edge, Chrome y Android
@@ -1815,6 +1815,8 @@ function crearApi(antenas) {
   );
   const ins = m.instruccionesMelki("senor", "Estado: {}");
   caso("Las instrucciones: trato, no inventar cifras, usar las herramientas y el estado al final", /«señor»/.test(ins) && /Nunca inventes cifras/.test(ins) && /estado_simulador/.test(ins) && ins.endsWith("Estado: {}") && /«señora»/.test(m.instruccionesMelki("senora")) && /de usted/.test(m.instruccionesMelki("neutro")));
+  const insEscrito = m.instruccionesMelki("senor", "Estado: {}", true);
+  caso("Sin voz (lo normal), la IA sabe que no la oyen: va al grano y confirma por escrito", /NO oye tu voz/.test(insEscrito) && /solo que escuche y cumpla sus órdenes/.test(insEscrito) && insEscrito.endsWith("Estado: {}") && !/NO oye tu voz/.test(ins));
   const gw = base("g", "Gateway", 4.2, -73.37, { pasarela: true, rol: "COMPANION" });
   const rep = base("r1", "Repetidor 1", 4.25, -73.3, { rol: "REPETIDOR" });
   const est = m.estadoParaIA({ antenas: [gw, rep], parametros: { ...PARAMETROS, preset: "SF11_250" }, resultado: null, desactualizado: false, estres: null, optimizacion: null, ubicacion: () => "Cumaral (Meta)", centro: { lat: 4.2, lon: -73.3 } });

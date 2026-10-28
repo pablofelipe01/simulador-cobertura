@@ -16,7 +16,7 @@ Trama del Inge. Incluye a **Melki**, un asistente local que ejecuta pedidos en e
 «¿cuántas personas aguanta el Repetidor 1?», «llena el gateway hasta su límite», «envía 25 pagos al tiempo», «¿cuánto
 cuesta la red para el Chocó?», «conecta a los que faltan»), responde preguntas (cómo viaja un mensaje, por qué una persona
 está en rojo, qué hacer ahora) y da tours guiados. Con una clave gratuita de Google AI Studio, Melki también **conversa
-como un modelo de inteligencia artificial** (Gemini Live: oye la voz directamente y contesta con voz natural), presenta
+como un modelo de inteligencia artificial** (Gemini Live: oye la voz directamente y responde por escrito), presenta
 el **pitch del modelo de negocio** con su robot volando por el mapa (cada antena, la inversión, la operación y el punto
 de equilibrio) y hace el **recorrido de la red**: va punto por punto y en una nube que sale de cada antena escribe qué se
 instaló, por qué ahí, qué papel cumple y, al final, por qué la red quedó así.
@@ -109,7 +109,8 @@ instaló, por qué ahí, qué papel cumple y, al final, por qué la red quedó a
   el botón para proponer la opción de máxima cobertura; «dame la mayor cobertura posible» la calcula de una vez
 - **Pitch del modelo de negocio** (v13; botón «Pitch» de la barra de arriba, o «Melki, preséntame el modelo de
   negocio»): el robot de Melki, en vectores, vuela por el mapa de capítulo en capítulo (la cámara lo sigue), señala cada
-  antena con un anillo que late y cuenta el guion en voz alta mientras una tarjeta muestra las cifras; en el computador,
+  antena con un anillo que late y muestra el guion y las cifras en una tarjeta (lo narra en voz alta solo con la voz
+  encendida); en el computador,
   lo que cuenta de cada antena sale escrito en una nube desde la antena (v13.1). Todo sale de la red que esté en el mapa
   y de los precios del documento de Trama; no inventa ingresos:
   - Portada, el problema (adultos rurales sin canal digital en el departamento de la red y en el país) y la solución
@@ -158,7 +159,8 @@ instaló, por qué ahí, qué papel cumple y, al final, por qué la red quedó a
     pantalla baja), la nube baja sola con lo que va escribiendo. Un toque en la nube la termina de escribir
 - **Conversar con IA: Gemini Live, gratis** (v13; Ajustes de voz → «Conversar con IA (Gemini Live)»): con la opción
   encendida, el Asistente Melki conversa con un modelo de voz en vivo de Google. Oye el audio del micrófono directamente
-  (no un texto), contesta con voz natural (con audífonos se le puede hablar encima; con parlantes se le calla con ■) y
+  (no un texto), responde por escrito (con voz natural solo si se enciende «Hablar en voz alta»: entonces, con audífonos
+  se le puede hablar encima y con parlantes se le calla con ■) y
   hace en el simulador lo que se le pida con las mismas órdenes de Melki. Sus herramientas: ejecutar una orden, leer el
   estado de la red y sus costos, consultar el conocimiento del proyecto, manejar el pitch y el recorrido de la red y
   despedirse. No inventa cifras: las toma del simulador.
@@ -176,13 +178,14 @@ instaló, por qué ahí, qué papel cumple y, al final, por qué la red quedó a
 - **Asistente Melki** por voz (tipo Jarvis; botón «Asistente Melki» de la barra de arriba, ícono de ondas del chat o
   «activa el asistente»): Melki escucha todo el tiempo y se activa con su nombre: «Hola Melki», «Oye Melki», «Hey
   Melki» o «Hello Melki» y el pedido de corrido; reconoce el nombre como lo escribe el reconocimiento («Melky»,
-  «Melqui», «Melkis», «Mel ki»…). Habla con el trato cortés de un mayordomo: al activarse saluda «Hola, señor.
+  «Melqui», «Melkis», «Mel ki»…). Responde con el trato cortés de un mayordomo: al activarse saluda «Hola, señor.
   Bienvenido…» y, si solo lo llaman por su nombre, contesta «Hola, mi señor. Le escucho; estoy atento y presto a seguir
   sus órdenes». Al activarse oculta el panel de herramientas y el de resultados para dejar el mapa libre; cuando un
   resultado se ve mejor en un panel, pregunta si lo muestra («sí» lo abre) y su barra trae los botones «Mostrar
   resultados», «Mostrar herramientas», «¿Qué hago ahora?» y «¿Qué puedo decir?»; al apagarlo, los paneles vuelven. Entiende lo mismo que por escrito, con los números y las coordenadas dichos en
   palabras («doscientas cincuenta personas», «cuatro punto dos, menos setenta y tres punto tres siete»); ejecuta,
-  contesta en voz alta (lo principal; el detalle queda escrito) y se queda atento unos segundos para seguir sin repetir
+  deja la respuesta escrita (lo principal en su barra y todo en la conversación; en voz alta solo si se lo piden) y se
+  queda atento unos segundos para seguir sin repetir
   el nombre. Controles por voz: «para», «repite», «más detalle», «sí, hazlo» / «la segunda» (los botones de su
   respuesta; «sí» nunca es «Deshacer»), «deshaz», «gracias», «deja de escuchar». Sin su nombre no hace nada; no toma
   como pedido su propia voz cuando entra por el micrófono (lo que empieza a oírse mientras habla, o el eco de sus
@@ -280,7 +283,15 @@ instaló, por qué ahí, qué papel cumple y, al final, por qué la red quedó a
       silencio.
   - Oído atento: en el computador mide el nivel de la voz. Las barritas del orbe siguen la voz que oye, y si la
     persona sigue hablando espera hasta 1,5 s más antes de hacer el pedido, para no cortarle la frase.
-- **Audio estable con parlantes o con audífonos** (v13.1):
+- **Melki no habla: escucha y cumple órdenes** (v13.2): lo normal es que Melki no hable en voz alta. Escucha todo el
+  tiempo, sin pausas, hace lo que se le pide y deja la respuesta escrita en su barra («Le respondo por escrito») y en la
+  conversación. El pitch y el recorrido van escritos (la tarjeta y la nube). Con la IA (Gemini Live) su audio no suena:
+  la respuesta queda escrita el tiempo de leerla, el micrófono nunca se calla y se le puede hablar encima (la IA sabe que
+  no la oyen y va al grano). Para oírlo: «háblame», el parlante de la conversación, el de la presentación o el del
+  recorrido, o «Hablar en voz alta» en Ajustes de voz (ahí aparecen la voz, «Probar», «Uso audífonos» y «Leer las
+  respuestas completas»); «no hables» lo vuelve a callar (ni la confirmación suena). La voz encendida dura hasta cerrar
+  o recargar la página: no se guarda.
+- **Audio estable con parlantes o con audífonos** (v13.1; con la voz encendida):
   - Con parlantes (lo normal, «Uso audífonos» apagado en Ajustes de voz) Melki no escucha mientras habla: la escucha
     queda en pausa desde antes de que empiece su voz (la suya, la de un tour, el pitch o el recorrido) y vuelve 0,45 s
     después de que calla. Así no se oye a sí mismo, no se responde ni se interrumpe, y en el celular el reconocimiento

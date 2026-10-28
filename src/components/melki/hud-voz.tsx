@@ -161,6 +161,7 @@ export function HudVoz({
   onApagar,
   nivel,
   ia = false,
+  voz = false,
   parlantes = false,
 }: {
   estado: EstadoManosLibres;
@@ -185,6 +186,11 @@ export function HudVoz({
   nivel?: () => number | null;
   /** Conversa con la IA (Gemini Live): lo dice con una insignia. */
   ia?: boolean;
+  /**
+   * Melki habla en voz alta (solo si se lo piden). Lo normal es que no: escucha, hace lo que se le pide y la respuesta
+   * queda escrita en la barra (no hay nada que callar).
+   */
+  voz?: boolean;
   /** Con parlantes no escucha mientras habla (para no oírse a sí mismo): se le calla con el botón. */
   parlantes?: boolean;
 }) {
@@ -223,6 +229,9 @@ export function HudVoz({
 
   const pequena = mini || (reposo && quieto);
   const tituloCallar = parlantes ? "Callar (con parlantes no le oigo mientras hablo: use este botón)" : "Callar (o diga «Melki, para»)";
+  /** Callar solo tiene sentido si suena su voz; sin voz la respuesta queda escrita y se va sola. */
+  const callable = estado === "hablando" && voz;
+  const nombreEstado = estado === "hablando" && !voz ? "Le respondo por escrito" : ESTADO[estado];
   const linea =
     aviso ??
     (estado === "hablando"
@@ -234,7 +243,7 @@ export function HudVoz({
         : estado === "esperando"
           ? subtitulo || "Por ejemplo: «Hola Melki, ¿qué hago ahora?»"
           : "Un momento, por favor…");
-  const etiquetaPequena = aviso ?? (estado === "esperando" ? "Diga «Hola Melki»" : estado === "hablando" ? subtitulo || "Hablando" : estado === "atento" ? (escuchado ? `«${escuchado}»` : "Le escucho…") : ESTADO[estado]);
+  const etiquetaPequena = aviso ?? (estado === "esperando" ? "Diga «Hola Melki»" : estado === "hablando" ? subtitulo || nombreEstado : estado === "atento" ? (escuchado ? `«${escuchado}»` : "Le escucho…") : nombreEstado);
 
   const empezar = (e: EventoPuntero<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest("button") || e.button !== 0) return;
@@ -300,7 +309,7 @@ export function HudVoz({
       >
         <Orbe estado={estado} pequeno nivel={nivel} />
         <span className="max-w-[240px] min-w-0 truncate pr-1 text-[12.5px] text-white/90">{etiquetaPequena}</span>
-        {estado === "hablando" && (
+        {callable && (
           <Boton etiqueta="Callar a Melki" titulo={tituloCallar} onClick={onCallar} fondo>
             <Square size={12} fill="currentColor" />
           </Boton>
@@ -335,12 +344,12 @@ export function HudVoz({
               title={motor ? `Escucho ${motor}` : undefined}
             >
               <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${estado === "atento" ? "animate-pulse bg-melki" : estado === "hablando" ? "bg-[#4fd1b5]" : estado === "pensando" ? "animate-pulse bg-[#8fb3ff]" : "bg-salvia"}`} />
-              <span>{ESTADO[estado]}</span>
+              <span>{nombreEstado}</span>
             </span>
           </p>
           <p className={`mt-1 line-clamp-2 text-[13.5px] leading-snug ${aviso ? "text-[#ffd2b8]" : estado === "atento" || estado === "pensando" ? "text-white italic" : "text-white/95"}`}>{linea}</p>
         </div>
-        {estado === "hablando" && (
+        {callable && (
           <Boton etiqueta="Callar a Melki" titulo={tituloCallar} onClick={onCallar} fondo>
             <Square size={12} fill="currentColor" />
           </Boton>
