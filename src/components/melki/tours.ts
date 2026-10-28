@@ -785,7 +785,7 @@ export const TOURS: Tour[] = [
     pasos: [
       {
         titulo: "El Asistente Melki",
-        texto: "Puedo escucharle todo el tiempo, como un asistente de voz: usted me llama por mi nombre y me da la orden, yo la hago y le contesto en voz alta, a su servicio. Así puede trabajar con las manos libres y solo el mapa. Estamos en un escenario de práctica.",
+        texto: "Puedo escucharle todo el tiempo, como un asistente de voz: usted me llama por mi nombre y me da la orden, yo la hago y le dejo la respuesta escrita, a su servicio (no hablo en voz alta, salvo que me diga «háblame»). Así puede trabajar con las manos libres y solo el mapa. Estamos en un escenario de práctica.",
       },
       {
         objetivo: "manos-libres",
@@ -805,7 +805,7 @@ export const TOURS: Tour[] = [
       {
         objetivo: ["hud-voz", "manos-libres"],
         titulo: "Converse sin repetir mi nombre",
-        texto: "Después de responder me quedo atento unos segundos: siga hablando sin decir «Melki». Para usar mis botones diga «sí, hazlo» o «la segunda»; «repite» y «más detalle» para oír todo; «para» me calla y «deshaz» revierte lo último. Los números y las coordenadas se pueden decir en palabras.",
+        texto: "Después de responder me quedo atento unos segundos: siga hablando sin decir «Melki». Para usar mis botones diga «sí, hazlo» o «la segunda»; «repite» y «más detalle» para ver todo; «para» quita lo que estoy mostrando y «deshaz» revierte lo último. Los números y las coordenadas se pueden decir en palabras.",
       },
       {
         objetivo: ["hud-sugerencias", "hud-voz"],
