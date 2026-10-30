@@ -25,7 +25,7 @@ import { estadoParaIA, HERRAMIENTAS_IA, instruccionesMelki } from "./herramienta
 import { MODELO_IA_DEFECTO, MODELOS_IA, SesionLive, VOCES_IA, type LlamadaFuncion } from "./ia-live";
 import { PresentacionPitch, type ControlPitch, type Narrador } from "./presentacion";
 import { RecorridoRed, type ControlRecorrido } from "./recorrido-red";
-import { LlegadaRobot } from "./llegada";
+import { LlegadaRobot, type NarradorLlegada, type OpcionesNarrar } from "./llegada";
 import { HudVoz, type SugerenciaHud } from "./hud-voz";
 import {
   AYUDA_VOZ,
@@ -406,8 +406,9 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   const recorridoAbierto = useRef(false);
   /** Ya quedó por escrito en la conversación el recorrido de esta vez. */
   const recorridoEscrito = useRef(false);
-  /* Melki llega volando a donde se le pidió ir (en vez del punto rojo), con la primera opción de la respuesta */
-  const [llegada, setLlegada] = useState<(LlegadaMelki & { n: number; accion?: AccionRespuesta }) | null>(null);
+  /* Melki llega volando a donde se le pidió ir (en vez del punto rojo), con la primera opción de la respuesta; con
+     `narrar`, lo dice en voz alta al llegar */
+  const [llegada, setLlegada] = useState<(LlegadaMelki & { n: number; accion?: AccionRespuesta; narrar?: boolean }) | null>(null);
   const nLlegada = useRef(0);
   /** Lo que Melki responde mientras la IA espera el resultado de una orden. */
   const captura = useRef<string[] | null>(null);
@@ -495,6 +496,14 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   const fijarVoz = (v: boolean) => {
     actual.current.vozActiva = v;
     onVoz(v);
+  };
+  /** El botón de la voz (en la barra del asistente o en la nube de Melki): la enciende o la apaga (y calla lo que suena). */
+  const alternarVoz = (v: boolean) => {
+    fijarVoz(v);
+    if (!v) {
+      callar();
+      setHablando(false);
+    }
   };
   // Melki no habla (escucha, hace lo que se le pide y responde por escrito); en las pruebas de la voz empieza con ella
   useEffect(() => {
@@ -680,10 +689,24 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     hablar(t, () => setHablando(false));
   };
 
-  const agregarMelki = (r: Respuesta) => {
+  /**
+   * Agrega la respuesta a la conversación y la dice (o la muestra en la barra del asistente). Con `callada`, solo queda
+   * escrita: la dirá Melki cuando llegue volando al sitio (con la voz encendida, en su nube).
+   */
+  const agregarMelki = (r: Respuesta, callada = false) => {
     if (captura.current) captura.current.push(r.acciones?.length ? `${r.texto}\n(Opciones: ${r.acciones.map((a) => a.texto).join(" · ")})` : r.texto);
     setMensajes((m) => [...m, { id: siguiente.current++, de: "melki", texto: r.texto, acciones: r.acciones }]);
     if (!actual.current.abierto) setNoLeido(true);
+    if (callada) {
+      const m = ml.current;
+      m.ultimoCompleto = r.texto;
+      // El asistente queda atento mientras Melki vuela (lo que diga al llegar pausa la escucha con parlantes)
+      if (m.activo && m.despierto && !ia.current.activa) {
+        window.clearTimeout(m.pensando);
+        quedarAtento();
+      }
+      return;
+    }
     decir(r.voz ?? r.texto, r.texto);
   };
 
@@ -1568,18 +1591,21 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   /**
    * Melki llega volando a donde se le pidió ir. Con la presentación o el recorrido abiertos (una cosa a la vez), o si
    * el mapa no está listo, queda el punto de siempre. En el celular se recoge la conversación para verlo llegar (lo
-   * que responde también va en su nube).
+   * que responde también va en su nube). Con `narrar` y la voz encendida (sin la IA, que habla por su cuenta), lo que
+   * responde lo dice Melki al llegar, a la par de su nube: devuelve si es así (entonces la respuesta no se dice antes).
    */
-  const mostrarLlegada = (res: ResultadoOrden) => {
+  const mostrarLlegada = (res: ResultadoOrden, narrar = true): boolean => {
     const l = res.llegada;
-    if (!l) return;
+    if (!l) return false;
     const a = actual.current.api;
     if (pitchAbierto.current || recorridoAbierto.current || !a.mapaPitch?.()) {
       if (l.marca) a.marcar(l.lat, l.lon, l.marca.titulo, l.marca.tarjeta);
-      return;
+      return false;
     }
     if (typeof window !== "undefined" && window.matchMedia?.("(max-width: 639px)").matches && actual.current.abierto) setAbierto(false);
-    setLlegada({ ...l, n: ++nLlegada.current, accion: res.acciones?.find((x) => x.accion !== "deshacer") });
+    const conVoz = narrar && actual.current.vozActiva && !ia.current.activa && vozDisponible();
+    setLlegada({ ...l, n: ++nLlegada.current, accion: res.acciones?.find((x) => x.accion !== "deshacer"), narrar: conVoz });
+    return conVoz;
   };
 
   /** El botón de la nube de la llegada: la misma opción de la conversación (queda marcada como usada allá también). */
@@ -1602,13 +1628,13 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   const ejecutar = (orden: Orden) => {
     setLlegada(null);
     const res = ejecutarOrden(orden, api);
-    mostrarLlegada(res);
+    const narrada = mostrarLlegada(res);
     pendiente.current = res.pendiente ?? null;
     if (res.nodo) ultimoNodo.current = res.nodo;
     if (res.lugar) ultimoLugar.current = res.lugar;
     if (res.deshacer) ultimoDeshacer.current = res.deshacer;
     if (res.esperar) esperando.current = res.esperar;
-    agregarMelki(res);
+    agregarMelki(res, narrada);
     // Con los paneles ocultos, ofrece el que sirve (el resultado de una simulación lo ofrece cuando termine)
     if (!res.luego && !(res.esperar && VER_RESULTADOS.has(orden.tipo))) sugerirPanel(orden.tipo);
     // Órdenes que tardan (el sembrado automático, el diseño por área): la respuesta llega cuando el motor termina
@@ -1651,8 +1677,9 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       }
       if (NECESITA_RED.has(orden.tipo)) await api.esperarResultado();
       const res = ejecutarOrden(orden, api);
-      // Melki llega volando solo en el último paso (los siguientes moverían el mapa); antes, el punto de siempre
-      if (i === total - 1) mostrarLlegada(res);
+      // Melki llega volando solo en el último paso (los siguientes moverían el mapa); antes, el punto de siempre. En un
+      // plan lo que responde se dice como siempre (con el resumen al final): al llegar no lo repite
+      if (i === total - 1) mostrarLlegada(res, false);
       else if (res.llegada?.marca) api.marcar(res.llegada.lat, res.llegada.lon, res.llegada.marca.titulo, res.llegada.marca.tarjeta);
       pendiente.current = res.pendiente ?? null;
       if (res.nodo) ultimoNodo.current = res.nodo;
@@ -1747,9 +1774,10 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       return;
     }
     if (/\b(desactiva|apaga|quita|silencia)\w* (tu |la )?voz\b|\bcallate\b|\bsilencio\b|\bno hables\b/.test(sinAcentos)) {
+      // Primero sin voz: lo que estaba diciendo termina y lo siguiente ya queda solo escrito
+      fijarVoz(false);
       callar();
       setHablando(false);
-      fijarVoz(false);
       agregarMelki({ texto: "Listo, ya no hablo en voz alta: le escucho y le respondo por escrito." });
       return;
     }
@@ -2434,8 +2462,12 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     [versionPitch], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
-  /** Narra un texto: con la IA (su voz, con `pedidoIA` delante) si está conversando; si no, con la voz del equipo o el tiempo de leerlo. */
-  const narrarCon = (pedidoIA: string, texto: string, fin: () => void): (() => void) => {
+  /**
+   * Narra un texto: con la IA (su voz, con `pedidoIA` delante) si está conversando; si no, con la voz del equipo o el
+   * tiempo de leerlo. Con la voz del equipo, `opciones.alTrozo` avisa qué parte del texto empieza a sonar (para escribirlo
+   * a la par) y `opciones.alFallar`, que la voz no pudo sonar; con `opciones.sinIA`, siempre con la voz del equipo.
+   */
+  const narrarCon = (pedidoIA: string, texto: string, fin: () => void, opciones?: OpcionesNarrar & { sinIA?: boolean }): (() => void) => {
     const x = ia.current;
     let hecho = false;
     const terminar = () => {
@@ -2444,7 +2476,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       fin();
     };
     const tiempo = Math.max(2500, texto.length * 68);
-    if (x.activa && x.sesion) {
+    if (x.activa && x.sesion && !opciones?.sinIA) {
       x.alNarrar = terminar;
       const pedido = `${pedidoIA} ${texto}`;
       x.narracion = { texto: pedido, sesion: x.sesion };
@@ -2478,8 +2510,10 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       () => {
         // Sin voz (el navegador no deja hablar todavía): el tiempo de leerlo
         fallo = true;
+        opciones?.alFallar?.();
         t = window.setTimeout(terminar, tiempo);
       },
+      opciones?.alTrozo,
     );
     return () => {
       hecho = true;
@@ -2492,6 +2526,30 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   const narrarPitch: Narrador = (texto, fin) => narrarCon("(Capítulo de la presentación para el público. Nárralo con tus palabras, con tono de pitch profesional, en unos 30 a 50 segundos y sin agregar cifras que no estén aquí:)", texto, fin);
   /** Lo breve de cada punto del recorrido (el detalle va escrito en la nube). */
   const narrarRecorrido: Narrador = (texto, fin) => narrarCon("(Punto del recorrido de la red. Dilo en voz alta con tus palabras, en 10 a 20 segundos, sin agregar cifras que no estén aquí; el detalle ya está escrito en pantalla:)", texto, fin);
+  /**
+   * Lo que dice Melki al llegar volando (con la voz encendida; con la IA, la que habla es ella). Si en ese momento suena
+   * otra cosa (la cola del asistente), espera a que termine (hasta unos 8 s) para no cortarla.
+   */
+  const narrarLlegada: NarradorLlegada = (texto, fin, opciones) => {
+    let parar: (() => void) | null = null;
+    let vivo = true;
+    let t = 0;
+    const intentar = (n: number) => {
+      if (!vivo) return;
+      const m = ml.current;
+      if (n < 40 && ((m.estado === "hablando" && m.conVoz) || m.cola.length > 0 || sonando())) {
+        t = window.setTimeout(() => intentar(n + 1), 200);
+        return;
+      }
+      parar = narrarCon("", texto, fin, { ...opciones, sinIA: true });
+    };
+    intentar(0);
+    return () => {
+      vivo = false;
+      window.clearTimeout(t);
+      parar?.();
+    };
+  };
 
   /* ───────────── Recorrido de la red ───────────── */
 
@@ -2777,6 +2835,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       nivel={nivelVoz}
       voz={vozActiva}
       parlantes={!manos.audifonos && vozActiva}
+      onVoz={vozDisponible() ? alternarVoz : undefined}
     />
     {llegada && (
       <LlegadaRobot
@@ -2787,6 +2846,10 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
         reservaDerecha={abierto ? 414 : 0}
         sugerencia={llegada.accion?.texto}
         onSugerencia={llegada.accion ? () => pulsarDesdeLlegada(llegada) : undefined}
+        voz={vozActiva}
+        onVoz={vozDisponible() ? alternarVoz : undefined}
+        narrar={modoIA ? undefined : narrarLlegada}
+        narrarAlLlegar={!!llegada.narrar}
         onFin={() => setLlegada((x) => (x?.n === llegada.n ? null : x))}
       />
     )}

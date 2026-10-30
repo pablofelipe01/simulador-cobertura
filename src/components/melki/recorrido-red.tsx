@@ -6,7 +6,8 @@
 "use client";
 
 // El recorrido de la red con el robot de Melki: vuela de punto en punto (la cámara lo sigue), señala cada antena y de
-// ella sale una nube que escribe qué se instaló, por qué ahí y qué papel cumple. No habla (lo normal); con la voz
+// ella sale una nube holográfica (translúcida: se ve la simulación detrás) que escribe qué se instaló, por qué ahí y qué
+// papel cumple. No habla (lo normal); con la voz
 // encendida (el parlante) dice solo lo breve. Un punto a la vez, sin llenar el mapa. La nube escribe al ritmo de
 // lectura; al terminar, una barra cuenta unos segundos para mirar las cifras y sigue sola al próximo punto (con el
 // puntero encima, espera). Se maneja con los botones, el teclado (← → espacio Esc) o pidiéndoselo a Melki
@@ -322,7 +323,9 @@ export function RecorridoRed({
       {punto && !volando && <span className="pitch-anillo absolute h-16 w-16 rounded-full border-4 border-melki" style={{ left: punto.x, top: punto.y }} aria-hidden="true" />}
       {pos && (
         <div className="pitch-robot absolute top-0 left-0" style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }} data-robot={gesto}>
-          <RobotMelki gesto={gesto} hablando={narrando && (voz || narradorIA)} mirando={pos.mirando} className="h-32 w-[6.4rem] sm:h-44 sm:w-36" titulo={`Melki ${narrando ? "explicando la red" : "en el recorrido de la red"}`} />
+          {/* Se posa sobre un halo de luz junto al punto que explica */}
+          {!volando && <span className="llegada-halo" aria-hidden="true" />}
+          <RobotMelki gesto={gesto} hablando={narrando && (voz || narradorIA)} mirando={pos.mirando} className="relative h-32 w-[6.4rem] sm:h-44 sm:w-36" titulo={`Melki ${narrando ? "explicando la red" : "en el recorrido de la red"}`} />
         </div>
       )}
       {!volando && zonaTam && anclaNube && (
@@ -345,6 +348,7 @@ export function RecorridoRed({
           maxMs={ESCRITURA_LECTURA.maxMs}
           cuenta={lista && auto && !ultima ? { ms: pausa, pausada: !reproduciendo || sobre } : null}
           onSobre={setSobre}
+          estilo="holo"
         />
       )}
       {/* Controles */}

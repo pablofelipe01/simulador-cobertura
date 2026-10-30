@@ -624,6 +624,21 @@ const cargarMalla = async (page) => {
   await page.waitForTimeout(400);
   await esperarRed(page);
 };
+/**
+ * v13.4: ¿la nube es holográfica? Translúcida (ningún tono de su fondo pasa del 60 % de opacidad), con lo de atrás
+ * desenfocado y oscurecido un poco (se ve la simulación, pero el texto se lee) y el texto claro.
+ */
+const estiloHolo = (nube) =>
+  nube.evaluate((el) => {
+    const s = getComputedStyle(el);
+    const filtro = s.backdropFilter || s.webkitBackdropFilter || "";
+    const alfas = [...s.backgroundImage.matchAll(/rgba\([^)]*,\s*([\d.]+)\)/g)].map((x) => Number(x[1]));
+    const [r, g, b] = (s.color.match(/[\d.]+/g) ?? []).map(Number);
+    const luz = Math.round(((0.2126 * r + 0.7152 * g + 0.0722 * b) / 255) * 100) / 100;
+    const alfaMax = alfas.length ? Math.max(...alfas) : 1;
+    const clase = el.classList.contains("nube-holo");
+    return { filtro, alfaMax, color: s.color, luz, clase, ok: clase && /blur/.test(filtro) && /brightness/.test(filtro) && alfaMax <= 0.6 && luz > 0.8 };
+  });
 /** Número de una cifra del «Estado de la red». */
 const cifra = async (page, etiqueta) => (await page.locator("[data-tour=estado-red] > div > div").filter({ hasText: etiqueta }).locator("p").first().innerText()).trim();
 const guia = (page) => page.locator("[data-tour=guia-sembrar]").innerText();
@@ -1566,6 +1581,13 @@ await flujo(
     await panel.waitFor({ state: "hidden", timeout: 5000 });
     await callado();
     await foto("despierto");
+    // (v13.4: con la voz encendida Melki lo dice al llegar volando; Esc lo devuelve a su esquina, así su nube no tapa la
+    // barra que se va a mover; si la barra ya se achicó sola esperando su nombre, se agranda)
+    await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
+    await page.keyboard.press("Escape");
+    await page.locator("[data-tour=llegada-melki]").waitFor({ state: "detached", timeout: 15000 });
+    const agrandarAntes = hud.getByRole("button", { name: "Agrandar la barra del asistente" });
+    if (await agrandarAntes.count()) await agrandarAntes.click();
     // La barra se arrastra a otra parte del mapa, se achica y se agranda
     const antes = await hud.boundingBox();
     await page.mouse.move(antes.x + 70, antes.y + 16);
@@ -1635,16 +1657,18 @@ await flujo(
     // Un lugar mal escrito por el dictado: lo entiende, lo lleva y ofrece la red de todo el municipio
     await decir("Hey Melki, ubícame en barranca de UPA meta");
     await hud.waitFor({ timeout: 10000 });
-    // (lo dicho en voz alta: «40919 hectáreas», sin las comillas)
-    await oido(/Lo llevé a Barranca de Upía \(Meta\), un municipio de 409\d\d hectáreas/);
+    // (lo dicho en voz alta: «40919 hectáreas», sin las comillas). v13.4: con la voz encendida lo dice Melki al llegar
+    // volando, a la par de su nube (y no la respuesta de la conversación antes)
+    await oido(/¡Hola, señor! Esto es Barranca de Upía \(Meta\): un municipio de 409\d\d hectáreas/);
     await callado();
+    afirmar(!/Lo llevé a Barranca/.test(await page.evaluate(() => window.__voz.dicho.join(" "))), "La respuesta no debería decirse dos veces (antes de llegar y al llegar)");
     await foto("lugar");
     // Si duda, pregunta; «sí» elige la primera opción
     await decir("Melki, ubícame en barranco vía");
     await oido(/No estoy seguro de haber entendido barranco via\. ¿Se refiere a Barranca de Upía \(Meta\)/);
     await callado();
     await decir("Melki, sí");
-    await page.waitForFunction(() => window.__voz.dicho.filter((x) => /Lo llevé a Barranca de Upía/.test(x)).length >= 2, null, { timeout: 15000 });
+    await page.waitForFunction(() => window.__voz.dicho.filter((x) => /Esto es Barranca de Upía/.test(x)).length >= 2, null, { timeout: 20000 });
     await callado();
     // Lo que no entiende lo pide de nuevo, con lo que oyó
     await decir("Melki, barranco loco pla xyz");
@@ -1726,9 +1750,10 @@ await flujo(
     // Con parlantes y frases duplicadas: un solo pedido, una sola respuesta, y no se responde a sí mismo
     await decir("Hey Melki, llévame a Villavicencio");
     await hud.waitFor({ timeout: 10000 });
-    await oido(/Lo llevé a Villavicencio/);
+    // (v13.4: lo dice al llegar volando, a la par de su nube)
+    await oido(/Esto es Villavicencio/);
     await sinBucle();
-    afirmar((await veces(/Lo llevé a Villavicencio/)) === 1, `Respondió más de una vez (eco o pedido duplicado): ${await veces(/Lo llevé a Villavicencio/)}`);
+    afirmar((await veces(/Esto es Villavicencio/)) === 1 && (await veces(/Lo llevé a Villavicencio/)) === 0, `Respondió más de una vez (eco o pedido duplicado): ${await veces(/Esto es Villavicencio/)}`);
     afirmar((await veces(/Diseño la malla/)) === 0, "No debe tomar su propia sugerencia («¿le armo una red…?») como pedido");
     await foto("sin-eco");
 
@@ -1852,12 +1877,13 @@ await flujo(
 
     await decir("Hey Melki, llévame a Villavicencio");
     await hud.waitFor({ timeout: 10000 });
-    await oido(/Lo llevé a Villavicencio/);
+    // (v13.4: lo dice al llegar volando, a la par de su nube)
+    await oido(/Esto es Villavicencio/);
     await callado();
     await page.waitForFunction(() => Boolean(window.__voz.activo), null, { timeout: 3000 });
     await page.waitForTimeout(4000);
     await callado();
-    afirmar((await veces(/Lo llevé a Villavicencio/)) === 1, `Respondió más de una vez: ${await veces(/Lo llevé a Villavicencio/)}`);
+    afirmar((await veces(/Esto es Villavicencio/)) === 1 && (await veces(/Lo llevé a Villavicencio/)) === 0, `Respondió más de una vez: ${await veces(/Esto es Villavicencio/)}`);
     const medida = await page.evaluate(() => ({ oye: window.__oyeHablando, pausa: window.__pausaHablando }));
     afirmar(medida.pausa >= 2 && medida.oye <= 3, `Con parlantes no debería escuchar mientras habla (escuchando ${medida.oye}, en pausa ${medida.pausa})`);
     await foto("pausa-al-hablar");
@@ -2006,6 +2032,8 @@ await flujo(
       { timeout: 15000 },
     );
     afirmar(/Le respondo por escrito/.test(await hud.textContent()), "La barra debería decir que responde por escrito");
+    // v13.4: la barra trae el botón «Voz de Melki» para encenderla a mano (apagada, lo normal)
+    afirmar((await hud.getByRole("button", { name: "Voz de Melki" }).getAttribute("aria-pressed")) === "false", "La barra debería traer el botón de la voz, apagado");
     afirmar((await hud.getByRole("button", { name: "Callar a Melki" }).count()) === 0, "Sin voz no hay nada que callar");
     afirmar((await hud.getByRole("button", { name: "Toque aquí para oír mi voz" }).count()) === 0, "Sin voz no pide un toque para hablar");
     afirmar(await page.evaluate(() => Boolean(window.__voz.activo)), "Mientras responde por escrito debería seguir escuchando");
@@ -2046,6 +2074,17 @@ await flujo(
     await chat.getByText(/Estamos viendo Villavicencio/).nth(1).waitFor({ timeout: 10000 });
     await page.waitForTimeout(2500);
     afirmar((await dichos()) === conVoz, `Después de «no hables» no debería volver a hablar: ${await lo()}`);
+    // v13.4: el botón «Voz de Melki» de la barra la enciende a mano (lo siguiente se oye) y la vuelve a apagar
+    const vozBarra = hud.getByRole("button", { name: "Voz de Melki" });
+    await vozBarra.click();
+    afirmar((await vozBarra.getAttribute("aria-pressed")) === "true" && (await chat.getByRole("button", { name: "Silenciar a Melki" }).getAttribute("aria-pressed")) === "true", "El botón de la barra debería encender la voz (la misma de la conversación)");
+    await chat.getByRole("textbox").fill("¿dónde estamos?");
+    await chat.getByRole("textbox").press("Enter");
+    await page.waitForFunction((n) => window.__voz.dicho.slice(n).some((x) => /Estamos viendo Villavicencio/.test(x)), conVoz, { timeout: 15000 });
+    await foto("voz-a-mano");
+    await vozBarra.click();
+    await page.waitForFunction(() => !window.speechSynthesis.speaking, null, { timeout: 5000 });
+    afirmar((await vozBarra.getAttribute("aria-pressed")) === "false" && (await chat.getByRole("button", { name: "Escuchar las respuestas" }).getAttribute("aria-pressed")) === "false", "El botón de la barra debería volver a apagar la voz");
   },
   {
     preparar: async (page) => {
@@ -2180,8 +2219,8 @@ await flujo(
     afirmar((await page.locator("[data-tour=recorrido-red][data-parada=panorama]").count()) === 1, "Con el puntero encima no debería haber seguido al próximo punto");
     await page.mouse.move(4, 300);
     await rec.locator("[data-cuenta=corre]").waitFor({ timeout: 3000 });
-    // A mano, para revisar cada punto
-    await rec.getByRole("button", { name: /^Avanza solo/ }).click();
+    // A mano, para revisar cada punto (enseguida: en un equipo lento la barra no alcanza a terminar mientras se toca)
+    await rec.getByRole("button", { name: /^Avanza solo/ }).evaluate((b) => b.click());
     afirmar((await page.locator("[data-tour=recorrido-red][data-parada=panorama]").count()) === 1 && (await rec.locator("[data-cuenta]").count()) === 0, "A mano no cuenta el tiempo ni sigue solo");
     afirmar(/Recorrido · 1 de 8/.test(await nube.textContent()), `El panorama no dice el paso: ${(await nube.textContent()).slice(0, 80)}`);
     afirmar(/El recorrido sigue el camino de la señal/.test(await nube.textContent()), "El panorama no explica el recorrido");
@@ -2204,11 +2243,10 @@ await flujo(
     afirmar(/Se instaló el sitio gateway/.test(tGw) && /Starlink/.test(tGw) && /Altura de la antena/.test(tGw) && /enlaza directo con/.test(tGw), `La nube del gateway no está completa: ${tGw.slice(0, 200)}`);
     afirmar((await rec.locator(".nube-linea path").count()) >= 1, "Falta la línea que señala el punto");
     afirmar((await rec.locator("[data-robot]").count()) === 1, "Falta el robot junto al gateway");
-    const vidrio = await nube.evaluate((el) => {
-      const s = getComputedStyle(el);
-      return { filtro: s.backdropFilter || s.webkitBackdropFilter || "", fondo: s.backgroundImage, color: s.color };
-    });
-    afirmar(/blur/.test(vidrio.filtro) && /rgba/.test(vidrio.fondo) && vidrio.color === "rgb(43, 47, 46)", `La nube debería ser de vidrio translúcido con el texto oscuro: ${JSON.stringify(vidrio)}`);
+    // v13.4: la nube es holográfica: translúcida (se ve la simulación detrás, apenas oscurecida) y con el texto claro
+    const holo = await estiloHolo(nube);
+    afirmar(holo.ok, `La nube debería ser holográfica y translúcida, con el texto claro: ${JSON.stringify(holo)}`);
+    afirmar((await rec.locator(".holo-marco").count()) === 1, "Falta el marco de luz del holograma");
     const mapa = await page.locator("[data-tour=mapa]").boundingBox();
     const caja = await nube.boundingBox();
     afirmar(caja.x >= mapa.x - 1 && caja.x + caja.width <= mapa.x + mapa.width + 1 && caja.y >= mapa.y - 1 && caja.y + caja.height <= mapa.y + mapa.height + 1, "La nube debería quedar dentro del mapa");
@@ -2330,11 +2368,29 @@ await flujo(
     afirmar(await nube.getByRole("button", { name: "Sí, la red de todo el municipio" }).isVisible(), "La nube debería traer la sugerencia");
     await page.waitForTimeout(1200);
     afirmar((await nube.getAttribute("data-escrito")) === "no", "La nube debería escribir al ritmo de lectura, no de golpe");
+    // v13.4: holográfica y translúcida (se ve la simulación detrás), con su marco de luz y los datos del municipio
+    const holo = await estiloHolo(nube);
+    afirmar(holo.ok, `La nube de la llegada debería ser holográfica y translúcida, con el texto claro: ${JSON.stringify(holo)}`);
+    afirmar((await lleg.locator(".holo-marco").count()) === 1 && (await lleg.locator(".llegada-halo").count()) === 1, "Faltan el marco de luz de la nube o el halo donde se posa el robot");
+    afirmar(/Área/.test(t) && /40\.9\d\d ha/.test(t) && /Departamento/.test(t) && /Nodos en el municipio/.test(t), `La nube debería traer los datos del municipio: ${t.slice(0, 240)}`);
     // Con la conversación abierta, la nube no la tapa
     const cajaNube = await nube.boundingBox();
     const cajaChat = await chat.boundingBox();
     afirmar(cajaNube.x + cajaNube.width <= cajaChat.x + 2, `La nube no debería tapar la conversación (${Math.round(cajaNube.x + cajaNube.width)} > ${Math.round(cajaChat.x)})`);
     await foto("saludo");
+    // La voz, a mano: apagada (lo normal) no dice nada; el botón «Voz» de la nube la enciende y Melki lo dice en voz
+    // alta (la nube lo escribe a la par); vuelve a apagarla y calla. Es la misma voz de la conversación
+    const botonVoz = lleg.getByRole("button", { name: "Voz de Melki" });
+    afirmar((await botonVoz.getAttribute("aria-pressed")) === "false" && (await page.evaluate(() => window.__voz.dicho.length)) === 0, "Sin encender la voz, Melki no debería hablar al llegar");
+    await botonVoz.click();
+    await page.waitForFunction(() => /¡Hola, señor! Esto es Barranca de Upía \(Meta\): un municipio de 409\d\d hectáreas/.test(window.__voz.dicho.join(" ")), null, { timeout: 10000 });
+    afirmar((await botonVoz.getAttribute("aria-pressed")) === "true" && (await lleg.getAttribute("data-voz")) === "si", "El botón de la voz debería quedar encendido");
+    afirmar((await chat.getByRole("button", { name: "Silenciar a Melki" }).getAttribute("aria-pressed")) === "true", "Es la misma voz: el parlante de la conversación también se enciende");
+    afirmar(!/Lo llevé a/.test(await page.evaluate(() => window.__voz.dicho.join(" "))), "Dice lo de la nube, no la respuesta de la conversación");
+    await foto("voz");
+    await botonVoz.click();
+    await page.waitForFunction(() => !window.speechSynthesis.speaking, null, { timeout: 5000 });
+    afirmar((await botonVoz.getAttribute("aria-pressed")) === "false" && (await lleg.getAttribute("data-hablando")) === "no", "Al apagar la voz, Melki calla");
     // Un toque la termina de escribir; la barra cuenta el tiempo para volver. Esc lo manda de vuelta a su esquina
     await nube.click({ position: { x: 24, y: 12 } });
     await lleg.locator(".nube-mapa[data-escrito=si]").waitFor({ timeout: 10000 });
@@ -2351,13 +2407,34 @@ await flujo(
     await page.waitForTimeout(2900);
     afirmar((await lleg.getAttribute("data-gesto")) === "senalando" && (await lleg.locator(".pitch-anillo").count()) === 1, `En una coordenada debería señalar el sitio (${await lleg.getAttribute("data-gesto")})`);
     afirmar((await page.locator(".pin-punto").count()) === 0 && (await page.getByRole("dialog", { name: "Punto marcado" }).count()) === 0, "Sin punto rojo ni tarjeta: lo señala Melki");
+    // Sus datos reales: el nodo más cercano (con la red del ejemplo); la voz sigue apagada
+    afirmar(/Nodo más cercano/.test(await lleg.locator(".nube-mapa").textContent()), "En una coordenada la nube debería decir cuál es el nodo más cercano");
+    afirmar((await lleg.getAttribute("data-voz")) === "no" && !(await page.evaluate(() => window.speechSynthesis.speaking)), "Con la voz apagada no debería hablar");
     await foto("coordenada");
     await lleg.locator(".nube-mapa").getByRole("button", { name: "Inscribir un nodo antena ahí" }).click();
     await page.waitForFunction((n) => document.querySelectorAll("[data-tour=lista-antenas] > li").length === n + 1, antes, { timeout: 10000 });
     await lleg.waitFor({ state: "detached", timeout: 8000 });
     afirmar(await chat.getByRole("button", { name: "Inscribir un nodo antena ahí" }).last().isDisabled(), "El botón de la conversación debería quedar usado");
+    // (que termine la simulación del nodo nuevo y su resultado quede escrito)
+    await page.waitForFunction(() => !document.querySelector("[role=progressbar]"), null, { timeout: 90000 });
+    await page.waitForTimeout(1500);
+    // Con la voz encendida desde la conversación, al llegar Melki lo dice en voz alta (y no antes): una sola vez
+    await chat.getByRole("button", { name: "Escuchar las respuestas" }).click();
+    const antesVoz = await page.evaluate(() => window.__voz.dicho.length);
+    await chat.getByRole("textbox").fill("ubícame en Cumaral");
+    await chat.getByRole("textbox").press("Enter");
+    await page.locator("[data-tour=llegada-melki][data-fase=llego]").waitFor({ timeout: 15000 });
+    await page.waitForFunction((n) => /Esto es Cumaral \(Meta\)/.test(window.__voz.dicho.slice(n).join(" ")), antesVoz, { timeout: 15000 });
+    await page.waitForFunction(() => !window.speechSynthesis.speaking, null, { timeout: 20000 });
+    const dicho = await page.evaluate((n) => window.__voz.dicho.slice(n), antesVoz);
+    afirmar(!dicho.some((x) => /Lo llevé a Cumaral/.test(x)) && dicho.filter((x) => /Esto es Cumaral/.test(x)).length === 1, `Al llegar debería decirlo una sola vez (sin la respuesta de la conversación): ${dicho.join(" | ").slice(0, 300)}`);
+    await lleg.locator(".nube-mapa[data-escrito=si]").waitFor({ timeout: 15000 });
+    await lleg.locator("[data-cuenta]").waitFor({ timeout: 5000 });
+    await foto("voz-al-llegar");
+    await lleg.getByRole("button", { name: "Cerrar (Melki vuelve a su lugar)" }).click();
+    await lleg.waitFor({ state: "detached", timeout: 8000 });
   },
-  { tamano: { width: 1920, height: 1080 } },
+  { tamano: { width: 1920, height: 1080 }, preparar: (page) => page.addInitScript(manosLibresDeMentira) },
 );
 
 await flujo(

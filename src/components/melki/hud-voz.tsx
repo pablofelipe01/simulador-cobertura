@@ -6,11 +6,12 @@
 "use client";
 
 // Barra del Asistente Melki sobre el mapa: el orbe animado según lo que hace (esperando su nombre, escuchando,
-// pensando, hablando), lo que va oyendo, lo que está diciendo (subtítulos) y las sugerencias del momento. Para no
+// pensando, hablando), lo que va oyendo, lo que está diciendo (subtítulos), las sugerencias del momento y el botón de
+// la voz (para que Melki hable en voz alta o solo responda por escrito, a mano). Para no
 // estorbar: se arrastra a cualquier parte del mapa (y recuerda dónde quedó; doble clic la devuelve a su sitio), se
 // encoge sola a una píldora mientras espera su nombre y crece cuando lo llaman; también se puede dejar siempre pequeña.
 // En reposo («dormido») no se muestra: Melki solo escucha su nombre.
-import { CircleHelp, Maximize2, Minimize2, PanelLeft, PanelRight, Sparkles, Square, Volume2, X } from "lucide-react";
+import { CircleHelp, Maximize2, Minimize2, PanelLeft, PanelRight, Sparkles, Square, Volume2, VolumeX, X } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties, type MouseEvent as EventoRaton, type PointerEvent as EventoPuntero, type ReactNode } from "react";
 
 import type { EstadoManosLibres } from "./manos-libres";
@@ -132,17 +133,34 @@ function Chip({ icono, texto, resaltado, onClick }: { icono: ReactNode; texto: s
   );
 }
 
-function Boton({ etiqueta, titulo, onClick, children, fondo }: { etiqueta: string; titulo?: string; onClick: () => void; children: ReactNode; fondo?: boolean }) {
+function Boton({ etiqueta, titulo, onClick, children, fondo, presionado }: { etiqueta: string; titulo?: string; onClick: () => void; children: ReactNode; fondo?: boolean; presionado?: boolean }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${fondo ? "bg-white/10 hover:bg-white/20" : "text-white/80 hover:bg-white/15 hover:text-white"}`}
+      className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${
+        presionado ? "bg-melki/30 text-[#ffd2b8] ring-1 ring-[#ffb27a]/60 hover:bg-melki/40" : fondo ? "bg-white/10 hover:bg-white/20" : "text-white/80 hover:bg-white/15 hover:text-white"
+      }`}
       aria-label={etiqueta}
+      aria-pressed={presionado}
       title={titulo ?? etiqueta}
     >
       {children}
     </button>
+  );
+}
+
+/** El botón de la voz de Melki: encendida, habla en voz alta; apagada (lo normal), responde por escrito. */
+function BotonVoz({ voz, onVoz }: { voz: boolean; onVoz: (v: boolean) => void }) {
+  return (
+    <Boton
+      etiqueta="Voz de Melki"
+      titulo={voz ? "Melki habla en voz alta (toque para que solo responda por escrito)" : "Melki responde por escrito (toque para que hable en voz alta)"}
+      onClick={() => onVoz(!voz)}
+      presionado={voz}
+    >
+      {voz ? <Volume2 size={15} /> : <VolumeX size={15} />}
+    </Boton>
   );
 }
 
@@ -163,6 +181,7 @@ export function HudVoz({
   ia = false,
   voz = false,
   parlantes = false,
+  onVoz,
 }: {
   estado: EstadoManosLibres;
   /** Lo que va reconociendo (en vivo). */
@@ -193,6 +212,8 @@ export function HudVoz({
   voz?: boolean;
   /** Con parlantes no escucha mientras habla (para no oírse a sí mismo): se le calla con el botón. */
   parlantes?: boolean;
+  /** Con él, la barra trae el botón para encender o apagar la voz de Melki a mano. */
+  onVoz?: (v: boolean) => void;
 }) {
   const [pos, setPos] = useState<Posicion>(() => leerHud().pos);
   const [mini, setMini] = useState(() => leerHud().mini);
@@ -314,6 +335,7 @@ export function HudVoz({
             <Square size={12} fill="currentColor" />
           </Boton>
         )}
+        {onVoz && <BotonVoz voz={voz} onVoz={onVoz} />}
         <Boton etiqueta="Agrandar la barra del asistente" onClick={() => fijarMini(false)}>
           <Maximize2 size={14} />
         </Boton>
@@ -354,6 +376,7 @@ export function HudVoz({
             <Square size={12} fill="currentColor" />
           </Boton>
         )}
+        {onVoz && <BotonVoz voz={voz} onVoz={onVoz} />}
         <Boton etiqueta="¿Qué hago ahora?" onClick={() => onSugerencia("que-hago")}>
           <Sparkles size={15} />
         </Boton>

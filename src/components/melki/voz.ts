@@ -133,39 +133,68 @@ function vozDelEquipo(): SpeechSynthesisVoice | undefined {
 }
 
 /**
- * Lee el texto en voz alta; devuelve una función para detenerlo. `alTerminar` se llama una sola vez. `alFallar` recibe
- * el error de la voz (por ejemplo «not-allowed»: el navegador no deja hablar hasta que la persona toque la página).
+ * Lo que está diciendo ahora: `callar()` lo da por terminado (quien esperaba el final, como la narración de la llegada
+ * o del recorrido o la cola del asistente, sigue); si empieza otra voz, queda interrumpido (avisa un fallo
+ * «interrupted» y ya no corta nada: detenerlo después no calla a la voz nueva).
+ */
+type Sesion = { fin: () => void; interrumpir: () => void };
+const enCurso = new Set<Sesion>();
+
+/**
+ * Lee el texto en voz alta; devuelve una función para detenerlo. `alTerminar` se llama una sola vez (también si se la
+ * calla con `callar()`). `alFallar` recibe el error de la voz (por ejemplo «not-allowed»: el navegador no deja hablar
+ * hasta que la persona toque la página; o «interrupted»: empezó otra voz y esta ya no sigue).
  *
  * Dice un trozo a la vez (cada uno empieza cuando termina el anterior): así ninguno pasa de unos 10 s, si uno no avisa
  * que terminó se sigue con el siguiente a su tiempo y, si la voz en línea falla (la red), se repite ese trozo con una
- * voz del equipo en vez de quedarse a medias.
+ * voz del equipo en vez de quedarse a medias. `alTrozo` avisa cuándo empieza cada trozo (dónde empieza y cuánto mide,
+ * en letras de lo que se dice), para escribir el texto a medida que Melki lo va diciendo.
  */
-export function hablar(texto: string, alTerminar?: () => void, alFallar?: (error: string) => void): () => void {
+export function hablar(texto: string, alTerminar?: () => void, alFallar?: (error: string) => void, alTrozo?: (desde: number, largo: number, total: number) => void): () => void {
   if (!vozDisponible()) {
     alTerminar?.();
     return () => {};
   }
   const s = window.speechSynthesis;
   const ocupada = s.speaking || s.pending;
+  // Lo que sonaba queda interrumpido por esta voz: se le avisa (sin darlo por terminado)
+  const antes = [...enCurso];
+  enCurso.clear();
   s.cancel();
+  for (const x of antes) x.interrumpir();
   const partes = trozosVoz(paraHablar(texto));
+  const total = partes.reduce((n, p) => n + p.length, 0);
+  const inicios = partes.map((_, i) => partes.slice(0, i).reduce((n, p) => n + p.length, 0));
   let terminado = false;
   let k = 0;
   let guardia = 0;
   let espera = 0;
   let voz = elegirVoz();
   let cambioVoz = false;
-  const fin = () => {
-    if (terminado) return;
+  const cerrar = () => {
     terminado = true;
+    enCurso.delete(sesion);
     window.clearTimeout(guardia);
     window.clearTimeout(espera);
+  };
+  const fin = () => {
+    if (terminado) return;
+    cerrar();
     alTerminar?.();
+  };
+  const sesion: Sesion = {
+    fin,
+    interrumpir: () => {
+      if (terminado) return;
+      cerrar();
+      alFallar?.("interrupted");
+    },
   };
   if (!partes.length) {
     fin();
     return () => {};
   }
+  enCurso.add(sesion);
   const decirTrozo = () => {
     if (terminado) return;
     if (k >= partes.length) return fin();
@@ -211,6 +240,10 @@ export function hablar(texto: string, alTerminar?: () => void, alFallar?: (error
     vivas.add(u);
     // Si el trozo no avisa que terminó (pasa en algunos navegadores), se sigue con el siguiente a su tiempo
     guardia = window.setTimeout(avanzar, 2500 + trozo.length * 95);
+    // Cuándo empieza a sonar este trozo (al pedirlo y, si la voz lo avisa, al sonar de verdad)
+    const i = k;
+    if (alTrozo) u.onstart = () => alTrozo(inicios[i], trozo.length, total);
+    alTrozo?.(inicios[i], trozo.length, total);
     s.speak(u);
   };
   // Justo después de cancelar otra voz, Chrome a veces se salta lo siguiente: se espera un instante
@@ -223,8 +256,13 @@ export function hablar(texto: string, alTerminar?: () => void, alFallar?: (error
   };
 }
 
+/** Calla a Melki ya. Lo que estaba diciendo se da por terminado: quien esperaba el final (el recorrido, la llegada) sigue. */
 export function callar() {
-  if (vozDisponible()) window.speechSynthesis.cancel();
+  if (!vozDisponible()) return;
+  const sonaban = [...enCurso];
+  enCurso.clear();
+  window.speechSynthesis.cancel();
+  for (const x of sonaban) x.fin();
 }
 
 /** ¿Hay alguna voz sonando (de Melki o de un tour)? */

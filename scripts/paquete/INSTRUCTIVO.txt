@@ -473,8 +473,9 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
     falta, los refuerzos para que funcione al 100 % y al 99,9 % (los
     repetidores de apoyo, los enlaces por reforzar, los respaldos, el
     segundo gateway y lo que cuestan) y, al final, por qué la red quedó
-    así. De cada punto sale una nube de vidrio, con una línea que lo
-    señala, que va escribiendo al ritmo de lectura:
+    así. De cada punto sale una nube holográfica y translúcida (se ve
+    la simulación detrás), con una línea de luz que lo señala, que va
+    escribiendo al ritmo de lectura:
       - qué se instaló (equipo, antena, altura, energía solar),
       - por qué ahí (el terreno frente al resto de la red, su enlace:
         distancia, línea de vista y margen, y dónde está su gente),
@@ -509,6 +510,18 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
     queda a su izquierda; en el celular la conversación se recoge para
     verlo llegar. El buscador de la barra de arriba sigue marcando el
     punto con su tarjeta.
+    La nube es holográfica y translúcida: se ve la simulación detrás
+    (apenas oscurecida para que el texto se lea), con su borde de luz y
+    los datos del sitio, solo los reales: en un municipio su área, su
+    departamento y cuántos nodos hay dentro; en una coordenada la señal
+    ahí (con la última simulación) y el nodo más cercano; en una antena
+    su altura, su alcance, sus enlaces y los saltos al gateway.
+ u) La voz de Melki, a mano: lo normal es que no hable. Para que hable,
+    toque el botón "Voz" de su nube cuando llega volando (o "Voz de
+    Melki" en la barra del asistente, o el parlante de la conversación):
+    lo dice en voz alta y la nube lo escribe a la par de su voz. Vuelva
+    a tocarlo y calla (la nube sigue escribiendo). Con la voz encendida,
+    cada vez que lo mande a un lugar lo dice al llegar (no antes).
 
 
 3. BUENO SABER
