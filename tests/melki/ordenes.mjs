@@ -24,7 +24,7 @@ export { numerosEnPalabras } from "./src/components/melki/numeros";
 export { detectarActivacion, controlDeVoz, limpiarComando, textoParaVoz, pareceEco, empiezaConNombre, AYUDA_VOZ, SALUDO_MANOS_LIBRES, esNombre, frases, elegirAlternativa } from "./src/components/melki/manos-libres";
 export { buscarLugares, cargarReferencia, pareceNombre, reconocerLugares, decidirLugar, contornoLugar, nombresParaVoz, textoUbicacion } from "./src/lib/geo/referencia";
 export { costoRedTrama } from "./src/lib/radio/trama";
-export { paraHablar, puntajeVoz, trozosVoz } from "./src/components/melki/voz";
+export { paraHablar, puntajeVoz, trozosVoz, hablar, callar } from "./src/components/melki/voz";
 export { estadoInicial, reductor } from "./src/components/simulador/estado";
 export { estadoRed } from "./src/lib/radio/estado-red";
 export { FICHA_GATEWAY } from "./src/lib/radio/protocolos";
@@ -324,6 +324,57 @@ function crearApi(antenas) {
     irAntena?.tipo === "ir" && irAntena.id === "e" && rAntena.llegada?.gesto === "senalando" && /^Aquí está «Ejemplo»: el gateway/.test(rAntena.llegada.parrafos[0]) && rAntena.acciones?.[0]?.accion === "recorrido-red" && rAntena.acciones[0].parada === "Ejemplo" && /¿Le explico por qué quedó aquí/.test(rAntena.texto),
     JSON.stringify(rAntena?.llegada?.parrafos),
   );
+  // v13.4 · La nube holográfica trae datos reales (como telemetría) y, en una coordenada, lo que dice en voz alta no deletrea los grados
+  const dato = (r, etiqueta) => r?.llegada?.datos?.find((d) => d.etiqueta === etiqueta);
+  caso(
+    "Coordenada sin simular: el nodo más cercano (y sin inventar la señal)",
+    dato(rCoord, "Nodo más cercano")?.valor === "Ejemplo" && /^a \d/.test(dato(rCoord, "Nodo más cercano").detalle) && !dato(rCoord, "Señal aquí"),
+    JSON.stringify(rCoord?.llegada?.datos),
+  );
+  caso(
+    "Coordenada: en voz alta, «le señalo el punto exacto» sin los grados ni las comillas",
+    /^Aquí es, le señalo el punto exacto, en Cumaral \(Meta\)\. ¿Le inscribo un nodo antena justo aquí\?$/.test(rCoord?.llegada?.voz ?? "") && !/°|'/.test(rCoord.llegada.voz),
+    rCoord?.llegada?.voz,
+  );
+  caso(
+    "Antena sin simular: la altura y la potencia de su ficha",
+    dato(rAntena, "Altura de la antena")?.valor === "15 m" && dato(rAntena, "Potencia")?.valor === "22 dBm" && /5,8 dBi/.test(dato(rAntena, "Potencia").detalle) && !dato(rAntena, "Enlaces"),
+    JSON.stringify(rAntena?.llegada?.datos),
+  );
+  // Con una simulación: la señal en el punto (su margen, su clase y los dBm), el alcance, los enlaces y la ruta
+  {
+    const g = base("g", "Gateway Cumaral", 4.27, -73.49, { pasarela: true });
+    const rep = base("r1", "Repetidor 1", 4.25, -73.4);
+    const apiR = crearApi([g, rep]);
+    const resultado = {
+      malla: { caja: { oeste: -73.5, sur: 4.2, este: -73.3, norte: 4.3 }, ancho: 2, alto: 2 },
+      mejor: Float32Array.from([34, 34, 34, 34]),
+      sensibilidadDbm: -132,
+      antenas: [
+        { id: "g", nombre: g.nombre, elevacionM: 312, alcanceKm: 8.4, alcanceConfiableKm: 5.1, areaServicioKm2: 96.3 },
+        { id: "r1", nombre: rep.nombre, elevacionM: 290, alcanceKm: 7.2, alcanceConfiableKm: 4.4, areaServicioKm2: 71 },
+      ],
+      enlaces: [{ a: "g", b: "r1", distanciaKm: 9.8, margenAB: 33, margenBA: 31, margen: 31, clase: "solido", vMax: -1, lineaVista: true }],
+      nodos: [
+        { id: "g", saltos: 0, vecinos: 1, componente: 0, critico: true, cuelloDb: null, ruta: ["g"] },
+        { id: "r1", saltos: 1, vecinos: 1, componente: 0, critico: false, cuelloDb: 31, ruta: ["r1", "g"] },
+      ],
+    };
+    apiR.resultado = () => resultado;
+    const rC = m.ejecutarOrden(m.interpretarOrden("llévame a 4.25, -73.35", apiR, null), apiR);
+    const s = dato(rC, "Señal aquí");
+    caso("Coordenada con la simulación: la señal ahí (34 dB, media, ≈ −98 dBm) y lo dice en voz alta", s?.valor === "34 dB" && /^Media · ≈ -98 dBm$/.test(s.detalle) && s.tono === "alerta" && /34 decibeles de margen: media/.test(rC.llegada.voz), JSON.stringify(rC.llegada?.datos));
+    const fuera = m.ejecutarOrden(m.interpretarOrden("llévame a 4.6, -73.0", apiR, null), apiR);
+    caso("…fuera del mapa calculado no inventa la señal", !dato(fuera, "Señal aquí") && !!dato(fuera, "Nodo más cercano"), JSON.stringify(fuera.llegada?.datos));
+    const rR = m.ejecutarOrden(m.interpretarOrden("llévame a la antena Repetidor 1", apiR, null), apiR);
+    caso(
+      "Repetidor con la simulación: altura sobre el terreno, alcance, enlaces y saltos al gateway",
+      /290 m s\. n\. m\./.test(dato(rR, "Altura de la antena")?.detalle ?? "") && dato(rR, "Alcance con servicio")?.valor === "7,2 km" && dato(rR, "Enlaces")?.valor === "1" && /31 dB/.test(dato(rR, "Enlaces").detalle) && dato(rR, "Enlaces").tono === "bien" && dato(rR, "Saltos al gateway")?.valor === "1" && dato(rR, "Saltos al gateway").tono === "bien",
+      JSON.stringify(rR.llegada?.datos),
+    );
+    const rG = m.ejecutarOrden(m.interpretarOrden("llévame a la antena Gateway Cumaral", apiR, null), apiR);
+    caso("Gateway con la simulación: el área con servicio (es la entrada a internet)", dato(rG, "Área con servicio")?.valor === "96,3 km²" && !dato(rG, "Saltos al gateway"), JSON.stringify(rG.llegada?.datos));
+  }
   caso("Activar la regla", m.interpretarOrden("activa la regla", api, null)?.tipo === "herramienta");
   caso("Simular", m.interpretarOrden("simula por favor", api, null)?.tipo === "simular");
   const radio = m.interpretarOrden("radio de 12 km", api, null);
@@ -1319,6 +1370,11 @@ function crearApi(antenas) {
     x.o?.tipo === "ir" && x.o.lugar?.nombre === "Barranca de Upía" && /^Lo llevé a Barranca de Upía \(Meta\), un municipio de 40\.9\d\d ha/.test(x.r.texto) && !apiL.llamadas.some((l) => l[0] === "marcar") && x.r.llegada?.gesto === "saludando" && /^Esto es Barranca de Upía \(Meta\): un municipio de 40\.9\d\d ha/.test(x.r.llegada.parrafos[0]) && /¿Le armo una red sostenible que cubra todo el municipio/.test(x.r.llegada.parrafos[1]),
     x.r?.llegada?.parrafos.join(" ").slice(0, 120),
   );
+  caso(
+    "…con los datos del municipio en su nube: el área, el departamento y cuántos nodos hay dentro",
+    ((d) => /^40\.9\d\d ha$/.test(d.find((c) => c.etiqueta === "Área")?.valor ?? "") && /^409,\d+ km²$/.test(d.find((c) => c.etiqueta === "Área")?.detalle ?? "") && d.find((c) => c.etiqueta === "Departamento")?.valor === "Meta" && d.find((c) => c.etiqueta === "Nodos en el municipio")?.valor === "0")(x.r?.llegada?.datos ?? []),
+    JSON.stringify(x.r?.llegada?.datos),
+  );
   const red = x.r.acciones?.find((a) => /todo el municipio/.test(a.texto))?.orden;
   caso("…y ofrece la red sostenible de todo el municipio (y probar hasta dónde aguanta)", red?.tipo === "disenar" && red.area.forma === "poligono" && red.sostenible && cerca(m.areaM2(red.area.puntos) / 1e6, 409, 5) && x.r.acciones.some((a) => a.orden?.despues?.estres?.rampa));
   for (const t of ["llévame a barranco vía meta", "ubícame en arranca de upyía meta"]) caso(`«${t}» también`, ((y) => y.o?.tipo === "ir" && y.o.lugar?.nombre === "Barranca de Upía")(hablar(t)));
@@ -1871,6 +1927,77 @@ function crearApi(antenas) {
   caso("La ayuda por voz cuenta el recorrido de la red", /explícame la red/.test(m.AYUDA_VOZ));
   const ri = m.responder("¿puedes hablar como chat gpt con gemini live?", c);
   caso("Hablar como una IA: Gemini Live gratis con la clave, y ofrece abrir los ajustes", /Gemini Live de Google/.test(ri.texto) && /gratis/.test(ri.texto) && ri.acciones?.some((a) => a.accion === "ajustes-ia"), ri.texto.slice(0, 120));
+}
+
+// v13.4 · La voz: avisa qué trozo empieza a sonar (para escribirlo a la par); «callar» da por terminado lo que decía
+// (quien esperaba el final sigue: el recorrido, la llegada), y lo que se interrumpe porque empezó otra voz no avisa
+{
+  const dichos = [];
+  let cola = [];
+  const sintesis = {
+    speaking: false,
+    pending: false,
+    getVoices: () => [],
+    speak(u) {
+      dichos.push(u.text);
+      cola.push(u);
+      sintesis.speaking = true;
+    },
+    cancel() {
+      const c = cola;
+      cola = [];
+      sintesis.speaking = false;
+      c.forEach((u) => u.onerror?.({ error: "interrupted" }));
+    },
+  };
+  /** Termina de decir el trozo que suena (como si la voz llegara al final). */
+  const terminaTrozo = () => {
+    const u = cola.shift();
+    sintesis.speaking = cola.length > 0;
+    u?.onend?.();
+  };
+  const antes = { window: globalThis.window, Utterance: globalThis.SpeechSynthesisUtterance };
+  globalThis.window = { speechSynthesis: sintesis, setTimeout, clearTimeout, matchMedia: undefined };
+  globalThis.SpeechSynthesisUtterance = class {
+    constructor(text) {
+      this.text = text;
+    }
+  };
+  try {
+    const trozos = [];
+    let fin = 0;
+    m.hablar("Hola, señor. Esto es Barranca de Upía. ¿Le armo una red que cubra todo el municipio, con su viabilidad, su costo y la prueba de la hora pico, para que la vea completa?", () => fin++, undefined, (desde, largo, total) => trozos.push([desde, largo, total]));
+    const total = trozos[0]?.[2];
+    caso("Cada trozo avisa dónde empieza y cuánto mide (el primero, al empezar)", trozos.length === 1 && trozos[0][0] === 0 && trozos[0][1] === dichos[0].length && total > dichos[0].length, JSON.stringify(trozos));
+    terminaTrozo();
+    caso("…y el siguiente, cuando termina el anterior (donde acabó el primero)", trozos.length === 2 && trozos[1][0] === dichos[0].length && trozos[1][0] + trozos[1][1] === total && fin === 0, JSON.stringify(trozos));
+    m.callar();
+    caso("«Callar» da por terminado lo que decía: avisa una sola vez", fin === 1 && !sintesis.speaking);
+    m.callar();
+    caso("…y callar otra vez no vuelve a avisar", fin === 1);
+    let finA = 0;
+    let finB = 0;
+    const fallosA = [];
+    const pararA = m.hablar("Primera respuesta.", () => finA++, (e) => fallosA.push(e));
+    m.hablar("Segunda respuesta.", () => finB++);
+    // (justo después de cortar otra voz, espera un instante antes de hablar)
+    await new Promise((ok) => setTimeout(ok, 250));
+    caso("Lo que interrumpe otra voz no se da por terminado: avisa que la interrumpieron (quien habla ahora es la otra)", finA === 0 && finB === 0 && fallosA.join() === "interrupted" && dichos.at(-1) === "Segunda respuesta.", fallosA.join());
+    pararA();
+    caso("…y detener la interrumpida no calla a la nueva", sintesis.speaking && finB === 0);
+    m.callar();
+    caso("…«callar» avisa solo a la que sonaba", finA === 0 && finB === 1);
+    let finC = 0;
+    const parar = m.hablar("Tercera respuesta.", () => finC++);
+    parar();
+    m.callar();
+    caso("Detenerla con su función avisa una vez (y «callar» después ya no)", finC === 1);
+  } finally {
+    globalThis.window = antes.window;
+    globalThis.SpeechSynthesisUtterance = antes.Utterance;
+    if (antes.window === undefined) delete globalThis.window;
+    if (antes.Utterance === undefined) delete globalThis.SpeechSynthesisUtterance;
+  }
 }
 
 console.log(fallos ? `\n✗ ${fallos} prueba(s) fallaron` : "\n✓ Melki verificado");
