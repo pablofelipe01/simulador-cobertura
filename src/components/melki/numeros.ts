@@ -151,6 +151,14 @@ function leerDecimal(ts: Token[], i: number): { texto: string; fin: number } | n
   return { texto: String(n.valor), fin: n.fin };
 }
 
+/** El valor de una frase que es solo un número en palabras («doscientos cincuenta» → 250, «una» → 1); si no, null. */
+export function numeroDePalabras(frase: string): number | null {
+  const ts = partir(sinTildes(frase.trim()));
+  if (!ts.length) return null;
+  const n = leerEntero(ts, 0);
+  return n && n.fin === ts.length ? n.valor : null;
+}
+
 /** Cambia los números en palabras por cifras (solo lo que es claramente un número). */
 export function numerosEnPalabras(texto: string): string {
   const ts = partir(texto.trim());
