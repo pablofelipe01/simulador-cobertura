@@ -9,8 +9,10 @@
 // señala, y escribe su explicación como una máquina de escribir. Translúcida, pero con el texto oscuro sobre un vidrio
 // claro y desenfocado, para que se lea sobre cualquier color del mapa. En el computador va al lado libre del punto;
 // en el celular, abajo, como una hoja. El texto completo está desde el principio (reservado e invisible), así la nube
-// no cambia de tamaño mientras escribe; un toque la termina de escribir.
-import { MessageSquareText } from "lucide-react";
+// no cambia de tamaño mientras escribe; un toque la termina de escribir. En el recorrido y cuando Melki llega a un
+// lugar escribe al ritmo de lectura (se lee a medida que aparece); una barra abajo muestra cuánto falta para seguir
+// y, con el puntero encima, espera.
+import { MessageSquareText, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import type { CifraPitch } from "@/lib/negocio/pitch";
@@ -25,6 +27,12 @@ const TONOS: Record<NonNullable<CifraPitch["tono"]>, string> = {
 export const anchoNube = (anchoZona: number) => Math.round(Math.min(410, Math.max(300, anchoZona * 0.3)));
 /** Separación entre el punto y la nube (lo que mide la línea que lo señala). */
 const SEPARACION = 58;
+
+/** Al ritmo de lectura: unas 1.500 letras por minuto (se lee a medida que aparece), hasta 40 s. */
+export const ESCRITURA_LECTURA = { msPorLetra: 40, maxMs: 40000 } as const;
+
+/** La pausa después de escribir, para mirar las cifras y terminar de leer antes de seguir (ms): entre 3,5 y 10 s. */
+export const pausaLectura = (parrafos: string[]) => Math.min(10000, Math.max(3500, parrafos.reduce((s, p) => s + p.length, 0) * 8));
 
 const reducirMovimiento = () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
@@ -43,6 +51,12 @@ export function NubeMapa({
   onEscrito,
   sugerencia,
   onSugerencia,
+  msPorLetra = 18,
+  maxMs = 9000,
+  cuenta = null,
+  onSobre,
+  onCerrar,
+  etiquetaCerrar = "Cerrar",
 }: {
   /** El punto (px dentro de la zona) del que sale la nube. */
   ancla: { x: number; y: number };
@@ -64,6 +78,16 @@ export function NubeMapa({
   onEscrito?: () => void;
   sugerencia?: { texto: string; pedido: string };
   onSugerencia?: (pedido: string) => void;
+  /** Ritmo de la máquina de escribir (ms por letra) y su tope (ms). Lo normal: rápido; en el recorrido, el de lectura. */
+  msPorLetra?: number;
+  maxMs?: number;
+  /** La barra que muestra cuánto falta para seguir (ms) y si está en pausa. */
+  cuenta?: { ms: number; pausada: boolean } | null;
+  /** El puntero entró o salió de la nube (para esperar mientras se lee). */
+  onSobre?: (sobre: boolean) => void;
+  /** Con él, la nube trae su botón para cerrarla. */
+  onCerrar?: () => void;
+  etiquetaCerrar?: string;
 }) {
   const caja = useRef<HTMLDivElement>(null);
   const [alto, setAlto] = useState(0);
@@ -84,21 +108,21 @@ export function NubeMapa({
     return () => ro?.disconnect();
   }, []);
 
-  // La máquina de escribir: termina en unos segundos según lo largo (máximo 9 s), medido con el reloj (en un equipo
-  // lento escribe a saltos más grandes, pero termina a tiempo)
+  // La máquina de escribir: termina en un tiempo según lo largo (con su tope), medido con el reloj (en un equipo lento
+  // escribe a saltos más grandes, pero termina a tiempo)
   const completo = letras >= total;
   const inicio = useRef<number | null>(null);
   useEffect(() => {
     if (!escribir || completo) return;
     if (inicio.current === null) inicio.current = performance.now();
     const desde = inicio.current;
-    const duracion = Math.min(9000, Math.max(1500, total * 18));
+    const duracion = Math.min(maxMs, Math.max(1500, total * msPorLetra));
     const id = window.setInterval(() => {
       const n = Math.min(total, Math.ceil((total * (performance.now() - desde)) / duracion));
       setLetras((x) => Math.max(x, n));
     }, 40);
     return () => window.clearInterval(id);
-  }, [escribir, completo, total]);
+  }, [escribir, completo, total, msPorLetra, maxMs]);
 
   useEffect(() => {
     if (completo && escribir && !avisado.current) {
@@ -176,10 +200,12 @@ export function NubeMapa({
         onClick={() => setLetras(total)}
         onWheel={quieta}
         onTouchMove={quieta}
+        onMouseEnter={onSobre ? () => onSobre(true) : undefined}
+        onMouseLeave={onSobre ? () => onSobre(false) : undefined}
         className={`nube-mapa pointer-events-auto absolute overflow-y-auto rounded-[20px] px-4 pt-3 pb-3.5 text-carbon ${listo ? "nube-emerge" : "opacity-0"}`}
         style={{ left, top, width: W, maxHeight: maxAlto, transformOrigin: `${ancla.x - left}px ${ancla.y - top}px` }}
       >
-        <p className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-melki-oscura uppercase">
+        <p className={`flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-melki-oscura uppercase ${onCerrar ? "pr-7" : ""}`}>
           <MessageSquareText size={13} aria-hidden="true" />
           <span className="min-w-0 truncate">{paso ? `${paso} · ${etiqueta}` : etiqueta}</span>
         </p>
@@ -224,6 +250,26 @@ export function NubeMapa({
           </button>
         )}
       </div>
+      {/* Fuera de la parte que se desplaza: la X arriba y la barra que cuenta el tiempo, abajo */}
+      {listo && onCerrar && (
+        <button
+          type="button"
+          onClick={onCerrar}
+          onMouseEnter={onSobre ? () => onSobre(true) : undefined}
+          onMouseLeave={onSobre ? () => onSobre(false) : undefined}
+          className="pointer-events-auto absolute rounded-full p-1 text-carbon-2/75 hover:bg-black/5 hover:text-carbon"
+          style={{ left: left + W - 34, top: top + 8 }}
+          aria-label={etiquetaCerrar}
+          title={etiquetaCerrar}
+        >
+          <X size={16} />
+        </button>
+      )}
+      {listo && cuenta && cuenta.ms > 0 && (
+        <span className="pointer-events-none absolute h-[3px] overflow-hidden rounded-full bg-carbon/12" style={{ left: left + 16, top: top + h - 6, width: W - 32 }} aria-hidden="true" data-cuenta={cuenta.pausada ? "pausada" : "corre"}>
+          <span className="nube-cuenta block h-full rounded-full bg-melki" style={{ animationDuration: `${cuenta.ms}ms`, animationPlayState: cuenta.pausada ? "paused" : "running" }} />
+        </span>
+      )}
     </>
   );
 }

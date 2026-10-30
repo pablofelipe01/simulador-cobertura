@@ -7,7 +7,9 @@
 
 // El recorrido de la red con el robot de Melki: vuela de punto en punto (la cámara lo sigue), señala cada antena y de
 // ella sale una nube que escribe qué se instaló, por qué ahí y qué papel cumple. No habla (lo normal); con la voz
-// encendida (el parlante) dice solo lo breve. Un punto a la vez, sin llenar el mapa. Se maneja con los botones, el teclado (← → espacio Esc) o pidiéndoselo a Melki
+// encendida (el parlante) dice solo lo breve. Un punto a la vez, sin llenar el mapa. La nube escribe al ritmo de
+// lectura; al terminar, una barra cuenta unos segundos para mirar las cifras y sigue sola al próximo punto (con el
+// puntero encima, espera). Se maneja con los botones, el teclado (← → espacio Esc) o pidiéndoselo a Melki
 // («siguiente», «ve al gateway», «¿por qué la red quedó así?», «termina el recorrido»).
 import { ChevronLeft, ChevronRight, Pause, Play, Repeat, Volume2, VolumeX, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -15,14 +17,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MapaPitch } from "@/lib/negocio/pitch";
 import { buscarParada, type ParadaRecorrido, type PedidoRecorrido } from "@/lib/negocio/recorrido-red";
 
-import { anchoNube, NubeMapa } from "./nube-mapa";
+import { anchoNube, ESCRITURA_LECTURA, NubeMapa, pausaLectura } from "./nube-mapa";
 import { BotonCtl, type Narrador } from "./presentacion";
 import { RobotMelki, type GestoRobot } from "./robot";
 
 export type ControlRecorrido = { pedir: (p: PedidoRecorrido) => string };
-
-/** El tiempo para leer una nube (ms): unas 1.400 letras por minuto, entre 6 y 45 s. */
-const tiempoLectura = (p: ParadaRecorrido) => Math.min(45000, Math.max(6000, p.nube.parrafos.reduce((s, x) => s + x.length, 0) * 42));
 
 export function RecorridoRed({
   armar,
@@ -73,9 +72,12 @@ export function RecorridoRed({
   /** La vuelta (parada y repetición) que ya terminó de escribirse y de decirse. */
   const [escrito, setEscrito] = useState<string | null>(null);
   const [narrado, setNarrado] = useState<string | null>(null);
+  /** El puntero está sobre la nube: espera (no sigue al próximo punto mientras se lee). */
+  const [sobre, setSobre] = useState(false);
   const zona = useRef<HTMLDivElement>(null);
   const cortar = useRef<(() => void) | null>(null);
-  const aparecio = useRef(0);
+  /** Lo que falta de la pausa de lectura de esta vuelta (se conserva al pausar o con el puntero encima). */
+  const restante = useRef<{ vuelta: string; ms: number } | null>(null);
   const terminado = useRef(false);
   /** El primer vuelo espera a que el mapa termine de agrandarse (se acaban de ocultar los paneles). */
   const primerVuelo = useRef(true);
@@ -128,7 +130,6 @@ export function RecorridoRed({
       fin = window.setTimeout(
         () => {
           if (!vigente) return;
-          aparecio.current = performance.now();
           setLlego(esta);
           anclar();
         },
@@ -140,6 +141,7 @@ export function RecorridoRed({
     // Mientras vuela, el robot va hacia donde quedará su destino
     const r = window.requestAnimationFrame(() => {
       setNarrando(false);
+      setSobre(false);
       anclar();
     });
     return () => {
@@ -189,25 +191,38 @@ export function RecorridoRed({
     };
   }, [parada?.clave, volando, reproduciendo, repeticion]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Escrita y dicha: deja leerla y sigue con la próxima (avanza solo); en la última, deja el resumen escrito
+  // Escrita (al ritmo de lectura) y dicha: unos segundos más para mirar las cifras (la barra los cuenta) y sigue con la
+  // próxima (avanza solo); con el puntero encima o en pausa, espera y conserva lo que faltaba. En la última, deja el
+  // resumen escrito.
   const ultima = k >= paradas.length - 1;
   const lista = !volando && escrito === vuelta && narrado === vuelta;
+  const pausa = parada ? pausaLectura(parada.nube.parrafos) : 0;
   useEffect(() => {
     if (!parada || !lista || (!(reproduciendo && auto) && !ultima)) return;
-    const espera = Math.max(1200, aparecio.current + tiempoLectura(parada) - performance.now());
-    const t = window.setTimeout(() => {
-      if (!ultima) {
-        if (reproduciendo && auto) setI(k + 1);
-        return;
-      }
-      setReproduciendo(false);
-      if (!terminado.current) {
-        terminado.current = true;
-        onTerminado?.(paradas);
-      }
-    }, espera);
-    return () => window.clearTimeout(t);
-  }, [lista, reproduciendo, auto, ultima, k]); // eslint-disable-line react-hooks/exhaustive-deps
+    const clave = `${vuelta}-${auto ? "auto" : "mano"}`;
+    if (restante.current?.vuelta !== clave) restante.current = { vuelta: clave, ms: pausa };
+    if (sobre && !ultima) return;
+    const desde = performance.now();
+    const ms = restante.current.ms;
+    const t = window.setTimeout(
+      () => {
+        if (!ultima) {
+          if (reproduciendo && auto) setI(k + 1);
+          return;
+        }
+        setReproduciendo(false);
+        if (!terminado.current) {
+          terminado.current = true;
+          onTerminado?.(paradas);
+        }
+      },
+      Math.max(250, ms),
+    );
+    return () => {
+      window.clearTimeout(t);
+      if (restante.current?.vuelta === clave) restante.current.ms = Math.max(0, ms - (performance.now() - desde));
+    };
+  }, [lista, reproduciendo, auto, ultima, k, sobre, vuelta]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ir = useCallback(
     (n: number) => {
@@ -326,6 +341,10 @@ export function RecorridoRed({
           onEscrito={() => setEscrito(vuelta)}
           sugerencia={parada.nube.sugerencia}
           onSugerencia={onPedir}
+          msPorLetra={ESCRITURA_LECTURA.msPorLetra}
+          maxMs={ESCRITURA_LECTURA.maxMs}
+          cuenta={lista && auto && !ultima ? { ms: pausa, pausada: !reproduciendo || sobre } : null}
+          onSobre={setSobre}
         />
       )}
       {/* Controles */}
