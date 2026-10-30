@@ -3,11 +3,13 @@
 // artificial. Prohibido su uso, copia, modificación o distribución sin licencia escrita de los titulares (Ley 23 de
 // 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
 
-// El recorrido de la red: el robot de Melki va punto por punto siguiendo el camino de la señal (el gateway y cada
-// repetidor, rama por rama), luego las personas y lo que falta, y en cada parada escribe en una nube qué se instaló,
-// por qué ahí y qué papel cumple; al final, por qué la red quedó así. Solo usa lo que da el simulador (la red del
-// mapa, la simulación al día y la prueba de estrés si la hay): no inventa cifras.
+// El recorrido de la red: el robot de Melki cuenta primero cómo calcula el simulador y luego va punto por punto
+// siguiendo el camino de la señal (el gateway y cada repetidor, rama por rama), las personas y lo que falta, y en cada
+// parada escribe en una nube qué se instaló, por qué ahí y qué papel cumple; al final, qué refuerzos necesita para
+// funcionar al 100 % y al 99,9 %, y por qué la red quedó así. Solo usa lo que da el simulador (la red del mapa, la
+// simulación al día, la prueba de estrés si la hay y el modelo de costos de Trama): lo que estima lo dice como estimado.
 import { presetPorId } from "../radio/constantes";
+import { entornoPorId } from "../radio/entorno";
 import { estadoRed } from "../radio/estado-red";
 import { distanciaM, rumbo } from "../radio/geo";
 import { PATRONES } from "../radio/patron";
@@ -16,7 +18,7 @@ import { costoRedTrama } from "../radio/trama";
 import type { Antena, Enlace } from "../radio/tipos";
 import { cajaDe, departamentoTrama, pesosHablados, type CifraPitch, type DatosPitch, type FocoPitch } from "./pitch";
 
-export type IdParada = "panorama" | "gateway" | "repetidor" | "personas" | "pendiente" | "cierre";
+export type IdParada = "panorama" | "metodo" | "gateway" | "repetidor" | "personas" | "pendiente" | "refuerzos" | "cierre";
 
 /** Lo que se escribe en la nube de una parada. */
 export type NubeRecorrido = {
@@ -106,6 +108,22 @@ function calidad(m: number): { texto: string; tono: CifraPitch["tono"] } {
 type Punto = { lat: number; lon: number };
 const centroDe = (xs: Punto[]): Punto | null => (xs.length ? { lat: xs.reduce((s, x) => s + x.lat, 0) / xs.length, lon: xs.reduce((s, x) => s + x.lon, 0) / xs.length } : null);
 const dist = (a: Punto, b: Punto) => distanciaM(a.lat, a.lon, b.lat, b.lon);
+const mediana = (xs: number[]): number | null => {
+  if (!xs.length) return null;
+  const o = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(o.length / 2);
+  return o.length % 2 ? o[m] : (o[m - 1] + o[m]) / 2;
+};
+/** Agrupa los puntos cercanos: cada grupo cabe a `radio` metros de su primer punto. */
+function agrupar<T extends Punto>(xs: T[], radio: number): T[][] {
+  const grupos: T[][] = [];
+  for (const x of xs) {
+    const g = grupos.find((y) => dist(y[0], x) <= radio);
+    if (g) g.push(x);
+    else grupos.push([x]);
+  }
+  return grupos;
+}
 
 /* ───────────── El recorrido ───────────── */
 
@@ -208,7 +226,7 @@ export function armarRecorrido(d: DatosPitch): ParadaRecorrido[] {
           ? `Tiene ${cuenta(red.gateways.length, "gateway", "gateways")} y ${cuenta(red.repetidores.length, "repetidor", "repetidores")}${P ? ` para ${cuenta(P, "persona", "personas")} con billetera de radio` : ""}${lugarRed ? `, en ${lugarRed}` : ""}, sobre ${protocolo.nombre} (LoRa ${f1(d.parametros.frecuenciaMhz, 1)} MHz).`
           : "Todavía no tiene gateway ni repetidores."
       }`,
-      "El recorrido sigue el camino de la señal: empieza en el gateway, por donde entra internet, y va repetidor por repetidor, rama por rama, hasta las personas. En cada punto le escribo qué se instaló, por qué quedó ahí y qué papel cumple; al final, por qué la red quedó así.",
+      `El recorrido sigue el camino de la señal: primero le cuento cómo calcula el simulador; luego empiezo en el gateway, por donde entra internet, y voy repetidor por repetidor, rama por rama, hasta las personas. En cada punto le escribo qué se instaló, por qué quedó ahí y qué papel cumple; al final, ${r ? "qué refuerzos necesita para funcionar al 100 % y al 99,9 %, y " : ""}por qué la red quedó así.`,
     ];
     if (sinSimular) parrafos.push("Aún no hay una simulación al día: mientras termina, le explico lo que se ve en el mapa; los enlaces, la cobertura y los saltos aparecen al simular.");
     else if (r) parrafos.push(`Con el relieve real, la red da servicio en el ${pct(r.areaObjetivo ? r.areaObjetivo.servicioPct : r.porcentajeServicio)} ${r.areaObjetivo ? "del área objetivo" : "del área de estudio"}${P ? ` y llegan al gateway ${C} de ${P} personas` : ""}.`);
@@ -216,7 +234,7 @@ export function armarRecorrido(d: DatosPitch): ParadaRecorrido[] {
       id: "panorama",
       clave: "panorama",
       titulo: "La red de un vistazo",
-      voz: `Le muestro la red punto por punto: ${cuenta(red.gateways.length, "gateway", "gateways")}, ${cuenta(red.repetidores.length, "repetidor", "repetidores")}${P ? ` y ${cuenta(P, "persona", "personas")}` : ""}. Empiezo por el gateway, por donde entra internet.`,
+      voz: `Le muestro la red punto por punto: ${cuenta(red.gateways.length, "gateway", "gateways")}, ${cuenta(red.repetidores.length, "repetidor", "repetidores")}${P ? ` y ${cuenta(P, "persona", "personas")}` : ""}. Primero le cuento cómo calcula el simulador y luego voy al gateway, por donde entra internet.`,
       resumen: `${cuenta(red.gateways.length, "gateway", "gateways")}, ${cuenta(red.repetidores.length, "repetidor", "repetidores")}${P ? ` y ${cuenta(P, "persona", "personas")}` : ""}${lugarRed ? ` en ${lugarRed}` : ""}.`,
       nube: {
         etiqueta: "Recorrido de la red",
@@ -235,7 +253,56 @@ export function armarRecorrido(d: DatosPitch): ParadaRecorrido[] {
     });
   }
 
-  /* 2 · Antena por antena */
+  /* 2 · Cómo lo calcula el simulador: el relieve, la pérdida, el margen, la malla y la hora pico */
+  {
+    const p = d.parametros;
+    const fuente = r?.relieve.fuente;
+    const resol = r && r.relieve.resolucionM > 0 ? r.relieve.resolucionM : null;
+    const relieveTxt =
+      fuente === "plano"
+        ? "sobre un terreno plano (sin relieve: así se ve lo que alcanzan los equipos solos)"
+        : fuente === "hgt"
+          ? `con el relieve real de los archivos de elevación cargados${resol ? ` (un dato de altura cada ${ent(resol)} m)` : ""}`
+          : `con el relieve real del terreno${resol ? `, descargado en teselas de elevación (un dato de altura cada ${ent(resol)} m)` : ""}`;
+    const sens = r?.sensibilidadDbm ?? preset.sensibilidadDbm;
+    const entorno = entornoPorId(p.entorno);
+    const parrafos = [
+      `Para cada antena, el simulador traza el perfil del terreno hacia cada punto de una malla de ${r ? `celdas de unos ${ent(r.malla.celdaM)} m` : "celdas"}, en ${f1(p.radioKm, 1)} km a la redonda, ${relieveTxt}. A la gente la calcula con la billetera a ${f1(p.alturaRxM, 1)} m del suelo.`,
+      `${
+        p.modelo === "itm"
+          ? "En cada perfil calcula la pérdida de la señal con Longley-Rice (el modelo ITM de la NTIA, el mismo que usa Radio Mobile)"
+          : "En cada perfil calcula la pérdida de la señal: la del espacio libre más la difracción sobre las lomas que tapan el camino (filo de cuchillo, método de Deygout, con la curvatura de la Tierra), calibrada contra simulaciones de Radio Mobile, con unos 3 dB de diferencia típica en los enlaces"
+      }${entorno.metodo === "ninguno" ? "" : `, y le suma la pérdida del entorno elegido, «${entorno.nombre.toLowerCase()}» (${entorno.metodo === "follaje" ? "follaje según UIT-R P.833" : "árboles o construcciones según UIT-R P.2108"})`}.`,
+      `Con esa pérdida saca el margen: cuánto le sobra a la señal sobre la sensibilidad del radio (${f1(sens, 1)} dBm con ${preset.nombre.replace(/ \(.*\)$/, "")}, a ${f1(p.frecuenciaMhz, 1)} MHz). Con 20 dB ya hay servicio; con 30 dB, señal media (la cobertura útil), y con 37 dB, confiable aun con lluvia y follaje. Entre dos antenas, un enlace es sólido desde 30 dB.`,
+      `Después arma la malla: para cada nodo busca el camino más robusto hasta el gateway (el que tiene su enlace más débil más fuerte), sin pasar de ${cuenta(limite, "salto", "saltos")}, y marca como punto crítico al repetidor que, si se apaga, deja a otros sin camino.`,
+      d.estres
+        ? `La prueba de la hora pico simula los mensajes de cada persona con el tiempo real que ocupa cada paquete en el aire (LoRa), las esperas y reintentos de ${protocolo.nombre} y los choques entre mensajes, y cuenta cuántos vuelven con su respuesta.`
+        : `Y con la prueba de la hora pico («prueba la hora pico») simula los mensajes de cada persona con el tiempo real de cada paquete en el aire y los choques entre mensajes, para saber si el canal aguanta.`,
+    ];
+    paradas.push({
+      id: "metodo",
+      clave: "metodo",
+      titulo: "Cómo lo calcula el simulador",
+      voz: "Así calcula el simulador: traza el perfil del terreno de cada antena a cada punto, le resta lo que tapan las lomas y mira cuánto le sobra a la señal. Con 20 dB ya hay servicio y con 37 es confiable.",
+      resumen: `${fuente === "plano" ? "terreno plano" : "relieve real"}${r ? `, celdas de ${ent(r.malla.celdaM)} m` : ""}, ${p.modelo === "itm" ? "Longley-Rice" : "modelo calibrado con Radio Mobile"}; servicio desde 20 dB, cobertura útil desde 30 y confiable desde 37; caminos más robustos al gateway en máximo ${cuenta(limite, "salto", "saltos")}.`,
+      nube: {
+        etiqueta: "El simulador por dentro",
+        titulo: "Cómo lo calcula el simulador",
+        subtitulo: `${preset.nombre} · ${f1(p.frecuenciaMhz, 1)} MHz`,
+        parrafos,
+        datos: [
+          { etiqueta: "Relieve", valor: fuente === "plano" ? "Plano" : fuente === "hgt" ? "Archivos HGT" : "Real", detalle: resol ? `un dato cada ${ent(resol)} m` : undefined },
+          ...(r ? [{ etiqueta: "Celda de cálculo", valor: `${ent(r.malla.celdaM)} m`, detalle: `${f1(p.radioKm, 1)} km por antena` }] : []),
+          { etiqueta: "Sensibilidad", valor: `${f1(sens, 1)} dBm`, detalle: `SF${preset.sf} · ${f1(preset.anchoBandaKhz, 1)} kHz` },
+          { etiqueta: "Modelo", valor: p.modelo === "itm" ? "Longley-Rice" : "Calibrado", detalle: p.modelo === "itm" ? "ITM de la NTIA" : "con Radio Mobile" },
+        ],
+      },
+      foco: { tipo: "red", caja: cajaRed },
+      ancla: null,
+    });
+  }
+
+  /* 3 · Antena por antena */
   for (const a of puntos) {
     const res = porId.get(a.id);
     const n = nodos.get(a.id);
@@ -411,7 +478,7 @@ export function armarRecorrido(d: DatosPitch): ParadaRecorrido[] {
     });
   }
 
-  /* 3 · Las personas */
+  /* 4 · Las personas */
   const faltan = [...red.sinCobertura, ...red.lejos.filter((x) => !esInfra.has(x.id))];
   if (P) {
     const equipoPersonas = (() => {
@@ -463,7 +530,7 @@ export function armarRecorrido(d: DatosPitch): ParadaRecorrido[] {
     });
   }
 
-  /* 4 · Lo que falta */
+  /* 5 · Lo que falta */
   if (r) {
     const pendientes: { texto: string; ancla: Punto; foco: FocoPitch; sugerencia?: { texto: string; pedido: string } }[] = [];
     if (!red.gateways.length && infra.length)
@@ -541,9 +608,149 @@ export function armarRecorrido(d: DatosPitch): ParadaRecorrido[] {
         ancla: { lat: primero.ancla.lat, lon: primero.ancla.lon },
       });
     }
+
+    /* 6 · Los refuerzos: qué le falta para funcionar al 100 % (que todos lleguen) y al 99,9 % (que no se caiga) */
+    {
+      const G = red.gateways.length;
+      const plan: string[] = [];
+      const datos: CifraPitch[] = [];
+      let apoyos = 0;
+      // El alcance de esta red: hacia la gente (el de las antenas) y entre antenas (lo que miden sus tramos)
+      const alcanceKm = mediana(infra.map((a) => porId.get(a.id)?.alcanceKm ?? 0).filter((x) => x > 0));
+      const tramo = mediana(
+        red.repetidores
+          .map((a) => {
+            const p = padreDe(a);
+            return p ? dist(a, p) : null;
+          })
+          .filter((x): x is number => x !== null),
+      );
+      const salto = tramo ?? (alcanceKm ? alcanceKm * 1000 : null);
+      // Al 100 % de las personas: los grupos que no llegan, cada uno con los repetidores que lo acercan a la red
+      if (faltan.length && salto) {
+        const grupos = agrupar(faltan, Math.max(500, (alcanceKm ? alcanceKm * 1000 : salto) * 0.6));
+        const conRuta = infra.filter((a) => typeof nodos.get(a.id)?.saltos === "number");
+        const base = conRuta.length ? conRuta : infra;
+        const lejos = grupos.map((g) => {
+          const c = centroDe(g)!;
+          return base.length ? Math.min(...base.map((a) => dist(a, c))) : 0;
+        });
+        apoyos = lejos.reduce((s, x) => s + Math.max(1, Math.round(x / salto)), 0);
+        const maxLejos = Math.max(...lejos);
+        const alcances = [alcanceKm ? `unos ${km(alcanceKm * 1000)} hacia la gente` : null, tramo ? `${km(tramo)} entre antenas` : null].filter(Boolean) as string[];
+        plan.push(
+          `Al 100 % de las personas: ${cuenta(faltan.length, "persona no llega", "personas no llegan")} al gateway${grupos.length > 1 ? `, en ${cuenta(grupos.length, "grupo", "grupos")}` : ""}${maxLejos >= 300 ? `; ${grupos.length > 1 ? "el más lejano está" : faltan.length === 1 ? "está" : "están"} a ${km(maxLejos)} de la red` : ""}. Con el alcance de los repetidores de esta red${alcances.length ? ` (${lista(alcances)})` : ""}, hacen falta unos ${cuenta(apoyos, "repetidor de apoyo", "repetidores de apoyo")}: es un estimado, «conecta a los que faltan» los ubica con el relieve real.`,
+        );
+        datos.push({ etiqueta: "Repetidores de apoyo", valor: ent(apoyos), detalle: "para llegar a todos", tono: "alerta" });
+      } else if (P && !faltan.length) plan.push(`Al 100 % de las personas: ${P === 1 ? "la persona del mapa llega" : `las ${ent(P)} personas del mapa llegan`} al gateway; no hace falta ningún repetidor más para conectarlas.`);
+      const largos = red.lejos.filter((x) => esInfra.has(x.id));
+      const sinCamino = red.aislados.filter((a) => esInfra.has(a.id));
+      if (sinCamino.length || largos.length)
+        plan.push(
+          [
+            sinCamino.length ? `${lista(sinCamino.slice(0, 3).map((a) => a.nombre))} ${sinCamino.length === 1 ? "necesita" : "necesitan"} llegar a la malla: subir la antena, moverlo a una loma o, si no alcanza, un repetidor intermedio.` : "",
+            largos.length ? `${lista(largos.slice(0, 3).map((a) => a.nombre))} ${largos.length === 1 ? "pasa" : "pasan"} del límite de ${cuenta(limite, "salto", "saltos")}: un repetidor que acorte el camino o antenas más altas lo resuelve.` : "",
+          ]
+            .filter(Boolean)
+            .join(" "),
+        );
+      // Enlaces firmes: en el camino de la señal, menos de 30 dB es inestable; para el 99,9 %, 37 dB o más
+      const enRuta = red.repetidores
+        .map((a) => {
+          const p = padreDe(a);
+          const x = p ? enlace(a.id, p.id) : undefined;
+          return x ? { a, p: p!, x } : null;
+        })
+        .filter((x): x is { a: Antena; p: Antena; x: Enlace } => !!x)
+        .sort((u, v) => u.x.margen - v.x.margen);
+      const justos = enRuta.filter((y) => y.x.margen >= 30 && y.x.margen < 37);
+      const tramoTxt = (y: { a: Antena; p: Antena; x: Enlace }) => `${y.a.nombre}–${y.p.nombre} (${f1(y.x.margen, 0)} dB)`;
+      if (debiles.length || justos.length)
+        plan.push(
+          `Enlaces firmes: ${
+            debiles.length
+              ? `${debiles.length === 1 ? `el enlace ${tramoTxt(debiles[0])} es inestable` : `${ent(debiles.length)} enlaces son inestables (${lista(debiles.slice(0, 3).map(tramoTxt))})`}: con lluvia se ${debiles.length === 1 ? "puede caer" : "pueden caer"}; hay que subir esas antenas a 9 o 12 m o llevarlas a una loma. `
+              : ""
+          }${justos.length ? `Para el 99,9 %, todos los enlaces del camino deberían tener 37 dB o más (aguantan lluvia y follaje): ${justos.length === 1 ? "falta" : "faltan"} ${lista(justos.slice(0, 3).map(tramoTxt))}${justos.length > 3 ? ` y ${cuenta(justos.length - 3, "más", "más")}` : ""}.` : ""}`.trim(),
+        );
+      else if (enRuta.length) plan.push(`Enlaces firmes: ${enRuta.length === 1 ? "el enlace del camino tiene" : "todos los enlaces del camino tienen"} 37 dB o más: aguantan lluvia y follaje.`);
+      if (debiles.length + justos.length) datos.push({ etiqueta: "Enlaces por reforzar", valor: ent(debiles.length + justos.length), detalle: "con menos de 37 dB", tono: debiles.length ? "mal" : "alerta" });
+      // Respaldo: un segundo camino donde hoy hay un punto único de falla
+      if (criticos.length) {
+        plan.push(`Respaldo: ${lista(criticos.slice(0, 3).map((a) => a.nombre))} ${criticos.length === 1 ? "es un punto único de falla" : "son puntos únicos de falla"}; un repetidor de respaldo cerca de cada uno da un segundo camino al gateway (${cuenta(criticos.length, "repetidor más", "repetidores más")}).`);
+        datos.push({ etiqueta: "Respaldos", valor: ent(criticos.length), detalle: criticos.length === 1 ? "punto único de falla" : "puntos únicos de falla", tono: "alerta" });
+      } else if (red.repetidores.length) plan.push("Respaldo: no hay puntos únicos de falla entre los repetidores; si uno se apaga, los demás siguen llegando al gateway.");
+      // El 99,9 % del tiempo: la salida a internet y la energía
+      plan.push(
+        G === 0
+          ? "Al 99,9 % del tiempo (menos de 9 horas sin servicio al año): primero, el gateway; sin él no hay salida a internet. Después, un segundo gateway o un segundo enlace a internet para que una falla no deje a todos sin servicio."
+          : G === 1
+            ? "Al 99,9 % del tiempo (menos de 9 horas sin servicio al año): con un solo gateway, si se cae el Starlink o el mini PC, la malla sigue en pie pero sin internet. Hace falta un segundo gateway en otra parte de la malla, o un segundo enlace a internet en el mismo sitio, además de la UPS, baterías para los días nublados y el mantenimiento preventivo."
+            : `Al 99,9 % del tiempo (menos de 9 horas sin servicio al año): con ${ent(G)} gateways, si uno falla, la gente cercana al otro sigue con internet; falta cuidar la energía (UPS y baterías para los días nublados) y el mantenimiento preventivo.`,
+      );
+      datos.push({ etiqueta: "Gateways", valor: G <= 1 ? `${ent(G)} → ${ent(G + 1)}` : ent(G), detalle: G === 0 ? "sin él no hay internet" : G === 1 ? "para el 99,9 %" : "con respaldo de internet", tono: G <= 1 ? "alerta" : "bien" });
+      // La hora pico: si el canal aguanta a toda la gente
+      const e = d.estres;
+      let saturadas = 0;
+      if (e) {
+        const malas = e.zonas.filter((z) => z.estado === "revienta" || z.estado === "lento");
+        saturadas = malas.length;
+        const mejor = (e.ajustes ?? []).filter((x) => !x.actual && x.completosPct >= e.completosPct + 1 && x.conRuta >= e.usuarios).sort((x, y) => y.completosPct - x.completosPct)[0];
+        const bien = !malas.length && e.completosPct >= 99.9;
+        plan.push(
+          `Hora pico: le funciona al ${pct(e.resumenUsuarios.funcionanPct)} de las personas y vuelve el ${pct(e.completosPct)} de los mensajes${bien ? ": el canal aguanta." : "."}${malas.length ? ` Se ${malas.length === 1 ? "satura" : "saturan"} ${lista(malas.slice(0, 3).map((z) => z.nombre))}: un repetidor más en ${malas.length === 1 ? "esa zona" : "esas zonas"} reparte la carga.` : ""}${mejor ? ` Con el ajuste de radio ${mejor.nombre} volvería el ${pct(mejor.completosPct)}.` : ""}`,
+        );
+      } else plan.push(`Hora pico: falta probarla; pídame «${P ? "prueba la hora pico" : "pon 250 personas alrededor de cada gateway y repetidor y haz la prueba de estrés"}» y le digo si el canal aguanta a toda la gente.`);
+      // Lo que costarían los refuerzos, con el modelo de costos de Trama
+      const gx = G <= 1 ? 1 : 0;
+      const rx = apoyos + criticos.length + saturadas;
+      const sitio = infra[0] ?? activas[0];
+      let costoTxt = "";
+      if ((gx || rx) && sitio) {
+        const dep = departamentoTrama(d.lugar?.(sitio.lat, sitio.lon)?.departamento);
+        const c = costoRedTrama(gx, rx, 0, "xiao", dep?.logistica ?? 1);
+        const piezas = [...(rx ? [cuenta(rx, "repetidor más", "repetidores más")] : []), ...(gx ? [G === 0 ? "el gateway" : "un segundo gateway"] : [])];
+        costoTxt = `unos ${pesosHablados(c.inversion.total)} de inversión y ${pesosHablados(c.mensual.total)} más al mes`;
+        plan.push(`En total, ${lista(piezas)}: unos ${pesosHablados(c.inversion.total)} de inversión (con instalación y transporte) y ${pesosHablados(c.mensual.total)} más al mes, con el modelo de costos de Trama.`);
+      }
+      const faltaAlgo = apoyos + debiles.length + justos.length + criticos.length + sinCamino.length + largos.length + saturadas > 0 || G <= 1;
+      const piezasVoz = [
+        apoyos ? `unos ${cuenta(apoyos, "repetidor de apoyo", "repetidores de apoyo")} para llegar a todos` : "",
+        debiles.length + justos.length ? `reforzar ${cuenta(debiles.length + justos.length, "enlace", "enlaces")}` : "",
+        criticos.length ? cuenta(criticos.length, "respaldo", "respaldos") : "",
+        G <= 1 ? (G === 0 ? "el gateway" : "un segundo gateway") : "",
+      ].filter(Boolean);
+      paradas.push({
+        id: "refuerzos",
+        clave: "refuerzos",
+        titulo: "Para que funcione al 100 %",
+        voz: piezasVoz.length ? `Para que funcione al 100 % y al 99,9 % necesita ${lista(piezasVoz)}.` : "La red ya está reforzada: todos llegan, los enlaces son firmes y no hay puntos únicos de falla.",
+        resumen: piezasVoz.length
+          ? `para funcionar al 100 % y al 99,9 % necesita ${lista(piezasVoz)}${costoTxt ? ` (${costoTxt})` : ""}${e ? "" : "; falta probar la hora pico"}.`
+          : `ya está reforzada: todos llegan, los enlaces son firmes y no hay puntos únicos de falla${e ? "" : "; falta probar la hora pico"}.`,
+        nube: {
+          etiqueta: "Refuerzos",
+          titulo: "Para que funcione al 100 % y al 99,9 %",
+          subtitulo: faltaAlgo ? "Lo que le falta, con números del simulador" : "Ya está reforzada",
+          parrafos: plan,
+          datos: datos.slice(0, 4),
+          sugerencia: faltan.length
+            ? { texto: "Conecta a los que faltan", pedido: "conecta a los que faltan" }
+            : debiles.length || justos.length || sinCamino.length || largos.length
+              ? { texto: "Ajústamelo", pedido: "ajústamelo" }
+              : criticos.length
+                ? { texto: "Sugiéreme antenas de apoyo", pedido: "sugiéreme antenas de apoyo" }
+                : !e
+                  ? { texto: "Probar la hora pico", pedido: P ? "prueba la hora pico" : "pon 250 personas alrededor de cada gateway y repetidor y haz la prueba de estrés" }
+                  : undefined,
+        },
+        foco: { tipo: "red", caja: cajaRed },
+        ancla: null,
+      });
+    }
   }
 
-  /* 5 · Por qué la red quedó así */
+  /* 7 · Por qué la red quedó así */
   {
     const parrafos: string[] = [];
     const G = red.gateways.length;
@@ -693,6 +900,16 @@ export function pedidoRecorrido(texto: string, enCurso: boolean): PedidoRecorrid
   if (/\bpor que (la red |la malla |tu red |mi red )?(quedo|esta|se armo|se construyo|se diseno|se hizo|la armaste|la hiciste|la disenaste) (asi|de esa (manera|forma)|de esta (manera|forma))\b/.test(t)) return { accion: enCurso ? "ir" : "empezar", parada: "cierre" };
   if (/\bpor que (pusiste|pusieron|ubicaste|ubicaron|elegiste|escogiste|esta|quedo|va|se puso|lo pusiste|la pusiste)\b.*\b(ahi|alli|alla|aqui|en ese (punto|sitio|lugar)|en esa (loma|ubicacion|parte))\b/.test(t) && /\b(gateway|pasarela|repetidor\w*|antena\w*|nodo)\b/.test(t))
     return { accion: enCurso ? "ir" : "empezar", parada: t };
+  // «¿Qué refuerzos necesita la red?», «¿qué le falta para funcionar al 100 %?»: los refuerzos (sin confundirlo con
+  // pedir un diseño, «ármame la red al 99,9 %»)
+  if (
+    /^(que|cuales|cuantos|cuantas|como)\b/.test(t) &&
+    (/\b(refuerz\w*|reforzar\w*)\b/.test(t) || (/\b(falta\w*|necesit\w*|requier\w*)\b/.test(t) && /\b(100|cien|99)\b/.test(t))) &&
+    !/\b(arma\w*|disen\w*|haz|hazme|crea\w*|pon|ponle|ponme)\b/.test(t)
+  )
+    return { accion: enCurso ? "ir" : "empezar", parada: "refuerzos" };
+  // Con el recorrido abierto, «¿cómo lo calcula el simulador?» va a esa parada
+  if (enCurso && /^(como|que)\b/.test(t) && /\b(calcula\w*|calculo)\b/.test(t)) return { accion: "ir", parada: "metodo" };
   // Las preguntas («¿qué es el recorrido?», «¿cómo funciona la red?») las contesta el cerebro
   if (/^(que|como|cual|cuales|para que|cuanto|cuando|donde)\b/.test(t)) return null;
   const explicar = /\b(explica\w*|describ\w*|detall\w*|cuentame|ensename|presentame)\b/.test(t) && RED.test(t) && !NO_RED.test(t);
@@ -729,6 +946,8 @@ export function buscarParada(paradas: ParadaRecorrido[], texto: string): number 
     const reps = paradas.map((p, i) => ({ p, i })).filter((x) => x.p.id === "repetidor");
     return reps[ORDINALES[ord[1]] - 1]?.i ?? -1;
   }
+  if (/\b(refuerz\w*|reforzar\w*|100|cien por ciento|99|respaldos?|redundan\w*)\b/.test(t)) return paradas.findIndex((p) => p.id === "refuerzos");
+  if (/\b(calcula\w*|calculo|metodo|propagacion|por dentro)\b|\bmodelo\b(?! de negocio)/.test(t)) return paradas.findIndex((p) => p.id === "metodo");
   if (/\b(gateway|pasarela|puerta|internet|starlink)\b/.test(t)) return paradas.findIndex((p) => p.id === "gateway");
   if (/\b(personas|gente|usuarios|billeteras)\b/.test(t)) return paradas.findIndex((p) => p.id === "personas");
   if (/\b(falta|faltan|pendiente\w*|mejorar|debil\w*|problema\w*|arreglar)\b/.test(t)) return paradas.findIndex((p) => p.id === "pendiente");
