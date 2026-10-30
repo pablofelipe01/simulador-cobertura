@@ -21,7 +21,8 @@ el **pitch del modelo de negocio** con su robot volando por el mapa (cada antena
 de equilibrio) y hace el **recorrido de la red**: cuenta cómo calcula el simulador, va punto por punto y en una nube que
 sale de cada antena escribe, al ritmo de lectura, qué se instaló, por qué ahí y qué papel cumple; al final, qué refuerzos
 necesita para funcionar al 100 % y al 99,9 % y por qué la red quedó así. Cuando se le pide ir a un lugar («ubícame en
-Barranca de Upía»), **Melki llega volando** y saluda, en vez del punto rojo.
+Barranca de Upía»), **Melki llega volando** y saluda, en vez del punto rojo, con una nube holográfica y translúcida (se
+ve la simulación detrás) y un botón para que hable en voz alta o no, a mano.
 
 > **© 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero. Todos los derechos reservados.**
 > Creado por Giancarlo González Guerrero para el Ingeniero Pablo Felipe Acevedo y la empresa Melki, con ayuda de
@@ -143,11 +144,26 @@ Barranca de Upía»), **Melki llega volando** y saluda, en vez del punto rojo.
   izquierda (si no cabe, Melki llega, saluda y vuelve); en el celular la conversación se recoge para verlo llegar. Con
   el pitch o el recorrido abiertos, o sin mapa, queda el punto de siempre. El buscador de la barra sigue marcando el
   punto con su tarjeta
+  - Holográfica y translúcida (v13.4): la nube es de vidrio ahumado que deja ver la simulación detrás (apenas
+    desenfocada y oscurecida, para que el texto claro se lea sobre cualquier color del mapa), con un borde de luz que
+    gira despacio, esquinas de visor, un barrido de luz al aparecer, la línea de luz por la que corren los datos hasta
+    la retícula del sitio, y el robot se posa sobre un halo. Trae sus datos como telemetría, solo los reales: en un
+    municipio, su área, su departamento y cuántos nodos del escenario hay dentro; en una coordenada, la señal ahí con la
+    última simulación (margen, clase y dBm, si el mapa calculado la cubre) y el nodo más cercano; en una antena, su
+    altura (sobre el terreno), su potencia o, con la simulación, su alcance, sus enlaces y los saltos al gateway (o el
+    área con servicio del gateway). Con el movimiento reducido del sistema, sin animaciones
+  - La voz, a mano (v13.4): el botón «Voz» de la nube enciende o apaga la voz de Melki (es la misma del parlante de la
+    conversación y del nuevo botón «Voz de Melki» de la barra del asistente; lo normal es que no hable). Encendida, Melki
+    lo dice en voz alta al llegar y la nube lo escribe a la par de su voz (en una coordenada no deletrea los grados);
+    la respuesta de la conversación no se dice antes, para no repetirla. Al encenderla con la nube abierta, lo dice
+    desde el principio; al apagarla, calla y la nube sigue escribiendo a su ritmo. Si en ese momento suena otra cosa,
+    espera a que termine. Con la IA conectada, la que habla es la IA
 - **Recorrido de la red** (v13.1; botón «Recorrido» de la barra de arriba, o «Melki, explícame la red», «hazme un
   recorrido por la red», «recorre la red punto por punto»): el robot de Melki va por el mapa un punto a la vez, siguiendo
   el camino de la señal (el gateway y sus repetidores rama por rama, en el sentido del reloj), y de cada punto sale una
-  nube de vidrio translúcido, con una línea que lo señala, que escribe su explicación como una máquina de escribir (el
-  texto oscuro sobre el vidrio claro se lee sobre cualquier color del mapa). Desde la v13.3 escribe al ritmo de lectura
+  nube holográfica y translúcida (desde la v13.4, como la de la llegada: se ve la simulación detrás y el texto claro se
+  lee sobre cualquier color del mapa), con una línea de luz que lo señala, que escribe su explicación como una máquina
+  de escribir. Desde la v13.3 escribe al ritmo de lectura
   (unas 1.500 letras por minuto: se lee a medida que aparece); al terminar, una barra cuenta unos segundos para mirar
   las cifras (de 3,5 a 10 s) y sigue sola al próximo punto; con el puntero encima, espera. La voz dice solo lo breve; el
   detalle va escrito. Todo sale de la red del mapa y de la simulación al día:
@@ -318,9 +334,11 @@ Barranca de Upía»), **Melki llega volando** y saluda, en vez del punto rojo.
   conversación. El pitch y el recorrido van escritos (la tarjeta y la nube). Con la IA (Gemini Live) su audio no suena:
   la respuesta queda escrita el tiempo de leerla, el micrófono nunca se calla y se le puede hablar encima (la IA sabe que
   no la oyen y va al grano). Para oírlo: «háblame», el parlante de la conversación, el de la presentación o el del
-  recorrido, o «Hablar en voz alta» en Ajustes de voz (ahí aparecen la voz, «Probar», «Uso audífonos» y «Leer las
+  recorrido, el botón «Voz de Melki» de la barra del asistente o el botón «Voz» de la nube cuando llega volando (v13.4),
+  o «Hablar en voz alta» en Ajustes de voz (ahí aparecen la voz, «Probar», «Uso audífonos» y «Leer las
   respuestas completas»); «no hables» lo vuelve a callar (ni la confirmación suena). La voz encendida dura hasta cerrar
-  o recargar la página: no se guarda.
+  o recargar la página: no se guarda. Callarlo (con un botón o «no hables») da por terminado lo que decía: el recorrido
+  y la llegada siguen solos, sin quedarse esperando (v13.4).
 - **Audio estable con parlantes o con audífonos** (v13.1; con la voz encendida):
   - Con parlantes (lo normal, «Uso audífonos» apagado en Ajustes de voz) Melki no escucha mientras habla: la escucha
     queda en pausa desde antes de que empiece su voz (la suya, la de un tour, el pitch o el recorrido) y vuelve 0,45 s
@@ -412,8 +430,9 @@ src/
                             micrófono a PCM de 16 kHz y la voz del modelo; herramientas-ia.ts: lo que la IA puede hacer
                             y quién es Melki para ella); el pitch (robot.tsx: el robot en vectores; presentacion.tsx:
                             la presentación que recorre el mapa); el recorrido de la red (recorrido-red.tsx: el robot
-                            punto por punto; nube-mapa.tsx: la nube de vidrio que sale de un punto y escribe al
-                            ritmo de lectura, con su barra de tiempo); llegada.tsx (Melki llega volando a un lugar)
+                            punto por punto; nube-mapa.tsx: la nube que sale de un punto, de vidrio o holográfica, y
+                            escribe al ritmo de lectura o a la par de la voz, con su barra de tiempo y su botón de la
+                            voz); llegada.tsx (Melki llega volando a un lugar y, con la voz encendida, lo dice)
   datos/geo/                límites, nombres y ríos de referencia (ver LEEME.md: fuentes y licencias)
   lib/autoria.ts            autoría, titulares y licencia (los usan «Acerca del simulador», Melki y la versión HTML)
   lib/geo/                  consultas locales: municipio de un punto, búsqueda de lugares, contorno de un municipio
