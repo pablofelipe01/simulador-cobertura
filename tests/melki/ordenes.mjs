@@ -303,6 +303,27 @@ function crearApi(antenas) {
   const api = crearApi([base("e", "Ejemplo", 4.2, -73.37, { pasarela: true })]);
   const ir = m.interpretarOrden("llévame a Villavicencio", api, null);
   caso("Ir a un municipio", ir?.tipo === "ir" && ir.lugar?.nombre === "Villavicencio");
+  // v13.3 · Melki llega volando: en vez del punto rojo, su robot va al sitio (saluda en un lugar; señala una coordenada o una antena)
+  const rIr = m.ejecutarOrden(ir, api);
+  caso(
+    "Ir a un municipio: Melki llega volando y saluda (sin el punto rojo; el punto queda solo si el robot no puede volar)",
+    rIr.llegada?.gesto === "saludando" && rIr.llegada.titulo === "Villavicencio" && /^Esto es Villavicencio \(Meta\)/.test(rIr.llegada.parrafos[0]) && /lo dejé encuadrado en el mapa/.test(rIr.llegada.parrafos[0]) && !api.llamadas.some((l) => l[0] === "marcar") && rIr.llegada.marca?.tarjeta === false && /^Lo llevé a Villavicencio \(Meta\)/.test(rIr.texto),
+    JSON.stringify(rIr.llegada?.parrafos),
+  );
+  const irCoord = m.interpretarOrden("llévame a 4.25, -73.30", api, null);
+  const rCoord = irCoord ? m.ejecutarOrden(irCoord, api) : null;
+  caso(
+    "Ir a una coordenada: Melki señala el punto exacto y ofrece inscribir un nodo ahí (sin el punto rojo)",
+    irCoord?.tipo === "ir" && !!irCoord.coord && rCoord.llegada?.gesto === "senalando" && /¿Le inscribo un nodo antena ahí\?$/.test(rCoord.texto) && rCoord.acciones[0].orden?.tipo === "agregar" && /^Aquí es: 4°15'/.test(rCoord.llegada.parrafos[0]) && !api.llamadas.some((l) => l[0] === "marcar") && rCoord.llegada.marca?.tarjeta === true,
+    rCoord?.texto,
+  );
+  const irAntena = m.interpretarOrden("llévame a la antena Ejemplo", api, null);
+  const rAntena = irAntena ? m.ejecutarOrden(irAntena, api) : null;
+  caso(
+    "Ir a una antena: Melki la señala y ofrece explicar por qué quedó ahí (el recorrido desde ese punto)",
+    irAntena?.tipo === "ir" && irAntena.id === "e" && rAntena.llegada?.gesto === "senalando" && /^Aquí está «Ejemplo»: el gateway/.test(rAntena.llegada.parrafos[0]) && rAntena.acciones?.[0]?.accion === "recorrido-red" && rAntena.acciones[0].parada === "Ejemplo" && /¿Le explico por qué quedó aquí/.test(rAntena.texto),
+    JSON.stringify(rAntena?.llegada?.parrafos),
+  );
   caso("Activar la regla", m.interpretarOrden("activa la regla", api, null)?.tipo === "herramienta");
   caso("Simular", m.interpretarOrden("simula por favor", api, null)?.tipo === "simular");
   const radio = m.interpretarOrden("radio de 12 km", api, null);
@@ -677,6 +698,7 @@ function crearApi(antenas) {
   caso("Ofrece deshacer y agregar respaldo", final.acciones?.some((a) => a.accion === "deshacer") && final.acciones?.some((a) => /respaldo/.test(a.texto) && a.orden?.respaldo === true));
   caso("El área del diseño queda como área objetivo con la meta pedida", api.llamadas.some((l) => l[0] === "area-objetivo" && l[1] && l[2]?.metaPct === 99.9 && l[2]?.margenDb === 30));
   caso("Con la meta cumplida ofrece optimizar el costo", final.acciones?.some((a) => a.orden?.tipo === "ajustar"));
+  caso("v13.3: recién desplegada, ofrece explicarla punto por punto (el recorrido), al final de las opciones", final.acciones?.at(-1)?.accion === "recorrido-red" && final.acciones.at(-1).texto === "Explícame la red punto por punto");
   api.disenoFalso = { ...api.disenoFalso, alcanzado: false, coberturaPct: 80, motivo: "Llegué al máximo de 3 repetidores.", huecos: [[-73.3, 4.2]] };
   api.resultadoFalso = { ...api.resultadoFalso, mejor: new Float32Array(3600).fill(10) };
   const corto = await m.ejecutarOrden({ ...d, maxRepetidores: 3 }, api).luego;
@@ -922,6 +944,7 @@ function crearApi(antenas) {
   caso("«¿Hasta cuántos usuarios aguanta cada repetidor?» → estrés con rampa", e1?.tipo === "estres" && e1.opciones.rampa === true, JSON.stringify(e1));
   caso("«Prueba de estrés en día de mercado» → 25 % en la hora pico", orden("haz la prueba de estrés en día de mercado")?.opciones?.horaPicoPct === 25);
   caso("«¿Qué tan colapsada está la red?» → estrés", orden("¿qué tan colapsada está la red?")?.tipo === "estres");
+  caso("«Prueba la hora pico» (lo que sugiere el recorrido) → estrés", orden("prueba la hora pico")?.tipo === "estres", JSON.stringify(orden("prueba la hora pico")));
   caso("«Hora pico con 5 pagos por persona al día»", orden("prueba la hora pico con 5 pagos por persona al día")?.opciones?.pagosPersonaDia === 5);
   caso("«¿Se disminuye el ancho de banda?» compara ajustes", orden("¿se disminuye el ancho de banda con la hora pico?")?.opciones?.comparar === true);
   caso("La ráfaga y la curva de pagos siguen siendo la prueba de carga", orden("envía 25 pagos al tiempo")?.tipo === "carga" && orden("¿hasta cuántos pagos aguanta?")?.tipo === "carga" && orden("mandemos pagos hasta que se reviente")?.tipo === "carga");
@@ -1291,7 +1314,11 @@ function crearApi(antenas) {
     return { o, r };
   };
   let x = hablar("ubícame en barranca de UPA meta");
-  caso("«Ubícame en barranca de UPA meta» → lo lleva a Barranca de Upía (Meta), marca el municipio y dice su tamaño", x.o?.tipo === "ir" && x.o.lugar?.nombre === "Barranca de Upía" && /^Lo llevé a Barranca de Upía \(Meta\), un municipio de 40\.9\d\d ha/.test(x.r.texto) && apiL.llamadas.some((l) => l[0] === "marcar"), x.r?.texto.slice(0, 90));
+  caso(
+    "«Ubícame en barranca de UPA meta» → lo lleva a Barranca de Upía (Meta), Melki llega volando y saluda (sin el punto rojo) y dice su tamaño",
+    x.o?.tipo === "ir" && x.o.lugar?.nombre === "Barranca de Upía" && /^Lo llevé a Barranca de Upía \(Meta\), un municipio de 40\.9\d\d ha/.test(x.r.texto) && !apiL.llamadas.some((l) => l[0] === "marcar") && x.r.llegada?.gesto === "saludando" && /^Esto es Barranca de Upía \(Meta\): un municipio de 40\.9\d\d ha/.test(x.r.llegada.parrafos[0]) && /¿Le armo una red sostenible que cubra todo el municipio/.test(x.r.llegada.parrafos[1]),
+    x.r?.llegada?.parrafos.join(" ").slice(0, 120),
+  );
   const red = x.r.acciones?.find((a) => /todo el municipio/.test(a.texto))?.orden;
   caso("…y ofrece la red sostenible de todo el municipio (y probar hasta dónde aguanta)", red?.tipo === "disenar" && red.area.forma === "poligono" && red.sostenible && cerca(m.areaM2(red.area.puntos) / 1e6, 409, 5) && x.r.acciones.some((a) => a.orden?.despues?.estres?.rampa));
   for (const t of ["llévame a barranco vía meta", "ubícame en arranca de upyía meta"]) caso(`«${t}» también`, ((y) => y.o?.tipo === "ir" && y.o.lugar?.nombre === "Barranca de Upía")(hablar(t)));
@@ -1656,6 +1683,10 @@ function crearApi(antenas) {
   caso(
     "«¿Por qué la red quedó así?» va a la conclusión; «¿por qué pusiste el repetidor 2 ahí?» y «explícame el repetidor dos», a ese punto",
     pr("¿Por qué la red quedó así?")?.parada === "cierre" && pr("¿por qué quedó así la red?")?.parada === "cierre" && pr("¿por qué la red quedó así?", true)?.accion === "ir" && /repetidor 2/.test(pr("¿por qué pusiste el repetidor 2 ahí?")?.parada ?? "") && pr("explícame el repetidor dos")?.accion === "empezar",
+  );
+  caso(
+    "v13.3: «¿Qué refuerzos necesita la red?» y «¿qué le falta para funcionar al 100 %?» van a los refuerzos; «ármame la red al 99,9 %» no",
+    pr("¿Qué refuerzos necesita la red?")?.parada === "refuerzos" && pr("¿qué le falta a la red para funcionar al 100 %?")?.parada === "refuerzos" && pr("¿qué necesita para funcionar al 99,9 %?", true)?.accion === "ir" && pr("ármame la red al 99,9 %") === null && pr("¿qué es la red?") === null && pr("¿cómo lo calcula el simulador?", true)?.parada === "metodo" && pr("¿cómo lo calcula el simulador?") === null,
   );
   caso(
     "No se confunde: los tours guiados, el pitch, «muéstrame toda la red» y las preguntas siguen en lo suyo",
