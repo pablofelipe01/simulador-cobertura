@@ -6,14 +6,14 @@
 // Órdenes para Melki: entiende pedidos en español con coordenadas (decimales o en grados, minutos y segundos)
 // y los ejecuta en el simulador: inscribir, mover, editar o borrar nodos, cambiar parámetros, simular, ir a un lugar,
 // medir distancias, ver perfiles y la señal en un punto. Todo se procesa aquí mismo, sin servicios externos.
-import { EQUIPOS, LIMITE_SALTOS_MAXIMO, META_UTIL_ESTUDIO_PCT, PRESETS, presetEquivalente, presetPorId, type EquipoId, type PresetId, type ProtocoloId } from "@/lib/radio/constantes";
+import { CLASES, ENLACES, EQUIPOS, LIMITE_SALTOS_MAXIMO, META_UTIL_ESTUDIO_PCT, PRESETS, presetEquivalente, presetPorId, UMBRAL_CONFIABLE_DB, UMBRAL_SERVICIO_DB, type EquipoId, type PresetId, type ProtocoloId } from "@/lib/radio/constantes";
 import { entornoPorId, perdidaEntorno } from "@/lib/radio/entorno";
 import { consejoRed, piezaDe, type EstadoRed, type Pieza } from "@/lib/radio/estado-red";
 import { INTENTOS, type ViajeMensaje } from "@/lib/radio/mensaje";
 import type { DestinoSiembra, Siembra } from "@/lib/radio/siembra";
 import type { Diseno } from "@/lib/radio/diseno";
 import { resumenCambios, textoCambio, type Ajuste, type PermisosAjuste, type SitioAjuste } from "@/lib/radio/ajuste";
-import { areaM2, cajaPoligono, conArea, coberturaEnArea, poligonoCaja, poligonoCirculo, poligonoRectangulo, porcentajeSobre, radioDeArea, recortarPoligono, sirveAlArea, type Poligono, type Rumbo } from "@/lib/radio/area";
+import { areaM2, cajaPoligono, conArea, coberturaEnArea, dentroPoligono, margenEnPunto, poligonoCaja, poligonoCirculo, poligonoRectangulo, porcentajeSobre, radioDeArea, recortarPoligono, sirveAlArea, type Poligono, type Rumbo } from "@/lib/radio/area";
 import { aDecimal, aGMS, desplazar, distanciaM, formatoDistancia, leerCoordenada, puntoCardinal, rumbo, rumboTexto } from "@/lib/radio/geo";
 import type { ClimaItm } from "@/lib/radio/itm";
 import { anchosHaz, esDireccional, patronPorId } from "@/lib/radio/patron";
@@ -24,7 +24,7 @@ import { decidirLugar, nombreLugar, pareceNombre, type CandidatoLugar, type Luga
 
 import type { CurvaCargaResultado, ResultadoCarga } from "@/lib/radio/carga";
 import type { ResultadoEstres, LimitePunto } from "@/lib/radio/estres";
-import type { DatosPitch, MapaPitch } from "@/lib/negocio/pitch";
+import type { CifraPitch, DatosPitch, MapaPitch } from "@/lib/negocio/pitch";
 import type { PropuestaOptimizar, ResultadoOptimizar } from "@/lib/radio/optimizar";
 import { PROTOCOLOS } from "@/lib/radio/protocolos";
 import { costoRedTrama, DEPARTAMENTOS_TRAMA, pesosTrama, type CostoRed, type NodoUsuario, type SfTrama, type TerrenoTrama } from "@/lib/radio/trama";
@@ -2043,8 +2043,10 @@ export type ResultadoOrden = Respuesta & {
 
 /**
  * Melki llega volando a donde se le pidió ir: un lugar (lo saluda), una coordenada o una antena (la señala). Lo que
- * escribe en su nube; el saludo con el trato de la persona lo pone la conversación. Si el robot no puede volar (el mapa
- * no está listo), queda el punto marcado de siempre (`marca`).
+ * escribe en su nube, con sus datos (solo los reales: del lugar, de la antena o de la última simulación); el saludo con
+ * el trato de la persona lo pone la conversación. `voz`: lo que dice en voz alta, si no es lo mismo que escribe (en una
+ * coordenada no deletrea los grados). Si el robot no puede volar (el mapa no está listo), queda el punto marcado de
+ * siempre (`marca`).
  */
 export type LlegadaMelki = {
   lat: number;
@@ -2054,8 +2056,63 @@ export type LlegadaMelki = {
   titulo: string;
   subtitulo?: string;
   parrafos: string[];
+  datos?: CifraPitch[];
+  voz?: string;
   marca?: { titulo: string; tarjeta: boolean };
 };
+
+/** El tono de una señal (margen en dB) en los datos de la nube: confiable, con servicio o sin él. */
+const tonoMargen = (m: number): CifraPitch["tono"] => (m >= UMBRAL_CONFIABLE_DB ? "bien" : m >= UMBRAL_SERVICIO_DB ? "alerta" : "mal");
+
+/** Los datos de una coordenada: la señal ahí con la última simulación (si la cubre) y el nodo más cercano. */
+function datosCoordenada(api: Api, lat: number, lon: number): { datos: CifraPitch[]; senal: string } {
+  const datos: CifraPitch[] = [];
+  let senal = "";
+  const r = api.resultado();
+  const m = r ? margenEnPunto(r, lat, lon) : NaN;
+  if (r && Number.isFinite(m)) {
+    const clase = CLASES.find((c) => m >= c.minimoDb) ?? CLASES[CLASES.length - 1];
+    datos.push({ etiqueta: "Señal aquí", valor: `${Math.round(m)} dB`, detalle: `${clase.nombre} · ≈ ${Math.round(m + r.sensibilidadDbm)} dBm`, tono: tonoMargen(m) });
+    senal = m >= UMBRAL_SERVICIO_DB ? ` Con la última simulación aquí la señal llega con ${Math.round(m)} decibeles de margen: ${clase.nombre.toLowerCase()}.` : " Con la última simulación aquí todavía no llega señal.";
+  }
+  const antenas = api.antenas();
+  if (antenas.length) {
+    const cerca = antenas.map((a) => ({ a, d: distanciaM(lat, lon, a.lat, a.lon) })).sort((x, y) => x.d - y.d)[0];
+    datos.push({ etiqueta: "Nodo más cercano", valor: cerca.a.nombre, detalle: `a ${formatoDistancia(cerca.d)}` });
+  }
+  return { datos, senal };
+}
+
+/** Los datos de un municipio: su área, su departamento y cuántos nodos del escenario hay dentro. */
+function datosMunicipio(l: Lugar, area: number, contorno: Poligono, antenas: Antena[]): CifraPitch[] {
+  const [ha, km] = (textoArea(area).match(/^(.*?)(?: \((.*)\))?$/) ?? []).slice(1);
+  const dentro = antenas.filter((a) => dentroPoligono(a.lon, a.lat, contorno)).length;
+  return [
+    { etiqueta: "Área", valor: ha || textoArea(area), detalle: km },
+    { etiqueta: "Departamento", valor: l.detalle },
+    { etiqueta: "Nodos en el municipio", valor: String(dentro), detalle: dentro ? "del escenario, dentro de su contorno" : "todavía no hay red aquí", tono: dentro ? undefined : "alerta" },
+  ];
+}
+
+/** Los datos de una antena: su altura y su potencia y, con la última simulación, su alcance, sus enlaces y su ruta. */
+function datosAntena(api: Api, a: Antena): CifraPitch[] {
+  const r = api.resultado();
+  const res = r?.antenas.find((x) => x.id === a.id);
+  const datos: CifraPitch[] = [{ etiqueta: "Altura de la antena", valor: `${fn(a.alturaM)} m`, detalle: res ? `sobre un terreno a ${Math.round(res.elevacionM)} m s. n. m.` : undefined }];
+  if (!r || !res) {
+    datos.push({ etiqueta: "Potencia", valor: `${fn(a.potenciaDbm)} dBm`, detalle: `antena de ${fn(a.gananciaDbi)} dBi` });
+    return datos;
+  }
+  datos.push({ etiqueta: "Alcance con servicio", valor: `${f1(res.alcanceKm)} km`, detalle: `confiable hasta ${f1(res.alcanceConfiableKm)} km` });
+  const enlaces = r.enlaces.filter((e) => (e.a === a.id || e.b === a.id) && e.margen >= UMBRAL_SERVICIO_DB);
+  const mejor = enlaces.length ? Math.max(...enlaces.map((e) => e.margen)) : NaN;
+  // (un enlace es sólido desde 30 dB, como en el mapa de la malla)
+  datos.push({ etiqueta: "Enlaces", valor: String(enlaces.length), detalle: enlaces.length ? `el mejor con ${Math.round(mejor)} dB de margen` : "sin enlace con la malla", tono: !enlaces.length ? "mal" : mejor >= ENLACES.solido.minimoDb ? "bien" : "alerta" });
+  const nodo = r.nodos.find((x) => x.id === a.id);
+  if (a.pasarela) datos.push({ etiqueta: "Área con servicio", valor: `${f1(res.areaServicioKm2)} km²`, detalle: "la entrada de la red a internet" });
+  else if (nodo) datos.push({ etiqueta: "Saltos al gateway", valor: nodo.saltos === null ? "Sin ruta" : String(nodo.saltos), detalle: nodo.saltos === null ? "no llega al gateway" : nodo.critico ? "punto único de falla" : undefined, tono: nodo.saltos === null ? "mal" : nodo.critico ? "alerta" : "bien" });
+  return datos;
+}
 
 function textoCoord(c: { lat: number; lon: number }) {
   return `${aGMS(c.lat, "lat")}, ${aGMS(c.lon, "lon")} (${aDecimal(c.lat)}, ${aDecimal(c.lon)})`;
@@ -2192,6 +2249,7 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
       if (o.coord) {
         api.centrar(o.coord.lat, o.coord.lon, 13);
         const lugar = api.ubicacion(o.coord.lat, o.coord.lon);
+        const { datos, senal } = datosCoordenada(api, o.coord.lat, o.coord.lon);
         return {
           texto: `Lo llevé a ${textoCoord(o.coord)}${lugar ? `, en ${lugar}` : ""}. ¿Le inscribo un nodo antena ahí?`,
           acciones: [{ texto: "Inscribir un nodo antena ahí", accion: "orden", orden: { tipo: "agregar", coord: o.coord, datos: { tipo: "antena" } } }],
@@ -2203,6 +2261,9 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
             titulo: lugar ?? "La coordenada",
             subtitulo: `${aDecimal(o.coord.lat)}, ${aDecimal(o.coord.lon)}`,
             parrafos: [`Aquí es: ${aGMS(o.coord.lat, "lat")}, ${aGMS(o.coord.lon, "lon")}${lugar ? `, en ${lugar}` : ""}. Le señalo el punto exacto.`, "¿Le inscribo un nodo antena justo aquí? Con el nodo puesto, el simulador calcula qué cubre desde ahí."],
+            datos,
+            // En voz alta, sin deletrear los grados
+            voz: `Aquí es, le señalo el punto exacto${lugar ? `, en ${lugar}` : ""}.${senal} ¿Le inscribo un nodo antena justo aquí?`,
             marca: { titulo: "Coordenada", tarjeta: true },
           },
         };
@@ -2225,6 +2286,7 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
               titulo: a.nombre,
               subtitulo: [lugar, `${aDecimal(a.lat)}, ${aDecimal(a.lon)}`].filter(Boolean).join(" · "),
               parrafos: [`Aquí está «${a.nombre}»: ${que}, con la antena a ${fn(a.alturaM)} m de altura.`, ...(infra ? ["¿Le explico por qué quedó aquí y qué papel cumple en la red? Se lo cuento en el recorrido, punto por punto."] : [])],
+              datos: datosAntena(api, a),
             },
           };
         }
@@ -2260,6 +2322,7 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
             titulo: l.nombre,
             subtitulo: [l.tipo === "municipio" ? l.detalle : null, area ? `municipio de ${textoArea(area)}` : null].filter(Boolean).join(" · ") || undefined,
             parrafos: [`Esto es ${nombreLugar(l)}${area ? `: un municipio de ${textoArea(area)}` : ""}${l.caja ? `${area ? ", y" : ";"} lo dejé encuadrado en el mapa` : ""}.`, segundo],
+            datos: contorno && area ? datosMunicipio(l, area, contorno, antenas) : undefined,
             marca: l.tipo === "municipio" ? { titulo: `${l.nombre}, ${l.detalle}`, tarjeta: false } : undefined,
           },
         };
