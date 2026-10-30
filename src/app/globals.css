@@ -1413,11 +1413,326 @@ body {
   }
 }
 
+/* La nube holográfica (cuando Melki llega volando y en el recorrido): vidrio ahumado y translúcido que deja ver la
+   simulación detrás, apenas desenfocada y oscurecida para que el texto claro se lea sobre cualquier color del mapa;
+   líneas de holograma muy tenues, un borde de luz que gira despacio, esquinas de visor y un barrido de luz al aparecer */
+@property --holo-giro {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+.nube-holo {
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.022) 0 1px, transparent 1px 3px),
+    linear-gradient(160deg, rgba(20, 30, 27, 0.46), rgba(12, 18, 16, 0.34) 55%, rgba(30, 21, 15, 0.42));
+  -webkit-backdrop-filter: blur(2.5px) saturate(1.45) brightness(0.66);
+  backdrop-filter: blur(2.5px) saturate(1.45) brightness(0.66);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow:
+    0 26px 60px -26px rgba(0, 0, 0, 0.75),
+    0 0 30px -8px rgba(255, 140, 70, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 0 36px rgba(79, 209, 181, 0.07);
+  color: #eef6f2;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 178, 122, 0.5) transparent;
+  cursor: default;
+}
+/* Sin desenfoque en el navegador: el vidrio un poco más oscuro, para que el texto se siga leyendo */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .nube-holo {
+    background: linear-gradient(160deg, rgba(20, 30, 27, 0.84), rgba(12, 18, 16, 0.78));
+  }
+}
+.nube-holo .nube-cursor {
+  background: #ffb27a;
+  box-shadow: 0 0 6px rgba(255, 170, 110, 0.9);
+}
+.holo-titulo {
+  text-shadow:
+    0 0 18px rgba(255, 178, 122, 0.3),
+    0 1px 2px rgba(0, 0, 0, 0.6);
+}
+.holo-marco {
+  position: absolute;
+  border-radius: 20px;
+  pointer-events: none;
+}
+.holo-marco::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.3px;
+  background: conic-gradient(
+    from var(--holo-giro),
+    rgba(255, 178, 122, 0.95),
+    rgba(255, 178, 122, 0.12) 18%,
+    rgba(95, 224, 195, 0.75) 38%,
+    rgba(255, 255, 255, 0.1) 56%,
+    rgba(95, 224, 195, 0.45) 76%,
+    rgba(255, 178, 122, 0.95)
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  /* Una vuelta de luz al encenderse (luego queda quieto: no gasta el equipo mientras se lee) */
+  animation: holo-giro 2.6s cubic-bezier(0.45, 0, 0.25, 1) 0.2s 1 both;
+}
+@keyframes holo-giro {
+  to {
+    --holo-giro: 360deg;
+  }
+}
+.holo-luz {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+}
+.holo-barrido {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 38%;
+  background: linear-gradient(180deg, transparent, rgba(255, 190, 140, 0.16) 45%, rgba(130, 235, 210, 0.12) 55%, transparent);
+  transform: translateY(-110%);
+  animation: holo-barrido 1.5s cubic-bezier(0.3, 0.1, 0.3, 1) 0.45s 1 both;
+}
+@keyframes holo-barrido {
+  from {
+    transform: translateY(-110%);
+  }
+  to {
+    transform: translateY(290%);
+  }
+}
+.holo-esquina {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  color: #ffb27a;
+  border: 0 solid currentColor;
+  filter: drop-shadow(0 0 3px rgba(255, 150, 80, 0.85));
+}
+.holo-esquina.ai {
+  top: -3px;
+  left: -3px;
+  border-top-width: 2px;
+  border-left-width: 2px;
+  border-top-left-radius: 9px;
+}
+.holo-esquina.ad {
+  top: -3px;
+  right: -3px;
+  border-top-width: 2px;
+  border-right-width: 2px;
+  border-top-right-radius: 9px;
+}
+.holo-esquina.bi {
+  bottom: -3px;
+  left: -3px;
+  border-bottom-width: 2px;
+  border-left-width: 2px;
+  border-bottom-left-radius: 9px;
+}
+.holo-esquina.bd {
+  bottom: -3px;
+  right: -3px;
+  border-bottom-width: 2px;
+  border-right-width: 2px;
+  border-bottom-right-radius: 9px;
+}
+.holo-led {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background: #ffb27a;
+  box-shadow:
+    0 0 0 2px rgba(255, 178, 122, 0.18),
+    0 0 8px rgba(255, 150, 80, 0.9);
+  will-change: opacity;
+  animation: holo-led 1.8s ease-in-out infinite;
+}
+@keyframes holo-led {
+  50% {
+    opacity: 0.4;
+  }
+}
+/* Los datos como telemetría: una celda de vidrio con su filo de luz */
+.holo-dato {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.1),
+    inset 2px 0 0 rgba(95, 224, 195, 0.6);
+}
+.holo-boton {
+  background: linear-gradient(135deg, #ffc394, #f08a4b 55%, #e07a3f);
+  box-shadow:
+    0 0 0 1px rgba(255, 214, 186, 0.5),
+    0 8px 22px -8px rgba(240, 120, 50, 0.85),
+    0 0 18px -2px rgba(255, 150, 80, 0.45);
+  text-shadow: none;
+  transition:
+    filter 0.15s ease,
+    transform 0.15s ease;
+}
+.holo-boton:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+.holo-boton:focus-visible {
+  outline: 2px solid #ffd9bf;
+  outline-offset: 2px;
+}
+.holo-cuenta {
+  background: linear-gradient(90deg, #5fe0c3, #ffb27a);
+  box-shadow: 0 0 8px rgba(255, 178, 122, 0.8);
+}
+/* El botón de la voz en el holograma: apagado, una píldora de vidrio; encendido, con su luz */
+.holo-voz {
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+.holo-voz:hover {
+  background: rgba(255, 255, 255, 0.13);
+}
+.holo-voz-encendida {
+  background: rgba(224, 122, 63, 0.3);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 178, 122, 0.65),
+    0 0 14px -2px rgba(255, 150, 80, 0.7);
+}
+.holo-ecualizador {
+  display: inline-flex;
+  height: 10px;
+  align-items: flex-end;
+  gap: 1.5px;
+}
+.holo-ecualizador i {
+  display: block;
+  width: 2px;
+  height: 100%;
+  border-radius: 1px;
+  background: currentColor;
+  opacity: 0.8;
+  transform: scaleY(0.3);
+  transform-origin: bottom;
+}
+.holo-ecualizador.activo i {
+  animation: holo-ecualizador 0.9s ease-in-out infinite;
+}
+.holo-ecualizador.activo i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.holo-ecualizador.activo i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes holo-ecualizador {
+  0%,
+  100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+/* La línea de luz que señala el punto, los datos que corren por ella y la retícula del visor */
+.holo-linea {
+  filter: drop-shadow(0 0 3px rgba(255, 170, 110, 0.75));
+}
+/* Los datos corren por la línea unos segundos al aparecer la nube (luego queda la línea de luz) */
+.holo-flujo {
+  stroke-dasharray: 0.025 0.075;
+  opacity: 0;
+  animation: holo-flujo 1.6s linear 0.6s 4;
+}
+@keyframes holo-flujo {
+  from {
+    stroke-dashoffset: 0;
+    opacity: 0.9;
+  }
+  to {
+    stroke-dashoffset: -0.1;
+    opacity: 0.9;
+  }
+}
+.holo-reticula {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: holo-reticula 3s cubic-bezier(0.3, 0, 0.2, 1) 1 both;
+  filter: drop-shadow(0 0 2px rgba(255, 150, 80, 0.8));
+}
+@keyframes holo-reticula {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.holo-nucleo {
+  filter: drop-shadow(0 0 4px rgba(255, 160, 90, 0.95));
+}
+/* El halo donde se posa el robot (cuando llega a un sitio) */
+.llegada-halo {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 128%;
+  height: 26px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 178, 122, 0.55), rgba(95, 224, 195, 0.22) 62%, transparent);
+  transform: translate(-50%, 42%);
+  pointer-events: none;
+  will-change: transform, opacity;
+  animation: llegada-halo 2.4s ease-in-out infinite;
+}
+.llegada-halo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid rgba(255, 178, 122, 0.7);
+  border-radius: 50%;
+  will-change: transform, opacity;
+  animation: llegada-onda 2.4s ease-out infinite;
+}
+@keyframes llegada-halo {
+  50% {
+    opacity: 0.65;
+    transform: translate(-50%, 42%) scale(0.92);
+  }
+}
+@keyframes llegada-onda {
+  from {
+    transform: scale(0.4);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .nube-emerge,
   .nube-dato,
-  .nube-cursor {
+  .nube-cursor,
+  .holo-marco::before,
+  .holo-barrido,
+  .holo-led,
+  .holo-ecualizador i,
+  .holo-reticula,
+  .llegada-halo,
+  .llegada-halo::after {
     animation: none !important;
+  }
+  .holo-flujo {
+    animation: none !important;
+    opacity: 0;
   }
   .nube-trazo {
     animation: none !important;
