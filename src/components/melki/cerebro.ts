@@ -25,8 +25,8 @@ import { TOURS, type IdTour } from "./tours";
 /** «recorrido» empieza el tour indicado; «tours» muestra el menú de tours; «manos-libres» activa la escucha por voz; «acerca» abre la autoría y la licencia. */
 export type AccionMelki = "recorrido" | "tours" | "simular" | "ejemplo" | "agregar" | "inspeccionar" | "parametros" | "resultados" | "kmz" | "regla" | "orden" | "deshacer" | "manos-libres" | "acerca" | "herramientas" | "pitch" | "recorrido-red" | "ajustes-ia";
 
-/** Con «detalle», la acción se muestra como una opción de menú (título y una línea). */
-export type AccionRespuesta = { texto: string; accion: AccionMelki; orden?: Orden; escenario?: Escenario; tour?: IdTour; detalle?: string };
+/** Con «detalle», la acción se muestra como una opción de menú (título y una línea). Con «parada», el recorrido de la red empieza en ese punto. */
+export type AccionRespuesta = { texto: string; accion: AccionMelki; orden?: Orden; escenario?: Escenario; tour?: IdTour; detalle?: string; parada?: string };
 
 export type Respuesta = {
   texto: string;
