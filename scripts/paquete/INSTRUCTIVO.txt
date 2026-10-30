@@ -522,6 +522,26 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
     lo dice en voz alta y la nube lo escribe a la par de su voz. Vuelva
     a tocarlo y calla (la nube sigue escribiendo). Con la voz encendida,
     cada vez que lo mande a un lugar lo dice al llegar (no antes).
+ v) Melki analista: pídale la red en la medida que quiera, por ejemplo
+    "ármame una red de 5 millas a la redonda de Cumaral", "en un radio
+    de 800 yardas", "10 km de diámetro", "2 x 1 millas" o "un cuadrado
+    de 3 km de lado" (también km, metros, pies, cuadras, hectáreas y
+    millas cuadradas). Agregue "para 400 familias" y revisa la capacidad
+    del gateway; "con un presupuesto de 80 millones" y no se pasa. Quita
+    los repetidores que sobran, no siembra repetidores que casi no
+    cubren (si de verdad necesita la meta, dígale "aunque cueste más") y
+    al final da su veredicto: red óptima, con reservas o insuficiente,
+    con el costo por km² cubierto y recomendaciones con su costo. El
+    botón "Usar la opción económica" quita los repetidores que menos
+    aportan y mide de nuevo la cobertura del área.
+ w) IA local (opcional): en la conversación con Melki toque el engranaje
+    (Ajustes de voz) y busque "IA local en este equipo (Qwen3.5)".
+    Encienda "Usar la IA local" y toque "Descargar y activar" (unos
+    2,4 GB, solo la primera vez; necesita Chrome o Edge con tarjeta
+    gráfica). Corre en este equipo, sin internet y sin enviar nada.
+    Melki la usa cuando no entiende un pedido: lo pasa a órdenes que
+    verifica antes de hacerlas. "Borrar el modelo de este equipo" libera
+    el espacio.
 
 
 3. BUENO SABER
