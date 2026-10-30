@@ -1399,6 +1399,19 @@ body {
     visibility: hidden;
   }
 }
+/* La barra de la nube: cuánto falta para seguir (se detiene con el puntero encima o en pausa) */
+.nube-cuenta {
+  transform-origin: left center;
+  animation: nube-cuenta linear forwards;
+}
+@keyframes nube-cuenta {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .nube-emerge,

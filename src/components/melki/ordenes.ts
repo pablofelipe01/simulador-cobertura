@@ -2037,6 +2037,24 @@ export type ResultadoOrden = Respuesta & {
   nodo?: string;
   /** Lugar de la orden (para «ahí», «ese municipio», «todo el municipio» en la siguiente). */
   lugar?: Lugar;
+  /** Melki llega volando al sitio (en vez del punto rojo) y escribe en su nube qué hay ahí. */
+  llegada?: LlegadaMelki;
+};
+
+/**
+ * Melki llega volando a donde se le pidió ir: un lugar (lo saluda), una coordenada o una antena (la señala). Lo que
+ * escribe en su nube; el saludo con el trato de la persona lo pone la conversación. Si el robot no puede volar (el mapa
+ * no está listo), queda el punto marcado de siempre (`marca`).
+ */
+export type LlegadaMelki = {
+  lat: number;
+  lon: number;
+  gesto: "saludando" | "senalando";
+  etiqueta: string;
+  titulo: string;
+  subtitulo?: string;
+  parrafos: string[];
+  marca?: { titulo: string; tarjeta: boolean };
 };
 
 function textoCoord(c: { lat: number; lon: number }) {
@@ -2169,32 +2187,62 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
       api.simular();
       return { texto: "Simulando… en un momento le cuento el resultado.", esperar: "*" };
     case "ir": {
+      // En vez del punto rojo, Melki vuela hasta el sitio (la conversación lo muestra con `llegada`): saluda en un
+      // lugar y señala una coordenada o una antena
       if (o.coord) {
         api.centrar(o.coord.lat, o.coord.lon, 13);
-        api.marcar(o.coord.lat, o.coord.lon, "Coordenada");
         const lugar = api.ubicacion(o.coord.lat, o.coord.lon);
         return {
-          texto: `Lo llevé a ${textoCoord(o.coord)}${lugar ? `, en ${lugar}` : ""}. Dejé el punto marcado: desde la tarjeta puede inscribir un nodo ahí.`,
+          texto: `Lo llevé a ${textoCoord(o.coord)}${lugar ? `, en ${lugar}` : ""}. ¿Le inscribo un nodo antena ahí?`,
           acciones: [{ texto: "Inscribir un nodo antena ahí", accion: "orden", orden: { tipo: "agregar", coord: o.coord, datos: { tipo: "antena" } } }],
+          llegada: {
+            lat: o.coord.lat,
+            lon: o.coord.lon,
+            gesto: "senalando",
+            etiqueta: "Melki llegó · Coordenada",
+            titulo: lugar ?? "La coordenada",
+            subtitulo: `${aDecimal(o.coord.lat)}, ${aDecimal(o.coord.lon)}`,
+            parrafos: [`Aquí es: ${aGMS(o.coord.lat, "lat")}, ${aGMS(o.coord.lon, "lon")}${lugar ? `, en ${lugar}` : ""}. Le señalo el punto exacto.`, "¿Le inscribo un nodo antena justo aquí? Con el nodo puesto, el simulador calcula qué cubre desde ahí."],
+            marca: { titulo: "Coordenada", tarjeta: true },
+          },
         };
       }
       if (o.id) {
         const a = porId.get(o.id);
         if (a) {
           api.centrar(a.lat, a.lon, 13);
-          return { texto: `Aquí está «${a.nombre}».` };
+          const infra = (a.tipo ?? "antena") === "antena";
+          const lugar = api.ubicacion(a.lat, a.lon);
+          const que = a.pasarela ? "el gateway, la entrada de la red a internet" : infra ? "un repetidor de la malla" : "un nodo de campo";
+          return {
+            texto: `Aquí está «${a.nombre}».${infra ? " ¿Le explico por qué quedó aquí y qué papel cumple?" : ""}`,
+            acciones: infra ? [{ texto: "¿Por qué quedó aquí?", accion: "recorrido-red", parada: a.nombre }] : undefined,
+            llegada: {
+              lat: a.lat,
+              lon: a.lon,
+              gesto: "senalando",
+              etiqueta: `Melki llegó · ${a.pasarela ? "Gateway" : infra ? "Repetidor" : "Nodo de campo"}`,
+              titulo: a.nombre,
+              subtitulo: [lugar, `${aDecimal(a.lat)}, ${aDecimal(a.lon)}`].filter(Boolean).join(" · "),
+              parrafos: [`Aquí está «${a.nombre}»: ${que}, con la antena a ${fn(a.alturaM)} m de altura.`, ...(infra ? ["¿Le explico por qué quedó aquí y qué papel cumple en la red? Se lo cuento en el recorrido, punto por punto."] : [])],
+            },
+          };
         }
       }
       if (o.lugar) {
         const l = o.lugar;
         if (l.caja) api.encuadrarCaja(l.caja);
         else api.centrar(l.lat, l.lon, 8);
-        // Solo el marcador con el nombre: la respuesta ya trae qué hacer ahí (y la tarjeta taparía la barra del asistente)
-        if (l.tipo === "municipio") api.marcar(l.lat, l.lon, `${l.nombre}, ${l.detalle}`, false);
         // Con el contorno del municipio: su tamaño y la red para cubrirlo entero, a un toque (o con «sí»)
         const contorno = l.tipo === "municipio" ? api.contornoLugar?.(l) : null;
         const area = contorno ? areaM2(contorno) : 0;
         const zona = contorno && area <= 3e9 ? ({ puntos: contorno, nombre: `en todo el municipio de ${l.nombre} (${l.detalle})`, etiqueta: `${l.nombre} (${l.detalle})`, lugar: l } as const) : null;
+        const segundo =
+          l.tipo === "municipio"
+            ? zona
+              ? "¿Le armo una red sostenible que cubra todo el municipio, con su viabilidad y su costo? Toque el botón o dígame «sí»."
+              : `Dígame qué hacemos aquí, por ejemplo «hazme una red sostenible en ${l.nombre} de 11.226 hectáreas».`
+            : "Dígame en qué municipio trabajamos («ubícame en» y su nombre) o qué red armamos aquí.";
         return {
           texto: `Lo llevé a ${nombreLugar(l)}${area ? `, un municipio de ${textoArea(area)}` : ""}.${zona ? " ¿Le armo una red sostenible que cubra todo el municipio, con su viabilidad y su costo?" : ""}`,
           acciones: zona
@@ -2204,6 +2252,16 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
               ]
             : undefined,
           lugar: l,
+          llegada: {
+            lat: l.lat,
+            lon: l.lon,
+            gesto: "saludando",
+            etiqueta: `Melki llegó · ${l.tipo === "municipio" ? "Municipio" : l.tipo === "departamento" ? "Departamento" : "País"}`,
+            titulo: l.nombre,
+            subtitulo: [l.tipo === "municipio" ? l.detalle : null, area ? `municipio de ${textoArea(area)}` : null].filter(Boolean).join(" · ") || undefined,
+            parrafos: [`Esto es ${nombreLugar(l)}${area ? `: un municipio de ${textoArea(area)}` : ""}${l.caja ? `${area ? ", y" : ";"} lo dejé encuadrado en el mapa` : ""}.`, segundo],
+            marca: l.tipo === "municipio" ? { titulo: `${l.nombre}, ${l.detalle}`, tarjeta: false } : undefined,
+          },
         };
       }
       return { texto: `No encontré «${o.consulta}». Pruebe con el nombre de un municipio o departamento de Colombia, o con coordenadas como ${EJEMPLO_COORD}.` };
@@ -2969,5 +3027,7 @@ function textoDiseno(o: Extract<Orden, { tipo: "disenar" }>, d: Diseno, puestas:
     if (!o.respaldo) acciones.push({ texto: "Agregar respaldo (dos nodos por punto)", accion: "orden", orden: conPoligono({ respaldo: true }) });
     if (o.porcentaje < 99.9) acciones.push({ texto: "Subir la meta a 99,9 %", accion: "orden", orden: conPoligono({ porcentaje: 99.9 }) });
   }
+  // Recién desplegada: Melki la puede explicar punto por punto (por qué cada antena quedó ahí y qué refuerzos necesita)
+  acciones.push({ texto: "Explícame la red punto por punto", accion: "recorrido-red" });
   return { texto: partes.join("\n"), acciones };
 }

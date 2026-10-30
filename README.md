@@ -18,8 +18,10 @@ cuesta la red para el Chocó?», «conecta a los que faltan»), responde pregunt
 está en rojo, qué hacer ahora) y da tours guiados. Con una clave gratuita de Google AI Studio, Melki también **conversa
 como un modelo de inteligencia artificial** (Gemini Live: oye la voz directamente y responde por escrito), presenta
 el **pitch del modelo de negocio** con su robot volando por el mapa (cada antena, la inversión, la operación y el punto
-de equilibrio) y hace el **recorrido de la red**: va punto por punto y en una nube que sale de cada antena escribe qué se
-instaló, por qué ahí, qué papel cumple y, al final, por qué la red quedó así.
+de equilibrio) y hace el **recorrido de la red**: cuenta cómo calcula el simulador, va punto por punto y en una nube que
+sale de cada antena escribe, al ritmo de lectura, qué se instaló, por qué ahí y qué papel cumple; al final, qué refuerzos
+necesita para funcionar al 100 % y al 99,9 % y por qué la red quedó así. Cuando se le pide ir a un lugar («ubícame en
+Barranca de Upía»), **Melki llega volando** y saluda, en vez del punto rojo.
 
 > **© 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero. Todos los derechos reservados.**
 > Creado por Giancarlo González Guerrero para el Ingeniero Pablo Felipe Acevedo y la empresa Melki, con ayuda de
@@ -130,13 +132,31 @@ instaló, por qué ahí, qué papel cumple y, al final, por qué la red quedó a
   - Se maneja con los botones, el teclado (← → espacio Esc) o la voz: «siguiente», «anterior», «pausa», «sigue»,
     «repite», «ve a la inversión», «termina la presentación». Avanza solo al terminar cada capítulo (o a mano). Con la
     IA conectada lo narra la IA con sus palabras y responde preguntas en medio; si le hablan encima, pausa
+- **Melki llega volando** (v13.3): cuando se le pide ir a un lugar («ubícame en Barranca de Upía», «llévame a
+  Villavicencio»), a una coordenada o a una antena, en vez del punto rojo el robot de Melki sale de su esquina cuando
+  la cámara llega, vuela hasta el sitio y saluda («¡Hola, señor!») o, en una coordenada o una antena, la señala (el
+  sitio late). De ahí sale su nube, que escribe al ritmo de lectura qué hay ahí y la sugerencia de la respuesta con su
+  botón («Sí, la red de todo el municipio», «Inscribir un nodo antena ahí», «¿Por qué quedó aquí?», que abre el
+  recorrido en esa antena); el botón de la conversación queda usado. Al terminar de escribir, una barra cuenta unos
+  segundos (con el puntero encima, espera) y Melki vuelve a su esquina; la X de la nube o Esc lo mandan de vuelta
+  antes. Si se mueve el mapa, el robot y la nube siguen al sitio. Con la conversación abierta, la nube queda a su
+  izquierda (si no cabe, Melki llega, saluda y vuelve); en el celular la conversación se recoge para verlo llegar. Con
+  el pitch o el recorrido abiertos, o sin mapa, queda el punto de siempre. El buscador de la barra sigue marcando el
+  punto con su tarjeta
 - **Recorrido de la red** (v13.1; botón «Recorrido» de la barra de arriba, o «Melki, explícame la red», «hazme un
   recorrido por la red», «recorre la red punto por punto»): el robot de Melki va por el mapa un punto a la vez, siguiendo
   el camino de la señal (el gateway y sus repetidores rama por rama, en el sentido del reloj), y de cada punto sale una
   nube de vidrio translúcido, con una línea que lo señala, que escribe su explicación como una máquina de escribir (el
-  texto oscuro sobre el vidrio claro se lee sobre cualquier color del mapa). La voz dice solo lo breve; el detalle va
-  escrito. Todo sale de la red del mapa y de la simulación al día:
+  texto oscuro sobre el vidrio claro se lee sobre cualquier color del mapa). Desde la v13.3 escribe al ritmo de lectura
+  (unas 1.500 letras por minuto: se lee a medida que aparece); al terminar, una barra cuenta unos segundos para mirar
+  las cifras (de 3,5 a 10 s) y sigue sola al próximo punto; con el puntero encima, espera. La voz dice solo lo breve; el
+  detalle va escrito. Todo sale de la red del mapa y de la simulación al día:
   - La red de un vistazo: piezas, lugar, protocolo y cobertura
+  - Cómo lo calcula el simulador (v13.3): el relieve (real, de archivos HGT o plano, con su resolución), la malla de
+    celdas y el radio de estudio, la pérdida (espacio libre más la difracción sobre las lomas, Deygout con la curvatura
+    de la Tierra, calibrada contra Radio Mobile; o Longley-Rice) y el entorno, el margen sobre la sensibilidad del
+    radio y sus cortes (20 dB servicio, 30 útil, 37 confiable; enlaces sólidos desde 30), cómo arma la malla (el camino
+    más robusto al gateway dentro del límite de saltos y los puntos críticos) y la prueba de la hora pico
   - El gateway: qué se instaló (radio, antena y altura, mini PC con UPS, Starlink y energía solar), por qué ahí (en la
     red, en el terreno y por sus enlaces directos, con distancia, margen y línea de vista) y su papel: cuántas personas
     salen por él a internet y qué pasa si se apaga
@@ -147,14 +167,24 @@ instaló, por qué ahí, qué papel cumple y, al final, por qué la red quedó a
   - Las personas: cuántas llegan, en cuántos saltos y por cuál punto entran; la prueba de estrés, si la hay
   - Lo que falta (gente sin cobertura, repetidores sin camino, enlaces débiles, puntos críticos), con un botón que se lo
     pide a Melki: «Conecta a los que faltan», «Ajústamelo» o «Sugiéreme antenas de apoyo»
+  - Para que funcione al 100 % y al 99,9 % (v13.3): los refuerzos, con números del simulador. Al 100 % de las personas:
+    cuántas no llegan, en cuántos grupos y a qué distancia, y cuántos repetidores de apoyo harían falta con el alcance de
+    los de esta red (un estimado: «conecta a los que faltan» los ubica con el relieve real); los repetidores sin camino o
+    que pasan del límite de saltos; los enlaces inestables (menos de 30 dB) y, para el 99,9 %, los que no llegan a 37 dB;
+    un respaldo por cada punto único de falla; al 99,9 % del tiempo (menos de 9 horas sin servicio al año), el segundo
+    gateway o un segundo enlace a internet, la UPS, las baterías y el mantenimiento; la hora pico (zonas que se saturan
+    y el ajuste de radio que rinde más) y lo que cuestan los refuerzos con el modelo de costos de Trama. Con el botón
+    que lo resuelve. También con «¿qué refuerzos necesita la red?» o «¿qué le falta para funcionar al 100 %?»
   - Por qué la red quedó así: la estructura y la distancia entre repetidores, el reparto de la carga, la solidez de los
     enlaces (línea de vista, el más débil, los de sobra), la cobertura y la calificación, y el costo de la
     infraestructura (sitios y repetidores, con instalación y transporte; el negocio completo está en el pitch)
   - Se maneja con los botones, el teclado (← → espacio Esc) o pidiéndoselo a Melki: «siguiente», «anterior», «pausa»,
-    «sigue», «repite», «ve al gateway», «ve al Repetidor 2», «el tercer repetidor», «ve a lo que falta», «¿por qué la
-    red quedó así?», «¿por qué pusiste el Repetidor 2 ahí?», «explícame el repetidor dos», «termina el recorrido».
-    Avanza solo cuando hay tiempo de leer cada nube (o a mano). Al terminar o al salir, deja todo escrito en la
-    conversación. Con la IA conectada, la IA dice lo breve con su voz y usa la herramienta del recorrido
+    «sigue», «repite», «ve al gateway», «ve al Repetidor 2», «el tercer repetidor», «ve a lo que falta», «ve a los
+    refuerzos», «¿cómo lo calcula el simulador?» (con el recorrido abierto), «¿por qué la red quedó así?», «¿por qué
+    pusiste el Repetidor 2 ahí?», «explícame el repetidor dos», «termina el recorrido». Avanza solo cuando hay tiempo de
+    leer cada nube (o a mano). Al terminar o al salir, deja todo escrito en la conversación. Con la IA conectada, la IA
+    dice lo breve con su voz y usa la herramienta del recorrido. Al terminar un diseño («ármame una red…»), Melki
+    ofrece «Explícame la red punto por punto»
   - En el celular la nube va abajo, como una hoja, y el punto queda arriba. Si el texto no cabe (en el celular o en una
     pantalla baja), la nube baja sola con lo que va escribiendo. Un toque en la nube la termina de escribir
 - **Conversar con IA: Gemini Live, gratis** (v13; Ajustes de voz → «Conversar con IA (Gemini Live)»): con la opción
@@ -382,7 +412,8 @@ src/
                             micrófono a PCM de 16 kHz y la voz del modelo; herramientas-ia.ts: lo que la IA puede hacer
                             y quién es Melki para ella); el pitch (robot.tsx: el robot en vectores; presentacion.tsx:
                             la presentación que recorre el mapa); el recorrido de la red (recorrido-red.tsx: el robot
-                            punto por punto; nube-mapa.tsx: la nube de vidrio que sale de un punto y escribe)
+                            punto por punto; nube-mapa.tsx: la nube de vidrio que sale de un punto y escribe al
+                            ritmo de lectura, con su barra de tiempo); llegada.tsx (Melki llega volando a un lugar)
   datos/geo/                límites, nombres y ríos de referencia (ver LEEME.md: fuentes y licencias)
   lib/autoria.ts            autoría, titulares y licencia (los usan «Acerca del simulador», Melki y la versión HTML)
   lib/geo/                  consultas locales: municipio de un punto, búsqueda de lugares, contorno de un municipio
@@ -404,8 +435,9 @@ src/
                             zonas, estrés, carga y Trama)
   lib/negocio/pitch.ts      el pitch del modelo de negocio: capítulos con la red del mapa, CAPEX, OPEX y punto de
                             equilibrio, y los pedidos de la presentación por voz o por escrito
-  lib/negocio/recorrido-red.ts  el recorrido de la red: las paradas (qué se instaló, por qué ahí, su papel, lo que
-                            falta y por qué quedó así), su resumen escrito y los pedidos por voz o por escrito
+  lib/negocio/recorrido-red.ts  el recorrido de la red: las paradas (cómo calcula el simulador, qué se instaló, por
+                            qué ahí, su papel, lo que falta, los refuerzos para el 100 % y el 99,9 % y por qué
+                            quedó así), su resumen escrito y los pedidos por voz o por escrito
   lib/config.ts             fuentes de mapas y relieve (reemplazables con variables de entorno)
 scripts/                    versión HTML, paquetes de avance y compresor ZIP
 tests/                      pruebas del motor, de Melki y de extremo a extremo (con un servidor de voz en vivo de

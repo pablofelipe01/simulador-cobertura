@@ -25,6 +25,7 @@ import { estadoParaIA, HERRAMIENTAS_IA, instruccionesMelki } from "./herramienta
 import { MODELO_IA_DEFECTO, MODELOS_IA, SesionLive, VOCES_IA, type LlamadaFuncion } from "./ia-live";
 import { PresentacionPitch, type ControlPitch, type Narrador } from "./presentacion";
 import { RecorridoRed, type ControlRecorrido } from "./recorrido-red";
+import { LlegadaRobot } from "./llegada";
 import { HudVoz, type SugerenciaHud } from "./hud-voz";
 import {
   AYUDA_VOZ,
@@ -57,7 +58,7 @@ import {
   type EstadoDictado,
   type ModoDictado,
 } from "./dictado";
-import { accionAjuste, dividirEnPasos, ejecutarOrden, interpretarOrden, textoCoberturaUtil, textoRed, type Api, type ContextoOrden, type Orden, type Pendiente } from "./ordenes";
+import { accionAjuste, dividirEnPasos, ejecutarOrden, interpretarOrden, textoCoberturaUtil, textoRed, type Api, type ContextoOrden, type LlegadaMelki, type Orden, type Pendiente, type ResultadoOrden } from "./ordenes";
 import type { IdTour } from "./tours";
 import { alCargarVoces, callar, fijarVozPreferida, hablar, puntajeVoz, sonando, vocesEspanol, vozDisponible } from "./voz";
 
@@ -405,6 +406,9 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   const recorridoAbierto = useRef(false);
   /** Ya quedó por escrito en la conversación el recorrido de esta vez. */
   const recorridoEscrito = useRef(false);
+  /* Melki llega volando a donde se le pidió ir (en vez del punto rojo), con la primera opción de la respuesta */
+  const [llegada, setLlegada] = useState<(LlegadaMelki & { n: number; accion?: AccionRespuesta }) | null>(null);
+  const nLlegada = useRef(0);
   /** Lo que Melki responde mientras la IA espera el resultado de una orden. */
   const captura = useRef<string[] | null>(null);
   /** Órdenes que siguen calculando (sembrado, diseño, prueba de estrés…). */
@@ -1561,8 +1565,44 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     agregarMelki({ texto: "Listo, deshice ese cambio." });
   };
 
+  /**
+   * Melki llega volando a donde se le pidió ir. Con la presentación o el recorrido abiertos (una cosa a la vez), o si
+   * el mapa no está listo, queda el punto de siempre. En el celular se recoge la conversación para verlo llegar (lo
+   * que responde también va en su nube).
+   */
+  const mostrarLlegada = (res: ResultadoOrden) => {
+    const l = res.llegada;
+    if (!l) return;
+    const a = actual.current.api;
+    if (pitchAbierto.current || recorridoAbierto.current || !a.mapaPitch?.()) {
+      if (l.marca) a.marcar(l.lat, l.lon, l.marca.titulo, l.marca.tarjeta);
+      return;
+    }
+    if (typeof window !== "undefined" && window.matchMedia?.("(max-width: 639px)").matches && actual.current.abierto) setAbierto(false);
+    setLlegada({ ...l, n: ++nLlegada.current, accion: res.acciones?.find((x) => x.accion !== "deshacer") });
+  };
+
+  /** El botón de la nube de la llegada: la misma opción de la conversación (queda marcada como usada allá también). */
+  const pulsarDesdeLlegada = (l: { n: number; accion?: AccionRespuesta }) => {
+    const a = l.accion;
+    if (!a) return;
+    const m = [...actual.current.mensajes].reverse().find((x) => x.acciones?.includes(a));
+    const i = m?.acciones?.indexOf(a) ?? -1;
+    const clave = m ? `${m.id}:${i}` : `llegada-${l.n}`;
+    if (actual.current.usados.has(clave)) return;
+    pulsarAccion(a, clave);
+  };
+
+  /** Cómo saluda al llegar: «¡Hola, señor!» la primera vez; luego, «¡Llegamos, señor!» o «¡Aquí estamos, señor!». */
+  const saludoLlegada = (n: number) => {
+    const quien = manos.trato === "ninguno" ? "" : manos.trato === "senora" ? ", señora" : ", señor";
+    return n === 1 ? `¡Hola${quien}!` : n % 2 ? `¡Llegamos${quien}!` : `¡Aquí estamos${quien}!`;
+  };
+
   const ejecutar = (orden: Orden) => {
+    setLlegada(null);
     const res = ejecutarOrden(orden, api);
+    mostrarLlegada(res);
     pendiente.current = res.pendiente ?? null;
     if (res.nodo) ultimoNodo.current = res.nodo;
     if (res.lugar) ultimoLugar.current = res.lugar;
@@ -1591,6 +1631,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
    * Las que necesitan la red calculada esperan la simulación; al final se puede deshacer todo junto.
    */
   const ejecutarPlan = async (pasos: string[], primera: Orden) => {
+    setLlegada(null);
     const antesPlan = api.instantanea();
     const total = pasos.length;
     let hechos = 0;
@@ -1610,6 +1651,9 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       }
       if (NECESITA_RED.has(orden.tipo)) await api.esperarResultado();
       const res = ejecutarOrden(orden, api);
+      // Melki llega volando solo en el último paso (los siguientes moverían el mapa); antes, el punto de siempre
+      if (i === total - 1) mostrarLlegada(res);
+      else if (res.llegada?.marca) api.marcar(res.llegada.lat, res.llegada.lon, res.llegada.marca.titulo, res.llegada.marca.tarjeta);
       pendiente.current = res.pendiente ?? null;
       if (res.nodo) ultimoNodo.current = res.nodo;
       if (res.lugar) ultimoLugar.current = res.lugar;
@@ -2354,8 +2398,10 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     if (!a.datosPitch || !a.mapaPitch?.()) return "Ahora no puedo presentar: el mapa no está listo.";
     if (!a.antenas().some((x) => x.activa && (x.tipo ?? "antena") === "antena")) return "Para presentar necesito una red en el mapa: ponga el gateway y los repetidores, o pídame «ármame una red que cubra todo el municipio».";
     pitchPendiente.current = p;
-    // Una cosa a la vez: si el recorrido estaba abierto, se cierra (los paneles siguen guardados)
+    // Una cosa a la vez: si el recorrido estaba abierto, se cierra (los paneles siguen guardados); el robot que había
+    // llegado a un lugar se va
     if (recorridoAbierto.current) cerrarRecorrido({ devolver: false, escribir: false });
+    setLlegada(null);
     // Deja el mapa libre: sin paneles, sin la conversación ni la tarjeta del nodo encima. Sin voz (lo normal), cada
     // capítulo queda escrito el tiempo de leerlo; con el parlante de la presentación, también se narra.
     liberarMapa();
@@ -2376,7 +2422,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     if (devolver) devolverPanelesPresentacion();
   };
 
-  const conRobot = pitch || recorrido !== null;
+  const conRobot = pitch || recorrido !== null || llegada !== null;
   const mapaPitch = useMemo(() => (conRobot ? (api.mapaPitch?.() ?? null) : null), [conRobot, api]);
 
   const armarCapitulos = useCallback(
@@ -2458,6 +2504,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     if (!hayRedEnMapa()) return "Para el recorrido necesito una red en el mapa: ponga el gateway y los repetidores, o pídame «ármame una red que cubra todo el municipio».";
     // Una cosa a la vez: si la presentación estaba abierta, se cierra (los paneles siguen guardados)
     if (pitchAbierto.current) cerrarPitch(false);
+    setLlegada(null);
     // Todo va escrito en cada nube (sin voz, lo normal); con el parlante del recorrido, también dice lo breve
     liberarMapa();
     recorridoAbierto.current = true;
@@ -2465,7 +2512,9 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     setRecorrido({ desde: p.parada });
     // Con la red al día (si faltaba simular, el recorrido se rehace cuando termine)
     void a.esperarResultado().then(() => setVersionPitch((v) => v + 1));
-    return p.parada && p.parada !== "cierre"
+    return p.parada === "refuerzos"
+      ? "Le explico qué refuerzos necesita la red para funcionar al 100 % y al 99,9 %. Use las flechas para ver cada punto, o dígame «ve al gateway» o «termina el recorrido»."
+      : p.parada && p.parada !== "cierre"
       ? "Le explico ese punto de la red. Use las flechas o dígame «siguiente», «anterior», «ve al gateway» o «termina el recorrido»."
       : p.parada === "cierre"
         ? "Le explico por qué la red quedó así. Use las flechas para ver cada punto, o dígame «ve al gateway» o «termina el recorrido»."
@@ -2542,7 +2591,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     }
     if (a.accion === "recorrido-red") {
       setUsados((u) => new Set(u).add(clave));
-      const t = pedirRecorrido({ accion: "empezar" });
+      const t = pedirRecorrido({ accion: "empezar", parada: a.parada });
       setMensajes((x) => [...x, { id: siguiente.current++, de: "melki", texto: t }]);
       return;
     }
@@ -2729,6 +2778,18 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       voz={vozActiva}
       parlantes={!manos.audifonos && vozActiva}
     />
+    {llegada && (
+      <LlegadaRobot
+        key={llegada.n}
+        llegada={llegada}
+        mapa={mapaPitch}
+        saludo={saludoLlegada(llegada.n)}
+        reservaDerecha={abierto ? 414 : 0}
+        sugerencia={llegada.accion?.texto}
+        onSugerencia={llegada.accion ? () => pulsarDesdeLlegada(llegada) : undefined}
+        onFin={() => setLlegada((x) => (x?.n === llegada.n ? null : x))}
+      />
+    )}
     {recorrido && (
       <RecorridoRed
         armar={armarParadas}

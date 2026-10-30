@@ -2162,18 +2162,41 @@ await flujo(
     const rec = page.locator("[data-tour=recorrido-red]");
     await rec.waitFor({ timeout: 10000 });
     const nube = rec.locator(".nube-mapa");
-    const escrita = () => rec.locator(".nube-mapa[data-escrito=si]").waitFor({ timeout: 25000 });
+    // La nube escribe al ritmo de lectura; un toque la termina de escribir (así la prueba no espera cada texto entero)
+    const escrita = async () => {
+      await nube.waitFor({ timeout: 15000 });
+      await nube.click({ position: { x: 24, y: 12 } });
+      await rec.locator(".nube-mapa[data-escrito=si]").waitFor({ timeout: 10000 });
+    };
+    // 1 · El panorama: la nube sale del robot y escribe al ritmo de lectura (no de golpe); los paneles se ocultan
+    await nube.waitFor({ timeout: 15000 });
+    await page.waitForTimeout(1500);
+    afirmar((await nube.getAttribute("data-escrito")) === "no", "La nube debería escribir al ritmo de lectura, no de golpe");
+    await escrita();
+    // Escrita: la barra cuenta unos segundos para seguir solo al próximo punto; con el puntero encima (quedó ahí con el
+    // toque), espera; al quitarlo, sigue contando
+    await rec.locator("[data-cuenta=pausada]").waitFor({ timeout: 5000 });
+    await page.waitForTimeout(6000);
+    afirmar((await page.locator("[data-tour=recorrido-red][data-parada=panorama]").count()) === 1, "Con el puntero encima no debería haber seguido al próximo punto");
+    await page.mouse.move(4, 300);
+    await rec.locator("[data-cuenta=corre]").waitFor({ timeout: 3000 });
     // A mano, para revisar cada punto
     await rec.getByRole("button", { name: /^Avanza solo/ }).click();
-    // 1 · El panorama: la nube sale del robot y escribe; los paneles se ocultan
-    await escrita();
-    afirmar(/Recorrido · 1 de 6/.test(await nube.textContent()), `El panorama no dice el paso: ${(await nube.textContent()).slice(0, 80)}`);
+    afirmar((await page.locator("[data-tour=recorrido-red][data-parada=panorama]").count()) === 1 && (await rec.locator("[data-cuenta]").count()) === 0, "A mano no cuenta el tiempo ni sigue solo");
+    afirmar(/Recorrido · 1 de 8/.test(await nube.textContent()), `El panorama no dice el paso: ${(await nube.textContent()).slice(0, 80)}`);
     afirmar(/El recorrido sigue el camino de la señal/.test(await nube.textContent()), "El panorama no explica el recorrido");
     afirmar(!(await page.locator("aside[aria-label=Resultados]").isVisible()), "El panel de resultados debería ocultarse");
     // Melki no habla (lo normal): todo va escrito en la nube
     afirmar((await page.evaluate(() => window.__voz.dicho.length)) === 0, `Sin encender la voz, el recorrido no debería hablar: ${await page.evaluate(() => window.__voz.dicho.join(" | ").slice(0, 200))}`);
     await foto("panorama");
-    // 2 · El gateway: la nube sale de su punto, con la línea que lo señala, y escribe qué se instaló, por qué ahí y su papel
+    // 2 · Cómo lo calcula el simulador: el relieve, la pérdida, el margen y sus cortes, la malla y la hora pico
+    await page.keyboard.press("ArrowRight");
+    await page.locator("[data-tour=recorrido-red][data-parada=metodo]").waitFor({ timeout: 10000 });
+    await escrita();
+    const tMetodo = await nube.textContent();
+    afirmar(/Cómo lo calcula el simulador/.test(tMetodo) && /perfil del terreno/.test(tMetodo) && /Con 20 dB ya hay servicio/.test(tMetodo) && /Radio Mobile/.test(tMetodo), `La nube del método no lo explica: ${tMetodo.slice(0, 200)}`);
+    await foto("metodo");
+    // 3 · El gateway: la nube sale de su punto, con la línea que lo señala, y escribe qué se instaló, por qué ahí y su papel
     await page.keyboard.press("ArrowRight");
     await page.locator("[data-tour=recorrido-red][data-parada^=gateway]").waitFor({ timeout: 10000 });
     await escrita();
@@ -2209,6 +2232,14 @@ await flujo(
     await escrita();
     afirmar(/no llega al gateway/.test(await nube.textContent()) && (await nube.getByRole("button", { name: "Conecta a los que faltan" }).isVisible()), "«Lo que falta» debería señalar a la persona sin cobertura y ofrecer conectarla");
     await foto("lo-que-falta");
+    // Los refuerzos: qué le falta para el 100 % (los repetidores de apoyo, estimados) y para el 99,9 % (el segundo gateway)
+    await chat.getByRole("textbox").fill("ve a los refuerzos");
+    await chat.getByRole("textbox").press("Enter");
+    await page.locator("[data-tour=recorrido-red][data-parada=refuerzos]").waitFor({ timeout: 10000 });
+    await escrita();
+    const tRef = await nube.textContent();
+    afirmar(/Para que funcione al 100 % y al 99,9 %/.test(tRef) && /hacen falta unos \d+ repetidore?s? de apoyo/.test(tRef) && /segundo gateway/.test(tRef) && /de inversión/.test(tRef) && (await nube.getByRole("button", { name: "Conecta a los que faltan" }).isVisible()), `Los refuerzos no dicen qué falta: ${tRef.slice(0, 240)}`);
+    await foto("refuerzos");
     await chat.getByRole("textbox").fill("¿por qué la red quedó así?");
     await chat.getByRole("textbox").press("Enter");
     await page.locator("[data-tour=recorrido-red][data-parada=cierre]").waitFor({ timeout: 10000 });
@@ -2221,13 +2252,13 @@ await flujo(
     await page.keyboard.press("Escape");
     await rec.waitFor({ state: "detached", timeout: 5000 });
     // (la conversación quedó abierta: con ella se le pidió «ve a lo que falta»)
-    await chat.getByText(/Le dejo por escrito el recorrido de la red \(6 paradas\)/).waitFor({ timeout: 10000 });
+    await chat.getByText(/Le dejo por escrito el recorrido de la red \(8 paradas\)/).waitFor({ timeout: 10000 });
     await page.locator("aside[aria-label=Resultados]").waitFor({ state: "visible", timeout: 5000 });
     // Desde una nube: «Conecta a los que faltan» cierra el recorrido y se lo pide a Melki
     await chat.getByRole("textbox").fill("explícame la red");
     await chat.getByRole("textbox").press("Enter");
     await rec.waitFor({ timeout: 10000 });
-    await rec.getByRole("button", { name: "Punto 5: Lo que falta" }).click();
+    await rec.getByRole("button", { name: "Punto 6: Lo que falta" }).click();
     await escrita();
     await nube.getByRole("button", { name: "Conecta a los que faltan" }).click();
     await rec.waitFor({ state: "detached", timeout: 5000 });
@@ -2252,8 +2283,15 @@ await flujo(
     await rec.waitFor({ timeout: 10000 });
     await rec.getByRole("button", { name: /^Avanza solo/ }).click();
     await page.getByRole("button", { name: "Siguiente (→)" }).click();
+    await page.locator("[data-tour=recorrido-red][data-parada=metodo]").waitFor({ timeout: 10000 });
+    await page.getByRole("button", { name: "Siguiente (→)" }).click();
+    await page.locator("[data-tour=recorrido-red][data-parada^=gateway]").waitFor({ timeout: 10000 });
     const nube = rec.locator(".nube-mapa");
-    await rec.locator(".nube-mapa[data-escrito=si]").waitFor({ timeout: 25000 });
+    // Escribe al ritmo de lectura (la nube sigue lo que escribe); un toque la termina
+    await nube.waitFor({ timeout: 15000 });
+    await page.waitForTimeout(3000);
+    await nube.click({ position: { x: 24, y: 12 } });
+    await rec.locator(".nube-mapa[data-escrito=si]").waitFor({ timeout: 10000 });
     const b = await nube.boundingBox();
     afirmar(b.x >= 0 && b.x + b.width <= 390 && b.height <= 844 * 0.5, `En el celular la nube debería caber abajo (${Math.round(b.x)}, ${Math.round(b.width)} × ${Math.round(b.height)})`);
     const ancho = await page.evaluate(() => document.documentElement.scrollWidth);
@@ -2267,6 +2305,82 @@ await flujo(
     await rec.waitFor({ state: "detached", timeout: 5000 });
   },
   { sembrar: true, tamano: { width: 390, height: 844 }, preparar: (page) => page.addInitScript(manosLibresDeMentira) },
+);
+
+// v13.3: Melki llega volando. «Ubícame en Barranca de Upía»: en vez del punto rojo, su robot sale de su esquina, vuela al
+// lugar y saluda, con una nube que escribe al ritmo de lectura qué hay ahí y la sugerencia; en una coordenada la señala y
+// el botón de la nube inscribe el nodo ahí (igual que el de la conversación, que queda usado).
+await flujo(
+  "llegada",
+  async (page, foto) => {
+    await esperarSimulacion(page);
+    await page.getByRole("button", { name: /Abrir a Melki/ }).click();
+    const chat = page.getByRole("region", { name: "Conversación con Melki" });
+    await chat.getByRole("textbox").fill("ubícame en Barranca de Upía");
+    await chat.getByRole("textbox").press("Enter");
+    const lleg = page.locator("[data-tour=llegada-melki]");
+    await lleg.waitFor({ timeout: 10000 });
+    await page.locator("[data-tour=llegada-melki][data-fase=llego]").waitFor({ timeout: 15000 });
+    afirmar((await page.locator(".pin-punto").count()) === 0, "Con Melki volando no debería quedar el punto rojo");
+    afirmar((await lleg.getAttribute("data-gesto")) === "saludando", `Al llegar a un lugar debería saludar (${await lleg.getAttribute("data-gesto")})`);
+    const nube = lleg.locator(".nube-mapa");
+    await nube.waitFor({ timeout: 5000 });
+    const t = await nube.textContent();
+    afirmar(/¡Hola, señor! Esto es Barranca de Upía \(Meta\)/.test(t) && /¿Le armo una red sostenible/.test(t), `La nube de la llegada no saluda ni dice dónde está: ${t.slice(0, 200)}`);
+    afirmar(await nube.getByRole("button", { name: "Sí, la red de todo el municipio" }).isVisible(), "La nube debería traer la sugerencia");
+    await page.waitForTimeout(1200);
+    afirmar((await nube.getAttribute("data-escrito")) === "no", "La nube debería escribir al ritmo de lectura, no de golpe");
+    // Con la conversación abierta, la nube no la tapa
+    const cajaNube = await nube.boundingBox();
+    const cajaChat = await chat.boundingBox();
+    afirmar(cajaNube.x + cajaNube.width <= cajaChat.x + 2, `La nube no debería tapar la conversación (${Math.round(cajaNube.x + cajaNube.width)} > ${Math.round(cajaChat.x)})`);
+    await foto("saludo");
+    // Un toque la termina de escribir; la barra cuenta el tiempo para volver. Esc lo manda de vuelta a su esquina
+    await nube.click({ position: { x: 24, y: 12 } });
+    await lleg.locator(".nube-mapa[data-escrito=si]").waitFor({ timeout: 10000 });
+    await lleg.locator("[data-cuenta]").waitFor({ timeout: 5000 });
+    await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
+    await page.keyboard.press("Escape");
+    await page.locator("[data-tour=llegada-melki][data-fase=vuelve]").waitFor({ timeout: 5000 });
+    await lleg.waitFor({ state: "detached", timeout: 8000 });
+    // Una coordenada: la señala (el sitio late), sin punto rojo ni tarjeta; el botón de la nube inscribe el nodo ahí
+    const antes = await page.locator("[data-tour=lista-antenas] > li").count();
+    await chat.getByRole("textbox").fill("llévame a 4.25, -73.30");
+    await chat.getByRole("textbox").press("Enter");
+    await page.locator("[data-tour=llegada-melki][data-fase=llego]").waitFor({ timeout: 15000 });
+    await page.waitForTimeout(2900);
+    afirmar((await lleg.getAttribute("data-gesto")) === "senalando" && (await lleg.locator(".pitch-anillo").count()) === 1, `En una coordenada debería señalar el sitio (${await lleg.getAttribute("data-gesto")})`);
+    afirmar((await page.locator(".pin-punto").count()) === 0 && (await page.getByRole("dialog", { name: "Punto marcado" }).count()) === 0, "Sin punto rojo ni tarjeta: lo señala Melki");
+    await foto("coordenada");
+    await lleg.locator(".nube-mapa").getByRole("button", { name: "Inscribir un nodo antena ahí" }).click();
+    await page.waitForFunction((n) => document.querySelectorAll("[data-tour=lista-antenas] > li").length === n + 1, antes, { timeout: 10000 });
+    await lleg.waitFor({ state: "detached", timeout: 8000 });
+    afirmar(await chat.getByRole("button", { name: "Inscribir un nodo antena ahí" }).last().isDisabled(), "El botón de la conversación debería quedar usado");
+  },
+  { tamano: { width: 1920, height: 1080 } },
+);
+
+await flujo(
+  "llegada-movil",
+  async (page, foto) => {
+    await esperarSimulacion(page).catch(() => {});
+    await page.getByRole("button", { name: /Abrir a Melki/ }).click();
+    const chat = page.getByRole("region", { name: "Conversación con Melki" });
+    await chat.getByRole("textbox").fill("ubícame en Cumaral");
+    await chat.getByRole("textbox").press("Enter");
+    // En el celular la conversación se recoge para ver llegar a Melki (lo que responde va en su nube)
+    await chat.waitFor({ state: "detached", timeout: 10000 });
+    await page.locator("[data-tour=llegada-melki][data-fase=llego]").waitFor({ timeout: 15000 });
+    const nube = page.locator("[data-tour=llegada-melki] .nube-mapa");
+    await nube.waitFor({ timeout: 5000 });
+    const b = await nube.boundingBox();
+    afirmar(b.x >= 0 && b.x + b.width <= 390 && b.y + b.height <= 844, `En el celular la nube debería caber (${Math.round(b.x)}, ${Math.round(b.width)} × ${Math.round(b.height)})`);
+    afirmar(/Cumaral/.test(await nube.textContent()), "La nube debería decir dónde llegó");
+    await foto("saludo");
+    await page.locator("[data-tour=llegada-melki]").getByRole("button", { name: "Cerrar (Melki vuelve a su lugar)" }).click();
+    await page.locator("[data-tour=llegada-melki]").waitFor({ state: "detached", timeout: 8000 });
+  },
+  { tamano: { width: 390, height: 844 } },
 );
 
 const ia = await iniciarIADeMentira();

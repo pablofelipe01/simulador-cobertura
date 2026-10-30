@@ -20,15 +20,20 @@ torre de 12 m con 4 radios Heltec T114, billeteras XIAO o T1000-E,
 Starlink) e incluye las funciones de Radio Mobile, una regla para medir
 distancias y áreas, un mapa con departamentos, municipios y ríos, y a
 Melki, el asistente que ejecuta pedidos escritos con sus palabras.
-Novedad: Melki ya no habla en voz alta: escucha todo el tiempo, hace
-lo que se le pide y deja la respuesta escrita (si algún día quiere
-oírlo, dígale "háblame"). Además, el "Recorrido" de la red: el robot de
-Melki va punto por punto y en una nube que sale de cada antena escribe
-qué se instaló, por qué ahí, qué papel cumple y, al final, por qué la
-red quedó así; el "Pitch" del modelo de negocio con el robot que
-presenta cada antena, la inversión, la operación y el punto de
-equilibrio, y, con una clave gratuita de Google, Melki conversa como un
-modelo de inteligencia artificial (Gemini Live).
+Novedad: cuando le pide a Melki ir a un lugar ("ubícame en Barranca de
+Upía"), en vez del punto rojo su robot vuela hasta allá y lo saluda, con
+una nube que escribe qué hay ahí y qué se puede hacer. El "Recorrido" de
+la red (el robot va punto por punto y en una nube que sale de cada
+antena escribe qué se instaló, por qué ahí y qué papel cumple) ahora
+cuenta primero cómo calcula el simulador y, al final, qué refuerzos
+necesita la red para funcionar al 100 % y al 99,9 %, con lo que cuestan;
+las nubes escriben al ritmo de lectura. Melki no habla en voz alta:
+escucha todo el tiempo, hace lo que se le pide y deja la respuesta
+escrita (si algún día quiere oírlo, dígale "háblame"). Además, el
+"Pitch" del modelo de negocio con el robot que presenta cada antena, la
+inversión, la operación y el punto de equilibrio, y, con una clave
+gratuita de Google, Melki conversa como un modelo de inteligencia
+artificial (Gemini Live).
 No hay que instalar nada.
 
 © 2026 Pablo Felipe Acevedo, Melki y Giancarlo González Guerrero.
@@ -462,10 +467,14 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
     barra de arriba o dígale a Melki "explícame la red" o "hazme un
     recorrido por la red". El robot de Melki va por el mapa un punto a
     la vez, siguiendo el camino de la señal: primero la red de un
-    vistazo, luego el gateway y cada repetidor (rama por rama), las
-    personas, lo que falta y, al final, por qué la red quedó así. De
-    cada punto sale una nube de vidrio, con una línea que lo señala, que
-    va escribiendo:
+    vistazo y cómo la calcula el simulador (el relieve, la pérdida, el
+    margen de 20, 30 y 37 dB, la malla y la hora pico), luego el
+    gateway y cada repetidor (rama por rama), las personas, lo que
+    falta, los refuerzos para que funcione al 100 % y al 99,9 % (los
+    repetidores de apoyo, los enlaces por reforzar, los respaldos, el
+    segundo gateway y lo que cuestan) y, al final, por qué la red quedó
+    así. De cada punto sale una nube de vidrio, con una línea que lo
+    señala, que va escribiendo al ritmo de lectura:
       - qué se instaló (equipo, antena, altura, energía solar),
       - por qué ahí (el terreno frente al resto de la red, su enlace:
         distancia, línea de vista y margen, y dónde está su gente),
@@ -473,18 +482,33 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
         acceso, punto crítico o con respaldo) y la altura recomendada.
     No habla: todo queda escrito (con el parlante del recorrido,
     además dice lo breve en voz alta). Toque la nube para que termine
-    de escribir. En el celular la nube va abajo y, si el texto no cabe,
+    de escribir. Al terminar, una barrita abajo cuenta unos segundos y
+    sigue sola al próximo punto; con el puntero encima de la nube,
+    espera. En el celular la nube va abajo y, si el texto no cabe,
     baja sola con lo que va escribiendo (si usted la mueve con el dedo,
     se queda quieta). En "Lo que falta" un botón se lo pide a Melki
     ("Conecta a los que faltan", "Ajústamelo").
     Controles: las flechas, espacio (pausa) y Esc (salir), los botones
     de abajo o la voz: "siguiente", "anterior", "pausa", "ve al
-    gateway", "ve al Repetidor 1", "ve a lo que falta", "¿por qué la
-    red quedó así?", "¿por qué pusiste el Repetidor 1 ahí?", "termina
-    el recorrido". Al terminar o al salir, todo queda escrito en la
-    conversación con Melki. Consejo: simule antes (y la prueba de
-    estrés, si quiere que también cuente cómo le va a cada persona en
-    la hora pico).
+    gateway", "ve al Repetidor 1", "ve a lo que falta", "ve a los
+    refuerzos", "¿por qué la red quedó así?", "¿por qué pusiste el
+    Repetidor 1 ahí?", "termina el recorrido". También "¿qué refuerzos
+    necesita la red?" lo abre en los refuerzos. Al terminar o al salir,
+    todo queda escrito en la conversación con Melki. Consejo: simule
+    antes (y la prueba de estrés, si quiere que también cuente cómo le
+    va a cada persona en la hora pico).
+ t) Melki llega volando: dígale "ubícame en Barranca de Upía",
+    "llévame a Villavicencio", "llévame a 4.25, -73.30" o "llévame al
+    Repetidor 1". Cuando el mapa llega, el robot de Melki sale de su
+    esquina, vuela hasta el sitio y saluda (en un lugar) o lo señala
+    (en una coordenada o una antena), sin el punto rojo. Su nube
+    escribe qué hay ahí y trae un botón con lo que se puede hacer ("Sí,
+    la red de todo el municipio", "Inscribir un nodo antena ahí", "¿Por
+    qué quedó aquí?"). Luego vuelve solo a su esquina; la X de la nube o
+    Esc lo mandan de vuelta antes. Con la conversación abierta la nube
+    queda a su izquierda; en el celular la conversación se recoge para
+    verlo llegar. El buscador de la barra de arriba sigue marcando el
+    punto con su tarjeta.
 
 
 3. BUENO SABER
