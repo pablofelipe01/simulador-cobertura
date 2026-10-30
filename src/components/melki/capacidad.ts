@@ -33,6 +33,7 @@ import type { OpcionesCarga, PedidoPoblar } from "../simulador/panel-capacidad";
 import { MAX_POR_ZONA, MUESTRA_PUNTO, textoLimite, textoLlenado, textoOptimizacion, textoPropuesta, textoUsuarios, textoZonas, ZONA_DEFECTO, type CentroZona, type OpcionesEstres, type PedidoZonas } from "../simulador/panel-estres";
 import type { Respuesta } from "./cerebro";
 import type { Api, Orden, ResultadoOrden } from "./ordenes";
+import { circuloEnTexto } from "./medidas";
 
 const f1 = (x: number, d = 1) => x.toFixed(d).replace(".", ",");
 const ent = (x: number) => Math.round(x).toLocaleString("es-CO");
@@ -288,8 +289,11 @@ function interpretarZonas(texto: string, tn: string, api: Api): Orden | null {
   pedido.n = cuantos ? Math.min(MAX_POR_ZONA, Math.max(1, Math.round(numero(`${cuantos[1]}${cuantos[2] ? " mil" : ""}`)))) : 250;
   const km = tn.match(/\b(?:a|en|dentro de|en un radio de|radio de)\s+(\d{1,2}(?:[.,]\d+)?)\s*(?:km|kilometros?)\b/) ?? tn.match(/\b(\d{1,2}(?:[.,]\d+)?)\s*(?:km|kilometros?)\s*(?:a la redonda|de radio|alrededor)\b/);
   const metros = tn.match(/\b(\d{2,4})\s*(?:m|metros)\s*(?:a la redonda|de radio|alrededor)\b/);
+  // En millas, yardas, pies o cuadras también («a media milla a la redonda de cada repetidor»)
+  const otra = km || metros ? null : circuloEnTexto(tn);
   if (km) pedido.radioKm = Math.min(20, Math.max(0.2, numero(km[1])));
   else if (metros) pedido.radioKm = Math.min(20, Math.max(0.2, Number(metros[1]) / 1000));
+  else if (otra) pedido.radioKm = Math.min(20, Math.max(0.2, otra.radio.metros / 1000));
   if (!cada && nombrados.length) pedido.centros = nombrados.map((c) => c.id);
   else if (!cada && /\b(este|ese|esta|esa|el seleccionado|la seleccionada)\s+(repetidor|nodo|antena|gateway|torre)\b/.test(tn)) {
     const sel = api.seleccion();
