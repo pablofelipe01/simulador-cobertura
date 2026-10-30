@@ -33,6 +33,9 @@ const publicas = Object.fromEntries(
     "NEXT_PUBLIC_DICTADO_MOTOR_URL",
     "NEXT_PUBLIC_DICTADO_MODELOS_URL",
     "NEXT_PUBLIC_DICTADO_MODELO",
+    "NEXT_PUBLIC_IA_LOCAL_LIBRERIA_URL",
+    "NEXT_PUBLIC_IA_LOCAL_LIBRERIA_SHA256",
+    "NEXT_PUBLIC_IA_LOCAL_MODELO",
   ].map((k) => [
     `process.env.${k}`,
     JSON.stringify(process.env[k] ?? ""),
