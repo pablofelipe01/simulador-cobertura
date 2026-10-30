@@ -10,7 +10,7 @@
 // todo el tiempo, se activa con «Hola Melki», ejecuta y contesta en voz alta con trato de mayordomo; al activarse deja
 // el mapa libre y sugiere los paneles cuando hacen falta) y menú de tours guiados (también en la primera visita).
 // Escucha avisos de la ventana: «melki:abrir», «melki:tours» y «melki:pedir» (los usan los tours y la barra superior).
-import { AudioLines, Compass, Ear, Globe, KeyRound, LoaderCircle, Mic, Play, Send, Settings2, ShieldCheck, Sparkles, Square, Trash2, Volume2, VolumeX, X } from "lucide-react";
+import { AudioLines, Compass, Cpu, Ear, Globe, KeyRound, LoaderCircle, Mic, Play, Send, Settings2, ShieldCheck, Sparkles, Square, Trash2, Volume2, VolumeX, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { consejoRed, estadoRed, piezaDe } from "@/lib/radio/estado-red";
@@ -23,6 +23,26 @@ import { abrirMicrofonoIA, ReproductorIA, type MicrofonoIA } from "./audio-ia";
 import { MelkiAvatar } from "./avatar";
 import { estadoParaIA, HERRAMIENTAS_IA, instruccionesMelki } from "./herramientas-ia";
 import { MODELO_IA_DEFECTO, MODELOS_IA, SesionLive, VOCES_IA, type LlamadaFuncion } from "./ia-live";
+import {
+  apagarIALocal,
+  borrarModeloLocal,
+  completarLocal,
+  estadoIALocal,
+  gb,
+  guardarPreferenciaIALocal,
+  iaLocalLista,
+  leerPreferenciaIALocal,
+  modeloLocal,
+  modeloLocalDescargado,
+  MODELOS_LOCALES,
+  prepararIALocal,
+  soporteWebGPU,
+  suscribirIALocal,
+  type PreferenciaIALocal,
+} from "./ia-local";
+import { cifrasInventadas, ESQUEMA_PENSAR, leerPensamiento, mensajesPensar } from "./pensar";
+import { medidasEnCifras } from "./medidas";
+import { numerosEnPalabras } from "./numeros";
 import { PresentacionPitch, type ControlPitch, type Narrador } from "./presentacion";
 import { RecorridoRed, type ControlRecorrido } from "./recorrido-red";
 import { LlegadaRobot, type NarradorLlegada, type OpcionesNarrar } from "./llegada";
@@ -358,6 +378,11 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   const [oidoIA, setOidoIA] = useState("");
   const [subIA, setSubIA] = useState("");
   const [avisoIA, setAvisoIA] = useState<string | null>(null);
+  /* IA local (Qwen3.5 en la tarjeta gráfica de este equipo) */
+  const [iaLocal, setIaLocal] = useState<PreferenciaIALocal>(() => leerPreferenciaIALocal());
+  const estadoLocal = useSyncExternalStore(suscribirIALocal, estadoIALocal, estadoIALocal);
+  const [localGuardado, setLocalGuardado] = useState<boolean | null>(null);
+  const [localSoporte, setLocalSoporte] = useState<{ ok: boolean; f16: boolean; motivo?: string } | null>(null);
   /** «No pude conectar con la IA…»: se ve un rato aunque el asistente local ya esté escuchando. */
   const [avisoFallo, setAvisoFallo] = useState<string | null>(null);
   const tAvisoFallo = useRef(0);
@@ -480,9 +505,9 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     pausada: false,
     ultimaVozSonando: 0,
   });
-  const actual = useRef({ abierto, vozActiva, api, mensajes, manos, usados, paneles, contexto, iaPref });
+  const actual = useRef({ abierto, vozActiva, api, mensajes, manos, usados, paneles, contexto, iaPref, iaLocal });
   useEffect(() => {
-    actual.current = { abierto, vozActiva, api, mensajes, manos, usados, paneles, contexto, iaPref };
+    actual.current = { abierto, vozActiva, api, mensajes, manos, usados, paneles, contexto, iaPref, iaLocal };
   });
   /** Las frases del asistente con el trato elegido. */
   const fr = () => frases(actual.current.manos.trato);
@@ -548,6 +573,9 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     if (!ajustes) return;
     void reconocedorDescargado().then(setDescargado);
     void permisoMicrofono().then(setPermiso);
+    // La IA local: si hay WebGPU y si el modelo ya está en este equipo (sin descargar nada)
+    void soporteWebGPU().then(setLocalSoporte);
+    void modeloLocalDescargado(actual.current.iaLocal.modelo).then(setLocalGuardado);
     // Las voces del equipo (llegan tarde la primera vez)
     const leer = () => setVoces(vocesEspanol().map((v) => ({ nombre: v.name, idioma: v.lang, natural: puntajeVoz(v) >= 70 })));
     const t = window.setTimeout(leer, 0);
@@ -1818,7 +1846,111 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     }
     // Sin orden: el cerebro responde (por voz, si no entendió, pide que se lo repita)
     const c = api.centroMapa();
-    agregarMelki(responder(pregunta, { ...contexto, trato: actual.current.manos.trato, porVoz: deVoz, vista: c ? api.ubicacion(c.lat, c.lon) : null }));
+    const r = responder(pregunta, { ...contexto, trato: actual.current.manos.trato, porVoz: deVoz, vista: c ? api.ubicacion(c.lat, c.lon) : null });
+    // Lo que ni el intérprete ni el cerebro entendieron lo piensa la IA local, si está activa
+    if (r.noEntendido && actual.current.iaLocal.activa) {
+      void pensarConIALocal(pregunta, r);
+      return;
+    }
+    agregarMelki(r);
+  };
+
+  /**
+   * La IA local (Qwen3.5 en este equipo) piensa lo que no se entendió: lo pasa a órdenes que el intérprete verifica (y
+   * se hacen como si se hubieran escrito) o da una respuesta corta con los datos del simulador. Una orden o respuesta
+   * con una cifra que no dijo la persona ni está en el simulador no se usa. Si algo falla, queda el «no entendí».
+   */
+  const pensarConIALocal = async (pregunta: string, sinEntender: Respuesta) => {
+    const pref = actual.current.iaLocal;
+    trabajos.current++;
+    try {
+      if (!iaLocalLista()) {
+        if (!(await modeloLocalDescargado(pref.modelo))) {
+          const m = modeloLocal(pref.modelo);
+          agregarMelki({
+            ...sinEntender,
+            texto: `${sinEntender.texto}\n\nLa IA local está activada, pero el modelo aún no está en este equipo: descárguelo en Ajustes (${m.nombre.replace(/ \(.*\)$/, "")}, ${gb(m.descargaGb)}, solo la primera vez).`,
+            acciones: [{ texto: "Abrir los ajustes de la IA local", accion: "ajustes-ia-local" }, ...(sinEntender.acciones ?? [])],
+          });
+          return;
+        }
+        agregarMelki({ texto: "Lo pienso con la IA local de este equipo (la primera vez tarda unos segundos en cargar)…" }, true);
+        if (!(await prepararIALocal(pref.modelo))) {
+          agregarMelki(sinEntender);
+          return;
+        }
+      }
+      const estado = estadoSimuladorIA();
+      const crudo = await completarLocal(mensajesPensar(pregunta, estado), { esquema: ESQUEMA_PENSAR, maxTokens: 320, temperatura: 0.1 });
+      const p = leerPensamiento(crudo);
+      if (!p) {
+        agregarMelki(sinEntender);
+        return;
+      }
+      // Las cifras de una orden salen de lo que dijo la persona (también en palabras: «doce metros») o del nombre de un
+      // nodo («Repetidor 3»); las de una respuesta, además, del estado del simulador
+      const dicho = [pregunta, medidasEnCifras(pregunta), numerosEnPalabras(pregunta)];
+      const nombres = actual.current.api.antenas().map((a) => a.nombre).join(" | ");
+      const fuentes = [...dicho, JSON.stringify(estado)];
+      const validas: { texto: string; orden: Orden }[] = [];
+      for (const texto of p.ordenes) {
+        if (cifrasInventadas(texto, [...dicho, nombres], false).length) continue;
+        // Lo que no es una orden del intérprete: el recorrido de la red y deshacer
+        const pr = pedidoRecorrido(texto, recorridoAbierto.current);
+        if (pr && p.ordenes.length === 1 && (recorridoAbierto.current || !pr.parada || hayRedEnMapa())) {
+          agregarMelki({ texto: `Con la IA local entendí: «${texto}».` }, true);
+          const t = pedirRecorrido(pr);
+          setMensajes((m) => [...m, { id: siguiente.current++, de: "melki", texto: t }]);
+          return;
+        }
+        if (/\b(deshac\w*|deshaz)\b/i.test(texto) && p.ordenes.length === 1) {
+          agregarMelki({ texto: `Con la IA local entendí: «${texto}».` }, true);
+          deshacer(ultimoDeshacer.current);
+          return;
+        }
+        const o = interpretarOrden(texto, actual.current.api, pendiente.current, contextoOrden());
+        if (o && o.tipo !== "aviso") validas.push({ texto, orden: o });
+      }
+      if (validas.length) {
+        agregarMelki({ texto: `Con la IA local entendí: ${validas.map((v) => `«${v.texto}»`).join(" y luego ")}.` }, true);
+        if (validas.length === 1) ejecutar(validas[0].orden);
+        else await ejecutarPlan(validas.map((v) => v.texto), validas[0].orden);
+        return;
+      }
+      if (p.respuesta && !cifrasInventadas(p.respuesta, fuentes).length) {
+        agregarMelki({ texto: p.respuesta });
+        return;
+      }
+      agregarMelki(sinEntender);
+    } catch {
+      agregarMelki(sinEntender);
+    } finally {
+      trabajos.current = Math.max(0, trabajos.current - 1);
+    }
+  };
+
+  /* ───────────── IA local: activar, descargar, borrar ───────────── */
+
+  const fijarIALocal = (c: Partial<PreferenciaIALocal>) => {
+    setIaLocal((p) => {
+      const n = { ...p, ...c };
+      guardarPreferenciaIALocal(n);
+      return n;
+    });
+  };
+
+  /** Revisa (sin descargar nada) si hay WebGPU y si el modelo elegido ya está en este equipo. */
+  const revisarIALocal = (modelo: string) => {
+    void soporteWebGPU().then(setLocalSoporte);
+    void modeloLocalDescargado(modelo).then(setLocalGuardado);
+  };
+
+  /** Descarga (la primera vez) y carga el modelo: lo pide la persona con el botón. */
+  const activarIALocal = async () => {
+    const modelo = actual.current.iaLocal.modelo;
+    fijarIALocal({ activa: true });
+    const ok = await prepararIALocal(modelo);
+    if (ok) setLocalGuardado(true);
   };
 
   /* ───────────── Conversación con IA (Gemini Live) ───────────── */
@@ -2653,9 +2785,10 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       setMensajes((x) => [...x, { id: siguiente.current++, de: "melki", texto: t }]);
       return;
     }
-    if (a.accion === "ajustes-ia") {
+    if (a.accion === "ajustes-ia" || a.accion === "ajustes-ia-local") {
       setAbierto(true);
       setAjustes(true);
+      if (a.accion === "ajustes-ia-local") window.setTimeout(() => document.querySelector('[data-tour="ajustes-ia-local"]')?.scrollIntoView({ block: "nearest", behavior: "smooth" }), 120);
       return;
     }
     if (a.accion === "deshacer") deshacer(a.escenario, clave);
@@ -3055,6 +3188,91 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
                 <p className="mt-2 text-[11.5px] leading-snug text-tenue">
                   La clave queda solo en este navegador (no se sube a ningún lado). Mientras conversa, su voz y un resumen del escenario (posiciones de las antenas y resultados) van a Google; en la capa gratuita Google puede usarlos para mejorar sus productos, con límites de uso por día.
                 </p>
+              </section>
+              <section className="mb-3 rounded-xl bg-white p-2.5 ring-1 ring-linea" aria-label="IA local en este equipo" data-tour="ajustes-ia-local">
+                <p className="mb-1 flex items-center gap-1.5 font-cond text-[14px] font-semibold">
+                  <Cpu size={15} className="text-melki-oscura" aria-hidden="true" /> IA local en este equipo (Qwen3.5)
+                </p>
+                <p className="mb-2 text-[12px] leading-snug text-carbon-2">
+                  Un modelo de lenguaje abierto que corre en la tarjeta gráfica de este equipo (WebGPU), sin instalar nada y sin mandar nada a internet. Lo uso cuando no le entiendo un pedido: lo paso a órdenes que verifico antes de hacerlas. El diseño, los costos y la cobertura siempre salen de mi cálculo.
+                </p>
+                <Interruptor
+                  activo={iaLocal.activa}
+                  onCambiar={(v) => {
+                    fijarIALocal({ activa: v });
+                    if (v) revisarIALocal(iaLocal.modelo);
+                    else void apagarIALocal();
+                  }}
+                  titulo="Usar la IA local"
+                  detalle="Cuando no le entiendo, lo pienso con el modelo de este equipo."
+                />
+                <label className="mt-2 block text-[12px] text-carbon-2">
+                  Modelo
+                  <select
+                    className="campo mt-0.5 w-full py-1 text-[12.5px]"
+                    value={iaLocal.modelo}
+                    disabled={estadoLocal.fase === "descargando" || estadoLocal.fase === "cargando"}
+                    onChange={(e) => {
+                      fijarIALocal({ modelo: e.target.value });
+                      setLocalGuardado(null);
+                      revisarIALocal(e.target.value);
+                    }}
+                    aria-label="Modelo de la IA local"
+                  >
+                    {MODELOS_LOCALES.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.nombre} · {gb(m.descargaGb)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <p className="mt-1 text-[11.5px] leading-snug text-tenue">{modeloLocal(iaLocal.modelo).detalle}.</p>
+                {(() => {
+                  const m = modeloLocal(iaLocal.modelo);
+                  const ocupada = estadoLocal.fase === "descargando" || estadoLocal.fase === "cargando";
+                  const lista = (estadoLocal.fase === "lista" || estadoLocal.fase === "pensando") && estadoLocal.modelo === iaLocal.modelo;
+                  const sinGpu = localSoporte?.ok === false;
+                  return (
+                    <>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void activarIALocal()}
+                          disabled={ocupada || lista || sinGpu}
+                          data-ia-local={lista ? "lista" : ocupada ? "preparando" : "apagada"}
+                          className={`inline-flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1 text-[12.5px] font-medium disabled:opacity-60 ${lista ? "bg-buena/15 text-buena ring-1 ring-buena/40" : "bg-carbon text-white hover:bg-carbon-2"}`}
+                        >
+                          {ocupada ? <LoaderCircle size={13} className="animate-spin" aria-hidden="true" /> : <Cpu size={13} aria-hidden="true" />}
+                          {lista ? "Lista en este equipo" : ocupada ? "Preparando…" : localGuardado ? "Cargar la IA local" : `Descargar y activar (${gb(m.descargaGb)})`}
+                        </button>
+                        {localGuardado && !ocupada && (
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-[12px] text-sin hover:bg-sin/10"
+                            onClick={() => {
+                              void borrarModeloLocal(iaLocal.modelo).then(() => setLocalGuardado(false));
+                            }}
+                          >
+                            <Trash2 size={12} /> Borrar el modelo de este equipo
+                          </button>
+                        )}
+                      </div>
+                      {ocupada && (
+                        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-linea" aria-hidden="true">
+                          <div className="h-full rounded-full bg-salvia transition-[width] duration-300" style={{ width: `${Math.round(estadoLocal.avance * 100)}%` }} />
+                        </div>
+                      )}
+                      {(sinGpu || estadoLocal.texto) && (
+                        <p className={`mt-1 text-[12px] leading-snug ${estadoLocal.fase === "error" || sinGpu ? "text-sin" : estadoLocal.fase === "lista" ? "text-buena" : "text-carbon-2"}`} role="status">
+                          {sinGpu ? localSoporte?.motivo : estadoLocal.texto}
+                        </p>
+                      )}
+                      <p className="mt-2 text-[11.5px] leading-snug text-tenue">
+                        Necesita Chrome o Edge con WebGPU y unos {gb(m.memoriaGb)} de memoria gráfica. Se descarga una sola vez (pesos abiertos, de Hugging Face) y queda en este navegador. Claude (Fable u Opus) no se puede instalar en un equipo: solo funciona por internet.
+                      </p>
+                    </>
+                  );
+                })()}
               </section>
               <p className="mb-1.5 font-cond text-[14px] font-semibold">Dictado por voz</p>
               <div className="space-y-1.5" role="radiogroup" aria-label="Modo de dictado">

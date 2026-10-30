@@ -23,7 +23,7 @@ import { accionAjuste, textoCoberturaUtil, textoRed, type Orden } from "./ordene
 import { TOURS, type IdTour } from "./tours";
 
 /** «recorrido» empieza el tour indicado; «tours» muestra el menú de tours; «manos-libres» activa la escucha por voz; «acerca» abre la autoría y la licencia. */
-export type AccionMelki = "recorrido" | "tours" | "simular" | "ejemplo" | "agregar" | "inspeccionar" | "parametros" | "resultados" | "kmz" | "regla" | "orden" | "deshacer" | "manos-libres" | "acerca" | "herramientas" | "pitch" | "recorrido-red" | "ajustes-ia";
+export type AccionMelki = "recorrido" | "tours" | "simular" | "ejemplo" | "agregar" | "inspeccionar" | "parametros" | "resultados" | "kmz" | "regla" | "orden" | "deshacer" | "manos-libres" | "acerca" | "herramientas" | "pitch" | "recorrido-red" | "ajustes-ia" | "ajustes-ia-local";
 
 /** Con «detalle», la acción se muestra como una opción de menú (título y una línea). Con «parada», el recorrido de la red empieza en ese punto. */
 export type AccionRespuesta = { texto: string; accion: AccionMelki; orden?: Orden; escenario?: Escenario; tour?: IdTour; detalle?: string; parada?: string };
@@ -33,6 +33,8 @@ export type Respuesta = {
   acciones?: AccionRespuesta[];
   /** Lo que se dice en voz alta, si es distinto de lo escrito (la disculpa no repite en voz lo que oyó: haría eco). */
   voz?: string;
+  /** No lo entendió (ni como orden ni como pregunta): la IA local, si está activa, puede intentarlo. */
+  noEntendido?: boolean;
 };
 
 export type ContextoMelki = {
@@ -90,6 +92,7 @@ export function respuestaNoEntendi(c: ContextoMelki, pregunta: string): Respuest
   const s = tratoDe(c);
   const oido = pregunta.trim().replace(/\s+/g, " ").slice(0, 120);
   return {
+    noEntendido: true,
     texto: `Discúlpeme${s ? `, ${s}` : ""}, no le entendí bien. ¿Me lo repite, por favor? ${c.porVoz ? `Escuché: «${oido}». ` : ""}Puede decirme, por ejemplo, «ubícame en Barranca de Upía, Meta», «ármame una red que cubra todo el municipio» o «¿cuánto cuesta la red?».`,
     // En voz, solo la disculpa: repetir lo que oyó o los ejemplos haría que el micrófono los volviera a oír
     voz: `Discúlpeme${s ? `, ${s}` : ""}, no le entendí bien. ¿Me lo repite, por favor?`,
@@ -205,7 +208,7 @@ const TEMAS: Tema[] = [
         "• Sembrar la malla: «pon el gateway en Cumaral», «agrega un repetidor a 8 km al norte del gateway», «pon una persona en 4.31, -73.22», «conecta a los que faltan», «envía un pago desde Persona 1», «¿qué hago ahora?».",
         "• Gente y capacidad: «puebla la zona con 250 personas», «reparte 1 persona por km² en el área objetivo», «solo donde haya señal», «envía 25 pagos al tiempo», «manda 15 mensajes de WhatsApp en 10 segundos», «¿hasta cuántos pagos aguanta?», «quita las pobladas».",
         "• Trama: «¿cuánto cuesta la red para el Chocó?», «¿y para todo el país con el 50 % de adopción?», «dimensiona 5.000 usuarios en 800 km² de sabana», «¿cuánto cuesta un repetidor?», «¿qué lleva cada persona?», «¿cuántos usuarios por frecuencia?».",
-        "• Diseñar una red: «ármame una malla que cubra 11.226 hectáreas con señal media o mejor en el 99,9 %», «cubre 500 ha alrededor de Cumaral con repetidores de 12 m», «cubre el área que medí con respaldo».",
+        "• Diseñar una red: «ármame una malla que cubra 11.226 hectáreas con señal media o mejor en el 99,9 %», «ármame una red de 5 millas a la redonda de Cumaral para 400 familias con un presupuesto de 80 millones», «cubre el área que medí con respaldo». Entiendo km, metros, millas, yardas, pies y cuadras, podo lo que sobra y le doy el veredicto con su costo.",
         "• Ajustar la red al mejor costo: «ajústamelo», «hazla factible sin pasar de 20 m», «optimiza el costo», «máximo 2 antenas de apoyo», «no muevas los nodos», «usa el área que medí como área objetivo con el 95 %».",
         "• Varias órdenes seguidas: «pon el gateway en 4.2, -73.37, luego un repetidor a 10 km al este y simula».",
         "• Nodos: «inscribe un nodo antena en 4°30'44\" N 73°07'24\" O a 12 m», «mueve Ejemplo 2 km al sur», «súbelo a 9 m», «sube todos los repetidores a 12 m», «borra todas las personas», «que Repetidor 2 no retransmita», «marca Torre 2 como pasarela».",
@@ -474,6 +477,32 @@ const TEMAS: Tema[] = [
         "Va un punto a la vez y en voz digo solo lo breve; al terminar le dejo todo escrito aquí. Se maneja con las flechas, el espacio y Esc, o diciéndome «siguiente», «ve al gateway», «¿por qué pusiste el Repetidor 2 ahí?» o «termina el recorrido».",
       ].join("\n"),
       acciones: [{ texto: "Empezar el recorrido", accion: "recorrido-red" }],
+    }),
+  },
+  {
+    id: "analista",
+    claves: ["como decides", "como disenas", "cuantos repetidores pones", "por que tantos repetidores", "red optima", "sobredimensionada", "freno de rendimiento", "opcion economica", "veredicto", "analisis de la red", "que medidas entiendes", "en millas", "en yardas", "capacidad del gateway", "red economica"],
+    responder: () => ({
+      texto: [
+        "Diseño como un ingeniero de radio, con el relieve real y el documento de Trama:",
+        "• Entiendo el tamaño en km, metros, millas (terrestres y náuticas), yardas, pies, cuadras (≈ 100 m), hectáreas, acres o millas cuadradas: «ármame una red de 5 millas a la redonda de Cumaral», «10 km de diámetro», «2 × 1 millas», «un cuadrado de 3 km de lado».",
+        "• Siembro cada repetidor donde más área nueva cubre, siempre enlazado a la red; al final podo los que sobran (su área ya la cubren otros) sin bajar de la meta ni debilitar un enlace.",
+        "• Con el freno de rendimiento no pongo un repetidor que cubra casi nada (menos del 0,3 % del área, o menos si pidió una meta muy alta): así la red no crece sin medida por huecos diminutos. Si de verdad necesita la meta, dígame «aunque cueste más».",
+        "• Con «para 400 familias» reviso la capacidad del gateway (una radio por cada 150 con SF11, hasta 4 por sitio) y con «con un presupuesto de 80 millones» limito los repetidores a lo que alcanza.",
+        "• Al terminar le doy el veredicto (óptima, viable con reservas o insuficiente), el costo por km² cubierto y recomendaciones acotadas, como la opción económica: menos repetidores por unos puntos de cobertura, con su ahorro.",
+      ].join("\n"),
+    }),
+  },
+  {
+    id: "ia-local",
+    claves: ["ia local", "inteligencia artificial local", "modelo local", "qwen", "webgpu", "sin internet", "offline", "deepseek", "fable", "opus", "claude", "llama", "modelo de lenguaje"],
+    responder: () => ({
+      texto: [
+        "Tengo una IA local opcional: Qwen3.5, un modelo de lenguaje abierto que corre en la tarjeta gráfica de este equipo con WebGPU, sin instalar nada y sin mandar nada a internet. Se descarga una vez (unos 2,4 GB el recomendado) cuando la activa en Ajustes y queda guardado en el navegador.",
+        "La uso cuando mi intérprete no entiende un pedido: el modelo lo pasa a órdenes que yo verifico antes de hacerlas, y si inventa una cifra que usted no dijo, no la uso. El diseño, los costos y la cobertura siempre salen del cálculo, no del modelo.",
+        "Claude (Fable u Opus) no se puede instalar en un equipo: funciona solo por internet. DeepSeek V4 es demasiado grande para un PC y sus versiones locales ya quedaron atrás frente a Qwen3.5.",
+      ].join("\n"),
+      acciones: [{ texto: "Abrir los ajustes de la IA local", accion: "ajustes-ia-local" }],
     }),
   },
   {
@@ -1161,8 +1190,9 @@ export function responder(pregunta: string, c: ContextoMelki): Respuesta {
   if (especifica && (!mejor || ["saludo", "gracias", "malla", "altura"].includes(mejor.tema.id) || /alcance|ruta|llega|cubre|salto|area|como esta/.test(t))) return especifica;
   // Un pedido de acción que no se entendió no se responde con un tema tomado al azar
   if (!especifica && (!mejor || mejor.puntos < 4)) {
-    // Un pedido que no es del simulador («hazme el café»): con respeto, y retoma el trabajo
-    if (PIDE_ACCION.test(t) && !DEL_SIMULADOR.test(t)) return respuestaFueraDeTema(c);
+    // Un pedido que no es del simulador («hazme el café»): con respeto, y retoma el trabajo (la IA local, si está
+    // activa, lo revisa antes: «conecta las veredas» sí es del simulador aunque no lo diga con sus palabras)
+    if (PIDE_ACCION.test(t) && !DEL_SIMULADOR.test(t)) return { ...respuestaFueraDeTema(c), noEntendido: true };
     const ne = noEntendiOrden(pregunta);
     if (ne) return c.porVoz ? { ...ne, texto: `Discúlpeme${tratoDe(c) ? `, ${tratoDe(c)}` : ""}, no le entendí bien: ${ne.texto.charAt(0).toLowerCase()}${ne.texto.slice(1)}` } : ne;
   }
@@ -1174,10 +1204,11 @@ export function responder(pregunta: string, c: ContextoMelki): Respuesta {
   // Por voz, lo que no tiene ni pregunta ni pedido claro casi siempre es el dictado que escribió mal: se pide repetir
   const pregunta_ = /^\s*¿|\?\s*$/.test(pregunta) || /^ (que|quien|quienes|como|cual|cuales|cuando|donde|por que|cuanto|cuanta|cuantos|cuantas)\b/.test(t);
   if (c.porVoz && !pregunta_ && !FUERA_DE_TEMA.test(t)) return respuestaNoEntendi(c, pregunta);
-  // Nada del simulador en lo que pidió: se lo dice con cortesía y retoma el trabajo
-  if (!DEL_SIMULADOR.test(t)) return respuestaFueraDeTema(c);
+  // Nada del simulador en lo que pidió: se lo dice con cortesía y retoma el trabajo (con la IA local activa, ella lo revisa)
+  if (!DEL_SIMULADOR.test(t)) return { ...respuestaFueraDeTema(c), noEntendido: true };
   if (c.porVoz) return respuestaNoEntendi(c, pregunta);
   return {
+    noEntendido: true,
     texto:
       "No estoy seguro de haber entendido. Puedo sembrar la red (gateway, repetidores y gente), poblar la zona y probar cuántos pagos, WhatsApp y consultas a la IA aguanta, dimensionar la red de un departamento, medir distancias, llevarlo a un municipio, explicar los colores, los enlaces y los saltos, o decirle por qué un nodo no llega al gateway. Pruebe: «¿qué puedes hacer?».",
     acciones: [{ texto: "Ver los tours guiados", accion: "tours" }],
@@ -1193,6 +1224,7 @@ export function noEntendiOrden(pregunta: string): Respuesta | null {
   const t = ` ${normalizar(pregunta)} `;
   if (!PIDE_ACCION.test(t)) return null;
   return {
+    noEntendido: true,
     texto: [
       "Entendí que quiere que haga algo en el simulador, pero no logré convertirlo en una orden. Estas sí las hago de una:",
       "• «ármame una malla que cubra 11.226 hectáreas con señal media o mejor en el 99,9 %»",
