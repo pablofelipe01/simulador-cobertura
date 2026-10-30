@@ -6,19 +6,27 @@
 "use client";
 
 // Melki llega volando: cuando se le pide ir a un lugar («ubícame en Barranca de Upía»), a una coordenada o a una
-// antena, en vez del punto rojo el robot sale de su esquina cuando la cámara llega, vuela hasta el sitio y saluda (en
-// un lugar) o lo señala (en una coordenada o una antena). De ahí sale su nube, que escribe al ritmo de lectura qué hay
-// ahí y qué se puede hacer (con el botón de la sugerencia). Al terminar de escribir, una barra cuenta unos segundos
-// (con el puntero encima, espera) y Melki vuelve a su esquina. La X de la nube o Esc lo mandan de vuelta antes; si el
-// mapa se mueve, el robot y la nube siguen al sitio. Si la conversación abierta deja muy poco mapa libre, la nube no
-// cabe: Melki llega, saluda y vuelve (lo que responde ya está escrito en la conversación).
+// antena, en vez del punto rojo el robot sale de su esquina cuando la cámara llega, vuela hasta el sitio, se posa sobre
+// un halo de luz y saluda (en un lugar) o lo señala (en una coordenada o una antena). De ahí sale su nube holográfica,
+// translúcida (se ve la simulación detrás), que escribe al ritmo de lectura qué hay ahí, con sus datos y lo que se
+// puede hacer (el botón de la sugerencia). Su botón «Voz» enciende o apaga la voz de Melki a mano: encendida, lo dice
+// en voz alta y la nube lo escribe a la par de su voz (lo normal es que no hable). Al terminar, una barra cuenta unos
+// segundos (con el puntero encima, espera) y Melki vuelve a su esquina. La X de la nube o Esc lo mandan de vuelta
+// antes; si el mapa se mueve, el robot y la nube siguen al sitio. Si la conversación abierta deja muy poco mapa libre,
+// la nube no cabe: Melki llega, saluda (y lo dice, con la voz encendida) y vuelve (lo que responde ya está escrito en
+// la conversación).
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { MapaPitch } from "@/lib/negocio/pitch";
 
-import { anchoNube, ESCRITURA_LECTURA, NubeMapa, pausaLectura } from "./nube-mapa";
+import { anchoNube, ESCRITURA_LECTURA, NubeMapa, pausaLectura, type TramoVoz } from "./nube-mapa";
 import type { LlegadaMelki } from "./ordenes";
 import { RobotMelki, type GestoRobot } from "./robot";
+
+/** Lo que avisa la voz mientras narra: qué parte del texto empieza a sonar (en letras de lo dicho) y si no pudo sonar. */
+export type OpcionesNarrar = { alTrozo?: (desde: number, largo: number, total: number) => void; alFallar?: () => void };
+/** Dice el texto en voz alta y avisa al terminar; devuelve cómo detenerlo. */
+export type NarradorLlegada = (texto: string, alTerminar: () => void, opciones?: OpcionesNarrar) => () => void;
 
 type Fase = "espera" | "vuela" | "llego" | "vuelve";
 type Pos = { x: number; y: number; mirando: "derecha" | "izquierda" };
@@ -31,6 +39,10 @@ const SALUDO_MS = 2600;
 const SIN_NUBE_MS = 5200;
 /** El ancho libre mínimo (px) para la nube (300) con su línea y un margen. */
 const ANCHO_CON_NUBE = 372;
+/** Lo que tarda la voz en decir cada letra (unas 16 por segundo): para escribir a la par lo que va diciendo. */
+const MS_LETRA_VOZ = 62;
+/** Después de decirlo en voz alta: unos segundos para mirar los datos y tocar la sugerencia antes de volver. */
+const PAUSA_TRAS_VOZ = 4500;
 
 const reducirMovimiento = () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
@@ -41,6 +53,10 @@ export function LlegadaRobot({
   reservaDerecha = 0,
   sugerencia,
   onSugerencia,
+  voz = false,
+  onVoz,
+  narrar,
+  narrarAlLlegar = false,
   onFin,
 }: {
   llegada: LlegadaMelki & { n: number };
@@ -52,6 +68,14 @@ export function LlegadaRobot({
   /** El botón de la nube (la primera opción de la respuesta). */
   sugerencia?: string;
   onSugerencia?: () => void;
+  /** La voz de Melki está encendida. */
+  voz?: boolean;
+  /** Con él, la nube trae el botón para encender o apagar la voz. */
+  onVoz?: (v: boolean) => void;
+  /** Cómo lo dice en voz alta (sin él, por ejemplo con la IA conversando, no lo dice aquí). */
+  narrar?: NarradorLlegada;
+  /** Con la voz ya encendida, la respuesta se dice al llegar (no se dijo antes en la conversación). */
+  narrarAlLlegar?: boolean;
   /** Ya volvió a su esquina. */
   onFin: () => void;
 }) {
@@ -63,8 +87,25 @@ export function LlegadaRobot({
   const [saluda, setSaluda] = useState(llegada.gesto === "saludando");
   const [escrito, setEscrito] = useState(false);
   const [sobre, setSobre] = useState(false);
-  /** Lo que falta de la pausa de lectura (se conserva con el puntero encima). */
-  const restante = useRef<number | null>(null);
+  /** Lo que falta de la pausa antes de volver (se conserva con el puntero encima), según cuántas veces lo dijo. */
+  const restante = useRef<{ clave: number; ms: number } | null>(null);
+
+  // La voz: lo dice al llegar si ya estaba encendida (y la respuesta se dice aquí), y otra vez cada vez que se enciende
+  // a mano. `dicha` es la última vez que terminó de decirlo.
+  const [vueltaVoz, setVueltaVoz] = useState(voz && narrarAlLlegar ? 1 : 0);
+  const [vozAntes, setVozAntes] = useState(voz);
+  if (voz !== vozAntes) {
+    setVozAntes(voz);
+    if (voz) setVueltaVoz((n) => n + 1);
+  }
+  const [dicha, setDicha] = useState(0);
+  /** El trozo que está diciendo (para escribirlo a la par) y si la voz no pudo sonar (entonces escribe a su ritmo). */
+  const [tramo, setTramo] = useState<TramoVoz | null>(null);
+  const [vozFallo, setVozFallo] = useState(false);
+  const narrarRef = useRef(narrar);
+  useEffect(() => {
+    narrarRef.current = narrar;
+  });
 
   /** El área libre: en el computador, sin lo que ocupa la conversación a la derecha. */
   const util = useCallback(
@@ -158,25 +199,64 @@ export function LlegadaRobot({
     return () => window.clearTimeout(t);
   }, [fase, saluda]);
 
-  // Escrita: unos segundos para terminar de leer (la barra los cuenta; con el puntero encima, espera) y vuelve
+  // Lo que escribe (con el saludo delante, en un lugar) y lo que dice en voz alta (lo mismo, salvo que traiga su texto
+  // para la voz, como en una coordenada)
   const parrafos = llegada.gesto === "saludando" && saludo ? [`${saludo} ${llegada.parrafos[0] ?? ""}`.trim(), ...llegada.parrafos.slice(1)] : llegada.parrafos;
-  const pausa = pausaLectura(parrafos);
+  const textoVoz = llegada.voz ?? parrafos.join(" ");
+  const narrando = voz && !!narrar && fase === "llego" && dicha < vueltaVoz;
+  /** La nube escribe a la par de la voz (cuando dice lo mismo que escribe y la voz sí suena). */
+  const aLaPar = narrando && !vozFallo && !llegada.voz;
+
+  // La voz: lo dice al llegar (o al encenderla a mano). Avisa cada trozo que empieza a sonar, para escribirlo a la par;
+  // si otra voz lo interrumpe sin avisar, no se queda esperando para siempre. Al apagarla, calla.
+  useEffect(() => {
+    if (!narrando) return;
+    const vuelta = vueltaVoz;
+    const total = parrafos.reduce((s, p) => s + p.length, 0);
+    let vigente = true;
+    const terminar = () => {
+      if (!vigente) return;
+      vigente = false;
+      setDicha(vuelta);
+    };
+    const tope = window.setTimeout(terminar, 12000 + textoVoz.length * 110);
+    const parar = narrarRef.current?.(textoVoz, terminar, {
+      alTrozo: (desde, largo, dicho) => {
+        if (!vigente || !dicho) return;
+        const r = total / dicho;
+        setTramo({ desde: Math.floor(desde * r), hasta: Math.ceil((desde + largo) * r), inicio: performance.now(), msPorLetra: MS_LETRA_VOZ / r });
+      },
+      alFallar: () => {
+        if (vigente) setVozFallo(true);
+      },
+    });
+    return () => {
+      vigente = false;
+      window.clearTimeout(tope);
+      parar?.();
+    };
+  }, [narrando, vueltaVoz]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Escrita (y dicha): unos segundos para terminar de leer (la barra los cuenta; con el puntero encima, espera) y vuelve
+  const pausa = dicha > 0 ? PAUSA_TRAS_VOZ : pausaLectura(parrafos);
   const conNube = !tam || cabeNube(tam.ancho, tam.alto);
   useEffect(() => {
-    if (fase !== "llego" || conNube) return;
-    const t = window.setTimeout(() => setFase("vuelve"), SIN_NUBE_MS);
+    if (fase !== "llego" || conNube || narrando) return;
+    const t = window.setTimeout(() => setFase("vuelve"), dicha > 0 ? 1800 : SIN_NUBE_MS);
     return () => window.clearTimeout(t);
-  }, [fase, conNube]);
+  }, [fase, conNube, narrando, dicha]);
   useEffect(() => {
-    if (fase !== "llego" || !escrito || sobre) return;
-    const ms = restante.current ?? pausa;
+    if (fase !== "llego" || !escrito || sobre || narrando) return;
+    if (restante.current?.clave !== dicha) restante.current = { clave: dicha, ms: pausa };
+    const r = restante.current;
+    const ms = r.ms;
     const desde = performance.now();
     const t = window.setTimeout(() => setFase("vuelve"), Math.max(250, ms));
     return () => {
       window.clearTimeout(t);
-      restante.current = Math.max(0, ms - (performance.now() - desde));
+      r.ms = Math.max(0, ms - (performance.now() - desde));
     };
-  }, [fase, escrito, sobre, pausa]);
+  }, [fase, escrito, sobre, pausa, narrando, dicha]);
 
   // La vuelta a su esquina; al llegar, se va
   useEffect(() => {
@@ -216,11 +296,23 @@ export function LlegadaRobot({
 
   const visible = fase === "vuela" || fase === "llego";
   const gesto: GestoRobot = fase === "llego" ? (saluda ? "saludando" : "senalando") : "volando";
+  const hablando = narrando && !vozFallo;
   const celular = (tam?.ancho ?? 1200) < 640;
   const area = tam ? util(tam.ancho, tam.alto) : null;
 
   return (
-    <div ref={zona} className="pointer-events-none absolute inset-0 z-[34]" role="region" aria-label={`Melki en ${llegada.titulo}`} data-tour="llegada-melki" data-fase={fase} data-gesto={gesto} data-con-nube={conNube ? "si" : "no"}>
+    <div
+      ref={zona}
+      className="pointer-events-none absolute inset-0 z-[34]"
+      role="region"
+      aria-label={`Melki en ${llegada.titulo}`}
+      data-tour="llegada-melki"
+      data-fase={fase}
+      data-gesto={gesto}
+      data-con-nube={conNube ? "si" : "no"}
+      data-voz={voz ? "si" : "no"}
+      data-hablando={hablando ? "si" : "no"}
+    >
       {/* El sitio exacto late en el mapa (una coordenada o una antena) */}
       {punto && fase === "llego" && llegada.gesto === "senalando" && <span className="pitch-anillo absolute h-16 w-16 rounded-full border-4 border-melki" style={{ left: punto.x, top: punto.y }} aria-hidden="true" />}
       {pos && (
@@ -229,7 +321,15 @@ export function LlegadaRobot({
           style={{ transform: `translate(${pos.x}px, ${pos.y}px)`, opacity: visible ? 1 : 0, transitionDelay: fase === "vuelve" ? "0s, 1.4s" : undefined }}
           data-robot={gesto}
         >
-          <RobotMelki gesto={gesto} mirando={pos.mirando} className="h-32 w-[6.4rem] sm:h-44 sm:w-36" titulo={fase === "llego" ? `Melki ${saluda ? "saludando" : "señalando"} en ${llegada.titulo}` : "Melki volando"} />
+          {/* Se posa sobre un halo de luz */}
+          {fase === "llego" && <span className="llegada-halo" aria-hidden="true" />}
+          <RobotMelki
+            gesto={gesto}
+            hablando={hablando}
+            mirando={pos.mirando}
+            className="relative h-32 w-[6.4rem] sm:h-44 sm:w-36"
+            titulo={fase === "llego" ? `Melki ${hablando ? "hablando" : saluda ? "saludando" : "señalando"} en ${llegada.titulo}` : "Melki volando"}
+          />
         </div>
       )}
       {fase === "llego" && area && punto && conNube && (
@@ -242,16 +342,21 @@ export function LlegadaRobot({
           titulo={llegada.titulo}
           subtitulo={llegada.subtitulo}
           parrafos={parrafos}
+          datos={llegada.datos}
           escribir
           onEscrito={() => setEscrito(true)}
           sugerencia={sugerencia && onSugerencia ? { texto: sugerencia, pedido: sugerencia } : undefined}
           onSugerencia={onSugerencia ? () => onSugerencia() : undefined}
           msPorLetra={ESCRITURA_LECTURA.msPorLetra}
           maxMs={ESCRITURA_LECTURA.maxMs}
-          cuenta={escrito ? { ms: pausa, pausada: sobre } : null}
+          cuenta={escrito && !narrando ? { ms: pausa, pausada: sobre } : null}
           onSobre={setSobre}
           onCerrar={() => setFase("vuelve")}
           etiquetaCerrar="Cerrar (Melki vuelve a su lugar)"
+          estilo="holo"
+          voz={onVoz ? { activa: voz, hablando, onCambiar: onVoz } : undefined}
+          siguiendoVoz={aLaPar}
+          tramoVoz={aLaPar ? tramo : null}
         />
       )}
     </div>
