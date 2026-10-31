@@ -23,10 +23,51 @@ import { accionAjuste, textoCoberturaUtil, textoRed, type Orden } from "./ordene
 import { TOURS, type IdTour } from "./tours";
 
 /** «recorrido» empieza el tour indicado; «tours» muestra el menú de tours; «manos-libres» activa la escucha por voz; «acerca» abre la autoría y la licencia. */
-export type AccionMelki = "recorrido" | "tours" | "simular" | "ejemplo" | "agregar" | "inspeccionar" | "parametros" | "resultados" | "kmz" | "regla" | "orden" | "deshacer" | "manos-libres" | "acerca" | "herramientas" | "pitch" | "recorrido-red" | "ajustes-ia" | "ajustes-ia-local";
+export type AccionMelki =
+  | "recorrido"
+  | "tours"
+  | "simular"
+  | "ejemplo"
+  | "agregar"
+  | "inspeccionar"
+  | "parametros"
+  | "resultados"
+  | "kmz"
+  | "regla"
+  | "orden"
+  | "deshacer"
+  | "manos-libres"
+  | "acerca"
+  | "herramientas"
+  | "pitch"
+  | "recorrido-red"
+  | "ajustes-ia"
+  | "ajustes-ia-local"
+  /* Modelo Melki: decir una orden con las palabras de Melki, contestar un tema, sus ajustes y olvidar lo aprendido */
+  | "decir"
+  | "tema"
+  | "ajustes-modelo"
+  | "olvidar-modelo"
+  | "corregir-modelo"
+  | "descartar";
 
-/** Con «detalle», la acción se muestra como una opción de menú (título y una línea). Con «parada», el recorrido de la red empieza en ese punto. */
-export type AccionRespuesta = { texto: string; accion: AccionMelki; orden?: Orden; escenario?: Escenario; tour?: IdTour; detalle?: string; parada?: string };
+/**
+ * Con «detalle», la acción se muestra como una opción de menú (título y una línea). Con «parada», el recorrido de la red
+ * empieza en ese punto. «frase» es la orden que se dice (acción «decir»), «tema» el tema que se contesta, y «aprende»
+ * la frase de la persona que el Modelo Melki recuerda si toca el botón.
+ */
+export type AccionRespuesta = {
+  texto: string;
+  accion: AccionMelki;
+  orden?: Orden;
+  escenario?: Escenario;
+  tour?: IdTour;
+  detalle?: string;
+  parada?: string;
+  frase?: string;
+  tema?: string;
+  aprende?: { frase: string; intencion: string };
+};
 
 export type Respuesta = {
   texto: string;
@@ -35,6 +76,9 @@ export type Respuesta = {
   voz?: string;
   /** No lo entendió (ni como orden ni como pregunta): la IA local, si está activa, puede intentarlo. */
   noEntendido?: boolean;
+  /** El tema que contestó y con cuántos puntos (con pocos, el Modelo Melki puede dar una segunda opinión). */
+  tema?: string;
+  puntos?: number;
 };
 
 export type ContextoMelki = {
@@ -52,6 +96,8 @@ export type ContextoMelki = {
   porVoz?: boolean;
   /** El municipio que se ve en el centro del mapa («Cumaral (Meta)»), para «¿dónde estamos?». */
   vista?: string | null;
+  /** El Modelo Melki: si está activo, cómo le fue en su prueba y cuántas frases aprendió de la persona. */
+  modeloMelki?: { activo: boolean; frases?: number; aciertos?: number; ciega?: number; aprendidas: number; intenciones?: number };
 };
 
 /** «señor», «señora» o nada, según el trato elegido (por defecto, señor). */
@@ -215,6 +261,7 @@ const TEMAS: Tema[] = [
         "• Radio: «usa SF10», «la frecuencia a 921,5 MHz», «confiabilidad del 90 %», «usa Longley-Rice», «simula con vegetación densa», «informe del enlace Ejemplo y Torre 2».",
         "• Mapa, medir y exportar: «muestra las vías», «llévame a Villavicencio», «distancia entre Ejemplo y Torre 2», «perfil de Ejemplo a Torre 2», «¿cuánto cubre el área?», «exporta a Google Earth».",
         "• Por voz, sin tocar nada: active el «Asistente Melki» y diga «Hola Melki, pon el gateway en Cumaral»; le dejo el mapa libre y le ofrezco los paneles cuando hagan falta.",
+        "• Con sus propias palabras: si no lo dice como en estos ejemplos, mi Modelo Melki entiende lo que quiere («móntame una malla que abarque tres millas alrededor de la finca», «métele 400 usuarios al repetidor 2») y, si dudo, le pregunto con botones.",
         "Si prefiere dictar, toque el micrófono y revise el texto antes de enviarlo. Y si quiere aprender paso a paso, pídame un tour guiado.",
       ].join("\n"),
       acciones: [{ texto: "Ver los tours guiados", accion: "tours" }],
@@ -494,12 +541,28 @@ const TEMAS: Tema[] = [
     }),
   },
   {
+    id: "modelo-melki",
+    claves: ["modelo melki", "red neuronal", "como me entiendes", "como entiendes", "como aprendes", "aprendes de mi", "lo que aprendiste", "olvidar lo aprendido", "tu propio modelo", "tu inteligencia artificial", "tu propia inteligencia"],
+    responder: (c) => {
+      const mm = c.modeloMelki;
+      const pct = (x?: number) => (x ? `${(100 * x).toFixed(1).replace(".", ",")} %` : "");
+      return {
+        texto: [
+          `Tengo mi propio modelo: el Modelo Melki, una red neuronal pequeña hecha solo para este simulador.${mm?.frases ? ` Aprendió de ${mm.frases.toLocaleString("es-CO")} frases` : " Aprendió de unas cien mil frases"} de cómo se piden las cosas aquí (diseñar la red, poner piezas, probar la carga, mover el mapa, preguntar…), con errores de tecleo, sin tildes y como las escribe el dictado. Corre en el procesador de este equipo en menos de un milisegundo: sin internet, sin tarjeta gráfica y sin descargar nada aparte.`,
+          "Lo uso cuando mis reglas no entienden un pedido: el modelo dice qué se pide, yo saco los datos de sus palabras (la medida, el lugar, el nodo, la plata) y armo la orden, que mi intérprete verifica antes de hacerla. Nunca inventa una cifra ni un lugar. Si no estoy seguro, le pregunto con botones; lo que borra algo siempre se lo confirmo; y lo que no es del simulador, se lo digo.",
+          `${mm?.aciertos ? `En su prueba con frases escritas a mano que nunca vio acertó ${pct(mm.ciega ?? mm.aciertos)}. ` : ""}Aprendo de usted: cuando me aclara con un botón, recuerdo esa forma de decirlo en este navegador, y si deshace algo que entendí así, no lo vuelvo a entender de esa manera.${mm?.aprendidas ? ` Llevo ${mm.aprendidas === 1 ? "1 frase aprendida" : `${mm.aprendidas} frases aprendidas`}.` : ""}${mm && !mm.activo ? " Ahora está apagado (se enciende en Ajustes)." : ""}`,
+        ].join("\n"),
+        acciones: [{ texto: "Abrir los ajustes del Modelo Melki", accion: "ajustes-modelo" }, ...(mm?.aprendidas ? [{ texto: "Olvidar lo aprendido", accion: "olvidar-modelo" as const }] : [])],
+      };
+    },
+  },
+  {
     id: "ia-local",
     claves: ["ia local", "inteligencia artificial local", "modelo local", "qwen", "webgpu", "sin internet", "offline", "deepseek", "fable", "opus", "claude", "llama", "modelo de lenguaje"],
     responder: () => ({
       texto: [
-        "Tengo una IA local opcional: Qwen3 (de Alibaba), un modelo de lenguaje abierto que corre en la tarjeta gráfica de este equipo con WebGPU, sin instalar nada y sin mandar nada a internet. Se descarga una vez (unos 2,3 GB el recomendado) cuando la activa en Ajustes y queda guardado en el navegador.",
-        "La uso cuando mi intérprete no entiende un pedido: el modelo lo pasa a órdenes que yo verifico antes de hacerlas, y si inventa una cifra que usted no dijo, no la uso. El diseño, los costos y la cobertura siempre salen del cálculo, no del modelo.",
+        "Siempre tengo mi propio Modelo Melki, una red neuronal hecha solo para este simulador que corre en el procesador, sin internet ni tarjeta gráfica (pregúnteme «¿cómo me entiendes?»). Además tengo una IA local opcional: Qwen3 (de Alibaba), un modelo de lenguaje abierto que corre en la tarjeta gráfica de este equipo con WebGPU, sin instalar nada y sin mandar nada a internet. Se descarga una vez (unos 2,3 GB el recomendado) cuando la activa en Ajustes y queda guardado en el navegador.",
+        "La uso cuando ni mi intérprete ni mi Modelo Melki entienden un pedido: Qwen3 lo pasa a órdenes que yo verifico antes de hacerlas, y si inventa una cifra que usted no dijo, no la uso. El diseño, los costos y la cobertura siempre salen del cálculo, no del modelo.",
         "Corre con WebLLM 0.2.82: las versiones más nuevas de esa biblioteca bloquearon la tarjeta gráfica en un equipo con Windows y gráficos AMD integrados. Si la tarjeta deja de responder, apago la IA local sola, se lo digo y no lo vuelvo a intentar hasta que usted la active.",
         "Claude (Fable u Opus) no se puede instalar en un equipo: funciona solo por internet. DeepSeek V4 es demasiado grande para un PC, y sus versiones locales razonan en voz alta antes de responder, lo que en una tarjeta integrada las hace mucho más lentas que Qwen3 para esto.",
       ].join("\n"),
@@ -1147,6 +1210,12 @@ function sobreAntena(t: string, c: ContextoMelki): Respuesta | null {
   return { texto };
 }
 
+/** La respuesta de un tema por su nombre (la usa el Modelo Melki cuando entendió de qué se pregunta). */
+export function responderTema(id: string, c: ContextoMelki): Respuesta | null {
+  const tema = TEMAS.find((t) => t.id === id);
+  return tema ? tema.responder(c) : null;
+}
+
 export function responder(pregunta: string, c: ContextoMelki): Respuesta {
   const t = ` ${normalizar(pregunta)} `;
   if (!t.trim()) return { texto: "Escríbame su pregunta." };
@@ -1197,7 +1266,7 @@ export function responder(pregunta: string, c: ContextoMelki): Respuesta {
     const ne = noEntendiOrden(pregunta);
     if (ne) return c.porVoz ? { ...ne, texto: `Discúlpeme${tratoDe(c) ? `, ${tratoDe(c)}` : ""}, no le entendí bien: ${ne.texto.charAt(0).toLowerCase()}${ne.texto.slice(1)}` } : ne;
   }
-  if (mejor && mejor.puntos >= 2) return mejor.tema.responder(c);
+  if (mejor && mejor.puntos >= 2) return { ...mejor.tema.responder(c), tema: mejor.tema.id, puntos: mejor.puntos };
   if (/\b(hola|buenas|buenos dias|saludos)\b/.test(t)) {
     const r = TEMAS.find((x) => x.id === "capacidades")!.responder(c);
     return { ...r, texto: `¡Hola! ${r.texto}` };

@@ -10,7 +10,7 @@
 // todo el tiempo, se activa con «Hola Melki», ejecuta y contesta en voz alta con trato de mayordomo; al activarse deja
 // el mapa libre y sugiere los paneles cuando hacen falta) y menú de tours guiados (también en la primera visita).
 // Escucha avisos de la ventana: «melki:abrir», «melki:tours» y «melki:pedir» (los usan los tours y la barra superior).
-import { AudioLines, Compass, Cpu, Ear, Globe, KeyRound, LoaderCircle, Mic, Play, Send, Settings2, ShieldCheck, Sparkles, Square, Trash2, Volume2, VolumeX, X } from "lucide-react";
+import { AudioLines, BrainCircuit, Compass, Cpu, Ear, Globe, KeyRound, LoaderCircle, Mic, Play, Send, Settings2, ShieldCheck, Sparkles, Square, Trash2, Volume2, VolumeX, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { consejoRed, estadoRed, piezaDe } from "@/lib/radio/estado-red";
@@ -64,7 +64,10 @@ import {
   type EstadoManosLibres,
   type Trato,
 } from "./manos-libres";
-import { menuTours, pedidoDeTour, responder, SUGERENCIAS, type AccionMelki, type AccionRespuesta, type ContextoMelki, type Respuesta } from "./cerebro";
+import { menuTours, pedidoDeTour, responder, responderTema, respuestaFueraDeTema, SUGERENCIAS, type AccionMelki, type AccionRespuesta, type ContextoMelki, type Respuesta } from "./cerebro";
+import { entender, type Decision, type Opcion, type Recuerdo } from "./modelo/entender";
+import { INTENCION } from "./modelo/intenciones";
+import { cargarModeloMelki, guardarPreferenciaModelo, leerMemoria, leerPreferenciaModelo, modeloMelki, olvidarMemoria, recordar, type PreferenciaModelo } from "./modelo/memoria";
 import {
   borrarReconocedor,
   componerTexto,
@@ -84,7 +87,20 @@ import { accionAjuste, dividirEnPasos, ejecutarOrden, interpretarOrden, textoCob
 import type { IdTour } from "./tours";
 import { alCargarVoces, callar, fijarVozPreferida, hablar, puntajeVoz, sonando, vocesEspanol, vozDisponible } from "./voz";
 
-type Mensaje = { id: number; de: "melki" | "usuario"; texto: string; acciones?: AccionRespuesta[]; voz?: boolean };
+/** «nota»: una línea pequeña sobre la respuesta (cómo entendió el Modelo Melki lo que se pidió). */
+type Mensaje = { id: number; de: "melki" | "usuario"; texto: string; acciones?: AccionRespuesta[]; voz?: boolean; nota?: string };
+
+/* Lo que Melki entiende fuera del intérprete (también para verificar las órdenes que arma el Modelo Melki) */
+const ACTIVAR_ASISTENTE = /\b(activa|enciende|prende|pon|inicia|abre|llama)\w* (el |al )?(modo )?(manos libres|jarvis|escucha|asistente( melki| de voz| por voz)?)\b|^escuchame$|^modo jarvis$|^(el )?asistente melki$|\bquiero hablarte\b/;
+const DESACTIVAR_ASISTENTE = /\b(desactiva|apaga|quita|termina|cierra)\w* (el )?(modo )?(manos libres|jarvis|escucha|asistente( melki| de voz| por voz)?)\b|\bdeja de escuchar\b/;
+const ACTIVAR_VOZ = /\b(activa|enciende|prende|pon)\w* (tu |la )?voz\b|\bhablame\b|\blee(me)? en voz alta\b/;
+const CALLAR_VOZ = /\b(desactiva|apaga|quita|silencia)\w* (tu |la )?voz\b|\bcallate\b|\bsilencio\b|\bno hables\b/;
+const DESHACER = /\b(deshac\w*|deshaz|revierte|revertir|anula lo [uú]ltimo)\b/i;
+const sinTildesMinusculas = (t: string) => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+/** Una aclaración del Modelo Melki dura esto esperando la respuesta («la primera», «sí», «ninguna»). */
+const ESPERA_ACLARACION_MS = 120000;
+/** Tras una orden que entendió el Modelo Melki, «deshacer» ofrece «Lo entendí mal» durante este tiempo. */
+const VENTANA_CORREGIR_MS = 180000;
 
 /** Un pedido dicho que quedó a medias («ubícame en…», «arma una red de…»): se espera un poco más a que termine. */
 /** Lo que empieza a oírse hasta 0,8 s después de que Melki calla es todavía su voz (el reconocimiento avisa tarde). */
@@ -380,6 +396,14 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   const [oidoIA, setOidoIA] = useState("");
   const [subIA, setSubIA] = useState("");
   const [avisoIA, setAvisoIA] = useState<string | null>(null);
+  /* Modelo Melki (la red neuronal propia del simulador, en el procesador) */
+  const [modeloPref, setModeloPref] = useState<PreferenciaModelo>(() => leerPreferenciaModelo());
+  const [memoriaModelo, setMemoriaModelo] = useState<Recuerdo[]>(() => leerMemoria());
+  const [infoModelo, setInfoModelo] = useState<{ estado: "cargando" | "listo" | "error"; version?: string; frases?: number; intenciones?: number; aciertos?: number; ciega?: number }>({ estado: "cargando" });
+  /** Lo último que hizo el Modelo Melki (para «Lo entendí mal» al deshacer) y la aclaración que espera respuesta. */
+  const ultimoModelo = useRef<{ frase: string; intencion: string; hasta: number } | null>(null);
+  const aclaracion = useRef<{ opciones: Opcion[]; pregunta: string; confirmar: boolean; hasta: number } | null>(null);
+  const notaModelo = useRef<{ texto: string; hasta: number } | null>(null);
   /* IA local (Qwen3 en la tarjeta gráfica de este equipo) */
   const [iaLocal, setIaLocal] = useState<PreferenciaIALocal>(() => leerPreferenciaIALocal());
   const estadoLocal = useSyncExternalStore(suscribirIALocal, estadoIALocal, estadoIALocal);
@@ -514,10 +538,29 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     pausada: false,
     ultimaVozSonando: 0,
   });
-  const actual = useRef({ abierto, vozActiva, api, mensajes, manos, usados, paneles, contexto, iaPref, iaLocal });
+  const actual = useRef({ abierto, vozActiva, api, mensajes, manos, usados, paneles, contexto, iaPref, iaLocal, modeloPref, memoriaModelo });
   useEffect(() => {
-    actual.current = { abierto, vozActiva, api, mensajes, manos, usados, paneles, contexto, iaPref, iaLocal };
+    actual.current = { abierto, vozActiva, api, mensajes, manos, usados, paneles, contexto, iaPref, iaLocal, modeloPref, memoriaModelo };
   });
+  // El Modelo Melki se carga cuando el navegador está desocupado (sus pesos vienen aparte, para no demorar el arranque)
+  useEffect(() => {
+    let vivo = true;
+    const cargar = () =>
+      void cargarModeloMelki()
+        .then((m) => {
+          const j = m.evaluacion;
+          if (vivo) setInfoModelo({ estado: "listo", version: m.version, intenciones: m.intenciones.length, frases: m.frases, aciertos: j?.aciertos, ciega: j?.ciega?.aciertos });
+        })
+        .catch(() => {
+          if (vivo) setInfoModelo({ estado: "error" });
+        });
+    const w = window as Window & { requestIdleCallback?: (f: () => void, o?: { timeout: number }) => number };
+    const t = w.requestIdleCallback ? w.requestIdleCallback(cargar, { timeout: 4000 }) : window.setTimeout(cargar, 1500);
+    return () => {
+      vivo = false;
+      if (!w.requestIdleCallback) window.clearTimeout(t);
+    };
+  }, []);
   /** Las frases del asistente con el trato elegido. */
   const fr = () => frases(actual.current.manos.trato);
   useEffect(() => {
@@ -730,9 +773,16 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
    * Agrega la respuesta a la conversación y la dice (o la muestra en la barra del asistente). Con `callada`, solo queda
    * escrita: la dirá Melki cuando llegue volando al sitio (con la voz encendida, en su nube).
    */
+  /** La nota del Modelo Melki va en la primera respuesta que sigue a lo que entendió (y no en otra más tarde). */
+  const tomarNota = () => {
+    const n = notaModelo.current;
+    notaModelo.current = null;
+    return n && reloj() < n.hasta ? n.texto : undefined;
+  };
   const agregarMelki = (r: Respuesta, callada = false) => {
     if (captura.current) captura.current.push(r.acciones?.length ? `${r.texto}\n(Opciones: ${r.acciones.map((a) => a.texto).join(" · ")})` : r.texto);
-    setMensajes((m) => [...m, { id: siguiente.current++, de: "melki", texto: r.texto, acciones: r.acciones }]);
+    const nota = tomarNota();
+    setMensajes((m) => [...m, { id: siguiente.current++, de: "melki", texto: r.texto, acciones: r.acciones, nota }]);
     if (!actual.current.abierto) setNoLeido(true);
     if (callada) {
       const m = ml.current;
@@ -1622,7 +1672,14 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     if (clave) setUsados((u) => new Set(u).add(clave));
     ultimoDeshacer.current = null;
     esperando.current = null;
-    agregarMelki({ texto: "Listo, deshice ese cambio." });
+    // Si lo que se deshace lo había entendido el Modelo Melki, la persona puede decirle que lo entendió mal
+    const um = ultimoModelo.current;
+    ultimoModelo.current = null;
+    const corregir = um && reloj() < um.hasta && actual.current.modeloPref.activo;
+    agregarMelki({
+      texto: corregir ? "Listo, deshice ese cambio. Si lo entendí mal, dígamelo y no lo vuelvo a entender así." : "Listo, deshice ese cambio.",
+      acciones: corregir ? [{ texto: "Lo entendiste mal", accion: "corregir-modelo", aprende: { frase: um.frase, intencion: um.intencion } }] : undefined,
+    });
   };
 
   /**
@@ -1751,12 +1808,25 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     if (!deIA && (sesion.current || control.current)) cortarDictado();
     setMensajes((m) => [...m, { id: siguiente.current++, de: "usuario", texto: pregunta, voz: deVoz || deIA || undefined }]);
     if (!deVoz && !deIA) setTexto("");
+    notaModelo.current = null;
+    // La respuesta a «¿quiso decir…?» del Modelo Melki: «la primera», «sí», «ninguna»
+    if (responderAclaracion(pregunta)) return;
+    atender(pregunta, deVoz);
+  };
+
+  /**
+   * Lo que Melki hace con un pedido (escrito, dictado, de la IA o armado por el Modelo Melki con sus palabras):
+   * el recorrido, el pitch, la voz, deshacer, los tours, el intérprete y el cerebro; lo que nada de eso entiende lo
+   * piensa el Modelo Melki y, si tampoco, la IA local (si está activa). `desdeModelo`: la frase ya la armó el modelo.
+   */
+  const atender = (pregunta: string, deVoz = false, desdeModelo = false) => {
     // El recorrido de la red: «explícame la red», «hazme un recorrido por la red», «¿por qué la red quedó así?»,
     // y mientras está abierto «siguiente», «ve al gateway», «termina el recorrido»…
     const pr = pedidoRecorrido(pregunta, recorridoAbierto.current);
     if (pr && (recorridoAbierto.current || !pr.parada || hayRedEnMapa())) {
       const t = pedirRecorrido(pr);
-      setMensajes((m) => [...m, { id: siguiente.current++, de: "melki", texto: t }]);
+      const nota = tomarNota();
+      setMensajes((m) => [...m, { id: siguiente.current++, de: "melki", texto: t, nota }]);
       if (captura.current) captura.current.push(t);
       if (ml.current.activo && ml.current.despierto) {
         window.clearTimeout(ml.current.pensando);
@@ -1769,7 +1839,8 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     if (pp) {
       const t = pedirPitch(pp);
       // Sin hablar encima de la narración: queda escrito
-      setMensajes((m) => [...m, { id: siguiente.current++, de: "melki", texto: t }]);
+      const nota = tomarNota();
+      setMensajes((m) => [...m, { id: siguiente.current++, de: "melki", texto: t, nota }]);
       if (captura.current) captura.current.push(t);
       if (ml.current.activo && ml.current.despierto) {
         window.clearTimeout(ml.current.pensando);
@@ -1778,13 +1849,9 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       return;
     }
     // La voz de Melki
-    const sinAcentos = pregunta.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const sinAcentos = sinTildesMinusculas(pregunta);
     // El asistente por escrito: «activa el asistente», «asistente Melki», «activa manos libres», «modo Jarvis», «escúchame»
-    if (
-      /\b(activa|enciende|prende|pon|inicia|abre|llama)\w* (el |al )?(modo )?(manos libres|jarvis|escucha|asistente( melki| de voz| por voz)?)\b|^escuchame$|^modo jarvis$|^(el )?asistente melki$|\bquiero hablarte\b/.test(
-        sinAcentos,
-      )
-    ) {
+    if (ACTIVAR_ASISTENTE.test(sinAcentos)) {
       if (!hayReconocimientoNavegador() && !hayMicrofono()) {
         agregarMelki({ texto: "Este navegador no puede escucharme. Use Edge o Chrome actualizados para el Asistente Melki." });
         return;
@@ -1794,7 +1861,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       else onManosLibres(true);
       return;
     }
-    if (/\b(desactiva|apaga|quita|termina|cierra)\w* (el )?(modo )?(manos libres|jarvis|escucha|asistente( melki| de voz| por voz)?)\b|\bdeja de escuchar\b/.test(sinAcentos)) {
+    if (DESACTIVAR_ASISTENTE.test(sinAcentos)) {
       const reposo = pasivaPermitida();
       if (ml.current.activo && ml.current.despierto) {
         // Se despide sin cortarse (en reposo sigue escuchando su nombre)
@@ -1805,12 +1872,12 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       agregarMelki({ texto: reposo ? fr().reposo : "Listo, ya no escucho. Cuando quiera, toque «Asistente Melki» o dígame «activa el asistente»." });
       return;
     }
-    if (/\b(activa|enciende|prende|pon)\w* (tu |la )?voz\b|\bhablame\b|\blee(me)? en voz alta\b/.test(sinAcentos) && vozDisponible()) {
+    if (ACTIVAR_VOZ.test(sinAcentos) && vozDisponible()) {
       fijarVoz(true);
       agregarMelki({ texto: "Listo, ahora le leo en voz alta lo que respondo (hasta que me diga «no hables» o recargue la página)." });
       return;
     }
-    if (/\b(desactiva|apaga|quita|silencia)\w* (tu |la )?voz\b|\bcallate\b|\bsilencio\b|\bno hables\b/.test(sinAcentos)) {
+    if (CALLAR_VOZ.test(sinAcentos)) {
       // Primero sin voz: lo que estaba diciendo termina y lo siguiente ya queda solo escrito
       fijarVoz(false);
       callar();
@@ -1825,7 +1892,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       agregarMelki({ texto: fr().mostrando("resultados") });
       return;
     }
-    if (/\b(deshac\w*|deshaz|revierte|revertir|anula lo [uú]ltimo)\b/i.test(pregunta)) {
+    if (DESHACER.test(pregunta)) {
       deshacer(ultimoDeshacer.current);
       return;
     }
@@ -1849,19 +1916,195 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
         return;
       }
     }
+    // «Métele un repetidor a 2 millas al norte del gateway» llega como una coordenada sola: el Modelo Melki puede
+    // entender qué se quería hacer con ella
+    if (entera?.tipo === "coordenada-sola" && !desdeModelo && actual.current.modeloPref.activo) {
+      void pensarConModelo(pregunta, deVoz, null, entera);
+      return;
+    }
     if (entera) {
       ejecutar(entera);
       return;
     }
     // Sin orden: el cerebro responde (por voz, si no entendió, pide que se lo repita)
-    const c = api.centroMapa();
-    const r = responder(pregunta, { ...contexto, trato: actual.current.manos.trato, porVoz: deVoz, vista: c ? api.ubicacion(c.lat, c.lon) : null });
-    // Lo que ni el intérprete ni el cerebro entendieron lo piensa la IA local, si está activa
+    const r = responder(pregunta, contextoMelki(deVoz));
+    // Un tema elegido con pocas palabras clave: si el Modelo Melki está muy seguro de que se pregunta otro, gana el modelo
+    // («¿cuántas veces rebota un mensaje?» es de los saltos, aunque diga «mensaje»), y también si se pregunta por un nodo
+    // del mapa («¿por qué la Persona 1 no tiene señal?» es cómo está ella, no qué equipo lleva una persona)
+    if (!r.noEntendido && r.tema && (r.puntos ?? 99) < 4 && !desdeModelo && actual.current.modeloPref.activo) {
+      const m = modeloMelki();
+      const d = m ? entender(m, pregunta, { api: actual.current.api, memoria: actual.current.memoriaModelo, verificar: entiendeFrase }) : null;
+      const otroTema = d?.tipo === "tema" && d.opcion.tema !== r.tema;
+      const unNodo = d?.tipo === "hacer" && d.opcion.id === "info-nodo";
+      if ((d?.tipo === "tema" || d?.tipo === "hacer") && (otroTema || unNodo) && d.opcion.p >= 0.9) {
+        hacerOpcion(d.opcion, pregunta, deVoz, true);
+        return;
+      }
+    }
+    // Lo que ni el intérprete ni el cerebro entendieron lo piensa el Modelo Melki (y si tampoco, la IA local)
+    if (r.noEntendido && !desdeModelo && actual.current.modeloPref.activo) {
+      void pensarConModelo(pregunta, deVoz, r);
+      return;
+    }
+    seguirSinEntender(pregunta, r);
+  };
+
+  /** El contexto del cerebro de ahora (con el trato, la vista y el Modelo Melki). */
+  const contextoMelki = (deVoz = false): ContextoMelki => {
+    const a = actual.current.api;
+    const c = a.centroMapa();
+    return {
+      ...actual.current.contexto,
+      trato: actual.current.manos.trato,
+      porVoz: deVoz,
+      vista: c ? a.ubicacion(c.lat, c.lon) : null,
+      modeloMelki: { activo: actual.current.modeloPref.activo, frases: infoModelo.frases, aciertos: infoModelo.aciertos, ciega: infoModelo.ciega, intenciones: infoModelo.intenciones, aprendidas: actual.current.memoriaModelo.filter((x) => x.s > 0).length },
+    };
+  };
+
+  /** Lo que sigue sin entenderse: la IA local (si está activa) o el «no entendí». */
+  const seguirSinEntender = (pregunta: string, r: Respuesta) => {
     if (r.noEntendido && actual.current.iaLocal.activa) {
       void pensarConIALocal(pregunta, r);
       return;
     }
     agregarMelki(r);
+  };
+
+  /* ───────────── Modelo Melki ───────────── */
+
+  /** ¿Melki entiende esta frase (la que armó el modelo)? El intérprete o lo que Melki atiende antes que él. */
+  const entiendeFrase = (frase: string): boolean => {
+    const t = sinTildesMinusculas(frase);
+    if (pedidoRecorrido(frase, recorridoAbierto.current) || pedidoPitch(frase, pitchAbierto.current)) return true;
+    if (ACTIVAR_ASISTENTE.test(t) || DESACTIVAR_ASISTENTE.test(t) || ACTIVAR_VOZ.test(t) || CALLAR_VOZ.test(t) || DESHACER.test(frase)) return true;
+    if (!/\d/.test(frase) && pedidoDeTour(frase)) return true;
+    // Las preguntas que arma el modelo y contesta el cerebro: cómo está un nodo del mapa y dónde estamos
+    if (/^¿(cómo está|dónde estamos)[\s?]/.test(frase)) return !responder(frase, contextoMelki(false)).noEntendido;
+    try {
+      const o = interpretarOrden(frase, actual.current.api, pendiente.current, contextoOrden());
+      return Boolean(o && o.tipo !== "coordenada-sola");
+    } catch {
+      return false;
+    }
+  };
+
+  /**
+   * El Modelo Melki piensa lo que no se entendió: hace la orden (si está seguro), la ofrece con un botón (si borra algo),
+   * contesta el tema, pregunta «¿quiso decir…?» o dice que está fuera del simulador. Si no sabe, todo sigue como antes
+   * (`orden`: la que había entendido el intérprete, como una coordenada sola).
+   */
+  const pensarConModelo = async (pregunta: string, deVoz: boolean, sinEntender: Respuesta | null, orden?: Orden) => {
+    trabajos.current++;
+    let hecho = false;
+    try {
+      const m = modeloMelki() ?? (await cargarModeloMelki());
+      const d = entender(m, pregunta, { api: actual.current.api, memoria: actual.current.memoriaModelo, verificar: entiendeFrase });
+      hecho = actuarModelo(d, pregunta, deVoz);
+    } catch {
+      hecho = false;
+    } finally {
+      trabajos.current = Math.max(0, trabajos.current - 1);
+    }
+    if (hecho) return;
+    if (orden) ejecutar(orden);
+    else if (sinEntender) seguirSinEntender(pregunta, sinEntender);
+  };
+
+  const minuscula = (t: string) => t.charAt(0).toLowerCase() + t.slice(1);
+
+  /** El botón de una opción del modelo: dice la orden, la hace directa o contesta el tema (y aprende la frase). */
+  const accionDeOpcion = (op: Opcion, pregunta: string, texto = op.texto): AccionRespuesta => ({
+    texto,
+    accion: op.frase ? "decir" : op.orden ? "orden" : "tema",
+    frase: op.frase,
+    orden: op.orden,
+    tema: op.tema,
+    aprende: { frase: pregunta, intencion: op.id },
+  });
+
+  /** Hace una opción del modelo (sin preguntar más): la frase pasa por Melki como si la hubiera escrito la persona. */
+  const hacerOpcion = (op: { id: string; frase?: string; orden?: Orden; tema?: string; texto: string }, pregunta: string, deVoz: boolean, nota: boolean) => {
+    if (nota) notaModelo.current = { texto: op.tema ? `Entendí que pregunta: ${minuscula(op.texto)}.` : `Entendí: «${op.frase ?? op.texto}».`, hasta: reloj() + 15000 };
+    if (!op.tema) ultimoModelo.current = { frase: pregunta, intencion: op.id, hasta: reloj() + VENTANA_CORREGIR_MS };
+    if (op.frase) atender(op.frase, deVoz, true);
+    else if (op.orden) ejecutar(op.orden);
+    else if (op.tema) {
+      const r = responderTema(op.tema, contextoMelki(deVoz));
+      if (r) agregarMelki(r);
+    }
+  };
+
+  const actuarModelo = (d: Decision, pregunta: string, deVoz: boolean): boolean => {
+    switch (d.tipo) {
+      case "hacer":
+      case "tema":
+        hacerOpcion(d.opcion, pregunta, deVoz, true);
+        return true;
+      case "confirmar": {
+        const op = d.opcion;
+        const it = INTENCION.get(op.id);
+        aclaracion.current = { opciones: [op], pregunta, confirmar: true, hasta: reloj() + ESPERA_ACLARACION_MS };
+        agregarMelki({
+          texto: `Entendí que quiere ${minuscula(it?.nombre ?? op.texto)}: «${op.frase ?? op.texto}». Como eso borra o reemplaza algo, ¿lo hago?`,
+          voz: `Entendí que quiere ${minuscula(it?.nombre ?? op.texto)}. ¿Lo hago? Dígame sí o no.`,
+          acciones: [accionDeOpcion(op, pregunta, "Sí, hazlo"), { texto: "No", accion: "descartar" }],
+        });
+        return true;
+      }
+      case "aclarar": {
+        aclaracion.current = { opciones: d.opciones, pregunta, confirmar: false, hasta: reloj() + ESPERA_ACLARACION_MS };
+        const ordinal = ["la primera", "la segunda", "la tercera"];
+        agregarMelki({
+          texto: `No estoy seguro de haberle entendido. ¿Quiso decir…?`,
+          voz: `No estoy seguro de haberle entendido. ¿Quiso decir: ${d.opciones.map((o, i) => `${ordinal[i]}, ${minuscula(o.texto).replace(/[«»"]/g, "")}`).join("; ")}? Dígame ${d.opciones.length > 1 ? "cuál" : "sí"}, o «ninguna».`,
+          acciones: [...d.opciones.map((o) => accionDeOpcion(o, pregunta)), { texto: "Ninguna", accion: "descartar" }],
+        });
+        return true;
+      }
+      case "falta":
+        agregarMelki({ texto: `Entendí que quiere ${minuscula(d.intencion.nombre)}, pero me falta un dato para hacerlo. Dígamelo así, por ejemplo: «${d.intencion.ejemplo}».` });
+        return true;
+      case "fuera":
+        agregarMelki(respuestaFueraDeTema(contextoMelki(deVoz)));
+        return true;
+      default:
+        return false;
+    }
+  };
+
+  /** Lo que la persona aclaró: el Modelo Melki lo recuerda en este navegador. */
+  const aprenderModelo = (frase: string, intencion: string, signo: 1 | -1) => {
+    const m = modeloMelki();
+    if (!m || !actual.current.modeloPref.activo) return;
+    setMemoriaModelo(recordar(m, frase, intencion, signo));
+  };
+
+  /** «La primera», «sí», «ninguna»… después de «¿quiso decir…?» (por voz o escrito). */
+  const responderAclaracion = (respuesta: string): boolean => {
+    const a = aclaracion.current;
+    aclaracion.current = null;
+    if (!a || reloj() > a.hasta) return false;
+    const t = sinTildesMinusculas(respuesta).replace(/[¿?¡!.,]/g, "").replace(/\b(melki|por favor|porfa)\b/g, "").trim();
+    if (/^(no|nop|ninguna|ninguno|ninguna de esas|ninguna de las anteriores|cancela|cancelar|nada|olvidalo|dejalo|mejor no)$/.test(t)) {
+      agregarMelki({ texto: "Listo, no hago nada. Dígamelo con otras palabras o pregúnteme «¿qué puedes hacer?»." });
+      return true;
+    }
+    const cual = /^(si|sí|dale|hazlo|hagale|esa|ese|eso|correcto|exacto|claro|ok|okey|listo|de una)$/.test(t)
+      ? 0
+      : /^((la|el|opcion) )?(primera|primero|1|uno|de arriba)( opcion)?$/.test(t)
+        ? 0
+        : /^((la|el|opcion) )?(segunda|segundo|2|dos)( opcion)?$/.test(t)
+          ? 1
+          : /^((la|el|opcion) )?(tercera|tercero|3|tres)( opcion)?$/.test(t)
+            ? 2
+            : -1;
+    // «Sí» solo vale si había una sola opción (o era para confirmar)
+    if (cual < 0 || cual >= a.opciones.length || (cual === 0 && !a.confirmar && a.opciones.length > 1 && /^(si|sí|dale|hazlo|hagale|ok|okey|listo|de una|claro)$/.test(t))) return false;
+    const op = a.opciones[cual];
+    aprenderModelo(a.pregunta, op.id, 1);
+    hacerOpcion(op, a.pregunta, false, false);
+    return true;
   };
 
   /** Ya se avisó en esta visita por qué no carga la IA local (no se repite a cada pedido). */
@@ -2824,10 +3067,38 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       setMensajes((x) => [...x, { id: siguiente.current++, de: "melki", texto: t }]);
       return;
     }
-    if (a.accion === "ajustes-ia" || a.accion === "ajustes-ia-local") {
+    if (a.accion === "ajustes-ia" || a.accion === "ajustes-ia-local" || a.accion === "ajustes-modelo") {
       setAbierto(true);
       setAjustes(true);
-      if (a.accion === "ajustes-ia-local") window.setTimeout(() => document.querySelector('[data-tour="ajustes-ia-local"]')?.scrollIntoView({ block: "nearest", behavior: "smooth" }), 120);
+      const destino = a.accion === "ajustes-ia-local" ? "ajustes-ia-local" : a.accion === "ajustes-modelo" ? "ajustes-modelo" : null;
+      if (destino) window.setTimeout(() => document.querySelector(`[data-tour="${destino}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" }), 120);
+      return;
+    }
+    /* Modelo Melki: la opción elegida se hace (y se aprende cómo lo dijo la persona) */
+    if (a.accion === "decir" || a.accion === "tema" || (a.accion === "orden" && a.aprende)) {
+      setUsados((u) => new Set(u).add(clave));
+      aclaracion.current = null;
+      if (a.aprende) aprenderModelo(a.aprende.frase, a.aprende.intencion, 1);
+      hacerOpcion({ id: a.aprende?.intencion ?? "", frase: a.frase, orden: a.orden, tema: a.tema, texto: a.texto }, a.aprende?.frase ?? a.texto, false, false);
+      return;
+    }
+    if (a.accion === "descartar") {
+      setUsados((u) => new Set(u).add(clave));
+      aclaracion.current = null;
+      agregarMelki({ texto: "Listo, no hago nada. Dígamelo con otras palabras o pregúnteme «¿qué puedes hacer?»." });
+      return;
+    }
+    if (a.accion === "olvidar-modelo") {
+      setUsados((u) => new Set(u).add(clave));
+      olvidarMemoria();
+      setMemoriaModelo([]);
+      agregarMelki({ texto: "Listo, olvidé lo que aprendí de usted en este navegador. Sigo entendiendo con mi modelo de siempre." });
+      return;
+    }
+    if (a.accion === "corregir-modelo" && a.aprende) {
+      setUsados((u) => new Set(u).add(clave));
+      aprenderModelo(a.aprende.frase, a.aprende.intencion, -1);
+      agregarMelki({ texto: "Gracias por decírmelo: así no lo vuelvo a entender. ¿Qué quería? Dígamelo con otras palabras o pregúnteme «¿qué puedes hacer?»." });
       return;
     }
     if (a.accion === "deshacer") deshacer(a.escenario, clave);
@@ -3228,6 +3499,48 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
                   La clave queda solo en este navegador (no se sube a ningún lado). Mientras conversa, su voz y un resumen del escenario (posiciones de las antenas y resultados) van a Google; en la capa gratuita Google puede usarlos para mejorar sus productos, con límites de uso por día.
                 </p>
               </section>
+              <section className="mb-3 rounded-xl bg-white p-2.5 ring-1 ring-linea" aria-label="Modelo Melki" data-tour="ajustes-modelo">
+                <p className="mb-1 flex items-center gap-1.5 font-cond text-[14px] font-semibold">
+                  <BrainCircuit size={15} className="text-melki-oscura" aria-hidden="true" /> Modelo Melki (entiende sus palabras)
+                </p>
+                <p className="mb-2 text-[12px] leading-snug text-carbon-2">
+                  Mi propia red neuronal, hecha solo para este simulador: entiende los pedidos dichos con sus palabras y los convierte en las órdenes que sé hacer (que verifico antes de hacerlas). Corre en el procesador de este equipo, sin internet ni tarjeta gráfica. Si no estoy seguro, le pregunto con botones; lo que borra algo siempre lo confirmo.
+                </p>
+                <Interruptor
+                  activo={modeloPref.activo}
+                  onCambiar={(v) => {
+                    const p: PreferenciaModelo = { activo: v };
+                    setModeloPref(p);
+                    guardarPreferenciaModelo(p);
+                  }}
+                  titulo="Usar el Modelo Melki"
+                  detalle="Cuando mis reglas no le entienden, lo piensa mi modelo."
+                />
+                <p className="mt-1.5 text-[11.5px] leading-snug text-tenue" data-modelo-melki={infoModelo.estado} role="status">
+                  {infoModelo.estado === "cargando"
+                    ? "Cargando el modelo…"
+                    : infoModelo.estado === "error"
+                      ? "No pude cargar el modelo en este navegador."
+                      : `Versión ${infoModelo.version} · ${infoModelo.intenciones} intenciones · aprendió de ${(infoModelo.frases ?? 0).toLocaleString("es-CO")} frases${infoModelo.ciega ? ` · acierta ${f1(100 * infoModelo.ciega)}\u00a0% en frases nuevas` : ""}.`}
+                </p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                  <span className="text-[12px] text-carbon-2" data-modelo-aprendidas={memoriaModelo.filter((x) => x.s > 0).length}>
+                    {memoriaModelo.length ? `Aprendió ${memoriaModelo.filter((x) => x.s > 0).length === 1 ? "1 forma" : `${memoriaModelo.filter((x) => x.s > 0).length} formas`} de decir las cosas de usted${memoriaModelo.some((x) => x.s < 0) ? ` y ${memoriaModelo.filter((x) => x.s < 0).length} que no` : ""}.` : "Aún no ha aprendido nada de usted."}
+                  </span>
+                  {memoriaModelo.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        olvidarMemoria();
+                        setMemoriaModelo([]);
+                      }}
+                      className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] text-sin ring-1 ring-sin/40 hover:bg-sin/10"
+                    >
+                      <Trash2 size={12} aria-hidden="true" /> Olvidar lo aprendido
+                    </button>
+                  )}
+                </div>
+              </section>
               <section className="mb-3 rounded-xl bg-white p-2.5 ring-1 ring-linea" aria-label="IA local en este equipo" data-tour="ajustes-ia-local">
                 <p className="mb-1 flex items-center gap-1.5 font-cond text-[14px] font-semibold">
                   <Cpu size={15} className="text-melki-oscura" aria-hidden="true" /> IA local en este equipo (Qwen3)
@@ -3502,6 +3815,12 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
                     <span className="mr-1 inline-flex translate-y-[2px] text-white/70" title="Dicho por voz">
                       <Mic size={13} aria-hidden="true" />
                       <span className="sr-only">Por voz: </span>
+                    </span>
+                  )}
+                  {m.nota && (
+                    <span className="mb-1 flex items-start gap-1 text-[11.5px] leading-snug text-tenue" data-nota-modelo="">
+                      <BrainCircuit size={12} className="mt-[2px] shrink-0 text-melki-oscura" aria-hidden="true" />
+                      <span>{m.nota}</span>
                     </span>
                   )}
                   {m.texto}
