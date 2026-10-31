@@ -137,6 +137,37 @@ ve la simulación detrás) y un botón para que hable en voz alta o no, a mano.
     ni de torres de 30 m: la opción económica (menos repetidores por unos puntos de cobertura, con su ahorro y el
     botón «Usar la opción económica», que los quita y mide de nuevo el área), radios de más en el gateway, afirmar los
     enlaces débiles o seguir sin el freno
+- **Modelo Melki** (v15; Ajustes de voz → «Modelo Melki (entiende sus palabras)», encendido de fábrica): la red
+  neuronal propia del simulador, hecha solo para él (del tipo fastText: vectores de palabras, de pares de palabras y de
+  pedazos de 3 a 5 letras, su promedio y una capa con softmax). Aprendió de 97.981 frases de cómo se pide cada cosa del
+  simulador (150 intenciones: diseñar la red, poner y mover piezas, alturas, nombres, la gente, la carga y el estrés,
+  ajustar, el mapa y sus capas, el escenario, Melki y 69 temas de preguntas, más «fuera del simulador» y «ruido del
+  dictado»), escritas con plantillas y con saludos, «por favor», errores de tecleo y de dictado, sin tildes y con
+  números en palabras. Pesa 1,1 MB (enteros de 8 bits), viene con la página (no se descarga nada aparte) y corre en el
+  procesador en unos 0,13 ms por frase, sin internet ni tarjeta gráfica. En frases escritas a mano que nunca vio acierta
+  el 97,1 % (la correcta queda entre las 3 primeras en el 99,3 %); lo que haría sin preguntar acierta el 97,9 %. Melki
+  lo usa cuando su intérprete y su cerebro no entienden un pedido: el modelo dice qué se pide, los datos salen de las
+  palabras de la persona con las reglas del intérprete (la medida, el lugar, el nodo —también mal escrito—, la altura,
+  la gente, la plata, el porcentaje) y la orden se arma en las palabras que Melki ya entiende, que el intérprete
+  verifica antes de hacerla: el modelo nunca inventa una cifra ni un lugar. Si está seguro, lo hace y lo dice en una
+  línea («Entendí: «ármame una red de 3 millas a la redonda de aquí».»); lo que borra o reemplaza algo siempre lo
+  confirma con un botón; si duda, pregunta «¿Quiso decir…?» con hasta tres opciones (también por voz: «la primera»,
+  «sí», «ninguna»); si falta un dato que no se puede suponer, lo pide con un ejemplo; lo que no es del simulador lo dice
+  con cortesía; y si casi no conoce las palabras («¿cómo arreglo la nevera?») no apuesta. Aprende de la persona en ese
+  navegador: la opción que elige queda recordada (la frase se guarda como la ve el modelo, con «0» por las cifras y
+  «zlugar» por los lugares, así vale con otras medidas y otros municipios), y al deshacer algo que entendió el modelo
+  aparece «Lo entendiste mal» para que no lo vuelva a entender así; «Olvidar lo aprendido» lo borra. Un tema que el
+  cerebro eligió con pocas palabras clave lo cambia si el modelo está muy seguro de que se pregunta otro («¿cuántas
+  veces rebota un mensaje?» es de los saltos) o por un nodo del mapa («dime cómo anda el gateway», «¿por qué la
+  Persona 1 no tiene señal?»: cómo está ese nodo, no qué equipo es). El lugar va en la orden con su nombre oficial
+  («barranca de upia» → «Barranca de Upía»; «Granada, Meta» si se dijo el departamento). Se entrena con
+  `npm run modelo:entrenar` (JavaScript puro, semilla fija: sale el mismo modelo) y el informe queda en
+  scripts/modelo-melki/INFORME.md
+- **Arreglos del intérprete** (v15, encontrados al verificar las órdenes del modelo): «agrega un repetidor dos millas al
+  norte del gateway» ponía el gateway (tomaba «repetidor 2» por un nodo); «a 800 m al este del Repetidor 1» dejaba la
+  antena a 300 m de altura; «¿cómo está el Repetidor 3?» le cambiaba el rol; «una red de 2 km de diámetro» preguntaba
+  por un municipio llamado «diámetro» y, con un lugar después, no lo encontraba; y un diseño «con un presupuesto de 80
+  millones para 300 familias» se volvía el dimensionamiento sin mapa
 - **IA local en este equipo** (v14; Ajustes de voz → «IA local en este equipo (Qwen3)»): un modelo de lenguaje
   abierto (Qwen3 de Alibaba; 4B recomendado, 1.7B liviano u 8B máximo) que corre en la tarjeta gráfica con WebGPU, sin
   instalar nada en el sistema y sin mandar nada a internet. Se descarga una sola vez (unos 2,3 GB el recomendado), solo
@@ -461,6 +492,7 @@ npm run dev          # http://localhost:3000
 | `npm run e2e`          | Pruebas de extremo a extremo con Playwright (Edge, o `CHROME_PATH`); teselas sintéticas       |
 | `npm run html`         | Versión HTML que se abre con doble clic (`dist/html/SIMULADOR-HTML/SIMULADOR.html`)           |
 | `npm run paquete`      | Paquetes de avance para probar sin instalar (`-- --destino "<carpeta>"`)                      |
+| `npm run modelo:entrenar` | Entrena el Modelo Melki (≈ 1 min, sin bibliotecas de IA) y escribe `src/datos/modelo/melki.json` y su informe |
 
 ## Estructura
 
@@ -485,8 +517,16 @@ src/
                             la IA local (ia-local.ts: el modelo Qwen3 en la tarjeta gráfica con WebGPU, su descarga, su
                             estado y la red de seguridad de la tarjeta; ia-local-trabajador.ts: el trabajador con WebLLM
                             0.2.82 y la caché en IndexedDB; pensar.ts: el catálogo de órdenes, el estado en corto, el
-                            JSON del modelo y la guardia de cifras)
+                            JSON del modelo y la guardia de cifras);
+                            el Modelo Melki (modelo/: rasgos.ts, las palabras, pares y pedazos de letras con su huella y
+                            los lugares como «zlugar»; modelo.ts, la red neuronal que lee los pesos y piensa una frase;
+                            ranuras.ts, los datos del pedido con las reglas del intérprete; intenciones.ts, las 150
+                            intenciones y la orden que arma cada una; entender.ts, hacer, confirmar, preguntar, el tema,
+                            fuera y lo aprendido; memoria.ts, la carga perezosa, la preferencia y lo aprendido en el
+                            navegador)
   datos/geo/                límites, nombres y ríos de referencia (ver LEEME.md: fuentes y licencias)
+  datos/modelo/melki.json   los pesos del Modelo Melki (enteros de 8 bits en base64), su vocabulario, sus umbrales y su
+                            evaluación; se carga aparte, cuando el navegador está desocupado
   lib/autoria.ts            autoría, titulares y licencia (los usan «Acerca del simulador», Melki y la versión HTML)
   lib/geo/                  consultas locales: municipio de un punto, búsqueda de lugares, contorno de un municipio
                             y reconocimiento de lugares dichos (fonetica.ts: cómo suena el español y cuánto se parecen)
@@ -514,7 +554,10 @@ src/
                             quedó así), su resumen escrito y los pedidos por voz o por escrito
   lib/config.ts             fuentes de mapas y relieve, del dictado privado y de la IA local (reemplazables con
                             variables de entorno)
-scripts/                    versión HTML, paquetes de avance y compresor ZIP
+scripts/                    versión HTML, paquetes de avance y compresor ZIP; modelo-melki/: el entrenamiento del Modelo
+                            Melki (gramatica.mjs, las plantillas y el ruido del dictado; plantillas.mjs, las órdenes;
+                            preguntas.mjs, los temas, lo que está fuera y el ruido; prueba.mjs y prueba-ciega.mjs, las
+                            frases escritas a mano para medirlo; entrenar.mjs; INFORME.md)
 tests/                      pruebas del motor, de Melki y de extremo a extremo (con un servidor de voz en vivo de
                             mentira que habla el protocolo de Gemini Live: tests/e2e/ia-de-mentira.mjs)
 ```
@@ -773,6 +816,10 @@ solo arranca si el micrófono ya está permitido (nunca pide permiso por sorpres
 deja el micrófono abierto para medir el nivel de la voz dentro de la página (ese audio no se guarda ni se envía) y se ve con el oído verde en el botón
 de Melki; «Melki, apaga el micrófono» lo apaga del todo y en Ajustes de voz se quita («Escucharme siempre en esta
 página»). «Melki, deja de escuchar» o la X de la barra lo devuelven al reposo.
+
+**Modelo Melki (v15):** no sale nada del equipo. El modelo viene con la página y piensa dentro del navegador; lo que
+aprende de la persona (las frases que aclaró con un botón) queda solo en el almacenamiento local de ese navegador, como
+lo ve el modelo (sin cifras ni nombres de lugares), y se borra con «Olvidar lo aprendido».
 
 **IA local (opcional, v14):** no sale nada del equipo. Con la opción encendida y el modelo descargado, el pedido y un
 resumen del escenario se le pasan al modelo dentro del navegador (en la tarjeta gráfica); solo se descargan, una vez,
