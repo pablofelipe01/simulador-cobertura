@@ -2766,6 +2766,8 @@ await flujo(
     sembrar: true,
     preparar: async (page) => {
       await page.addInitScript(() => {
+        // Solo el camino de la IA local (sin el Modelo Melki, que entendería estos pedidos antes)
+        localStorage.setItem("simulador-cobertura-melki-modelo", JSON.stringify({ activo: false }));
         // Un modelo de mentira: responde según el pedido (con el estado del simulador a la vista)
         window.__melkiIALocalDePrueba = {
           completar: async (mensajes) => {
@@ -2827,6 +2829,8 @@ await flujo(
     sembrar: true,
     preparar: async (page) => {
       await page.addInitScript(() => {
+        // Solo el camino de la IA local (sin el Modelo Melki, que entendería estos pedidos antes)
+        localStorage.setItem("simulador-cobertura-melki-modelo", JSON.stringify({ activo: false }));
         window.__llamadasIA = 0;
         window.__melkiIALocalDePrueba = {
           completar: async () => {
@@ -2840,6 +2844,98 @@ await flujo(
   },
 );
 
+
+// v15: el Modelo Melki (la red neuronal propia del simulador) entiende pedidos dichos con otras palabras: los hace y dice
+// cómo los entendió, confirma lo que borra, pregunta si duda (y aprende la respuesta), contesta temas, reconoce lo que
+// está fuera del simulador y, al deshacer, deja decirle que entendió mal; en Ajustes se apaga y se olvida lo aprendido
+await flujo(
+  "modelo-melki",
+  async (page, foto) => {
+    await esperarRed(page);
+    await page.getByRole("button", { name: /Abrir a Melki/ }).click();
+    const chat = page.getByRole("region", { name: "Conversación con Melki" });
+    const decir = async (t) => {
+      await chat.getByLabel("Pregunta para Melki").fill(t);
+      await page.keyboard.press("Enter");
+    };
+    const ultimo = () => chat.locator("[data-mensaje]").last();
+    const memoria = () => page.evaluate(() => JSON.parse(localStorage.getItem("simulador-cobertura-melki-modelo-memoria") ?? "[]"));
+    // Ajustes: encendido y cargado (sin descargas: sus pesos vienen con la página)
+    await chat.getByRole("button", { name: "Ajustes de voz" }).click();
+    const seccion = page.getByRole("region", { name: "Modelo Melki" });
+    await seccion.locator('[data-modelo-melki="listo"]').waitFor({ timeout: 20000 });
+    const interruptor = seccion.getByRole("switch", { name: /Usar el Modelo Melki/ });
+    afirmar((await interruptor.getAttribute("aria-checked")) === "true", "El Modelo Melki debería estar encendido");
+    await seccion.getByText(/^Versión 1\.0 · 150 intenciones · aprendió de [\d.]+ frases · acierta \d+,\d\s% en frases nuevas\.$/).waitFor({ timeout: 5000 });
+    await chat.getByRole("button", { name: "Ajustes de voz" }).click();
+    // Una orden con otras palabras: la hace y dice cómo la entendió
+    await decir("¿cuánto me sale todo?");
+    await ultimo().locator("[data-nota-modelo]").getByText("Entendí: «¿cuánto cuesta la red?».").waitFor({ timeout: 15000 });
+    await ultimo().getByText(/La red del mapa \(.*\) con los precios del documento de Trama:/).waitFor({ timeout: 5000 });
+    // Una pregunta con otras palabras: su tema
+    await decir("¿cómo te activo con la voz?");
+    await ultimo().locator("[data-nota-modelo]").getByText("Entendí que pregunta: cómo funciona el Asistente Melki.").waitFor({ timeout: 15000 });
+    // Lo que borra se confirma, y «No» no hace nada
+    await decir("quítame a todos los usuarios");
+    await ultimo().getByText(/^Entendí que quiere borrar todas las personas: «borra todas las personas»\. Como eso borra o reemplaza algo, ¿lo hago\?/).waitFor({ timeout: 15000 });
+    await ultimo().getByRole("button", { name: "No" }).click();
+    await ultimo().getByText(/^Listo, no hago nada\./).waitFor({ timeout: 10000 });
+    // Si duda, pregunta; la opción elegida se hace y se aprende…
+    await decir("dale con lo de la plata");
+    await ultimo().getByText("No estoy seguro de haberle entendido. ¿Quiso decir…?").waitFor({ timeout: 15000 });
+    await foto("aclarar");
+    await ultimo().getByRole("button", { name: "¿cuánto cuesta la red?" }).click();
+    await ultimo().getByText(/^La red del mapa \(/).waitFor({ timeout: 15000 });
+    const m1 = await memoria();
+    afirmar(m1.length === 1 && m1[0].i === "costo-red" && m1[0].s === 1, `Memoria tras aclarar: ${JSON.stringify(m1)}`);
+    // …y la próxima vez lo hace sin preguntar
+    await decir("dale con lo de la plata");
+    await ultimo().locator("[data-nota-modelo]").getByText("Entendí: «¿cuánto cuesta la red?».").waitFor({ timeout: 15000 });
+    // Lo que está fuera del simulador
+    await decir("hazme el café por favor");
+    await ultimo().getByText(/fui diseñado y creado para cumplir órdenes y procesos dentro de este simulador/).waitFor({ timeout: 10000 });
+    // Por un nodo del mapa con otras palabras: cómo está ese nodo (las reglas daban qué es un gateway en general)
+    await decir("dime cómo anda el gateway");
+    await ultimo().locator("[data-nota-modelo]").getByText("Entendí: «¿cómo está el Ejemplo?».").waitFor({ timeout: 15000 });
+    await ultimo().getByText(/Ejemplo: terreno a|Ejemplo está a/).waitFor({ timeout: 5000 });
+    // Una pieza con su posición (el intérprete solo veía una coordenada); al deshacer, «Lo entendiste mal»
+    await decir("métele un repetidor dos millas al norte del gateway");
+    // (en la demostración, el gateway se llama «Ejemplo»)
+    await chat.locator("[data-nota-modelo]").getByText("Entendí: «agrega un repetidor a 2 millas al norte del Ejemplo».").waitFor({ timeout: 15000 });
+    const puesto = chat.locator("[data-mensaje]").filter({ hasText: /Listo: puse el repetidor «/ }).last();
+    await puesto.waitFor({ timeout: 15000 });
+    await puesto.getByRole("button", { name: "Deshacer" }).click();
+    await ultimo().getByText(/^Listo, deshice ese cambio\. Si lo entendí mal, dígamelo/).waitFor({ timeout: 10000 });
+    await ultimo().getByRole("button", { name: "Lo entendiste mal" }).click();
+    await ultimo().getByText(/^Gracias por decírmelo: así no lo vuelvo a entender/).waitFor({ timeout: 10000 });
+    const m2 = await memoria();
+    afirmar(m2.some((x) => x.i === "poner-repetidor" && x.s === -1), `Memoria tras «Lo entendiste mal»: ${JSON.stringify(m2)}`);
+    // Ajustes: lo aprendido y olvidarlo
+    await chat.getByRole("button", { name: "Ajustes de voz" }).click();
+    await seccion.getByText("Aprendió 1 forma de decir las cosas de usted y 1 que no.").waitFor({ timeout: 5000 });
+    await seccion.scrollIntoViewIfNeeded();
+    await foto("ajustes");
+    await seccion.getByRole("button", { name: "Olvidar lo aprendido" }).click();
+    await seccion.getByText("Aún no ha aprendido nada de usted.").waitFor({ timeout: 5000 });
+    afirmar((await memoria()).length === 0, "Debería haber olvidado lo aprendido");
+    // Apagado, queda lo de antes: las reglas toman «¿cuánto me sale todo?» por algo fuera del simulador
+    await interruptor.click();
+    afirmar((await page.evaluate(() => JSON.parse(localStorage.getItem("simulador-cobertura-melki-modelo") ?? "null")))?.activo === false, "La preferencia apagada no quedó guardada");
+    await chat.getByRole("button", { name: "Ajustes de voz" }).click();
+    await decir("¿cuánto me sale todo?");
+    await ultimo().getByText(/fui diseñado y creado para cumplir órdenes y procesos dentro de este simulador/).waitFor({ timeout: 10000 });
+    afirmar((await ultimo().locator("[data-nota-modelo]").count()) === 0, "Con el modelo apagado no debería haber nota del modelo");
+    // Encendido otra vez: un diseño dicho con sus palabras
+    await chat.getByRole("button", { name: "Ajustes de voz" }).click();
+    await interruptor.click();
+    await chat.getByRole("button", { name: "Ajustes de voz" }).click();
+    await decir("quiero llevar señal a las fincas que quedan a unas tres millas de aquí");
+    await chat.locator("[data-nota-modelo]").getByText("Entendí: «ármame una red de 3 millas a la redonda de aquí».").waitFor({ timeout: 15000 });
+    await chat.getByText(/Diseño la malla para [\d.]+ ha \([\d,]+ km²\), un círculo de 3 millas \(4,83 km\) de radio, en el centro del mapa/).waitFor({ timeout: 20000 });
+    await foto("diseno");
+  },
+  { sembrar: true },
+);
 
 let fallos = 0;
 for (const r of resultados) {

@@ -394,6 +394,8 @@ const n = (t: string) =>
     .replace(/\bnodo\s*-?\s*antena(s?)\b/g, "nodo antena$1")
     .replace(/\s+/g, " ")
     .trim();
+/** La frase como la compara el intérprete (también la usa el Modelo Melki para sacar sus datos). */
+export const textoOrden = n;
 const num = (s: string) => Number(s.replace(",", "."));
 const f1 = (x: number, d = 1) => x.toFixed(d).replace(".", ",");
 /** Número sin decimales si es entero (20 m), con uno si no (1,5 m). */
@@ -488,7 +490,7 @@ function buscarNodo(tn: string, antenas: Antena[], seleccion: string | null, exc
   return null;
 }
 
-function nodosMencionados(tn: string, antenas: Antena[]): Antena[] {
+export function nodosMencionados(tn: string, antenas: Antena[]): Antena[] {
   const encontrados: { a: Antena; pos: number }[] = [];
   for (const a of [...antenas].sort((x, y) => y.nombre.length - x.nombre.length)) {
     const nombre = n(a.nombre);
@@ -723,7 +725,7 @@ function registrarDuda(d: DudaLugar) {
 const escRe = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** Los lugares que pueden ser lo dicho: por cómo suena (si el simulador lo ofrece) o con el buscador. */
-function candidatosLugar(frase: string, api: Api): CandidatoLugar[] {
+export function candidatosLugar(frase: string, api: Api): CandidatoLugar[] {
   if (api.reconocerLugar) return api.reconocerLugar(frase);
   const tn = n(frase);
   return api
@@ -739,8 +741,8 @@ function candidatosLugar(frase: string, api: Api): CandidatoLugar[] {
 }
 
 /** Palabras que siguen a «en», «de»… y no son un lugar («en la loma», «de señal media», «en todo el municipio»). */
-const NO_ES_LUGAR =
-  /^(un|una|unos|unas|mi|su|sus|este|esta|estos|estas|ese|esa|esos|esas|aquel|aquella|area|zona|zonas|mapa|campo|loma|lomas|casa|finca|punto|puntos|centro|red|malla|torre|torres|altura|metros|km|rango|radio|total|todo|toda|todos|todas|forma|manera|marco|base|cada|que|senal|cobertura|calidad|buena|buenas|media|medias|estable|estables|baja|bajas|hectareas?|ha|personas?|gente|repetidor\w*|gateway|nodos?|antenas?|popularidad|hora|dia|pagos?|mensajes?|parte|mitad|sector|lado|costado|region|norte(?! de santander)|sur|oeste|oriente|occidente|nororiente|noroccidente|suroriente|suroccidente|pantalla|vista|ahi|alli|alla|nuevo|nueva|cuenta|serio|general|promedio|verdad|realidad|lugar|sitio|municipio|pueblo|departamento|ciudad|vereda|tal|tales|sabana|sabanas|llano|llanos|monte|montes|montana|montanas|selva|rio|rios|quebrada|quebradas|veredas?|fincas?|hacienda|haciendas|potreros?|cerros?|valles?|caserios?|parques?|carretera|via|vias|rural|rurales|urbana|urbano|casco|plaza|colegio|escuela|hospital|cuenta|serio|general|promedio|vivo|directo|linea|favor|economia|economica|economico|costos?|precios?|dinero|plata|inversion|presupuesto|energia|solar|internet|starlink|capacidad|estres|carga|trafico|whatsapp|usuarios?|billeteras?|quiebre|quebrarse|maximo|minimo|limite|aguante|ver|saber|probar|mirar|medir|calcular|hacer|tener|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|quince|veinte|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa|cien|ciento|cientos|mil|millon|millones|por ciento|porciento|nada|algo|ella|el|ellos|siguiente|siguientes|anterior|misma|mismo|otra|otro|nueva|nuevo|manera|modo|momento|tiempo|caso|vez|veces)\b/;
+export const NO_ES_LUGAR =
+  /^(un|una|unos|unas|mi|su|sus|este|esta|estos|estas|ese|esa|esos|esas|aquel|aquella|area|zona|zonas|mapa|campo|loma|lomas|casa|finca|punto|puntos|centro|red|malla|torre|torres|altura|metros|km|rango|radio|diametro|diametros|redonda|alrededores|total|todo|toda|todos|todas|forma|manera|marco|base|cada|que|senal|cobertura|calidad|buena|buenas|media|medias|estable|estables|baja|bajas|hectareas?|ha|personas?|gente|repetidor\w*|gateway|nodos?|antenas?|popularidad|hora|dia|pagos?|mensajes?|parte|mitad|sector|lado|costado|region|norte(?! de santander)|sur|oeste|oriente|occidente|nororiente|noroccidente|suroriente|suroccidente|pantalla|vista|ahi|alli|alla|nuevo|nueva|cuenta|serio|general|promedio|verdad|realidad|lugar|sitio|municipio|pueblo|departamento|ciudad|vereda|tal|tales|sabana|sabanas|llano|llanos|monte|montes|montana|montanas|selva|rio|rios|quebrada|quebradas|veredas?|fincas?|hacienda|haciendas|potreros?|cerros?|valles?|caserios?|parques?|carretera|via|vias|rural|rurales|urbana|urbano|casco|plaza|colegio|escuela|hospital|cuenta|serio|general|promedio|vivo|directo|linea|favor|economia|economica|economico|costos?|precios?|dinero|plata|inversion|presupuesto|energia|solar|internet|starlink|capacidad|estres|carga|trafico|whatsapp|usuarios?|billeteras?|quiebre|quebrarse|maximo|minimo|limite|aguante|ver|saber|probar|mirar|medir|calcular|hacer|tener|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|quince|veinte|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa|cien|ciento|cientos|mil|millon|millones|por ciento|porciento|nada|algo|ella|el|ellos|siguiente|siguientes|anterior|misma|mismo|otra|otro|nueva|nuevo|manera|modo|momento|tiempo|caso|vez|veces)\b/;
 
 /**
  * Un municipio, departamento o país nombrado después de «en», «cerca de», «del municipio de»…: prueba las palabras que
@@ -753,7 +755,14 @@ function lugarEnTexto(tn: string, api: Api, estricto = true): Lugar | null {
   const re = /\b(?:en|alrededor de|cerca de|junto a|sobre|por|del municipio de|municipio de|de|para)\s+(?:el municipio de |el pueblo de |la ciudad de |el departamento del? |el )?([a-z][a-z ]{2,60})/g;
   let duda: DudaLugar | null = null;
   let intento: DudaLugar | null = null;
-  for (const m of tn.matchAll(re)) {
+  // Lo que no se reconoce se vuelve a mirar por dentro («de diámetro en Villavicencio» → «en Villavicencio»); lo que se
+  // halla por dentro solo vale si es seguro (no pregunta «¿se refiere a…?» por una palabra suelta)
+  let finPrevio = -1;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(tn))) {
+    const interior = m.index < finPrevio;
+    finPrevio = Math.max(finPrevio, m.index + m[0].length);
+    re.lastIndex = m.index + m[0].length - m[1].length;
     const palabras = m[1].split(/\s+\d/)[0].trim().split(/\s+/).slice(0, 6);
     let mejor: { c: CandidatoLugar; frase: string } | null = null;
     let primera: DudaLugar | null = null;
@@ -769,10 +778,10 @@ function lugarEnTexto(tn: string, api: Api, estricto = true): Lugar | null {
       }
       const d = decidirLugar(candidatosLugar(frase, api));
       // La frase más larga que parecía un nombre (por si no se reconoce ninguna: «en xyz» → «no reconocí xyz»)
-      if (!primera && nombreCompacto(sinArticulo).length >= 6 && !frase.split(" ").some((w) => NO_ES_LUGAR.test(w))) primera = { dicho: frase, opciones: d.opciones.filter((c) => c.puntaje >= 0.66) };
+      if (!interior && !primera && nombreCompacto(sinArticulo).length >= 6 && !frase.split(" ").some((w) => NO_ES_LUGAR.test(w))) primera = { dicho: frase, opciones: d.opciones.filter((c) => c.puntaje >= 0.66) };
       if (d.tipo === "seguro") {
         if (!mejor || d.candidato.puntaje > mejor.c.puntaje + 1e-9) mejor = { c: d.candidato, frase };
-      } else if (d.tipo === "dudoso" && !duda && d.opciones[0] && (d.opciones[0].puntaje >= (estricto ? 0.78 : 0.7) || d.opciones[0].exacto)) duda = { dicho: frase, opciones: d.opciones };
+      } else if (!interior && d.tipo === "dudoso" && !duda && d.opciones[0] && (d.opciones[0].puntaje >= (estricto ? 0.78 : 0.7) || d.opciones[0].exacto)) duda = { dicho: frase, opciones: d.opciones };
     }
     if (mejor) {
       usarLugar(mejor.c.lugar, mejor.c, mejor.frase);
@@ -822,7 +831,7 @@ function preguntaLugar(opciones: OpcionLugar[], dicho: string): string {
   return `No estoy seguro de haber entendido «${dicho}». ¿Se refiere a ${lista(lugares.map(nombreLugar))}?`;
 }
 
-const RUMBOS = "norte|sur|este|oeste|oriente|occidente|noreste|noroeste|sureste|suroeste|nororiente|noroccidente|suroriente|suroccidente|sudeste|sudoeste";
+export const RUMBOS = "norte|sur|este|oeste|oriente|occidente|noreste|noroeste|sureste|suroeste|nororiente|noroccidente|suroriente|suroccidente|sudeste|sudoeste";
 
 /**
  * Posición relativa: «a 10 km al norte del gateway», «2 km al noreste de Repetidor 1», «a 500 m al sur de
@@ -1115,10 +1124,10 @@ function interpretarAreaObjetivo(texto: string, tn: string, api: Api): Orden | n
 const REHACER = /\b(vuelve\w* a hacer\w*|volver a hacer\w*|rehac\w*|rehaz\w*|haz\w* de nuevo|hacerlo de nuevo|de nuevo el diseno|otra vez el diseno)\b/;
 
 /** «Aunque cueste más», «cueste lo que cueste»: el usuario prefiere la meta al costo (sin el freno de rendimiento). */
-const A_CUALQUIER_COSTO =
+export const A_CUALQUIER_COSTO =
   /\b(aunque cuest\w*( mas)?|aunque salga (mas )?car[oa]|cueste lo que cueste|cueste lo que sea|a toda costa|a cualquier (costo|precio)|sin importar (el |lo que )?(costo|precio|plata|cueste)|sin (el )?freno|sin limite de (costo|repetidores|plata))\b/;
 /** «Aquí», «desde donde estoy»: el centro del mapa que se está viendo. */
-const AQUI = /\b(?:de|desde|alrededor de|en torno a)\s+(?:aqui|aca|este punto|donde estoy|donde estamos|lo que estoy viendo)\b/;
+export const AQUI = /\b(?:de|desde|alrededor de|en torno a)\s+(?:aqui|aca|este punto|donde estoy|donde estamos|lo que estoy viendo)\b/;
 
 function interpretarDiseno(texto: string, tn: string, api: Api, antenas: Antena[], contexto: ContextoOrden = {}): Orden | null {
   const rehacer = REHACER.test(tn);
@@ -1339,6 +1348,8 @@ function interpretarLote(texto: string, tn: string, antenas: Antena[]): Orden | 
 /** Rol MeshCore en el texto («como repetidor», «que no retransmita», «room server»); acepta también los nombres viejos. */
 function rolEnTexto(tn: string): Rol | null {
   if (!/\b(rol|como|modo|sea|sean|retransmit\w*)\b/.test(tn)) return null;
+  // «¿Cómo está el Repetidor 3?» pregunta por el nodo; no le cambia el rol
+  if (/^(como|que tal|cual|cuales|por que)\b/.test(tn) && !/\b(pon\w*|deja\w*|configur\w*|cambi\w*|vuelv\w*|conviert\w*|hazl[oa]|que sea|que quede)\b/.test(tn)) return null;
   if (/\b(room ?server|servidor de sala|sala de mensajes|tablero)\b/.test(tn)) return "ROOM_SERVER";
   if (/\b(companion|compania|billetera|client ?mute|cliente mudo|mudo|mudos|silencios\w*|no retransmit\w*|cliente|clientes|client)\b/.test(tn)) return "COMPANION";
   if (/\b(repetidor|repeater|router|enrutador|retransmisor|retransmit\w*)\b/.test(tn)) return "REPETIDOR";
@@ -1668,6 +1679,12 @@ function interpretarOrdenBase(dicho: string, api: Api, pendiente: Pendiente, con
       if (p?.tipo === "pedir-diseno") return { ...p, despues };
     }
   }
+  // «Ármame una red de 4 km a la redonda con 80 millones para 300 familias» es un diseño con su gente y su
+  // presupuesto, no el dimensionamiento de Trama (que es sin mapa: «dimensiona la red para 5.000 usuarios»)
+  if (capacidad?.tipo === "trama-dimensionar" && CONSTRUIR_RED.test(tn) && (areaEnTexto(sinTildes(texto)) || circuloEnTexto(tn) || rectanguloEnTexto(tn) || ladoEnTexto(tn) || MUNICIPIO_ENTERO.test(tn) || TODO_LUGAR.test(tn))) {
+    const d = interpretarDiseno(texto, tn, api, antenas, contexto);
+    if (d) return d;
+  }
   if (capacidad) return capacidad;
   const diseno = interpretarDiseno(texto, tn, api, antenas, contexto);
   if (diseno) return diseno;
@@ -1746,7 +1763,8 @@ function interpretarOrdenBase(dicho: string, api: Api, pendiente: Pendiente, con
         return { tipo: "editar", id: nodo.id, cambios: { elevacionDeg: e }, descripcion: `el haz queda ${e === 0 ? "horizontal" : `${fn(Math.abs(e))}° hacia ${e < 0 ? "abajo" : "arriba"}`}` };
       }
     }
-    const rol = rolEnTexto(tn);
+    // Sin el nombre del nodo: en «sube el Repetidor 3 como a 12 m», «repetidor» es el nombre, no el rol
+    const rol = rolEnTexto(tn.replace(new RegExp(String.raw`\b${escRe(n(nodo.nombre))}\b`, "g"), " ").replace(/\s+/g, " ").trim());
     if (rol)
       return {
         tipo: "editar",
@@ -1888,9 +1906,11 @@ function piezaEnTexto(tn: string, antenas: Antena[]): Pieza | null {
     if (!m) continue;
     // «Inscribe un nodo antena en mi casa» o «antena con internet» siguen siendo nodos del modo avanzado
     if (otroEquipo && (pieza === "persona" || m[0] === "internet")) continue;
-    // «Repetidor 2» o «Persona 3» seguidos de su número son nodos que ya existen
+    // «Repetidor 2» o «Persona 3» seguidos de su número son nodos que ya existen (pero en «un repetidor 2 millas al
+    // norte» el número es de la medida)
     const resto = tn.slice((m.index ?? 0) + m[0].length);
-    if (/^\s*\d/.test(resto) && antenas.some((a) => n(a.nombre) === `${m[0]} ${resto.trim().split(" ")[0]}`)) continue;
+    const medida = /^\s*\d+(?:[.,]\d+)?\s*(?:km|kms|kilometros?|m|mts?|metros?|millas?|mi|yardas?|yd|pies|ft|cuadras?)\b/.test(resto);
+    if (/^\s*\d/.test(resto) && !medida && antenas.some((a) => n(a.nombre) === `${m[0]} ${resto.trim().split(" ")[0]}`)) continue;
     return pieza;
   }
   return null;
@@ -1938,7 +1958,11 @@ function interpretarMalla(texto: string, tn: string, api: Api, coord: Coordenada
     const datos: DatosNodo = {};
     const nombre = nombreNuevo(texto);
     if (nombre) datos.nombre = nombre;
-    const altura = texto.match(/(\d{1,3}(?:[.,]\d+)?)\s*(?:m|mts?|metros?)\b(?!\s*s\.?\s*n)/i);
+    // La altura no es la distancia de la posición («a 800 m al este del Repetidor 1») ni un radio («500 m a la redonda»)
+    const sinDistancias = texto
+      .replace(new RegExp(String.raw`\d{1,4}(?:[.,]\d+)?\s*(?:m|mts?|metros?)\b\s*(?:hacia\s+)?(?:al|el|del|hacia)\s+(?:${RUMBOS})\b`, "gi"), " ")
+      .replace(/\d{1,4}(?:[.,]\d+)?\s*(?:m|mts?|metros?)\s*(?:a la redonda|de radio|alrededor)/gi, " ");
+    const altura = sinDistancias.match(/(\d{1,3}(?:[.,]\d+)?)\s*(?:m|mts?|metros?)\b(?!\s*s\.?\s*n)/i);
     if (altura) datos.alturaM = Math.min(300, Math.max(0.5, num(altura[1])));
     return { tipo: "pieza", pieza, coord: coord ?? undefined, datos, mover: moverGateway };
   }

@@ -15,6 +15,7 @@
     "prueba:melki": "node tests/melki/ordenes.mjs",
     "html": "next build && node scripts/html/build.mjs",
     "paquete": "node scripts/paquete.mjs",
+    "modelo:entrenar": "node scripts/modelo-melki/entrenar.mjs",
     "e2e": "node tests/e2e/run.mjs",
     "check": "npm run lint && npm run typecheck && npm run prueba:motor && npm run prueba:melki && npm run build"
   },
