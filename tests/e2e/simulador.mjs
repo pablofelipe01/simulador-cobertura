@@ -2739,7 +2739,7 @@ await flujo(
     const seccion = page.getByRole("region", { name: "IA local en este equipo" });
     await seccion.waitFor({ timeout: 10000 });
     const opciones = await seccion.getByRole("combobox", { name: "Modelo de la IA local" }).locator("option").allInnerTexts();
-    afirmar(opciones[0] === "Qwen3.5 4B (recomendado) · 2,4 GB" && opciones.length === 3, `Modelos: ${opciones.join(" | ")}`);
+    afirmar(opciones[0] === "Qwen3 4B (recomendado) · 2,3 GB" && opciones.length === 3, `Modelos: ${opciones.join(" | ")}`);
     await seccion.getByRole("switch", { name: /Usar la IA local/ }).click();
     await seccion.getByRole("button", { name: /^(Descargar y activar|Cargar la IA local)/ }).click();
     await seccion.getByRole("button", { name: "Lista en este equipo" }).waitFor({ timeout: 10000 });
@@ -2776,6 +2776,63 @@ await flujo(
             if (/tres millas/.test(pedido)) return JSON.stringify({ ordenes: ["ármame una red de 3 millas a la redonda de aquí"], respuesta: "Le armo la red." });
             if (/fincas/.test(pedido)) return JSON.stringify({ ordenes: ["ármame una red de 17,3 km a la redonda de aquí"], respuesta: "Le armo una red de 17,3 km." });
             return JSON.stringify({ ordenes: [], respuesta: `La red tiene ${estado.gateways} ${estado.gateways === 1 ? "gateway" : "gateways"} y ${estado.repetidores} ${estado.repetidores === 1 ? "repetidor" : "repetidores"}.` });
+          },
+        };
+      });
+    },
+  },
+);
+
+// v14.1: si la tarjeta gráfica deja de responder (aquí lo simula el modelo de mentira, con el error que da WebLLM), la
+// IA local se apaga sola, Melki lo dice, queda anotado en el navegador y no la vuelve a usar; los ajustes lo muestran
+await flujo(
+  "ia-local-tarjeta",
+  async (page, foto) => {
+    await esperarRed(page);
+    await page.getByRole("button", { name: /Abrir a Melki/ }).click();
+    const chat = page.getByRole("region", { name: "Conversación con Melki" });
+    const decir = async (t) => {
+      await chat.getByLabel("Pregunta para Melki").fill(t);
+      await page.keyboard.press("Enter");
+    };
+    await chat.getByRole("button", { name: "Ajustes de voz" }).click();
+    const seccion = page.getByRole("region", { name: "IA local en este equipo" });
+    await seccion.waitFor({ timeout: 10000 });
+    await seccion.getByRole("switch", { name: /Usar la IA local/ }).click();
+    await seccion.getByRole("button", { name: /^(Descargar y activar|Cargar la IA local)/ }).click();
+    await seccion.getByRole("button", { name: "Lista en este equipo" }).waitFor({ timeout: 10000 });
+    await chat.getByRole("button", { name: "Ajustes de voz" }).click();
+    // La tarjeta «se bloquea» pensando el pedido
+    await decir("quiero llevar señal a las fincas que quedan a unas tres millas de aquí");
+    await chat.getByText(/^Intenté pensarlo con la IA local, pero la tarjeta gráfica de este equipo dejó de responder/).waitFor({ timeout: 20000 });
+    const pref = await page.evaluate(() => JSON.parse(localStorage.getItem("simulador-cobertura-melki-ia-local") ?? "null"));
+    afirmar(pref?.activa === false && typeof pref?.falla === "string", `Preferencia tras la falla: ${JSON.stringify(pref)}`);
+    // Lo siguiente que no entiende ya no pasa por la IA local
+    const llamadas = await page.evaluate(() => window.__llamadasIA);
+    const antes = await chat.locator("[data-mensaje]").count();
+    await decir("quiero llevar señal a las fincas de la vereda");
+    await page.waitForFunction((n) => document.querySelectorAll("[data-mensaje]").length > n + 1, antes, { timeout: 20000 });
+    await chat.locator("[data-mensaje]").last().getByText(/^No estoy seguro de haber entendido/).waitFor({ timeout: 20000 });
+    afirmar((await page.evaluate(() => window.__llamadasIA)) === llamadas && llamadas === 1, `La IA local se volvió a usar tras la falla (${llamadas} → ${await page.evaluate(() => window.__llamadasIA)})`);
+    // Los ajustes: el interruptor apagado, el aviso de la falla y qué hacer
+    await chat.getByRole("button", { name: "Ajustes de voz" }).click();
+    await seccion.waitFor({ timeout: 10000 });
+    afirmar((await seccion.getByRole("switch", { name: /Usar la IA local/ }).getAttribute("aria-checked")) === "false", "El interruptor de la IA local quedó encendido");
+    await seccion.locator("[data-ia-local-falla]").waitFor({ timeout: 5000 });
+    await seccion.getByText(/ciérrelo por completo y vuelva a abrirlo/).first().waitFor({ timeout: 5000 });
+    await seccion.locator("[data-ia-local-falla]").scrollIntoViewIfNeeded();
+    await foto("tarjeta");
+  },
+  {
+    sembrar: true,
+    preparar: async (page) => {
+      await page.addInitScript(() => {
+        window.__llamadasIA = 0;
+        window.__melkiIALocalDePrueba = {
+          completar: async () => {
+            window.__llamadasIA++;
+            await new Promise((ok) => setTimeout(ok, 200));
+            throw new Error("Device was lost. This can happen due to insufficient memory or other GPU constraints. Detailed error: DXGI_ERROR_DEVICE_HUNG (0x887A0006)");
           },
         };
       });
