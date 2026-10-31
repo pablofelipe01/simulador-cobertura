@@ -38,6 +38,8 @@ import {
   prepararIALocal,
   soporteWebGPU,
   suscribirIALocal,
+  TEXTO_TARJETA_BLOQUEADA,
+  TEXTO_TARJETA_CHAT,
   type PreferenciaIALocal,
 } from "./ia-local";
 import { cifrasInventadas, ESQUEMA_PENSAR, leerPensamiento, mensajesPensar } from "./pensar";
@@ -378,9 +380,16 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   const [oidoIA, setOidoIA] = useState("");
   const [subIA, setSubIA] = useState("");
   const [avisoIA, setAvisoIA] = useState<string | null>(null);
-  /* IA local (Qwen3.5 en la tarjeta gráfica de este equipo) */
+  /* IA local (Qwen3 en la tarjeta gráfica de este equipo) */
   const [iaLocal, setIaLocal] = useState<PreferenciaIALocal>(() => leerPreferenciaIALocal());
   const estadoLocal = useSyncExternalStore(suscribirIALocal, estadoIALocal, estadoIALocal);
+  // Si la tarjeta gráfica dejó de responder, la IA local ya quedó apagada (y anotada) en el navegador: se toma de ahí
+  // (una vez por falla, al enterarse; así un cambio posterior en los ajustes no la vuelve a encender)
+  const [fallasVistas, setFallasVistas] = useState(0);
+  if ((estadoLocal.fallas ?? 0) > fallasVistas) {
+    setFallasVistas(estadoLocal.fallas ?? 0);
+    setIaLocal(leerPreferenciaIALocal());
+  }
   const [localGuardado, setLocalGuardado] = useState<boolean | null>(null);
   const [localSoporte, setLocalSoporte] = useState<{ ok: boolean; f16: boolean; motivo?: string } | null>(null);
   /** «No pude conectar con la IA…»: se ve un rato aunque el asistente local ya esté escuchando. */
@@ -1855,10 +1864,35 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     agregarMelki(r);
   };
 
+  /** Ya se avisó en esta visita por qué no carga la IA local (no se repite a cada pedido). */
+  const avisoIALocal = useRef(false);
+
+  /** El «no entendí», con lo que le pasó a la IA local si falló (la tarjeta gráfica o la carga), y el botón de ajustes. */
+  const sinIALocal = (sinEntender: Respuesta) => {
+    const e = estadoIALocal();
+    if (e.tarjeta) {
+      // La IA local quedó apagada y anotada: la interfaz lo refleja
+      setIaLocal(leerPreferenciaIALocal());
+      agregarMelki({
+        ...sinEntender,
+        texto: `${e.texto === TEXTO_TARJETA_BLOQUEADA ? `No pude usar la IA local: ${e.texto.charAt(0).toLowerCase()}${e.texto.slice(1)}` : TEXTO_TARJETA_CHAT}\n\n${sinEntender.texto}`,
+        acciones: [{ texto: "Abrir los ajustes de la IA local", accion: "ajustes-ia-local" }, ...(sinEntender.acciones ?? [])],
+      });
+      return;
+    }
+    if (e.fase === "error" && e.texto && !avisoIALocal.current) {
+      avisoIALocal.current = true;
+      agregarMelki({ ...sinEntender, texto: `${sinEntender.texto}\n\nLa IA local no pudo cargar: ${e.texto}`, acciones: [{ texto: "Abrir los ajustes de la IA local", accion: "ajustes-ia-local" }, ...(sinEntender.acciones ?? [])] });
+      return;
+    }
+    agregarMelki(sinEntender);
+  };
+
   /**
-   * La IA local (Qwen3.5 en este equipo) piensa lo que no se entendió: lo pasa a órdenes que el intérprete verifica (y
+   * La IA local (Qwen3 en este equipo) piensa lo que no se entendió: lo pasa a órdenes que el intérprete verifica (y
    * se hacen como si se hubieran escrito) o da una respuesta corta con los datos del simulador. Una orden o respuesta
-   * con una cifra que no dijo la persona ni está en el simulador no se usa. Si algo falla, queda el «no entendí».
+   * con una cifra que no dijo la persona ni está en el simulador no se usa. Si algo falla, queda el «no entendí» (y, si
+   * la tarjeta gráfica dejó de responder, la IA local se apaga sola y lo dice).
    */
   const pensarConIALocal = async (pregunta: string, sinEntender: Respuesta) => {
     const pref = actual.current.iaLocal;
@@ -1876,7 +1910,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
         }
         agregarMelki({ texto: "Lo pienso con la IA local de este equipo (la primera vez tarda unos segundos en cargar)…" }, true);
         if (!(await prepararIALocal(pref.modelo))) {
-          agregarMelki(sinEntender);
+          sinIALocal(sinEntender);
           return;
         }
       }
@@ -1923,7 +1957,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       }
       agregarMelki(sinEntender);
     } catch {
-      agregarMelki(sinEntender);
+      sinIALocal(sinEntender);
     } finally {
       trabajos.current = Math.max(0, trabajos.current - 1);
     }
@@ -1949,8 +1983,13 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   const activarIALocal = async () => {
     const modelo = actual.current.iaLocal.modelo;
     fijarIALocal({ activa: true });
+    avisoIALocal.current = false;
     const ok = await prepararIALocal(modelo);
-    if (ok) setLocalGuardado(true);
+    if (ok) {
+      setLocalGuardado(true);
+      // Cargó bien: el aviso de una falla anterior de la tarjeta ya no aplica
+      fijarIALocal({ falla: undefined });
+    } else if (estadoIALocal().tarjeta) setIaLocal(leerPreferenciaIALocal());
   };
 
   /* ───────────── Conversación con IA (Gemini Live) ───────────── */
@@ -3191,11 +3230,16 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
               </section>
               <section className="mb-3 rounded-xl bg-white p-2.5 ring-1 ring-linea" aria-label="IA local en este equipo" data-tour="ajustes-ia-local">
                 <p className="mb-1 flex items-center gap-1.5 font-cond text-[14px] font-semibold">
-                  <Cpu size={15} className="text-melki-oscura" aria-hidden="true" /> IA local en este equipo (Qwen3.5)
+                  <Cpu size={15} className="text-melki-oscura" aria-hidden="true" /> IA local en este equipo (Qwen3)
                 </p>
                 <p className="mb-2 text-[12px] leading-snug text-carbon-2">
                   Un modelo de lenguaje abierto que corre en la tarjeta gráfica de este equipo (WebGPU), sin instalar nada y sin mandar nada a internet. Lo uso cuando no le entiendo un pedido: lo paso a órdenes que verifico antes de hacerlas. El diseño, los costos y la cobertura siempre salen de mi cálculo.
                 </p>
+                {iaLocal.falla && (
+                  <p className="mb-2 rounded-lg bg-sin/10 px-2 py-1.5 text-[12px] leading-snug text-sin" role="note" data-ia-local-falla="">
+                    El {new Date(iaLocal.falla).toLocaleString("es-CO", { day: "numeric", month: "long", hour: "numeric", minute: "2-digit" })}, la tarjeta gráfica dejó de responder con la IA local y la apagué. Si la vuelve a activar, hágalo con el navegador recién abierto; si se repite, use el modelo liviano o déjela apagada.
+                  </p>
+                )}
                 <Interruptor
                   activo={iaLocal.activa}
                   onCambiar={(v) => {

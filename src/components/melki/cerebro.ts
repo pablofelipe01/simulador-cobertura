@@ -498,9 +498,10 @@ const TEMAS: Tema[] = [
     claves: ["ia local", "inteligencia artificial local", "modelo local", "qwen", "webgpu", "sin internet", "offline", "deepseek", "fable", "opus", "claude", "llama", "modelo de lenguaje"],
     responder: () => ({
       texto: [
-        "Tengo una IA local opcional: Qwen3.5, un modelo de lenguaje abierto que corre en la tarjeta gráfica de este equipo con WebGPU, sin instalar nada y sin mandar nada a internet. Se descarga una vez (unos 2,4 GB el recomendado) cuando la activa en Ajustes y queda guardado en el navegador.",
+        "Tengo una IA local opcional: Qwen3 (de Alibaba), un modelo de lenguaje abierto que corre en la tarjeta gráfica de este equipo con WebGPU, sin instalar nada y sin mandar nada a internet. Se descarga una vez (unos 2,3 GB el recomendado) cuando la activa en Ajustes y queda guardado en el navegador.",
         "La uso cuando mi intérprete no entiende un pedido: el modelo lo pasa a órdenes que yo verifico antes de hacerlas, y si inventa una cifra que usted no dijo, no la uso. El diseño, los costos y la cobertura siempre salen del cálculo, no del modelo.",
-        "Claude (Fable u Opus) no se puede instalar en un equipo: funciona solo por internet. DeepSeek V4 es demasiado grande para un PC y sus versiones locales ya quedaron atrás frente a Qwen3.5.",
+        "Corre con WebLLM 0.2.82: las versiones más nuevas de esa biblioteca bloquearon la tarjeta gráfica en un equipo con Windows y gráficos AMD integrados. Si la tarjeta deja de responder, apago la IA local sola, se lo digo y no lo vuelvo a intentar hasta que usted la active.",
+        "Claude (Fable u Opus) no se puede instalar en un equipo: funciona solo por internet. DeepSeek V4 es demasiado grande para un PC, y sus versiones locales razonan en voz alta antes de responder, lo que en una tarjeta integrada las hace mucho más lentas que Qwen3 para esto.",
       ].join("\n"),
       acciones: [{ texto: "Abrir los ajustes de la IA local", accion: "ajustes-ia-local" }],
     }),
