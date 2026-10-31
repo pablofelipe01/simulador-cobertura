@@ -20,7 +20,15 @@ torre de 12 m con 4 radios Heltec T114, billeteras XIAO o T1000-E,
 Starlink) e incluye las funciones de Radio Mobile, una regla para medir
 distancias y áreas, un mapa con departamentos, municipios y ríos, y a
 Melki, el asistente que ejecuta pedidos escritos con sus palabras.
-Novedad: cuando le pide a Melki ir a un lugar ("ubícame en Barranca de
+Novedad: Melki tiene su propio modelo de inteligencia artificial, el
+"Modelo Melki": una red neuronal pequeña, hecha solo para este
+simulador, que entiende los pedidos dichos con sus palabras ("móntame
+una malla que abarque tres millas alrededor de la finca", "¿cuánto me
+sale todo?") y los convierte en las órdenes que Melki sabe hacer. Corre
+en el procesador de este equipo, sin internet, sin tarjeta gráfica y
+sin descargar nada; si no está seguro, pregunta con botones, y aprende
+de lo que usted le aclara.
+También: cuando le pide a Melki ir a un lugar ("ubícame en Barranca de
 Upía"), en vez del punto rojo su robot vuela hasta allá y lo saluda, con
 una nube que escribe qué hay ahí y qué se puede hacer. El "Recorrido" de
 la red (el robot va punto por punto y en una nube que sale de cada
@@ -549,6 +557,24 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
     sus diseños no se pierden. Si la quiere volver a probar, actívela
     con el navegador recién abierto y, si se repite, use el modelo
     liviano o déjela apagada.
+ x) Modelo Melki (activo de fábrica): háblele o escríbale con sus
+    propias palabras, sin aprenderse las órdenes. Pruebe:
+      "quiero llevar señal a las fincas que quedan a unas tres millas
+      de aquí", "¿cuánto me sale todo?", "métele un repetidor dos
+      millas al norte del gateway" y luego "sube el repetdor 1 a 12 m"
+      (mal escrito a propósito), "dime cómo anda el gateway" y
+      "¿cómo te activo con la voz?".
+    Cuando lo entiende con su modelo, Melki lo hace y lo dice en una
+    línea pequeña sobre la respuesta ("Entendí: «...»"). Lo que borra
+    algo siempre lo confirma ("¿lo hago?"). Si duda, pregunta "¿Quiso
+    decir...?" con botones (por voz responda "la primera", "sí" o
+    "ninguna"); la opción que usted elige la recuerda en este navegador
+    y la próxima vez la hace sin preguntar. Si deshace algo que el
+    modelo entendió, toque "Lo entendiste mal" y no lo vuelve a
+    entender así. En la conversación toque el engranaje (Ajustes de
+    voz) > "Modelo Melki" para apagarlo o para "Olvidar lo aprendido".
+    Lo que no es del simulador lo dice con cortesía, y lo que no
+    entiende lo pide de nuevo. Pregúntele "¿cómo me entiendes?".
 
 
 3. BUENO SABER
@@ -587,7 +613,9 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
   escenario" para pasar un escenario de una a otra.
 - El mapa base y el relieve en línea solo reciben la zona que se ve en
   pantalla; no se envían nodos, mediciones ni resultados. Melki
-  entiende y ejecuta los pedidos aquí mismo, sin internet. Con manos
+  entiende y ejecuta los pedidos aquí mismo, sin internet (también su
+  Modelo Melki y lo que aprende de usted, que queda solo en este
+  navegador). Con manos
   libres en el modo "Con el navegador", el audio del micrófono va a
   Edge o Chrome mientras está activo; en "Privado" no sale del equipo.
 - Conversar con IA: la capa gratuita de Google no cobra (tiene límites
