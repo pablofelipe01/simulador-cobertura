@@ -40,6 +40,12 @@ export { MODELOS_LOCALES, MODELO_LOCAL_DEFECTO, leerPreferenciaIALocal, textoErr
 export { CONFIG } from "./src/lib/config";
 export { CODIGO_IA_LOCAL } from "./src/components/melki/ia-local-trabajador";
 export { analizarRed, textoAnalisis, capacidadPara, repetidoresEnPresupuesto, costoRepetidorInstalado, costoGatewayInstalado } from "./src/lib/radio/analista";
+export { cargarModelo, predecir, analizar, vectorFrase } from "./src/components/melki/modelo/modelo";
+export { entender, conMemoria, opcionDe } from "./src/components/melki/modelo/entender";
+export { extraerRanuras } from "./src/components/melki/modelo/ranuras";
+export { INTENCIONES, INTENCION } from "./src/components/melki/modelo/intenciones";
+export { normalizarFrase, rasgos, huella, marcarLugares, CASILLAS } from "./src/components/melki/modelo/rasgos";
+export { responderTema } from "./src/components/melki/cerebro";
 `;
 const tmp = mkdtempSync(path.join(os.tmpdir(), "melki-"));
 const archivo = path.join(tmp, "melki.mjs");
@@ -2183,6 +2189,134 @@ function crearApi(antenas) {
     if (antes.window === undefined) delete globalThis.window;
     if (antes.Utterance === undefined) delete globalThis.SpeechSynthesisUtterance;
   }
+}
+
+// ─── v15: el Modelo Melki (la red neuronal propia del simulador) y lo que se arregló en el intérprete ───
+{
+  await m.cargarReferencia();
+  const cM = { antenas: [], parametros: PARAMETROS, resultado: null, desactualizado: false, relieve: "teselas", modo: "sembrar" };
+  const { readFileSync } = await import("node:fs");
+  const { PRUEBA } = await import(pathToFileURL(path.join(repo, "scripts/modelo-melki/prueba.mjs")).href);
+  const { PRUEBA_CIEGA } = await import(pathToFileURL(path.join(repo, "scripts/modelo-melki/prueba-ciega.mjs")).href);
+  const json = JSON.parse(readFileSync(path.join(repo, "src/datos/modelo/melki.json"), "utf8"));
+  const t0 = performance.now();
+  const mod = m.cargarModelo(json);
+  const tCarga = performance.now() - t0;
+  const ids = m.INTENCIONES.map((i) => i.id);
+  caso("v15: el Modelo Melki carga (formato, 150 intenciones en el orden del catálogo, vectores de 8 bits) en menos de 300 ms", json.formato === "melki-1" && mod.intenciones.join() === ids.join() && ids.length === 150 && mod.vectores.length === mod.escalas.length * mod.dim && tCarga < 300, `${tCarga.toFixed(0)} ms, ${mod.escalas.length} filas`);
+  caso("v15: pesa poco (≤ 1,3 MB) y trae sus umbrales y su evaluación", JSON.stringify(json).length <= 1.3e6 && mod.umbrales.hacer >= 0.55 && mod.umbrales.margen >= 0.25 && mod.umbrales.tema >= 0.6 && json.evaluacion?.ciega?.frases > 100, `${(JSON.stringify(json).length / 1024).toFixed(0)} KB`);
+  caso("v15: la huella de los rasgos es la de siempre (FNV-1a, igual al entrenar y en el navegador)", m.huella("u red") === 2741968455 && m.huella("c <re") === 1771377171 && m.huella("") === 2166136261 && m.CASILLAS === 131072);
+  caso("v15: normaliza como al aprender (números → 0, plata, porcentajes, sin el nombre de Melki)", m.normalizarFrase("Oye Melki, ¿me armas una red de tres millas?") === "oye me armas una red de 0 millas" && m.normalizarFrase("con 80 millones") === "con 0 millones" && m.normalizarFrase("en el noventa y cinco por ciento") === "en el 0 %", m.normalizarFrase("en el noventa y cinco por ciento"));
+  caso("v15: los lugares se vuelven «zlugar», pero no las palabras comunes («toca», «la plata», «meta»)", m.normalizarFrase("llévame a Barranca de Upía", mod.lugares) === "llevame a zlugar" && m.normalizarFrase("toca poner un repetidor con la plata de la meta", mod.lugares) === "toca poner un repetidor con la plata de la meta" && mod.lugares.size > 900);
+  const juzgar = (lista) => Object.entries(lista).flatMap(([id, frases]) => frases.map((f) => ({ f, id, top: m.predecir(mod, f, 3) })));
+  const ap = juzgar(PRUEBA);
+  const ci = juzgar(PRUEBA_CIEGA);
+  const acierto = (l) => l.filter((x) => x.top[0]?.id === x.id).length / l.length;
+  const top3 = (l) => l.filter((x) => x.top.some((c) => c.id === x.id)).length / l.length;
+  caso("v15: prueba aparte (frases a mano): ≥ 97 % de aciertos y ≥ 99 % entre las 3 primeras", acierto(ap) >= 0.97 && top3(ap) >= 0.99, `${(100 * acierto(ap)).toFixed(1)} % · top 3 ${(100 * top3(ap)).toFixed(1)} % en ${ap.length}`);
+  caso("v15: prueba ciega (frases nuevas): ≥ 94 % de aciertos y ≥ 98 % entre las 3 primeras, como dice su informe", acierto(ci) >= 0.94 && top3(ci) >= 0.98 && Math.abs(acierto(ci) - json.evaluacion.ciega.aciertos) < 1e-3, `${(100 * acierto(ci)).toFixed(1)} % · top 3 ${(100 * top3(ci)).toFixed(1)} % en ${ci.length}`);
+  caso("v15: cada intención acierta con al menos una de sus frases de prueba", ids.every((id) => ap.some((x) => x.id === id && x.top[0]?.id === id)), ids.filter((id) => !ap.some((x) => x.id === id && x.top[0]?.id === id)).join(", "));
+  const t1 = performance.now();
+  for (let i = 0; i < 1000; i++) m.predecir(mod, "móntame una malla de tres millas alrededor de la finca para 300 familias", 3);
+  const tPred = (performance.now() - t1) / 1000;
+  caso("v15: piensa una frase en menos de medio milisegundo (en el procesador, sin tarjeta gráfica)", tPred < 0.5, `${tPred.toFixed(3)} ms`);
+
+  // Entender: con el simulador de mentira, lo que verifica el intérprete y la memoria
+  const g = () => crearApi([base("g", "Gateway", 4.2, -73.37, { pasarela: true }), base("r1", "Repetidor 1", 4.25, -73.3, { rol: "REPETIDOR" }), base("r2", "Repetidor 2", 4.22, -73.33, { rol: "REPETIDOR" }), base("r3", "Repetidor 3", 4.18, -73.4, { rol: "REPETIDOR" }), base("p1", "Persona 1", 4.21, -73.36, { tipo: "nodo" })]);
+  const MELKI = /^(hazme un tour|deshaz lo último|háblame|no hables|activa el asistente|deja de escuchar|explícame la red punto por punto|preséntame el modelo de negocio)$/;
+  const ent = (frase, memoria = []) => {
+    const api = g();
+    const verificar = (f) => MELKI.test(f) || ((o) => Boolean(o && o.tipo !== "coordenada-sola"))(m.interpretarOrden(f, api, null));
+    return { d: m.entender(mod, frase, { api, memoria, verificar }), api };
+  };
+  const orden = (r) => (r.d.opcion?.frase ? m.interpretarOrden(r.d.opcion.frase, r.api, null) : r.d.opcion?.orden);
+  let r = ent("móntame una malla que abarque tres millas alrededor de donde estoy");
+  caso("v15: «móntame una malla que abarque tres millas alrededor de donde estoy» → la hace: «ármame una red de 3 millas a la redonda de aquí»", r.d.tipo === "hacer" && r.d.opcion.frase === "ármame una red de 3 millas a la redonda de aquí" && orden(r)?.tipo === "disenar" && orden(r).area.centro.tipo === "mapa", JSON.stringify(r.d.opcion?.frase ?? r.d));
+  r = ent("métele un repetidor dos millas al norte del gateway");
+  caso("v15: «métele un repetidor dos millas al norte del gateway» → un repetidor nuevo a 2 millas del Gateway (no el Repetidor 2)", r.d.tipo === "hacer" && orden(r)?.tipo === "pieza" && orden(r).pieza === "repetidor" && /Gateway/.test(orden(r).coord?.desde ?? ""), r.d.opcion?.frase);
+  r = ent("elimíname el repetidor tres");
+  caso("v15: lo que borra se confirma con un botón («borra el Repetidor 3»), nunca se hace solo", r.d.tipo === "confirmar" && r.d.opcion.frase === "borra el Repetidor 3" && orden(r)?.tipo === "eliminar", r.d.tipo);
+  r = ent("quiero ver las carreteras");
+  caso("v15: «quiero ver las carreteras» → «muestra las vías»", r.d.tipo === "hacer" && r.d.opcion.frase === "muestra las vías" && orden(r)?.tipo === "vista", r.d.opcion?.frase);
+  r = ent("pásate a mestastic");
+  caso("v15: «pásate a mestastic» (mal escrito) → «cambia a Meshtastic»", r.d.tipo === "hacer" && r.d.opcion.frase === "cambia a Meshtastic" && orden(r)?.tipo === "parametros", r.d.opcion?.frase);
+  r = ent("métele 400 usuarios al repetidor 2 y estrésalo");
+  caso("v15: «métele 400 usuarios al repetidor 2 y estrésalo» → 400 personas alrededor del Repetidor 2 y la prueba de estrés", r.d.tipo === "hacer" && orden(r)?.tipo === "zonas" && orden(r).pedido.n === 400 && orden(r).pedido.centros?.[0] === "r2" && orden(r).estres, r.d.opcion?.frase);
+  r = ent("¿qué quieren decir las manchitas de colores?");
+  caso("v15: las preguntas con otras palabras van a su tema («¿qué quieren decir las manchitas de colores?» → los colores)", r.d.tipo === "tema" && r.d.opcion.tema === "colores" && /verde|amarill/i.test(m.responderTema("colores", cM)?.texto ?? ""), r.d.tipo);
+  r = ent("¿cómo está el clima en Villavicencio?");
+  caso("v15: lo que no es del simulador lo reconoce aunque nombre un lugar", r.d.tipo === "fuera", r.d.tipo);
+  caso("v15: lo que casi no conoce no lo hace ni lo contesta como un tema («¿cómo arreglo la nevera?», «¿qué es el big bang?», «y el»)", ["¿cómo arreglo la nevera?", "¿qué es el big bang?", "y el"].every((f) => ["nada", "fuera"].includes(ent(f).d.tipo)) && ent("y el").d.tipo === "nada", ["¿cómo arreglo la nevera?", "¿qué es el big bang?", "y el"].map((f) => ent(f).d.tipo).join(" "));
+  caso("v15: una orden con una pieza que no existe no se hace ni ofrece un tema («agrega un dron a la malla»); el dictado sin sentido tampoco («barranco loco pla xyz»)", ent("agrega un dron a la malla").d.tipo === "nada" && ent("barranco loco pla xyz").d.tipo === "nada", `${ent("agrega un dron a la malla").d.tipo} ${ent("barranco loco pla xyz").d.tipo}`);
+  r = ent("sube el repetdor 2 a 12 m");
+  caso("v15: un nodo mal escrito se reconoce («sube el repetdor 2 a 12 m» → el Repetidor 2, no todos los repetidores)", r.d.tipo === "hacer" && r.d.opcion.frase === "sube el Repetidor 2 a 12 m", r.d.opcion?.frase ?? r.d.tipo);
+  r = ent("una casa más a 800 m al este del repetidor 3");
+  caso("v15: «una casa más a 800 m al este del Repetidor 3» no pone un repetidor (el Repetidor 3 es la referencia): ofrece la persona", r.d.tipo === "aclarar" && r.d.opciones[0]?.id === "poner-persona", r.d.tipo === "aclarar" ? r.d.opciones.map((o) => o.texto).join(" | ") : r.d.tipo);
+  r = ent("borra el repetidor");
+  caso("v15: si falta un dato que no se puede suponer, lo pide con un ejemplo («borra el repetidor» → ¿cuál?)", r.d.tipo === "falta" && /Repetidor 2/.test(r.d.intencion.ejemplo ?? ""), r.d.tipo);
+  r = ent("dame una red que tape tres kilometros alrededor del repetidor 2");
+  caso("v15: si duda, pregunta «¿quiso decir…?» con opciones que el intérprete entiende", r.d.tipo === "aclarar" && r.d.opciones.length >= 2 && r.d.opciones.length <= 3 && r.d.opciones.some((o) => o.id === "disenar") && r.d.opciones.every((o) => o.frase ? m.interpretarOrden(o.frase, r.api, null) : o.orden || o.tema), r.d.tipo === "aclarar" ? r.d.opciones.map((o) => o.texto).join(" | ") : r.d.tipo);
+  // Memoria: lo que la persona aclaró gana, y lo que deshizo ya no se entiende así
+  const norm = (f) => m.normalizarFrase(f, mod.lugares);
+  r = ent("hágale con lo de la plata", [{ f: norm("hágale con lo de la plata"), i: "costo-red", s: 1, t: 0 }]);
+  caso("v15: aprende de la persona: «hágale con lo de la plata» (que aclaró con un botón) → el costo de la red", r.d.tipo === "hacer" && r.d.aprendida && r.d.opcion.id === "costo-red", r.d.tipo);
+  r = ent("hágale con lo de la plata en Villavicencio", [{ f: norm("hágale con lo de la plata en Paratebueno"), i: "costo-red", s: 1, t: 0 }]);
+  caso("v15: …y vale también con otro lugar o con otras cifras (la frase se recuerda con «zlugar» y «0»)", r.d.tipo === "hacer" && r.d.opcion.id === "costo-red", r.d.tipo);
+  r = ent("quiero ver las carreteras", [{ f: norm("quiero ver las carreteras"), i: "capa-mostrar", s: -1, t: 0 }]);
+  caso("v15: lo que deshizo con «Lo entendiste mal» ya no lo entiende así", !(r.d.tipo === "hacer" && r.d.opcion?.id === "capa-mostrar"), r.d.tipo);
+  // Las órdenes que arma cada intención las entiende el intérprete
+  const armadas = [
+    ["disenar", "quiero cubrir 1.200 hectáreas con señal media en el noventa y cinco por ciento", "disenar"],
+    ["disenar", "levántame una red de 4 km con 80 millones para 300 familias", "disenar"],
+    ["poner-gateway", "coloca la pasarela en 4.5149, -73.0024", "pieza"],
+    ["poner-persona", "una persona a un kilómetro al sur del Repetidor 1", "pieza"],
+    ["mover-nodo", "pasa el repetidor 2 dos kilómetros hacia el oriente", "mover"],
+    ["altura", "bájale el repetidor 2 a 6 m", "editar"],
+    ["renombrar", "al repetidor 2 ponle de nombre la loma", "renombrar"],
+    ["apuntar", "orienta el repetidor 2 hacia el gateway", "apuntar-omni"],
+    ["distancia", "qué tan lejos queda el repetidor 1 del repetidor 3", "distancia"],
+    ["informe", "el balance del enlace del gateway al repetidor 2", "informe"],
+    ["carga", "mándale 30 pagos al mismo tiempo", "carga"],
+    ["dimensionar", "calcula la red para 5000 usuarios", "trama-dimensionar"],
+    ["ajustar", "arréglalo para que funcione sin torres de más de 20 m", "ajustar"],
+    ["ir-lugar", "vamos a Villavicencio", "ir"],
+    ["fondo-mapa", "quiero ver el mapa en satélite", "vista"],
+    ["exportar", "bájame esto para google earth", "exportar"],
+    ["nombre-escenario", "guarda el escenario con el nombre Prueba Norte", "nombre-escenario"],
+  ];
+  const malas = armadas.filter(([id, f, tipo]) => {
+    const api = g();
+    const o = m.opcionDe({ id, p: 1 }, m.extraerRanuras(f, api), null);
+    const x = o?.frase ? m.interpretarOrden(o.frase, api, null) : null;
+    return x?.tipo !== tipo;
+  });
+  caso("v15: cada intención arma su orden con los datos dichos y el intérprete la entiende (17 casos)", malas.length === 0, malas.map((x) => x[1]).join(" | "));
+  const ren = m.opcionDe({ id: "renombrar", p: 1 }, m.extraerRanuras("al repetidor 2 ponle de nombre la loma", g()), null);
+  caso("v15: el nombre dictado en minúsculas queda con mayúsculas («La Loma»); la plata dicha en cifras, en pesos", /"La Loma"/.test(ren?.frase ?? "") && m.extraerRanuras("levántame una red con 80 millones", g()).plata === "$80.000.000", ren?.frase);
+  // Con el reconocimiento de lugares del simulador (como en el navegador)
+  const gL = () => {
+    const a = g();
+    a.buscarLugar = (t) => m.buscarLugares(t, 5);
+    a.reconocerLugar = (t) => m.reconocerLugares(t, { departamento: "Meta" });
+    return a;
+  };
+  const lugarDe = (f) => m.extraerRanuras(f, gL()).lugar;
+  const upia = m.opcionDe({ id: "disenar", p: 1 }, m.extraerRanuras("móntame una malla de 3 km alrededor de barranca de upia", gL()), null);
+  caso(
+    "v15: el lugar va en la orden con su nombre oficial («barranca de upia» → «Barranca de Upía»; con el departamento si se dijo: «Granada, Meta») y el intérprete lo encuentra",
+    upia?.frase === "ármame una red de 3 km a la redonda en Barranca de Upía" && lugarDe("quiero ver el mapa de granada meta") === "Granada, Meta" && m.interpretarOrden("llévame a Granada, Meta", gL(), null)?.lugar?.detalle === "Meta",
+    `${upia?.frase} · ${lugarDe("quiero ver el mapa de granada meta")}`,
+  );
+  caso("v15: cada intención con tema apunta a un tema que existe en el cerebro", m.INTENCIONES.filter((i) => i.tema).every((i) => m.responderTema(i.tema, cM)), m.INTENCIONES.filter((i) => i.tema && !m.responderTema(i.tema, cM)).map((i) => i.tema).join(", "));
+  // Lo que se arregló en el intérprete al revisar las órdenes del modelo
+  const apiF = g();
+  const oF = (f) => m.interpretarOrden(f, apiF, null);
+  caso("v15: «agrega un repetidor dos millas al norte del gateway» pone un repetidor (no el gateway) a 2 millas del Gateway", oF("agrega un repetidor dos millas al norte del gateway")?.pieza === "repetidor");
+  caso("v15: «agrega un repetidor a 800 m al este del Repetidor 1» no toma los 800 m como la altura de la antena", oF("agrega un repetidor a 800 m al este del Repetidor 1")?.datos?.alturaM === undefined && oF("agrega un repetidor en 4.3, -73.2 a 12 m")?.datos?.alturaM === 12);
+  caso("v15: «¿cómo está el Repetidor 3?» pregunta por el nodo (no le cambia el rol); «pon el Repetidor 3 como companion» sí", oF("¿cómo está el Repetidor 3?") === null && oF("pon el Repetidor 3 como companion")?.cambios?.rol === "COMPANION" && oF("sube el Repetidor 3 como a 12 m")?.cambios?.alturaM === 12);
+  caso("v15: «ármame una red de 2 km de diámetro» no pregunta por un municipio llamado «diámetro»", oF("ármame una red de 2 km de diámetro")?.tipo === "disenar");
+  caso("v15: «…de 2 km de diámetro en Villavicencio» encuentra Villavicencio después de «diámetro»", /Villavicencio/.test(oF("ármame una red de 2 km de diámetro en Villavicencio")?.area?.centro?.nombre ?? ""));
+  caso("v15: un diseño con presupuesto y familias es un diseño (no el dimensionamiento sin mapa)", oF("ármame una red de 4 km a la redonda con un presupuesto de $80.000.000 para 300 familias")?.tipo === "disenar" && oF("dimensiona la red para 5000 usuarios")?.tipo === "trama-dimensionar");
 }
 
 console.log(fallos ? `\n✗ ${fallos} prueba(s) fallaron` : "\n✓ Melki verificado");
