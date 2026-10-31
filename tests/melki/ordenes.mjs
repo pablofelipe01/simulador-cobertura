@@ -35,8 +35,10 @@ export { aPcm16k } from "./src/components/melki/audio-ia";
 export { HERRAMIENTAS_IA, instruccionesMelki, estadoParaIA } from "./src/components/melki/herramientas-ia";
 export { medidasEnCifras, circuloEnTexto, presupuestoEnTexto, usuariosEnTexto, textoDistancia, distancia } from "./src/components/melki/medidas";
 export { numeroDePalabras } from "./src/components/melki/numeros";
-export { leerPensamiento, cifrasInventadas, mensajesPensar, numerosDe, CATALOGO_ORDENES, ESQUEMA_PENSAR } from "./src/components/melki/pensar";
-export { MODELOS_LOCALES, MODELO_LOCAL_DEFECTO, leerPreferenciaIALocal, textoError } from "./src/components/melki/ia-local";
+export { leerPensamiento, cifrasInventadas, mensajesPensar, numerosDe, CATALOGO_ORDENES, ESQUEMA_PENSAR, estadoCompacto, instruccionesPensar } from "./src/components/melki/pensar";
+export { MODELOS_LOCALES, MODELO_LOCAL_DEFECTO, leerPreferenciaIALocal, textoError, esFallaTarjeta, TEXTO_TARJETA } from "./src/components/melki/ia-local";
+export { CONFIG } from "./src/lib/config";
+export { CODIGO_IA_LOCAL } from "./src/components/melki/ia-local-trabajador";
 export { analizarRed, textoAnalisis, capacidadPara, repetidoresEnPresupuesto, costoRepetidorInstalado, costoGatewayInstalado } from "./src/lib/radio/analista";
 `;
 const tmp = mkdtempSync(path.join(os.tmpdir(), "melki-"));
@@ -873,13 +875,69 @@ function crearApi(antenas) {
     const apiCat = crearApi([base("g", "Gateway", 4.2, -73.37, { pasarela: true }), base("r1", "Repetidor 1", 4.25, -73.3), base("r2", "Repetidor 2", 4.22, -73.33), base("r3", "Repetidor 3", 4.18, -73.4)]);
     const noEntiende = m.CATALOGO_ORDENES.filter((x) => !/explícame la red|deshaz/.test(x) && !m.interpretarOrden(x, apiCat, null));
     caso("v14: IA local — el intérprete entiende cada orden del catálogo que imita el modelo", noEntiende.length === 0, noEntiende.join(" | "));
-    const msgs = m.mensajesPensar("necesito conectar las veredas", { red: { gateways: 1 } });
-    caso("v14: IA local — instrucciones con el catálogo, el estado y el pedido", msgs.length === 2 && /CATÁLOGO:/.test(msgs[0].content) && /^ESTADO: \{"red":\{"gateways":1\}\}\nPEDIDO: necesito conectar las veredas$/.test(msgs[1].content));
-    caso("v14: IA local — Qwen3.5 4B por defecto (2B liviano y 9B máximo), apagada si no se ha activado", m.MODELO_LOCAL_DEFECTO === "Qwen3.5-4B-q4f16_1-MLC" && m.MODELOS_LOCALES.length === 3 && m.leerPreferenciaIALocal().activa === false);
+    const msgs = m.mensajesPensar("necesito conectar las veredas", { gateways: 1, repetidores: 2 });
+    caso("v14: IA local — instrucciones con el catálogo, el estado y el pedido", msgs.length === 2 && /CATÁLOGO:/.test(msgs[0].content) && /^ESTADO: \{"gateways":1,"repetidores":2\}\nPEDIDO: necesito conectar las veredas$/.test(msgs[1].content), msgs[1].content);
+    // v14.1: el pedido al modelo, corto (en una tarjeta integrada, menos texto es menos tiempo y menos carga)
+    const nodoIA = (i) => ({ nombre: `Repetidor ${i}`, tipo: "repetidor", lat: 4.4, lon: -72.9, lugar: "Barranca de Upía (Meta)", alturaAntenaM: 12, sueloM: 300, areaServicioKm2: 40, alcanceKm: 8.4, saltos: 2, critico: false, enlace: { con: "Gateway", margenDb: 28, distanciaKm: 6.2, lineaVista: true } });
+    const estadoGrande = {
+      protocolo: "MeshCore",
+      ajusteRadio: "Trama SF11",
+      mapaCentro: { lat: 4.4, lon: -72.9, lugar: "Barranca de Upía (Meta)" },
+      simulado: true,
+      gateways: 1,
+      repetidores: 30,
+      personas: 0,
+      infraestructura: Array.from({ length: 30 }, (_, i) => nodoIA(i + 1)),
+      cobertura: { areaEstudioKm2: 900, conServicioPct: 97.2, senalMediaOMejorPct: 95.1, confiablePct: 76.3, respaldoPct: 40, areaObjetivo: { nombre: "Área objetivo", areaKm2: 201, senalMediaOMejorPct: 97 }, factibilidad: "Factible", recomendaciones: ["Suba el Repetidor 3"] },
+      costos: { moneda: "COP", inversionTotal: 248300000, operacionMes: 1200000, redCompletaMes: 5338333, nota: "Precios del documento de Trama" },
+    };
+    const msgsG = m.mensajesPensar("necesito conectar las veredas", estadoGrande);
+    const largoIA = msgsG[0].content.length + msgsG[1].content.length;
+    caso(
+      "v14.1: IA local — el pedido al modelo es corto (menos de 2.900 caracteres aun con 30 repetidores) y trae lo que sirve",
+      largoIA < 2900 && m.instruccionesPensar().length < 1700 && m.CATALOGO_ORDENES.length <= 18 && /"gateways":1,"repetidores":30/.test(msgsG[1].content) && /"lugar":"Barranca de Upía \(Meta\)"/.test(msgsG[1].content) && /"senalMediaOMejorPct":95\.1/.test(msgsG[1].content) && /"inversionTotal":248300000/.test(msgsG[1].content) && /Repetidor 1, 12 m, 2 saltos, alcance 8\.4 km, enlace 28 dB con Gateway/.test(msgsG[1].content) && /\nPEDIDO: necesito conectar las veredas$/.test(msgsG[1].content),
+      `largo ${largoIA}: ${msgsG[1].content.slice(0, 160)}`,
+    );
+    caso(
+      "v14.1: IA local — el estado en corto: sin estado, «{}»; si no cabe, se van los nodos del final y lo general se queda",
+      m.estadoCompacto(null) === "{}" && m.estadoCompacto(estadoGrande, 600).length <= 600 && /"cobertura":/.test(m.estadoCompacto(estadoGrande, 600)) && /Repetidor 1,/.test(m.estadoCompacto(estadoGrande, 600)) && !/Repetidor 30,/.test(m.estadoCompacto(estadoGrande, 600)),
+    );
+    caso(
+      "v14.1: IA local — Qwen3 4B por defecto (1.7B liviano y 8B máximo) con WebLLM 0.2.82 fijada por su huella, apagada si no se ha activado",
+      m.MODELO_LOCAL_DEFECTO === "Qwen3-4B-q4f16_1-MLC" && m.MODELOS_LOCALES.map((x) => x.id).join() === "Qwen3-4B-q4f16_1-MLC,Qwen3-1.7B-q4f16_1-MLC,Qwen3-8B-q4f16_1-MLC" && /\/@mlc-ai\/web-llm@0\.2\.82\/lib\/index\.js$/.test(m.CONFIG.iaLocal.libreria) && m.CONFIG.iaLocal.huella === "4c89beb3ed13946e6f1ca9376f33062b5c64765c26f3ddaba045df6a13dda858" && m.leerPreferenciaIALocal().activa === false,
+    );
+    // Una preferencia de la v14 (Qwen3.5, que ya no está) pasa al recomendado sin perder el resto; la falla se conserva
+    const almacenIA = new Map([["simulador-cobertura-melki-ia-local", JSON.stringify({ activa: true, modelo: "Qwen3.5-4B-q4f16_1-MLC", falla: "2026-10-30T19:20:00.000Z" })]]);
+    globalThis.localStorage = { getItem: (k) => almacenIA.get(k) ?? null, setItem: (k, v) => almacenIA.set(k, String(v)), removeItem: (k) => almacenIA.delete(k) };
+    const prefVieja = m.leerPreferenciaIALocal();
+    delete globalThis.localStorage;
+    caso("v14.1: IA local — una preferencia con un modelo Qwen3.5 pasa al Qwen3 4B y conserva la falla anotada", prefVieja.modelo === "Qwen3-4B-q4f16_1-MLC" && prefVieja.activa === true && prefVieja.falla === "2026-10-30T19:20:00.000Z", JSON.stringify(prefVieja));
+    caso(
+      "v14.1: IA local — reconoce cuando la tarjeta gráfica deja de responder (y no confunde la red ni el espacio)",
+      m.esFallaTarjeta("Failed to execute 'requestDevice' on 'GPUAdapter': D3D12 create command queue failed with DXGI_ERROR_DEVICE_REMOVED (0x887A0005)") &&
+        m.esFallaTarjeta("Device was lost. This can happen due to insufficient memory or other GPU constraints.") &&
+        m.esFallaTarjeta("Model not loaded before trying to complete ChatCompletionRequest. Please ensure you have called MLCEngine.reload(model)") &&
+        m.esFallaTarjeta("GetDeviceRemovedReason: DXGI_ERROR_DEVICE_HUNG (0x887A0006)") &&
+        !m.esFallaTarjeta("TypeError: Failed to fetch") &&
+        !m.esFallaTarjeta("QuotaExceededError: the quota has been exceeded"),
+    );
     caso(
       "v14: IA local — los errores de la biblioteca, en palabras (sin internet, sin espacio, la tarjeta gráfica; la huella tal cual)",
-      /revise la conexión a internet/.test(m.textoError(new Error("Failed to store https://huggingface.co/x with error: TypeError: Failed to fetch"))) && /espacio suficiente/.test(m.textoError(new Error("QuotaExceededError"))) && /tarjeta gráfica no pudo/.test(m.textoError(new Error("Device was lost"))) && /huella SHA-256/.test(m.textoError(new Error("El motor de la IA local que llegó no es el esperado (su huella SHA-256 no coincide): no lo uso."))),
+      /revise la conexión a internet/.test(m.textoError(new Error("Failed to store https://huggingface.co/x with error: TypeError: Failed to fetch"))) && /espacio suficiente/.test(m.textoError(new Error("QuotaExceededError"))) && m.textoError(new Error("Device was lost")) === m.TEXTO_TARJETA && /ciérrelo por completo y vuelva a abrirlo/.test(m.TEXTO_TARJETA) && /no pudo cargar el modelo/.test(m.textoError(new Error("out of memory"))) && /huella SHA-256/.test(m.textoError(new Error("El motor de la IA local que llegó no es el esperado (su huella SHA-256 no coincide): no lo uso."))),
     );
+    // El trabajador: avisa si la tarjeta se pierde (escucha la consola antes de importar la biblioteca) y usa IndexedDB
+    const trab = m.CODIGO_IA_LOCAL;
+    caso(
+      "v14.1: IA local — el trabajador escucha la consola antes de importar la biblioteca, avisa «perdida» y usa la caché en IndexedDB",
+      trab.indexOf("console.error = function") > -1 && trab.indexOf("console.error = function") < trab.indexOf("await import(url)") && /tipo: "perdida"/.test(trab) && /useIndexedDBCache: true/.test(trab) && /if \(perdida\) throw new Error\("Device was lost: "/.test(trab),
+    );
+    let trabajadorValido = true;
+    try {
+      new Function(trab);
+    } catch {
+      trabajadorValido = false;
+    }
+    caso("v14.1: IA local — el código del trabajador es JavaScript válido", trabajadorValido);
   }
 
   // Varias órdenes en un mensaje
