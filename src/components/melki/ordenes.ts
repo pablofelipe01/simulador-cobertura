@@ -27,6 +27,7 @@ import type { ResultadoEstres, LimitePunto } from "@/lib/radio/estres";
 import type { CifraPitch, DatosPitch, MapaPitch } from "@/lib/negocio/pitch";
 import type { PropuestaOptimizar, ResultadoOptimizar } from "@/lib/radio/optimizar";
 import { PROTOCOLOS } from "@/lib/radio/protocolos";
+import { analizarRed, capacidadPara, costoGatewayInstalado, repetidoresEnPresupuesto, sfTrama, textoAnalisis } from "@/lib/radio/analista";
 import { costoRedTrama, DEPARTAMENTOS_TRAMA, pesosTrama, type CostoRed, type NodoUsuario, type SfTrama, type TerrenoTrama } from "@/lib/radio/trama";
 
 import type { EscalaSenal, ModoApp, Vista } from "../simulador/estado";
@@ -34,6 +35,31 @@ import { ALTURA_REPETIDOR_DEFECTO } from "../simulador/piezas";
 import type { AreaPoblar, OpcionesCarga, PedidoPoblar, ResultadoPoblar } from "../simulador/panel-capacidad";
 import type { CentroZona, OpcionesEstres, PedidoPunto, PedidoZonas, ResultadoPunto, ResultadoZonas } from "../simulador/panel-estres";
 import { ejecutarCapacidad, interpretarCapacidad, seguirConZonas } from "./capacidad";
+import {
+  cifra,
+  circuloEnTexto,
+  distancia,
+  factorArea,
+  ladoEnTexto,
+  leerNumero,
+  LONGITUDES,
+  medidasEnCifras,
+  NUMERO,
+  presupuestoEnTexto,
+  rectanguloEnTexto,
+  sinTildes,
+  textoDicho,
+  textoDistancia,
+  textoMetros,
+  tieneDistancia,
+  UNIDAD_AREA,
+  UNIDAD_LONGITUD,
+  unidadAreaImperial,
+  unidadDe,
+  usuariosEnTexto,
+  type Distancia,
+  type Presupuesto,
+} from "./medidas";
 import type { AccionRespuesta, Respuesta } from "./cerebro";
 
 /** Cambios de la vista que Melki puede pedir (unidad y escala de colores del mapa de señal). */
@@ -68,7 +94,11 @@ export type CentroArea = { tipo: "coord"; coord: Coordenada; nombre?: string } |
 
 /** Área pedida para el diseño: una forma alrededor de un centro, o un área medida con la regla. */
 export type AreaPedida =
-  | { forma: "circulo" | "cuadrado" | "rectangulo"; areaM2: number; anchoM?: number; altoM?: number; centro: CentroArea }
+  /**
+   * Una forma alrededor de un centro. `medida` es lo dicho con su conversión («un círculo de 5 millas de radio
+   * (8,05 km)») y `etiqueta`, el nombre corto del área en el mapa («radio de 5 millas (8,05 km)»).
+   */
+  | { forma: "circulo" | "cuadrado" | "rectangulo"; areaM2: number; anchoM?: number; altoM?: number; centro: CentroArea; medida?: string; etiqueta?: string }
   | { forma: "medicion"; id: string }
   /**
    * Un polígono ya conocido (para rehacer o ampliar un diseño, o todo un municipio); `dibujar` lo vuelve a poner como
@@ -138,6 +168,14 @@ type OrdenSola =
       despues?: DespuesDiseno;
       /** «Una red sostenible y viable»: el diseño cuenta además su viabilidad técnica y su costo con los precios de Trama. */
       sostenible?: boolean;
+      /** La gente que debe atender («para 400 familias»): la capacidad del gateway entra en el análisis. */
+      usuarios?: { n: number; quienes: string };
+      /** El presupuesto («con 80 millones»): limita los repetidores y entra en el análisis. */
+      presupuesto?: Presupuesto;
+      /** «Aunque cueste más», «cueste lo que cueste»: sin el freno de rendimiento (siembra hasta la meta o el máximo). */
+      aCualquierCosto?: boolean;
+      /** El máximo de repetidores lo dijo el usuario («hasta 20 repetidores»). */
+      maxDicho?: boolean;
     }
   /** Falta dónde o de qué tamaño hacer la red («hazme una red sostenible»): lo pregunta y queda esperando la respuesta. */
   | { tipo: "pedir-diseno"; lugar?: LugarPedido; sostenible: boolean; despues?: DespuesDiseno }
@@ -151,6 +189,8 @@ type OrdenSola =
   | { tipo: "red-municipio"; sostenible: boolean }
   /** «¿Cuánto cuesta la red?»: la inversión y la operación de la red del mapa con los precios de Trama. */
   | { tipo: "costo-red" }
+  /** La opción económica de un diseño: quitar esos repetidores y medir de nuevo la cobertura del área. */
+  | { tipo: "usar-economica"; ids: string[]; nombres: string[]; area: Poligono; margenDb: number; respaldo: boolean; clases: string; metaPct: number; ahorroCop: number }
   | { tipo: "eliminar-varios"; ids: string[]; descripcion: string }
   | { tipo: "editar-varios"; ids: string[]; cambios: Partial<Antena>; descripcion: string }
   | { tipo: "auto"; valor: boolean }
@@ -341,6 +381,8 @@ export type OpcionesDiseno = {
   alturaRepetidorM: number;
   gateway: Coordenada | null;
   maxRepetidores: number;
+  /** Freno de rendimiento: no poner repetidores que cubran menos de `minPct` % del área. */
+  eficiencia?: { minPct: number } | null;
 };
 
 const n = (t: string) =>
@@ -626,38 +668,13 @@ function unidadEnTexto(texto: string, tn: string): UnidadId | null {
 
 /* ───────────── Números, áreas, lugares y posiciones relativas ───────────── */
 
-/** Minúsculas y sin tildes, conservando símbolos como «²» y «%». */
-const sinTildes = (t: string) => t.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+export { leerNumero };
 
 /**
- * Número escrito en español: «11.226» y «1.500» (miles con punto), «1.234,5», «99,9», «99.9», «11 mil».
- * Un punto seguido de exactamente tres cifras es separador de miles, como se escribe en Colombia.
+ * Área pedida en el texto (m²). Si después se corrige («11.000 ha… exactos 11.226»), vale la corrección. En millas,
+ * yardas o pies cuadrados (y acres o fanegadas) trae también lo dicho con su conversión: «2 millas cuadradas (5,18 km²)».
  */
-export function leerNumero(s: string): number {
-  const t = s.trim().replace(/\s+/g, " ");
-  const mil = /\s*mil(es)?$/.test(t);
-  const base = t.replace(/\s*mil(es)?$/, "");
-  let v: number;
-  if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(base)) v = Number(base.replace(/\./g, "").replace(",", "."));
-  else if (/^\d{1,3}(,\d{3}){2,}(\.\d+)?$/.test(base)) v = Number(base.replace(/,/g, ""));
-  else v = Number(base.replace(",", "."));
-  return mil ? v * 1000 : v;
-}
-
-const NUMERO = String.raw`(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+(?:[.,]\d+)?)(?:\s*(mil(?:es)?)\b)?`;
-const UNIDAD_AREA = String.raw`(hectareas?|hectarias?|has?(?![a-z])|km\s?2(?![0-9])|km²|kms?\s+cuadrados?|kilometros?\s+cuadrados?|metros?\s+cuadrados?|m\s?2(?![0-9])|m²|fanegadas?|acres?)`;
-
-function factorArea(unidad: string): number {
-  const u = unidad.replace(/\s+/g, " ");
-  if (/^h/.test(u)) return 1e4;
-  if (/^(km|kms|kilometro)/.test(u)) return 1e6;
-  if (/^fanegada/.test(u)) return 6400;
-  if (/^acre/.test(u)) return 4046.86;
-  return 1;
-}
-
-/** Área pedida en el texto (m²). Si después se corrige («11.000 ha… exactos 11.226»), vale la corrección. */
-export function areaEnTexto(bajo: string): { m2: number; unidad: string } | null {
+export function areaEnTexto(bajo: string): { m2: number; unidad: string; dicho?: string } | null {
   const lista = [...bajo.matchAll(new RegExp(`${NUMERO}\\s*${UNIDAD_AREA}`, "g"))];
   if (!lista.length) return null;
   const ultimo = lista[lista.length - 1];
@@ -666,7 +683,10 @@ export function areaEnTexto(bajo: string): { m2: number; unidad: string } | null
   const resto = bajo.slice((ultimo.index ?? 0) + ultimo[0].length);
   const correccion = resto.match(new RegExp(`\\b(?:exact\\w*|en realidad|mejor dicho|o sea|perdon|corrijo|correccion|siendo precis\\w*|precisamente|en total)\\b[^0-9]{0,24}${NUMERO}(?!\\s*(?:%|por ciento|m\\b|metros|km\\b|kilometros|db|dbi|dbm|repetidor))`));
   if (correccion) m2 = leerNumero(`${correccion[1]}${correccion[2] ? " mil" : ""}`) * factorArea(unidad);
-  return m2 > 0 ? { m2, unidad } : null;
+  if (!(m2 > 0)) return null;
+  const valor = m2 / factorArea(unidad);
+  const imperial = unidadAreaImperial(unidad, valor);
+  return { m2, unidad, ...(imperial ? { dicho: `${cifra(valor)} ${imperial} (${m2 >= 1e6 ? `${cifra(m2 / 1e6)} km²` : `${cifra(m2 / 1e4)} ha`})` } : {}) };
 }
 
 /** «11.226 ha (112,26 km²)», «850 ha», «3,5 ha». */
@@ -809,7 +829,13 @@ const RUMBOS = "norte|sur|este|oeste|oriente|occidente|noreste|noroeste|sureste|
  * 4.2, -73.37», «a 8 km del gateway hacia el oriente», «5 km al este de Cumaral».
  */
 function relativaEnTexto(texto: string, tn: string, api: Api, antenas: Antena[], ultimo?: Antena): (Coordenada & { desde: string }) | null {
-  const dist = String.raw`(\d+(?:[.,]\d+)?)\s*(km|kms|kilometros?|m|mts?|metros?)`;
+  // En km, metros, millas, yardas, pies o cuadras («a 2 millas al norte del gateway»)
+  const dist = String.raw`(\d+(?:[.,]\d+)?)\s*${UNIDAD_LONGITUD}`;
+  const enMetros = (v: string, u: string) => num(v) * LONGITUDES[unidadDe(u) ?? "m"].metros;
+  const dicho = (v: string, u: string, metros: number) => {
+    const unidad = unidadDe(u) ?? "m";
+    return unidad === "km" || unidad === "m" ? formatoDistancia(metros) : textoDistancia(distancia(num(v), unidad));
+  };
   const a = tn.match(new RegExp(`${dist}\\s+(?:mas\\s+)?(?:al|hacia el|hacia|rumbo al?|en direccion al?)?\\s*(${RUMBOS})\\s+(?:de|del|desde)\\s+(.{2,60})`));
   const b = a ? null : tn.match(new RegExp(`${dist}\\s+(?:de|del|desde)\\s+(.{2,40}?)\\s+(?:al|hacia el|hacia|rumbo al?)\\s+(${RUMBOS})\\b`));
   // Sin punto de partida («un repetidor a 10 km al este»): desde el último nodo que se tocó o desde el gateway
@@ -817,13 +843,13 @@ function relativaEnTexto(texto: string, tn: string, api: Api, antenas: Antena[],
     const c = tn.match(new RegExp(`${dist}\\s+(?:mas\\s+)?(?:al|hacia el|hacia|rumbo al?|en direccion al?)\\s*(${RUMBOS})\\b(?!\\s+(?:de|del|desde)\\b)`));
     const desde = ultimo ?? antenas.find((x) => x.pasarela && x.activa);
     if (!c || !desde) return null;
-    const metrosC = num(c[1]) * (/^k/.test(c[2]) ? 1000 : 1);
+    const metrosC = enMetros(c[1], c[2]);
     const g = CARDINALES.find(([re]) => re.test(c[3]))?.[1];
     if (g === undefined || !(metrosC > 0) || metrosC > 200000) return null;
     const q = desplazar(desde.lat, desde.lon, metrosC, g);
-    return { lat: q.lat, lon: q.lon, desde: `a ${formatoDistancia(metrosC)} al ${c[3]} de ${desde.nombre}` };
+    return { lat: q.lat, lon: q.lon, desde: `a ${dicho(c[1], c[2], metrosC)} al ${c[3]} de ${desde.nombre}` };
   }
-  const metros = num((a ?? b)![1]) * (/^k/.test((a ?? b)![2]) ? 1000 : 1);
+  const metros = enMetros((a ?? b)![1], (a ?? b)![2]);
   const rumboTxt = a ? a[3] : b![4];
   const frase = ` ${a ? a[4] : b![3]} `;
   const grados = CARDINALES.find(([re]) => re.test(rumboTxt))?.[1];
@@ -841,7 +867,7 @@ function relativaEnTexto(texto: string, tn: string, api: Api, antenas: Antena[],
   }
   if (!base) return null;
   const q = desplazar(base.lat, base.lon, metros, grados);
-  return { lat: q.lat, lon: q.lon, desde: `a ${formatoDistancia(metros)} al ${rumboTxt} de ${base.nombre}` };
+  return { lat: q.lat, lon: q.lon, desde: `a ${dicho((a ?? b)![1], (a ?? b)![2], metros)} al ${rumboTxt} de ${base.nombre}` };
 }
 
 /**
@@ -1088,23 +1114,30 @@ function interpretarAreaObjetivo(texto: string, tn: string, api: Api): Orden | n
 /** «Vuélveme a hacerlo», «rehazlo», «hazlo de nuevo», «otra vez»: repetir el diseño (con otra meta o área). */
 const REHACER = /\b(vuelve\w* a hacer\w*|volver a hacer\w*|rehac\w*|rehaz\w*|haz\w* de nuevo|hacerlo de nuevo|de nuevo el diseno|otra vez el diseno)\b/;
 
+/** «Aunque cueste más», «cueste lo que cueste»: el usuario prefiere la meta al costo (sin el freno de rendimiento). */
+const A_CUALQUIER_COSTO =
+  /\b(aunque cuest\w*( mas)?|aunque salga (mas )?car[oa]|cueste lo que cueste|cueste lo que sea|a toda costa|a cualquier (costo|precio)|sin importar (el |lo que )?(costo|precio|plata|cueste)|sin (el )?freno|sin limite de (costo|repetidores|plata))\b/;
+/** «Aquí», «desde donde estoy»: el centro del mapa que se está viendo. */
+const AQUI = /\b(?:de|desde|alrededor de|en torno a)\s+(?:aqui|aca|este punto|donde estoy|donde estamos|lo que estoy viendo)\b/;
+
 function interpretarDiseno(texto: string, tn: string, api: Api, antenas: Antena[], contexto: ContextoOrden = {}): Orden | null {
   const rehacer = REHACER.test(tn);
   if (!rehacer && !/\b(cubr\w*|cobertura|abarc\w*|red|malla|repetidor\w*|senal|disen\w*|arm\w*|planific\w*|cuant\w* (repetidores|nodos|antenas))\b/.test(tn)) return null;
   const bajo = sinTildes(texto);
   const area = areaEnTexto(bajo);
   const verboFuerte = /\b(cubr\w*|abarc\w*|cobertura|disen\w*|arm\w*|planific\w*)\b/.test(tn);
-  const radio = verboFuerte ? bajo.match(/\b(?:radio de|en un radio de)\s*(\d+(?:[.,]\d+)?)\s*(km|kilometros?|m|metros?)\b|(\d+(?:[.,]\d+)?)\s*(km|kilometros?|m|metros?)\s*(?:de radio|a la redonda)/) : null;
-  const rect = bajo.match(/(\d+(?:[.,]\d+)?)\s*(km|kilometros?|m|metros?)?\s*(?:por|x)\s*(\d+(?:[.,]\d+)?)\s*(km|kilometros?|m|metros?)\b/);
-  const lado = bajo.match(/cuadrad\w*\s+de\s+(\d+(?:[.,]\d+)?)\s*(km|kilometros?|m|metros?)\s+(?:de lado|por lado)/);
+  // «5 millas a la redonda», «en un radio de 800 yardas», «10 km de diámetro»: con un verbo de cobertura o pidiendo una
+  // red (no el radio de estudio de la simulación)
+  const circulo = (verboFuerte || /\b(red|redes|malla)\b/.test(tn)) && !/\bradio del? estudio\b/.test(tn) ? circuloEnTexto(bajo) : null;
+  const rect = rectanguloEnTexto(bajo);
+  const lado = ladoEnTexto(bajo);
   const medida = (/\b(area|zona|poligono)\b.{0,30}\b(medi|medida|medido|dibuj\w*|marq\w*|traz\w*)\b|\b(area|zona|poligono)\b.{0,20}\bregla\b/.test(tn) || /\bcubr\w* (esta|esa|el|la) (area|zona|poligono)\b(?! de)/.test(tn));
   // Sin tamaño: todo el municipio, una zona de él, lo que se ve en el mapa o «ese sector»
-  const zona = !area && !radio && !lado && !(rect && verboFuerte) && (verboFuerte || /\b(red|malla)\b/.test(tn)) ? zonaDeDiseno(tn, api, contexto) : null;
+  const zona = !area && !circulo && !lado && !(rect && verboFuerte) && (verboFuerte || /\b(red|malla)\b/.test(tn)) ? zonaDeDiseno(tn, api, contexto) : null;
   if (zona && "aviso" in zona && !medida) return { tipo: "aviso", texto: zona.aviso };
-  if (!area && !radio && !(rect && verboFuerte) && !lado && !medida && !zona) return null;
+  if (!area && !circulo && !(rect && verboFuerte) && !lado && !medida && !zona) return null;
   if (!verboFuerte && !rehacer && !/\b(red|malla|repetidor\w*|cuant\w* (repetidores|nodos|antenas))\b/.test(tn)) return null;
 
-  const metros = (v: string, u?: string) => num(v) * (u && /^k/.test(u) ? 1000 : 1);
   let pedida: AreaPedida | null = null;
   const pcts = [...bajo.matchAll(/(\d{1,3}(?:[.,]\d+)?)\s*(?:%|por ciento)/g)].map((m) => leerNumero(m[1])).filter((v) => v > 0 && v <= 100);
   const porcentaje = pcts.length ? pcts[pcts.length - 1] : 95;
@@ -1115,6 +1148,16 @@ function interpretarDiseno(texto: string, tn: string, api: Api, antenas: Antena[
   const alturaM = altura ? Math.min(60, Math.max(3, num(altura[1]))) : ALTURA_REPETIDOR_DEFECTO;
   const maxTxt = tn.match(/\b(?:maximo|max|no mas de|hasta|como mucho)\s+(?:de\s+)?(\d{1,3})\s+(?:repetidores|repetidoras|torres|nodos)\b/);
   const maxRepetidores = maxTxt ? Math.min(200, Math.max(1, Number(maxTxt[1]))) : 60;
+  // La gente a atender, el presupuesto y si la meta va por encima del costo
+  const usuarios = usuariosEnTexto(bajo);
+  const presupuesto = presupuestoEnTexto(bajo);
+  const extra = {
+    ...(SOSTENIBLE.test(tn) ? { sostenible: true } : {}),
+    ...(usuarios ? { usuarios } : {}),
+    ...(presupuesto ? { presupuesto } : {}),
+    ...(A_CUALQUIER_COSTO.test(tn) ? { aCualquierCosto: true } : {}),
+    ...(maxTxt ? { maxDicho: true } : {}),
+  };
 
   // Gateway en un punto pedido («con el gateway en 4.2, -73.37»)
   let gateway: Coordenada | null = null;
@@ -1124,19 +1167,24 @@ function interpretarDiseno(texto: string, tn: string, api: Api, antenas: Antena[
   // Rehacer sobre el área objetivo que ya está (del mismo tamaño): se diseña sobre ella, no sobre un círculo nuevo
   const objetivoIgual = rehacer && area ? [...api.mediciones()].reverse().find((x) => x.tipo === "area" && x.objetivo && Math.abs(areaM2(x.puntos) / area.m2 - 1) < 0.08) : undefined;
   if (objetivoIgual) pedida = { forma: "medicion", id: objetivoIgual.id };
-  else if (medida && !area && !radio && !rect && !lado) {
+  else if (medida && !area && !circulo && !rect && !lado) {
     const m = [...api.mediciones()].reverse().find((x) => x.tipo === "area");
     if (m) pedida = { forma: "medicion", id: m.id };
     else if (zona && "puntos" in zona) pedida = { forma: "poligono", puntos: zona.puntos, nombre: zona.nombre, dibujar: true, etiqueta: zona.etiqueta };
-    else return { tipo: "disenar", area: { forma: "medicion", id: "" }, margenDb, clases, porcentaje, respaldo, alturaM, gateway, maxRepetidores };
+    else return { tipo: "disenar", area: { forma: "medicion", id: "" }, margenDb, clases, porcentaje, respaldo, alturaM, gateway, maxRepetidores, ...extra };
   } else if (zona && "puntos" in zona) {
     pedida = { forma: "poligono", puntos: zona.puntos, nombre: zona.nombre, dibujar: true, etiqueta: zona.etiqueta };
   } else {
-    // Centro del área: el punto o el lugar dicho («en la zona norte de Barranca de Upía»: el centro de esa zona), o
-    // «ahí» / «ese municipio» (el último lugar del que se habló)
-    let centro: CentroArea;
-    let u: (Coordenada & { desde?: string; lugar?: Lugar }) | null = gateway ? { ...gateway, desde: "alrededor del gateway" } : ubicacionEnTexto(texto, tn, api, antenas, true);
-    if (!u && contexto.ultimoLugar && ESE_LUGAR.test(tn)) {
+    // Centro del área: un nodo nombrado («5 millas a la redonda del Repetidor 2»), el punto o el lugar dicho («en la
+    // zona norte de Barranca de Upía»: el centro de esa zona), «aquí» (lo que se ve) o «ahí» / «ese municipio» (el
+    // último lugar del que se habló)
+    let centro: CentroArea | null = null;
+    let u: (Coordenada & { desde?: string; lugar?: Lugar }) | null = gateway ? { ...gateway, desde: "alrededor del gateway" } : null;
+    const nodo = !u && (circulo || area) && /\b(a la redonda|alrededor|en torno|desde|centrad\w*|radio)\b/.test(tn) ? nodosMencionados(tn, antenas)[0] : undefined;
+    if (nodo) u = { lat: nodo.lat, lon: nodo.lon, desde: `alrededor de ${nodo.nombre}` };
+    if (!u && AQUI.test(tn)) centro = { tipo: "mapa" };
+    if (!u && !centro) u = ubicacionEnTexto(texto, tn, api, antenas, true);
+    if (!u && !centro && contexto.ultimoLugar && ESE_LUGAR.test(tn)) {
       const l = contexto.ultimoLugar;
       usarLugar(l);
       u = { lat: l.lat, lon: l.lon, desde: `en ${nombreLugar(l)}`, lugar: l };
@@ -1149,25 +1197,45 @@ function interpretarDiseno(texto: string, tn: string, api: Api, antenas: Antena[
       u = { lat: (b.sur + b.norte) / 2, lon: (b.oeste + b.este) / 2, desde: `en la zona ${ADJETIVO_RUMBO[r]} de ${nombreLugar(u.lugar)}`, lugar: u.lugar };
     }
     if (u) centro = { tipo: "coord", coord: { lat: u.lat, lon: u.lon }, nombre: u.desde };
-    else if (antenas.some((a) => a.pasarela && a.activa)) centro = { tipo: "gateway" };
-    else centro = { tipo: "mapa" };
+    else if (!centro && antenas.some((a) => a.pasarela && a.activa)) centro = { tipo: "gateway" };
+    else if (!centro) centro = { tipo: "mapa" };
     if (lado) {
-      const l = metros(lado[1], lado[2]);
-      pedida = { forma: "cuadrado", areaM2: l * l, anchoM: l, altoM: l, centro };
+      const l = lado.metros;
+      pedida = { forma: "cuadrado", areaM2: l * l, anchoM: l, altoM: l, centro, medida: `un cuadrado de ${textoDistancia(lado)} de lado`, etiqueta: `cuadrado de ${textoDicho(lado)} de lado` };
     } else if (rect && !area) {
-      const a1 = metros(rect[1], rect[2] ?? rect[4]);
-      const a2 = metros(rect[3], rect[4]);
-      pedida = { forma: "rectangulo", areaM2: a1 * a2, anchoM: a1, altoM: a2, centro };
-    } else if (radio && !area) {
-      const r = metros(radio[1] ?? radio[3], radio[2] ?? radio[4]);
-      pedida = { forma: "circulo", areaM2: Math.PI * r * r, centro };
+      const a1 = rect.ancho.metros;
+      const a2 = rect.alto.metros;
+      const metrico = (d: Distancia) => d.unidad === "km" || d.unidad === "m";
+      const dicho = `${textoDicho(rect.ancho)} × ${textoDicho(rect.alto)}`;
+      pedida = {
+        forma: "rectangulo",
+        areaM2: a1 * a2,
+        anchoM: a1,
+        altoM: a2,
+        centro,
+        medida: `un rectángulo de ${dicho}${metrico(rect.ancho) && metrico(rect.alto) ? "" : ` (${textoMetros(a1)} × ${textoMetros(a2)})`}`,
+        etiqueta: dicho,
+      };
+    } else if (circulo && !area) {
+      const r = circulo.radio.metros;
+      pedida =
+        circulo.como === "diametro"
+          ? { forma: "circulo", areaM2: Math.PI * r * r, centro, medida: `un círculo de ${textoDistancia(circulo.dicho)} de diámetro (radio de ${textoMetros(r)})`, etiqueta: `diámetro de ${textoDicho(circulo.dicho)}` }
+          : {
+              forma: "circulo",
+              areaM2: Math.PI * r * r,
+              centro,
+              medida: `un círculo de ${textoDistancia(circulo.radio)} de radio${circulo.como === "supuesto" ? ` (tomé los ${textoDicho(circulo.dicho)} como radio, a la redonda)` : ""}`,
+              etiqueta: `radio de ${textoDistancia(circulo.radio)}`,
+            };
     } else if (area) {
-      const cuadrado = /\bcuadrad\w*/.test(tn);
-      pedida = cuadrado ? { forma: "cuadrado", areaM2: area.m2, anchoM: Math.sqrt(area.m2), altoM: Math.sqrt(area.m2), centro } : { forma: "circulo", areaM2: area.m2, centro };
+      const cuadrado = /\bcuadrad\w*/.test(tn) && !/\b(millas?|yardas?|pies|kilometros?|metros?)\s+cuadrad/.test(tn);
+      const dicho = area.dicho ? { medida: area.dicho } : {};
+      pedida = cuadrado ? { forma: "cuadrado", areaM2: area.m2, anchoM: Math.sqrt(area.m2), altoM: Math.sqrt(area.m2), centro, ...dicho } : { forma: "circulo", areaM2: area.m2, centro, ...dicho };
     }
   }
   if (!pedida) return null;
-  return { tipo: "disenar", area: pedida, margenDb, clases, porcentaje, respaldo, alturaM, gateway, maxRepetidores, ...(SOSTENIBLE.test(tn) ? { sostenible: true } : {}) };
+  return { tipo: "disenar", area: pedida, margenDb, clases, porcentaje, respaldo, alturaM, gateway, maxRepetidores, ...extra };
 }
 
 /** «Sostenible», «viable», «económica y técnicamente», «que funcione de la mejor manera»: la red se diseña y se evalúa con su costo. */
@@ -1210,10 +1278,13 @@ function completarDiseno(texto: string, tn: string, api: Api, antenas: Antena[],
   // «Todo», «el municipio completo», «la zona norte»: el municipio del lugar pedido (o donde caen sus coordenadas)
   const soloTodo = /^(tod[oa]|tod[oa] el municipio|el municipio( completo| entero)?|complet[oa]|enter[oa]|tod[oa] completo)$/.test(tn.replace(/[.,!]/g, "").trim());
   const zonaDicha = soloTodo || MUNICIPIO_ENTERO.test(tn) || ZONA_RUMBO.test(tn) || TODO_LUGAR.test(tn) || VISTA_MAPA.test(tn);
-  const conTamano = areaEnTexto(bajo) || /\b\d+(?:[.,]\d+)?\s*(km|kilometros?|m|metros?)\b/.test(bajo) || zonaDicha;
+  const conTamano = areaEnTexto(bajo) || tieneDistancia(bajo) || zonaDicha;
   if (!conTamano) return u ? { tipo: "pedir-diseno", lugar, sostenible: p.sostenible, despues: p.despues } : null;
-  const frase = soloTodo ? "todo el municipio" : texto;
-  const fraseN = soloTodo ? "todo el municipio" : tn;
+  // Solo una distancia («de 5 km», «3 millas»): es el radio, a la redonda del lugar
+  const soloDistancia = !zonaDicha && !areaEnTexto(bajo) && !circuloEnTexto(bajo) && !rectanguloEnTexto(bajo) && !ladoEnTexto(bajo);
+  const aLaRedonda = (s: string) => s.replace(new RegExp(String.raw`(\d+(?:[.,]\d+)?\s*${UNIDAD_LONGITUD})`, "i"), "$1 a la redonda");
+  const frase = soloTodo ? "todo el municipio" : soloDistancia ? aLaRedonda(sinTildes(texto)) : texto;
+  const fraseN = soloTodo ? "todo el municipio" : soloDistancia ? aLaRedonda(tn) : tn;
   const ultimoLugar = lugar?.lugar ?? (lugar ? lugarDePunto(api, lugar.lat, lugar.lon) : null) ?? contexto.ultimoLugar;
   const d = interpretarDiseno(`diseña una red ${p.sostenible ? "sostenible " : ""}que cubra ${frase}`, `disena una red ${p.sostenible ? "sostenible " : ""}que cubra ${fraseN}`, api, antenas, { ...contexto, ultimoLugar });
   if (d?.tipo === "aviso") return d;
@@ -1334,7 +1405,7 @@ function interpretarPantalla(tn: string): Orden | null {
   }
   if (!on && !off) return null;
   // Con cantidades («radio de 12 km», «20 m», «-100 dBm») es un parámetro o un nodo, no una capa
-  if (/\d\s*(km|kilometros?|m|metros?|db|dbm|dbi|mhz)\b/.test(tn)) return null;
+  if (/\d\s*(km|kilometros?|m|metros?|millas?|yardas?|pies|cuadras?|db|dbm|dbi|mhz)\b/.test(tn)) return null;
   const valor = !off;
   const capas: [RegExp, keyof CambiosVista, string][] = [
     [/\b(vias|carreteras|caminos|trochas)\b/, "refVias", "las vías"],
@@ -1524,7 +1595,9 @@ function lugarPendiente(tn: string, api: Api, p: Extract<NonNullable<Pendiente>,
   return { tipo: "pedir-lugar", dicho: p.dicho, original: p.original, sugerencias: d.opciones.map((c) => c.lugar) };
 }
 
-function interpretarOrdenBase(texto: string, api: Api, pendiente: Pendiente, contexto: ContextoOrden = {}): Orden | null {
+function interpretarOrdenBase(dicho: string, api: Api, pendiente: Pendiente, contexto: ContextoOrden = {}): Orden | null {
+  // «Cinco millas», «un kilómetro y medio», «noventa y cinco por ciento»: en cifras para todos los intérpretes
+  const texto = medidasEnCifras(dicho);
   const tn = n(texto);
   if (!tn) return null;
   // Respuestas a lo que Melki acaba de preguntar: «¿se refiere a…?» y «¿me repite el municipio?»
@@ -2698,6 +2771,31 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
       api.centrar(a.lat, a.lon, 13);
       return { texto: `Aquí está «${a.nombre}»: lo dejé seleccionado para editarlo.`, nodo: a.id };
     }
+    case "usar-economica": {
+      const quitar = antenas.filter((a) => o.ids.includes(a.id));
+      if (!quitar.length) return { texto: "Esos repetidores ya no están en el mapa: la opción económica era para el diseño anterior." };
+      api.eliminarVarias(quitar.map((a) => a.id));
+      const nombres = quitar.map((a) => a.nombre).join(", ");
+      const luego = (async (): Promise<Respuesta> => {
+        const r = await api.esperarResultado();
+        const real = r ? coberturaEnArea(r, o.area, o.respaldo ? "segundo" : "mejor") : null;
+        const pct = real ? porcentajeSobre(real, o.margenDb) : null;
+        const ahorro = o.ahorroCop > 0 ? ` y ahorra unos ${pesosTrama(o.ahorroCop)}` : "";
+        return {
+          texto:
+            pct === null
+              ? `Quité ${quitar.length === 1 ? "1 repetidor" : `${quitar.length} repetidores`} (${nombres})${ahorro}. Simule para ver la cobertura del área.`
+              : `Opción económica lista: la malla cubre el ${fp(pct)} % del área con ${o.clases} (la meta era ${fp(o.metaPct)} %). Quité ${quitar.length === 1 ? "1 repetidor" : `${quitar.length} repetidores`} (${nombres})${ahorro}.${real ? ` Dentro del área: ${resumenClases(real)}.` : ""}`,
+          acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }],
+        };
+      })();
+      return {
+        texto: `Quito ${quitar.length === 1 ? "1 repetidor" : `${quitar.length} repetidores`} (${nombres}) para la opción económica y mido de nuevo la cobertura del área.`,
+        acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }],
+        deshacer: antes,
+        luego,
+      };
+    }
     case "eliminar-varios": {
       const quitar = antenas.filter((a) => o.ids.includes(a.id));
       if (!quitar.length) return { texto: `No hay ${o.descripcion.replace(/^tod[oa]s (l[oa]s )?/, "")} para borrar.` };
@@ -2949,10 +3047,30 @@ function ejecutarDiseno(o: Extract<Orden, { tipo: "disenar" }>, api: Api, antes:
   if (area > 3e9) return { texto: "Esa área es muy grande para diseñarla de una vez (más de 300.000 ha). Divídala en zonas y pídamelas por partes." };
   // El gateway que ya hay solo cuenta si alcanza el área; en otro municipio la malla lleva su propio gateway
   const gw = antenas.find((x) => x.pasarela && x.activa && sirveAlArea(poligono, x.lat, x.lon));
+  // Presupuesto: cuántos repetidores caben (con el sitio del gateway si hay que ponerlo y las radios que pida la gente)
+  const b0 = cajaPoligono(poligono);
+  const enCentro = gw ?? { lat: (b0.sur + b0.norte) / 2, lon: (b0.oeste + b0.este) / 2 };
+  const { logistica } = logisticaEn(api, enCentro.lat, enCentro.lon);
+  let maxRepetidores = o.maxRepetidores;
+  let conPresupuesto = "";
+  if (o.presupuesto) {
+    const sf = sfTrama(presetPorId(api.parametros().preset).sf);
+    const radios = o.usuarios ? Math.min(4, capacidadPara(o.usuarios.n, sf).radios) - 1 : 0;
+    const caben = repetidoresEnPresupuesto(o.presupuesto.cop, !gw, logistica, Math.max(0, radios));
+    const plata = o.presupuesto.dolares ? `USD ${Math.round(o.presupuesto.dolares).toLocaleString("es-CO")} (${pesosTrama(o.presupuesto.cop)})` : pesosTrama(o.presupuesto.cop);
+    if (caben === null)
+      return {
+        texto: `Con ${plata} no alcanza ni para el sitio del gateway: con su torre de 12 m, la radio, el Starlink, la energía solar, la instalación y el transporte cuesta unos ${pesosTrama(costoGatewayInstalado(logistica))}. Dígame un presupuesto mayor o use un gateway que ya exista en la zona.`,
+      };
+    maxRepetidores = Math.min(maxRepetidores, caben);
+    conPresupuesto = ` Con ${plata} de presupuesto caben ${caben === 0 ? "solo el gateway (ningún repetidor)" : `hasta ${caben === 1 ? "1 repetidor" : `${caben} repetidores`}`}${gw ? "" : " además del gateway"}.`;
+  }
   if (o.gateway && gw) api.editar(gw.id, { lat: Number(o.gateway.lat.toFixed(6)), lon: Number(o.gateway.lon.toFixed(6)), activa: true });
   const forma = o.area.forma === "cuadrado" ? "cuadrada" : o.area.forma === "rectangulo" ? "rectangular" : "";
+  const medidaDicha = "medida" in o.area ? o.area.medida : undefined;
   if (dibujar) {
-    nombreArea = `Área objetivo · ${o.area.forma === "poligono" && o.area.etiqueta ? o.area.etiqueta : textoArea(area)}`;
+    // El nombre del área no repite su tamaño (la regla lo escribe al lado): el municipio, el radio pedido o el área dicha
+    nombreArea = `Área objetivo · ${("etiqueta" in o.area && o.area.etiqueta) || textoArea(area)}`;
     idArea = `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
     api.medir({ id: idArea, nombre: nombreArea, tipo: "area", puntos: poligono, visible: true }, false);
   } else {
@@ -2960,7 +3078,9 @@ function ejecutarDiseno(o: Extract<Orden, { tipo: "disenar" }>, api: Api, antes:
     api.encuadrarCaja([b.oeste, b.sur, b.este, b.norte]);
   }
   const meta = `${o.clases} en el ${fp(o.porcentaje)} % del área${o.respaldo ? ", con respaldo (cada punto con dos nodos)" : ""}`;
-  const pedido = { area: poligono, margenDb: o.margenDb, porcentaje: o.porcentaje, respaldo: o.respaldo, alturaRepetidorM: o.alturaM, gateway: o.gateway, maxRepetidores: o.maxRepetidores };
+  // Freno de rendimiento: un repetidor debe cubrir al menos ese % del área (menos exigente si se pidió una meta muy alta)
+  const eficiencia = o.aCualquierCosto ? null : { minPct: o.porcentaje >= 99.5 ? 0.05 : o.porcentaje >= 98 ? 0.1 : 0.3 };
+  const pedido = { area: poligono, margenDb: o.margenDb, porcentaje: o.porcentaje, respaldo: o.respaldo, alturaRepetidorM: o.alturaM, gateway: o.gateway, maxRepetidores, eficiencia };
   const luego = (async (): Promise<Respuesta> => {
     const d = await api.disenarArea(pedido);
     if (!d) return { texto: "No pude calcular el diseño (el relieve no cargó o el motor se detuvo). Intente de nuevo en un momento.", acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: base }] };
@@ -2975,7 +3095,7 @@ function ejecutarDiseno(o: Extract<Orden, { tipo: "disenar" }>, api: Api, antes:
     return { texto: `${hecho.texto}\n\n${sigue.texto}`, acciones: [...(sigue.acciones ?? []), ...(hecho.acciones ?? [])].slice(0, 5) };
   })();
   return {
-    texto: `Diseño la malla para ${textoArea(area)}${forma ? ` (área ${forma})` : ""} ${donde}: ${meta}. ${dibujar ? "Dibujé el área en el mapa. " : ""}Busco con el relieve real dónde va ${gw || o.gateway ? "cada repetidor" : "el gateway y cada repetidor"} (torres de ${fn(o.alturaM)} m), siempre enlazados a la red.${o.despues ? ` Después pongo ${o.despues.zonas.n ?? 250} personas alrededor de cada gateway y repetidor (zonas de popularidad)${o.despues.estres ? (o.despues.estres.rampa ? " y hago la prueba de estrés de la hora pico, subiendo la carga hasta ver dónde se quiebra cada uno" : " y hago la prueba de estrés de la hora pico para ver si la red se revienta") : ""}.` : ""} ${area > 2e8 ? "Es un área grande: tardo un poco más." : "Tardo unos segundos."}`,
+    texto: `Diseño la malla para ${textoArea(area)}${medidaDicha ? `, ${medidaDicha},` : forma ? ` (área ${forma})` : ""} ${donde}: ${meta}.${o.usuarios ? ` Para ${o.usuarios.n.toLocaleString("es-CO")} ${o.usuarios.quienes}.` : ""}${conPresupuesto} ${dibujar ? "Dibujé el área en el mapa. " : ""}Busco con el relieve real dónde va ${gw || o.gateway ? "cada repetidor" : "el gateway y cada repetidor"} (torres de ${fn(o.alturaM)} m), siempre enlazados a la red.${o.despues ? ` Después pongo ${o.despues.zonas.n ?? 250} personas alrededor de cada gateway y repetidor (zonas de popularidad)${o.despues.estres ? (o.despues.estres.rampa ? " y hago la prueba de estrés de la hora pico, subiendo la carga hasta ver dónde se quiebra cada uno" : " y hago la prueba de estrés de la hora pico para ver si la red se revienta") : ""}.` : ""} ${area > 2e8 ? "Es un área grande: tardo un poco más." : "Tardo unos segundos."}`,
     acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: base }],
     deshacer: base,
     luego,
@@ -3071,9 +3191,18 @@ function textoDiseno(o: Extract<Orden, { tipo: "disenar" }>, d: Diseno, puestas:
   }
   if (!ok && d.motivo) partes.push(d.motivo);
   if (o.sostenible) partes.push(...viabilidadDiseno(o, puestas, r, pct, enlaces, maxSaltos, poligono, api));
+  // El análisis de ingeniería: veredicto, costo, capacidad, presupuesto y recomendaciones acotadas (todo calculado)
+  // Sin simulación, los saltos son los del diseño (nadie queda «sin ruta» por no haber simulado)
+  const analisis = analisisDiseno(o, d, puestas, r, pct, enlaces, r ? maxSaltos : Math.max(0, ...d.nodos.map((x) => x.saltos)), r ? sinRuta : 0, poligono, api);
+  partes.push("", ...textoAnalisis(analisis.a, !o.sostenible));
   partes.push(ok ? "Antes de instalar, revise en campo el acceso, la energía y que nada tape las antenas." : "Puedo probar con torres más altas, o puede aceptar este resultado.");
-  const conPoligono = (cambios: Partial<Extract<Orden, { tipo: "disenar" }>>): Orden => ({ ...o, area: { forma: "poligono", puntos: poligono, nombre: `en el área «${nombreArea}»`, dibujar: Boolean(cambios.reemplazar) }, ...cambios });
+  // Al rehacer sobre la misma área se conserva su nombre («radio de 5 millas (8,05 km)», «Barranca de Upía (Meta)»)
+  const etiqueta = nombreArea.startsWith("Área objetivo · ") ? nombreArea.slice("Área objetivo · ".length) : undefined;
+  const conPoligono = (cambios: Partial<Extract<Orden, { tipo: "disenar" }>>): Orden => ({ ...o, area: { forma: "poligono", puntos: poligono, nombre: `en el área «${nombreArea}»`, dibujar: Boolean(cambios.reemplazar), ...(etiqueta ? { etiqueta } : {}) }, ...cambios });
   const acciones: Respuesta["acciones"] = [{ texto: "Deshacer", accion: "deshacer", escenario: base }];
+  // La opción económica (menos repetidores por unos puntos de cobertura) y, si frenó, seguir hasta la meta
+  if (analisis.economica) acciones.push({ texto: `Usar la opción económica (${analisis.economica.repetidores} ${analisis.economica.repetidores === 1 ? "repetidor" : "repetidores"}, ≈ ${fp(analisis.economica.coberturaPct)} %)`, accion: "orden", orden: analisis.economica.orden });
+  if (d.frenado && !ok) acciones.push({ texto: "Seguir hasta la meta aunque cueste más", accion: "orden", orden: conPoligono({ aCualquierCosto: true, reemplazar: base }) });
   if (!ok) {
     if (d.motivo?.startsWith("Llegué al máximo") && o.maxRepetidores < 200) {
       const mas = Math.min(200, Math.max(60, o.maxRepetidores * 3));
@@ -3093,4 +3222,76 @@ function textoDiseno(o: Extract<Orden, { tipo: "disenar" }>, d: Diseno, puestas:
   // Recién desplegada: Melki la puede explicar punto por punto (por qué cada antena quedó ahí y qué refuerzos necesita)
   acciones.push({ texto: "Explícame la red punto por punto", accion: "recorrido-red" });
   return { texto: partes.join("\n"), acciones };
+}
+
+/**
+ * El análisis de la red recién diseñada (la de esta área: la de otro municipio que ya esté en el mapa no entra) y la
+ * orden para usar la opción económica, con los repetidores puestos que se quitarían.
+ */
+function analisisDiseno(
+  o: Extract<Orden, { tipo: "disenar" }>,
+  d: Diseno,
+  puestas: Antena[],
+  r: ResultadoSimulacion | null,
+  pct: number,
+  enlaces: number[],
+  maxSaltos: number,
+  sinRuta: number,
+  poligono: Poligono,
+  api: Api,
+) {
+  const todas = api.antenas().filter((a) => a.activa && sirveAlArea(poligono, a.lat, a.lon));
+  const gateways = todas.filter((a) => a.pasarela).length;
+  const repetidores = todas.filter((a) => !a.pasarela && (a.tipo ?? "antena") === "antena").length;
+  const gw = puestas.find((a) => a.pasarela);
+  const reps = puestas.filter((a) => !a.pasarela);
+  const centro = gw ?? todas.find((a) => a.pasarela) ?? puestas[0];
+  const { logistica, departamento } = centro ? logisticaEn(api, centro.lat, centro.lon) : { logistica: 1, departamento: null };
+  const terreno = departamento ? (DEPARTAMENTOS_TRAMA.find((x) => x.nombre === departamento)?.terreno ?? null) : null;
+  const nodosR = r ? new Map(r.nodos.map((x) => [x.id, x])) : null;
+  // El nodo puesto que corresponde a cada nodo del diseño (aplicarDiseno los pone en el mismo orden)
+  const puesta = new Map(d.nodos.map((x, i) => [x.id, puestas[i]]));
+  let menor: { nombre: string; pct: number } | null = null;
+  for (const x of d.nodos) {
+    const a = puesta.get(x.id);
+    if (x.pieza === "repetidor" && a && x.aportePct !== undefined && (!menor || x.aportePct < menor.pct)) menor = { nombre: a.nombre, pct: x.aportePct };
+  }
+  const quitar = (d.economica?.quitar ?? []).map((id) => puesta.get(id)).filter((a): a is Antena => Boolean(a));
+  const econ = d.economica && quitar.length === d.economica.quitar.length ? { repetidores: reps.length - quitar.length, coberturaPct: d.economica.coberturaPct } : null;
+  const a = analizarRed({
+    areaKm2: areaM2(poligono) / 1e6,
+    metaPct: o.porcentaje,
+    coberturaPct: pct,
+    clases: o.clases,
+    respaldo: o.respaldo,
+    gateways,
+    repetidores,
+    nuevos: { gateways: gw ? 1 : 0, repetidores: reps.length },
+    alturaM: o.alturaM,
+    enlacesDb: enlaces,
+    maxSaltos,
+    limiteSaltos: api.parametros().limiteSaltos,
+    sinRuta,
+    criticos: reps.filter((x) => nodosR?.get(x.id)?.critico).length,
+    podados: d.podados ?? 0,
+    frenado: d.frenado ?? null,
+    economica: econ,
+    aporteMin: menor,
+    usuarios: o.usuarios ?? null,
+    presupuestoCop: o.presupuesto?.cop ?? null,
+    sf: sfTrama(presetPorId(api.parametros().preset).sf),
+    logistica,
+    departamento,
+    terreno,
+  });
+  const ahorro = -(a.recomendaciones.find((x) => x.id === "economica")?.costoCop ?? 0);
+  return {
+    a,
+    economica: econ
+      ? {
+          ...econ,
+          orden: { tipo: "usar-economica" as const, ids: quitar.map((x) => x.id), nombres: quitar.map((x) => x.nombre), area: poligono, margenDb: o.margenDb, respaldo: o.respaldo, clases: o.clases, metaPct: o.porcentaje, ahorroCop: ahorro },
+        }
+      : null,
+  };
 }

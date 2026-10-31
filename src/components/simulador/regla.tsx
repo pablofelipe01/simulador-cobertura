@@ -216,7 +216,9 @@ export function Regla({ mapa, estado, despachar, onPerfil, onCentrar, semilla }:
     for (const m of mediciones) {
       if (!m.visible && m.id !== estado.medicionSel) continue;
       const ult = m.tipo === "area" ? centroide(m.puntos) : m.puntos[m.puntos.length - 1];
-      lista.push({ clave: `t:${m.id}`, lonlat: ult, texto: `${m.nombre} · ${textoMedicion(m).split(" · ")[0]}`, clase: "regla-total" });
+      // Si el nombre ya dice el área («Área objetivo · 20.106 ha (201,1 km²)»), no se repite
+      const yaDiceArea = m.tipo === "area" && /\d[\d.,]*\s*(?:ha|km²|m²)(?![a-z])/.test(m.nombre);
+      lista.push({ clave: `t:${m.id}`, lonlat: ult, texto: yaDiceArea ? m.nombre : `${m.nombre} · ${textoMedicion(m).split(" · ")[0]}`, clase: "regla-total" });
     }
     const conTramos = (puntos: Punto[], prefijo: string, cerrada: boolean) => {
       const ps = cerrada && puntos.length >= 3 ? [...puntos, puntos[0]] : puntos;

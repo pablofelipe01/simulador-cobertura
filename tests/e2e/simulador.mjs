@@ -2694,6 +2694,95 @@ await flujo(
 );
 await ia.cerrar();
 
+// v14: el analista de Melki (millas, la gente, el veredicto y la etiqueta del área sin repetir su tamaño)
+await flujo(
+  "analista-millas",
+  async (page, foto) => {
+    await esperarRed(page);
+    await page.getByRole("button", { name: /Abrir a Melki/ }).click();
+    const chat = page.getByRole("region", { name: "Conversación con Melki" });
+    await chat.getByLabel("Pregunta para Melki").fill("ármame una red de dos millas a la redonda de Barranca de Upía, Meta para 400 familias");
+    await page.keyboard.press("Enter");
+    await chat.getByText(/^Diseño la malla para [\d.]+ ha \([\d,]+ km²\), un círculo de 2 millas \(3,22 km\) de radio, en Barranca de Upía \(Meta\): .* Para 400 familias\./).waitFor({ timeout: 20000 });
+    await chat.getByText(/^(Listo: la malla cubre|Llegué al)/).waitFor({ timeout: 240000 });
+    const final = await chat.locator("[data-mensaje]").filter({ hasText: /Listo: la malla cubre|Llegué al/ }).last().innerText();
+    fs.writeFileSync(path.join(salida, "analista-millas.txt"), final);
+    afirmar(
+      /\nAnálisis de Melki: red (óptima|viable con reservas|insuficiente para lo pedido)\./.test(final) && /• Costo: inversión de unos \$[^\n]* por km² cubierto/.test(final) && /• Capacidad: 400 familias caben con 3 radios en el gateway/.test(final) && /Ponga 2 radios más en el gateway/.test(final),
+      `Análisis: ${final.split("Análisis")[1]?.slice(0, 500)}`,
+    );
+    // El área objetivo se llama por su radio y la regla escribe su tamaño una sola vez
+    const etiquetas = await page.locator(".etiqueta-mapa.regla-total").allInnerTexts();
+    afirmar(etiquetas.some((e) => /^Área objetivo · radio de 2 millas \(3,22 km\) · [\d,]+ km² \([\d.]+ ha\)$/.test(e)) && etiquetas.every((e) => (e.match(/km²/g) ?? []).length <= 1), `Etiquetas: ${etiquetas.join(" | ")}`);
+    await foto("analisis");
+  },
+  { sembrar: true },
+);
+
+// v14: la IA local (con un modelo de mentira: en las pruebas no hay tarjeta gráfica): los ajustes, entender un pedido
+// libre y la guardia de cifras (una orden con un número que nadie dijo no se hace)
+await flujo(
+  "ia-local",
+  async (page, foto) => {
+    await esperarRed(page);
+    await page.getByRole("button", { name: /Abrir a Melki/ }).click();
+    const chat = page.getByRole("region", { name: "Conversación con Melki" });
+    const decir = async (t) => {
+      await chat.getByLabel("Pregunta para Melki").fill(t);
+      await page.keyboard.press("Enter");
+    };
+    // Apagada, lo que no entiende queda en «no entendí» (sin la IA)
+    await decir("quiero llevar señal a las fincas que quedan a unas tres millas de aquí");
+    await chat.getByText(/^No estoy seguro de haber entendido/).waitFor({ timeout: 10000 });
+    // Ajustes: la sección de la IA local, con el modelo recomendado y su tamaño
+    await chat.getByRole("button", { name: "Ajustes de voz" }).click();
+    const seccion = page.getByRole("region", { name: "IA local en este equipo" });
+    await seccion.waitFor({ timeout: 10000 });
+    const opciones = await seccion.getByRole("combobox", { name: "Modelo de la IA local" }).locator("option").allInnerTexts();
+    afirmar(opciones[0] === "Qwen3.5 4B (recomendado) · 2,4 GB" && opciones.length === 3, `Modelos: ${opciones.join(" | ")}`);
+    await seccion.getByRole("switch", { name: /Usar la IA local/ }).click();
+    await seccion.getByRole("button", { name: /^(Descargar y activar|Cargar la IA local)/ }).click();
+    await seccion.getByRole("button", { name: "Lista en este equipo" }).waitFor({ timeout: 10000 });
+    await foto("ajustes");
+    await chat.getByRole("button", { name: "Ajustes de voz" }).click();
+    // Un pedido libre: el modelo lo pasa a una orden que el intérprete verifica y se hace
+    await decir("quiero llevar señal a las fincas que quedan a unas tres millas de aquí");
+    await chat.getByText("Con la IA local entendí: «ármame una red de 3 millas a la redonda de aquí».").waitFor({ timeout: 20000 });
+    await chat.getByText(/^Diseño la malla para [\d.]+ ha \([\d,]+ km²\), un círculo de 3 millas \(4,83 km\) de radio, en el centro del mapa/).waitFor({ timeout: 20000 });
+    await chat.getByText(/^(Listo: la malla cubre|Llegué al)/).waitFor({ timeout: 240000 });
+    // La guardia: «17,3 km» no lo dijo nadie, así que esa orden no se hace (queda el «no entendí»)
+    const antes = await chat.locator("[data-mensaje]").count();
+    await decir("quiero llevar señal a las fincas de la vereda");
+    await page.waitForFunction((n) => document.querySelectorAll("[data-mensaje]").length > n + 1, antes, { timeout: 20000 });
+    await chat.locator("[data-mensaje]").last().getByText(/No estoy seguro de haber entendido/).waitFor({ timeout: 20000 });
+    const nuevos = await chat.locator("[data-mensaje]").allInnerTexts();
+    afirmar(!nuevos.slice(antes).some((x) => /17,3 km|Con la IA local entendí/.test(x)), `La guardia dejó pasar una cifra inventada: ${nuevos.slice(antes).join(" | ").slice(0, 300)}`);
+    // Una pregunta que no está en el cerebro: responde con los datos del simulador
+    await decir("¿qué tan lejos llega una antena de 12 metros?");
+    await chat.locator("[data-mensaje]").filter({ hasText: /La red tiene \d+ gateways? y \d+ repetidor/ }).first().waitFor({ timeout: 20000 });
+    await foto("conversacion");
+  },
+  {
+    sembrar: true,
+    preparar: async (page) => {
+      await page.addInitScript(() => {
+        // Un modelo de mentira: responde según el pedido (con el estado del simulador a la vista)
+        window.__melkiIALocalDePrueba = {
+          completar: async (mensajes) => {
+            const u = mensajes[mensajes.length - 1].content;
+            const pedido = u.split("PEDIDO: ")[1] ?? "";
+            const estado = { gateways: Number(u.match(/"gateways":(\d+)/)?.[1] ?? 0), repetidores: Number(u.match(/"repetidores":(\d+)/)?.[1] ?? 0) };
+            await new Promise((ok) => setTimeout(ok, 300));
+            if (/tres millas/.test(pedido)) return JSON.stringify({ ordenes: ["ármame una red de 3 millas a la redonda de aquí"], respuesta: "Le armo la red." });
+            if (/fincas/.test(pedido)) return JSON.stringify({ ordenes: ["ármame una red de 17,3 km a la redonda de aquí"], respuesta: "Le armo una red de 17,3 km." });
+            return JSON.stringify({ ordenes: [], respuesta: `La red tiene ${estado.gateways} ${estado.gateways === 1 ? "gateway" : "gateways"} y ${estado.repetidores} ${estado.repetidores === 1 ? "repetidor" : "repetidores"}.` });
+          },
+        };
+      });
+    },
+  },
+);
+
 
 let fallos = 0;
 for (const r of resultados) {

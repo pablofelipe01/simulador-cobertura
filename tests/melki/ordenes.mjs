@@ -33,6 +33,11 @@ export { pedidoRecorrido } from "./src/lib/negocio/recorrido-red";
 export { SesionLive, mensajeSetup, motivoCierre, cierreRecuperable, aBase64, deBase64, pcmDeBytes, bytesDePcm, MODELO_IA_DEFECTO } from "./src/components/melki/ia-live";
 export { aPcm16k } from "./src/components/melki/audio-ia";
 export { HERRAMIENTAS_IA, instruccionesMelki, estadoParaIA } from "./src/components/melki/herramientas-ia";
+export { medidasEnCifras, circuloEnTexto, presupuestoEnTexto, usuariosEnTexto, textoDistancia, distancia } from "./src/components/melki/medidas";
+export { numeroDePalabras } from "./src/components/melki/numeros";
+export { leerPensamiento, cifrasInventadas, mensajesPensar, numerosDe, CATALOGO_ORDENES, ESQUEMA_PENSAR } from "./src/components/melki/pensar";
+export { MODELOS_LOCALES, MODELO_LOCAL_DEFECTO, leerPreferenciaIALocal, textoError } from "./src/components/melki/ia-local";
+export { analizarRed, textoAnalisis, capacidadPara, repetidoresEnPresupuesto, costoRepetidorInstalado, costoGatewayInstalado } from "./src/lib/radio/analista";
 `;
 const tmp = mkdtempSync(path.join(os.tmpdir(), "melki-"));
 const archivo = path.join(tmp, "melki.mjs");
@@ -754,6 +759,128 @@ function crearApi(antenas) {
   api.resultadoFalso = { ...api.resultadoFalso, mejor: new Float32Array(3600).fill(10) };
   const corto = await m.ejecutarOrden({ ...d, maxRepetidores: 3 }, api).luego;
   caso("Si no llega, lo dice y ofrece más repetidores, torres más altas y ver un hueco", /^Llegué al/.test(corto.texto) && corto.acciones.some((a) => /hasta 60 repetidores/.test(a.texto)) && corto.acciones.some((a) => /torres de 20 m/.test(a.texto)) && corto.acciones.some((a) => a.orden?.tipo === "ir"));
+
+  // v14: medidas en km, millas, yardas, pies y cuadras; la gente, el presupuesto y el análisis del ingeniero
+  {
+    const radio = (o) => (o?.area?.areaM2 ? Math.sqrt(o.area.areaM2 / Math.PI) : 0);
+    const millas = orden("ármame una red de 5 millas a la redonda del gateway");
+    caso("v14: «5 millas a la redonda» → círculo de 8,05 km de radio, dicho con su conversión", millas?.tipo === "disenar" && millas.area.forma === "circulo" && cerca(radio(millas), 8046.72, 0.5) && /5 millas \(8,05 km\)/.test(millas.area.medida ?? "") && millas.area.etiqueta === "radio de 5 millas (8,05 km)", JSON.stringify(millas?.area).slice(0, 220));
+    const palabras = orden("hazme una red de cinco millas a la redonda");
+    caso("v14: «cinco millas» en palabras", palabras?.tipo === "disenar" && cerca(radio(palabras), 8046.72, 0.5));
+    const ymedio = orden("una red de un kilómetro y medio a la redonda del gateway");
+    caso("v14: «un kilómetro y medio a la redonda» → 1,5 km", ymedio?.tipo === "disenar" && cerca(radio(ymedio), 1500, 0.5), JSON.stringify(ymedio?.area).slice(0, 120));
+    const yardas = orden("cubre 800 yardas a la redonda del gateway");
+    caso("v14: «800 yardas a la redonda» → 731,5 m", yardas?.tipo === "disenar" && cerca(radio(yardas), 731.52, 0.5));
+    const pies = orden("cubre en un radio de 3000 pies alrededor del gateway");
+    caso("v14: «un radio de 3000 pies» → 914,4 m", pies?.tipo === "disenar" && cerca(radio(pies), 914.4, 0.5));
+    const nauticas = orden("ármame una malla de 2 millas náuticas de radio");
+    caso("v14: millas náuticas (1.852 m)", nauticas?.tipo === "disenar" && cerca(radio(nauticas), 3704, 0.5));
+    const cuadras = orden("una red de 10 cuadras a la redonda");
+    caso("v14: «10 cuadras a la redonda» → 1 km (una cuadra ≈ 100 m)", cuadras?.tipo === "disenar" && cerca(radio(cuadras), 1000, 0.5));
+    const diametro = orden("cubre un círculo de 10 km de diámetro alrededor del gateway");
+    caso("v14: «10 km de diámetro» → radio de 5 km", diametro?.tipo === "disenar" && cerca(radio(diametro), 5000, 0.5) && /diámetro/.test(diametro.area.medida ?? ""));
+    const rectMi = orden("cubre un área de 2 x 1 millas");
+    caso("v14: «2 × 1 millas» → rectángulo de 3,22 × 1,61 km", rectMi?.area?.forma === "rectangulo" && cerca(rectMi.area.anchoM, 3218.688, 0.5) && cerca(rectMi.area.altoM, 1609.344, 0.5));
+    const ladoMi = orden("diseña una red en un cuadrado de 2 millas de lado");
+    caso("v14: «un cuadrado de 2 millas de lado»", ladoMi?.area?.forma === "cuadrado" && cerca(ladoMi.area.anchoM, 3218.688, 0.5));
+    const mi2 = orden("cubre 2 millas cuadradas alrededor del gateway");
+    caso("v14: «2 millas cuadradas» → 5,18 km² en círculo (no en cuadrado)", mi2?.area?.forma === "circulo" && cerca(mi2.area.areaM2, 5179976.22, 1) && /2 millas cuadradas \(5,18 km²\)/.test(mi2.area.medida ?? ""), JSON.stringify(mi2?.area).slice(0, 160));
+    const lugarMi = orden("ármame una red de 5 millas a la redonda de Villavicencio");
+    caso("v14: «… a la redonda de Villavicencio» → centrada en el municipio", lugarMi?.tipo === "disenar" && lugarMi.area.centro?.tipo === "coord" && cerca(lugarMi.area.centro.coord.lat, 4.14) && /Villavicencio/.test(lugarMi.area.centro.nombre ?? ""), JSON.stringify(lugarMi?.area?.centro));
+    const nodoCentro = orden("cubre 2 km a la redonda del Repetidor 1");
+    caso("v14: «2 km a la redonda del Repetidor 1» → centrada en ese repetidor", nodoCentro?.area?.centro?.tipo === "coord" && cerca(nodoCentro.area.centro.coord.lat, 4.25) && cerca(nodoCentro.area.centro.coord.lon, -73.3), JSON.stringify(nodoCentro?.area?.centro));
+    const suelta = orden("ármame una red de 4 km en Villavicencio");
+    caso("v14: «una red de 4 km» → se toma como radio y lo dice", suelta?.tipo === "disenar" && cerca(radio(suelta), 4000, 0.5) && /tomé los 4 km como radio/.test(suelta.area.medida ?? ""), JSON.stringify(suelta?.area).slice(0, 200));
+    const pideTam = m.ejecutarOrden(orden("hazme una red sostenible"), api);
+    const respTam = m.interpretarOrden("en Villavicencio, 3 millas", api, pideTam.pendiente);
+    caso("v14: a «¿dónde y de qué tamaño?» basta «en Villavicencio, 3 millas» (a la redonda)", respTam?.tipo === "disenar" && respTam.sostenible && cerca(radio(respTam), 4828.032, 0.5) && cerca(respTam.area.centro.coord.lat, 4.14), JSON.stringify(respTam?.area).slice(0, 200));
+    const relMi = orden("agrega un repetidor a 2 millas al norte del gateway");
+    caso("v14: «a 2 millas al norte del gateway» → 3,22 km", relMi?.tipo === "pieza" && cerca(relMi.coord.lat, 4.2 + 3218.688 / 110580, 0.002), JSON.stringify(relMi));
+    const extras = orden("ármame una red para 400 familias en 3 km a la redonda del gateway con un presupuesto de 80 millones aunque cueste más");
+    caso("v14: la gente, el presupuesto y «aunque cueste más»", extras?.usuarios?.n === 400 && extras.usuarios.quienes === "familias" && extras.presupuesto?.cop === 80e6 && extras.aCualquierCosto === true, JSON.stringify({ u: extras?.usuarios, p: extras?.presupuesto, c: extras?.aCualquierCosto }));
+    caso("v14: números en palabras pegados a una unidad (los nombres de lugares no se tocan)", m.medidasEnCifras("Tres Esquinas con dos mil metros y noventa y cinco por ciento") === "Tres Esquinas con 2000 metros y 95 por ciento" && m.medidasEnCifras("media milla") === "0.5 milla" && m.medidasEnCifras("dos y media millas") === "2.5 millas" && m.numeroDePalabras("doscientos cincuenta") === 250, m.medidasEnCifras("Tres Esquinas con dos mil metros y noventa y cinco por ciento"));
+    caso("v14: presupuesto en dólares (a la TRM) y «12 m» no es plata", m.presupuestoEnTexto("presupuesto de usd 25.000")?.cop === 25000 * 3158 && m.presupuestoEnTexto("torres de 12 m con un presupuesto de 100 millones")?.cop === 1e8 && m.presupuestoEnTexto("que no pase de 1,2 mil millones")?.cop === 1.2e9);
+    caso("v14: «250 personas alrededor de cada repetidor» no es la gente de la red", m.usuariosEnTexto("pon 250 personas alrededor de cada repetidor") === null && m.usuariosEnTexto("para 1.200 usuarios")?.n === 1200);
+    const zonaMi = orden("pon 250 personas a media milla a la redonda de cada repetidor");
+    caso("v14: zonas de popularidad en millas («media milla a la redonda»)", zonaMi?.tipo === "zonas" && cerca(zonaMi.pedido.radioKm, 0.8047, 0.001), JSON.stringify(zonaMi?.pedido));
+
+    // El analista (sin mapa): veredicto, capacidad, presupuesto y recomendaciones acotadas
+    const baseA = { areaKm2: 100, metaPct: 95, coberturaPct: 96, clases: "señal media o mejor", respaldo: false, gateways: 1, repetidores: 5, nuevos: { gateways: 1, repetidores: 5 }, alturaM: 6, enlacesDb: [35, 40, 33, 31, 45], maxSaltos: 2, limiteSaltos: 3, sinRuta: 0, criticos: 1, podados: 1, frenado: null, economica: { repetidores: 3, coberturaPct: 91 }, aporteMin: { nombre: "Repetidor 5", pct: 0.8 }, usuarios: { n: 400, quienes: "familias" }, presupuestoCop: null, sf: 11, logistica: 1.3, departamento: "Meta", terreno: "sabana" };
+    const a1 = m.analizarRed(baseA);
+    caso("v14: analista — red óptima: 400 familias piden 3 radios (2 de más) y la opción económica va primero", a1.veredicto === "optima" && a1.radiosExtra === 2 && a1.capacidad.radios === 3 && a1.recomendaciones[0].id === "economica" && a1.referencia?.repetidores === 1 && /^Análisis de Melki: red óptima\./.test(m.textoAnalisis(a1)[0]), JSON.stringify({ v: a1.veredicto, r: a1.radiosExtra, rec: a1.recomendaciones.map((x) => x.id) }));
+    const a2 = m.analizarRed({ ...baseA, presupuestoCop: 10e6 });
+    caso("v14: analista — se pasa del presupuesto: insuficiente y dice cuánto alcanza", a2.veredicto === "insuficiente" && a2.recomendaciones.some((x) => x.id === "presupuesto") && a2.hallazgos.some((h) => /^Presupuesto: lo nuevo cuesta/.test(h)));
+    const a3 = m.analizarRed({ ...baseA, usuarios: { n: 1000, quienes: "usuarios" } });
+    caso("v14: analista — 1.000 usuarios piden 7 radios: un sitio de gateway más (solo por capacidad)", a3.veredicto === "insuficiente" && a3.capacidad.sitios === 2 && a3.recomendaciones.some((x) => x.id === "sitio"));
+    const a4 = m.analizarRed({ ...baseA, enlacesDb: [25, 40], usuarios: null });
+    caso("v14: analista — un enlace débil deja la red con reservas y propone afirmarlo", a4.veredicto === "reservas" && a4.recomendaciones.some((x) => x.id === "enlaces"));
+    const a5 = m.analizarRed({ ...baseA, coberturaPct: 93, frenado: { minPct: 0.3, mejorPct: 0.12 }, usuarios: null });
+    caso("v14: analista — frenó: insuficiente para lo pedido y ofrece seguir sin el freno", a5.veredicto === "insuficiente" && a5.recomendaciones.some((x) => x.id === "meta") && a5.hallazgos.some((h) => /^Freno de rendimiento/.test(h)));
+    caso("v14: presupuesto → repetidores que caben (el gateway primero)", m.repetidoresEnPresupuesto(m.costoGatewayInstalado(1) - 1, true) === null && m.repetidoresEnPresupuesto(m.costoGatewayInstalado(1) + 2.5 * m.costoRepetidorInstalado(1), true) === 2);
+
+    // Ejecutar: la etiqueta sin repetir el área, el análisis y la opción económica
+    const apiE = crearApi([base("r9", "Repetidor 9", 5.5, -72.5)]);
+    apiE.disenoFalso = {
+      nodos: [
+        { id: "diseno-gateway", pieza: "gateway", lat: 4.2, lon: -73.37, sueloM: 300, desdeId: null, enlaceDb: null, saltos: 0, coberturaPct: 60 },
+        { id: "diseno-1", pieza: "repetidor", lat: 4.22, lon: -73.35, sueloM: 300, desdeId: "diseno-gateway", enlaceDb: 41, saltos: 1, coberturaPct: 80, aportePct: 6 },
+        { id: "diseno-2", pieza: "repetidor", lat: 4.18, lon: -73.39, sueloM: 300, desdeId: "diseno-gateway", enlaceDb: 38, saltos: 1, coberturaPct: 92, aportePct: 4 },
+        { id: "diseno-4", pieza: "repetidor", lat: 4.21, lon: -73.4, sueloM: 300, desdeId: "diseno-gateway", enlaceDb: 35, saltos: 1, coberturaPct: 96, aportePct: 1.2 },
+      ],
+      areaKm2: 113, muestras: 1000, inicialPct: 0, coberturaPct: 96, objetivoPct: 95, margenObjetivoDb: 30, respaldo: false, alcanzado: true, motivo: null, huecos: [],
+      podados: 1, frenado: null, economica: { quitar: ["diseno-4"], repetidores: 2, coberturaPct: 92.4 },
+    };
+    apiE.resultadoFalso = api.resultadoFalso;
+    apiE.centro = { lat: 4.2, lon: -73.37 };
+    const oE = m.interpretarOrden("ármame una red de 6 km a la redonda de aquí", apiE, null);
+    const rE = m.ejecutarOrden(oE, apiE);
+    const medirE = apiE.llamadas.find((l) => l[0] === "medir");
+    caso("v14: el área objetivo se llama por su radio (sin repetir el área, que la escribe la regla)", medirE?.[1].nombre === "Área objetivo · radio de 6 km" && /^Diseño la malla para 11\.310 ha \(113,1 km²\), un círculo de 6 km de radio, /.test(rE.texto), `${medirE?.[1].nombre} | ${rE.texto.slice(0, 110)}`);
+    const fE = await rE.luego;
+    caso("v14: el resultado trae el análisis de Melki (veredicto, optimización, costo y recomendaciones)", /\nAnálisis de Melki: red /.test(fE.texto) && /• Optimización: quité 1 repetidor que sobraba/.test(fE.texto) && /• Costo: inversión de unos \$/.test(fE.texto) && /Si quiere ahorrar: con 2 repetidores \(en vez de 3\)/.test(fE.texto), fE.texto.split("Análisis")[1]?.slice(0, 260).replace(/\n/g, " "));
+    const econ = fE.acciones.find((a) => a.orden?.tipo === "usar-economica");
+    caso("v14: ofrece «Usar la opción económica» con el repetidor puesto que sobra", econ && /^Usar la opción económica \(2 repetidores, ≈ 92,4 %\)$/.test(econ.texto) && econ.orden.ids.length === 1, econ?.texto);
+    const rEcon = m.ejecutarOrden(econ.orden, apiE);
+    const fEcon = await rEcon.luego;
+    caso("v14: usar la opción económica quita ese repetidor y mide de nuevo el área", apiE.llamadas.some((l) => l[0] === "eliminar-varias" && l[1].length === 1) && /^Opción económica lista: la malla cubre el [\d,]+ % del área/.test(fEcon.texto), fEcon.texto.slice(0, 120));
+    apiE.disenoFalso = { ...apiE.disenoFalso, alcanzado: false, coberturaPct: 93, motivo: "Me detuve para no sobredimensionar la red: …", frenado: { minPct: 0.3, mejorPct: 0.1 }, economica: null };
+    apiE.resultadoFalso = { ...apiE.resultadoFalso, mejor: new Float32Array(3600).fill(10) };
+    const fF = await m.ejecutarOrden(oE, apiE).luego;
+    caso("v14: si frenó, ofrece seguir hasta la meta aunque cueste más (sin el freno)", fF.acciones.some((a) => a.texto === "Seguir hasta la meta aunque cueste más" && a.orden?.aCualquierCosto === true && a.orden.reemplazar));
+    // Sin gateway en la zona: el presupuesto paga primero el sitio del gateway
+    const apiP = crearApi([]);
+    apiP.centro = { lat: 4.2, lon: -73.37 };
+    apiP.disenoFalso = { ...apiE.disenoFalso, alcanzado: true, coberturaPct: 96, motivo: null, frenado: null };
+    apiP.resultadoFalso = api.resultadoFalso;
+    const caro = m.interpretarOrden("ármame una red de 3 km a la redonda de aquí con un presupuesto de 5 millones", apiP, null);
+    const rCaro = m.ejecutarOrden(caro, apiP);
+    caso("v14: con un presupuesto que no alcanza ni para el gateway, lo dice antes de dibujar", /^Con \$5 M no alcanza ni para el sitio del gateway/.test(rCaro.texto) && !rCaro.luego, rCaro.texto.slice(0, 100));
+    const conPlata = m.ejecutarOrden(m.interpretarOrden("ármame una red de 3 km a la redonda de aquí con un presupuesto de 120 millones", apiP, null), apiP);
+    const pedidoPlata = apiP.llamadas.find((l) => l[0] === "disenar")?.[1];
+    caso("v14: el presupuesto limita los repetidores del diseño y lleva el freno de rendimiento", /Con \$120 M de presupuesto caben hasta \d+ repetidores además del gateway/.test(conPlata.texto) && pedidoPlata?.maxRepetidores < 60 && pedidoPlata?.eficiencia?.minPct === 0.3, `${conPlata.texto.slice(120, 400)} | ${JSON.stringify({ max: pedidoPlata?.maxRepetidores, ef: pedidoPlata?.eficiencia })}`);
+    await conPlata.luego;
+
+    // La IA local: lo que devuelve el modelo, la guardia de cifras y el catálogo que entiende el intérprete
+    const pens = m.leerPensamiento('Claro: {"ordenes": ["ármame una red de 3 millas a la redonda de Villavicencio"], "respuesta": "Armo la red."} listo');
+    caso("v14: IA local — lee el JSON del modelo aunque venga con texto alrededor", pens?.ordenes.length === 1 && pens.respuesta === "Armo la red." && m.leerPensamiento("no sé") === null);
+    const fuentesIA = ["conecta las veredas a unas tres millas de Villavicencio", JSON.stringify({ cobertura: { conServicioPct: 95.6 }, costos: { inversionTotal: 248300000 } })];
+    caso(
+      "v14: IA local — la guardia deja las cifras dichas o del estado (redondeadas, en millones) y caza las inventadas",
+      m.cifrasInventadas("la red cubre el 95,6 % y cuesta unos 248 millones", fuentesIA).length === 0 && m.cifrasInventadas("cubre el 96 % con 248,3 millones", fuentesIA).length === 0 && m.cifrasInventadas("ármame una red de 8 km a la redonda", fuentesIA).join() === "8" && m.cifrasInventadas("ármame una red de 3 millas a la redonda de Villavicencio", fuentesIA).join() === "3",
+      JSON.stringify([m.cifrasInventadas("ármame una red de 8 km a la redonda", fuentesIA), m.cifrasInventadas("cubre el 96 % con 248,3 millones", fuentesIA)]),
+    );
+    // (con una red que tiene Repetidor 2 y 3; el recorrido y deshacer los maneja la conversación, no el intérprete)
+    const apiCat = crearApi([base("g", "Gateway", 4.2, -73.37, { pasarela: true }), base("r1", "Repetidor 1", 4.25, -73.3), base("r2", "Repetidor 2", 4.22, -73.33), base("r3", "Repetidor 3", 4.18, -73.4)]);
+    const noEntiende = m.CATALOGO_ORDENES.filter((x) => !/explícame la red|deshaz/.test(x) && !m.interpretarOrden(x, apiCat, null));
+    caso("v14: IA local — el intérprete entiende cada orden del catálogo que imita el modelo", noEntiende.length === 0, noEntiende.join(" | "));
+    const msgs = m.mensajesPensar("necesito conectar las veredas", { red: { gateways: 1 } });
+    caso("v14: IA local — instrucciones con el catálogo, el estado y el pedido", msgs.length === 2 && /CATÁLOGO:/.test(msgs[0].content) && /^ESTADO: \{"red":\{"gateways":1\}\}\nPEDIDO: necesito conectar las veredas$/.test(msgs[1].content));
+    caso("v14: IA local — Qwen3.5 4B por defecto (2B liviano y 9B máximo), apagada si no se ha activado", m.MODELO_LOCAL_DEFECTO === "Qwen3.5-4B-q4f16_1-MLC" && m.MODELOS_LOCALES.length === 3 && m.leerPreferenciaIALocal().activa === false);
+    caso(
+      "v14: IA local — los errores de la biblioteca, en palabras (sin internet, sin espacio, la tarjeta gráfica; la huella tal cual)",
+      /revise la conexión a internet/.test(m.textoError(new Error("Failed to store https://huggingface.co/x with error: TypeError: Failed to fetch"))) && /espacio suficiente/.test(m.textoError(new Error("QuotaExceededError"))) && /tarjeta gráfica no pudo/.test(m.textoError(new Error("Device was lost"))) && /huella SHA-256/.test(m.textoError(new Error("El motor de la IA local que llegó no es el esperado (su huella SHA-256 no coincide): no lo uso."))),
+    );
+  }
 
   // Varias órdenes en un mensaje
   const pasos = m.dividirEnPasos("pon el gateway en 4.2, -73.37, luego un repetidor a 10 km al este, una persona a 3 km al sur del repetidor y envía un mensaje desde la persona");

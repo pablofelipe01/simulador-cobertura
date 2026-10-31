@@ -110,6 +110,44 @@ ve la simulación detrás) y un botón para que hable en voz alta o no, a mano.
   entiende un pedido de acción, lo dice y da ejemplos. A «¿cómo dejo la mayor cobertura posible?» responde con
   recomendaciones para el escenario (sitios altos, línea de vista, malla con respaldo, gateway al centro, SF y antena) y
   el botón para proponer la opción de máxima cobertura; «dame la mayor cobertura posible» la calcula de una vez
+- **Melki analista** (v14): diseña como un ingeniero de radio, con el relieve real y el documento de Trama.
+  - **Medidas**: km, metros, millas (terrestres y náuticas), yardas, pies y cuadras (≈ 100 m); hectáreas, km², m²,
+    acres, fanegadas, millas, yardas y pies cuadrados; también en palabras pegadas a la unidad («cinco millas», «un
+    kilómetro y medio», «media milla»). «ármame una red de 5 millas a la redonda de Cumaral», «en un radio de 800
+    yardas», «10 km de diámetro», «2 × 1 millas», «un cuadrado de 3 km de lado», «2 km a la redonda del Repetidor 1»,
+    «a la redonda de aquí» (lo que se ve), «agrega un repetidor a 2 millas al norte del gateway». Melki dice lo que
+    entendió con su conversión («un círculo de 5 millas (8,05 km) de radio»)
+  - **El área objetivo se llama por lo pedido** («Área objetivo · radio de 5 millas (8,05 km)») y la regla escribe su
+    tamaño una sola vez (ya no «20.106 ha (201,1 km²) · 201,06 km² (20.106 ha)»)
+  - **Poda**: al final quita los repetidores que sobran (su área ya la cubren otros) sin bajar de la meta ni debilitar
+    ningún enlace (cada nodo conserva su clase de enlace, firme o mínimo, dentro del límite de saltos); lo verifica en
+    las celdas del mapa de la red podada
+  - **Freno de rendimiento**: no siembra un repetidor que cubra casi nada (menos del 0,3 % del área; 0,1 % con metas de
+    98 % o más y 0,05 % desde 99,5 %), salvo un relevo que abra un sitio que sí rinda: la red no crece sin medida por
+    huecos diminutos. Si frena antes de la meta lo explica y ofrece «Seguir hasta la meta aunque cueste más» (o se le
+    dice «aunque cueste más» desde el principio)
+  - **La gente y el presupuesto**: «para 400 familias» revisa la capacidad del gateway (una radio por cada 150 con
+    SF11, 280 con SF10 o 500 con SF9; hasta 4 por sitio) y solo propone otro gateway si la capacidad lo exige; «con un
+    presupuesto de 80 millones» (o «USD 25.000», a la TRM del cotizador) limita los repetidores a lo que alcanza
+    después del sitio del gateway y de las radios, y si no alcanza ni para el gateway lo dice antes de dibujar
+  - **Veredicto y recomendaciones acotadas**: al terminar da el análisis (red óptima, viable con reservas o
+    insuficiente para lo pedido): la optimización, los enlaces y los saltos, el costo (inversión, por km² cubierto y por
+    usuario; operación al mes), la capacidad, el presupuesto y la referencia del documento de Trama (celdas hexagonales
+    con el alcance supuesto por terreno). Las recomendaciones traen su costo y no se salen de la meta, del presupuesto
+    ni de torres de 30 m: la opción económica (menos repetidores por unos puntos de cobertura, con su ahorro y el
+    botón «Usar la opción económica», que los quita y mide de nuevo el área), radios de más en el gateway, afirmar los
+    enlaces débiles o seguir sin el freno
+- **IA local en este equipo** (v14; Ajustes de voz → «IA local en este equipo (Qwen3.5)»): un modelo de lenguaje
+  abierto (Qwen3.5 de Alibaba; 4B recomendado, 2B liviano o 9B máximo) que corre en la tarjeta gráfica con WebGPU, sin
+  instalar nada en el sistema y sin mandar nada a internet. Se descarga una sola vez (unos 2,4 GB el recomendado), solo
+  cuando la persona pulsa «Descargar y activar», y queda guardado en el navegador para usarlo sin internet; «Borrar el
+  modelo de este equipo» libera el espacio. Melki la usa cuando su intérprete y su cerebro no entienden un pedido: el
+  modelo lo pasa a órdenes que el intérprete verifica antes de hacerlas (con «Con la IA local entendí: «…»») o da una
+  respuesta corta con los datos del simulador. Una guardia revisa las cifras: una orden con un número que la persona no
+  dijo (ni es el nombre de un nodo) no se hace, y una respuesta con una cifra que no está en el simulador no se muestra.
+  El diseño, los costos y la cobertura siempre salen del cálculo, nunca del modelo. Claude (Fable u Opus) no se puede
+  instalar en un equipo (solo funciona por internet) y DeepSeek V4 no cabe en un PC; sus versiones locales quedaron
+  atrás frente a Qwen3.5
 - **Pitch del modelo de negocio** (v13; botón «Pitch» de la barra de arriba, o «Melki, preséntame el modelo de
   negocio»): el robot de Melki, en vectores, vuela por el mapa de capítulo en capítulo (la cámara lo sigue), señala cada
   antena con un anillo que late y muestra el guion y las cifras en una tarjeta (lo narra en voz alta solo con la voz
@@ -432,7 +470,12 @@ src/
                             la presentación que recorre el mapa); el recorrido de la red (recorrido-red.tsx: el robot
                             punto por punto; nube-mapa.tsx: la nube que sale de un punto, de vidrio o holográfica, y
                             escribe al ritmo de lectura o a la par de la voz, con su barra de tiempo y su botón de la
-                            voz); llegada.tsx (Melki llega volando a un lugar y, con la voz encendida, lo dice)
+                            voz); llegada.tsx (Melki llega volando a un lugar y, con la voz encendida, lo dice);
+                            medidas.ts (v14: km, millas, yardas, pies, cuadras y áreas; el círculo, el rectángulo y el
+                            cuadrado de un pedido; los números en palabras junto a la unidad; el presupuesto y la gente);
+                            la IA local (ia-local.ts: el modelo Qwen3.5 en la tarjeta gráfica con WebGPU, su descarga y
+                            su estado; ia-local-trabajador.ts: el trabajador con WebLLM y la caché en IndexedDB;
+                            pensar.ts: el catálogo de órdenes, el JSON del modelo y la guardia de cifras)
   datos/geo/                límites, nombres y ríos de referencia (ver LEEME.md: fuentes y licencias)
   lib/autoria.ts            autoría, titulares y licencia (los usan «Acerca del simulador», Melki y la versión HTML)
   lib/geo/                  consultas locales: municipio de un punto, búsqueda de lugares, contorno de un municipio
@@ -446,7 +489,9 @@ src/
                             poblar (personas al azar), trama (equipos,
                             precios, capacidad y dimensionamiento del documento de Trama),
                             alcance-plano (alcance de referencia), area (áreas objetivo y cobertura dentro de ellas),
-                            diseno (diseño de la malla por área), ajuste (ajuste inteligente cobertura–costo),
+                            diseno (diseño de la malla por área, con la poda, el freno y la opción económica),
+                            analista (v14: veredicto, costo por km², capacidad, presupuesto y recomendaciones acotadas),
+                            ajuste (ajuste inteligente cobertura–costo),
                             costos (costo interno para comparar, con los precios de Trama);
                             components/simulador/animacion-malla.ts (flujo animado), panel-ajuste.tsx (propuesta),
                             panel-capacidad.tsx (Poblar personas y Prueba de carga), panel-estres.tsx (Zonas de
@@ -457,7 +502,8 @@ src/
   lib/negocio/recorrido-red.ts  el recorrido de la red: las paradas (cómo calcula el simulador, qué se instaló, por
                             qué ahí, su papel, lo que falta, los refuerzos para el 100 % y el 99,9 % y por qué
                             quedó así), su resumen escrito y los pedidos por voz o por escrito
-  lib/config.ts             fuentes de mapas y relieve (reemplazables con variables de entorno)
+  lib/config.ts             fuentes de mapas y relieve, del dictado privado y de la IA local (reemplazables con
+                            variables de entorno)
 scripts/                    versión HTML, paquetes de avance y compresor ZIP
 tests/                      pruebas del motor, de Melki y de extremo a extremo (con un servidor de voz en vivo de
                             mentira que habla el protocolo de Gemini Live: tests/e2e/ia-de-mentira.mjs)
@@ -618,6 +664,18 @@ la cobertura útil, la confiable (≥ 37 dB), la que tiene servicio (≥ 20 dB) 
   del mapa, así que la meta estimada coincide con la simulada. «Respaldo» exige dos nodos con ese margen en cada
   punto. Al terminar Melki pone los nodos, simula y cuenta la cobertura real por clase; si no llega, ofrece más
   repetidores, torres más altas o ver un punto sin cobertura.
+- **Poda, freno y opción económica** (v14, `diseno.ts`): con las celdas del mapa y el margen de cada nodo en cada
+  celda, quita uno a uno los repetidores del diseño que menos aportan mientras la cobertura no baje del piso (la meta
+  más una holgura pequeña, o lo que se tenía si no se cumplía) y ningún nodo quede peor enlazado (clase 2: ruta con
+  enlaces ≥ 30 dB dentro del límite de saltos; clase 1: ≥ 22 dB; 0: sin ruta). Después verifica en la cuadrícula del
+  mapa de la red podada y devuelve los últimos si hiciera falta. La opción económica sigue quitando sin aplicarlo hasta
+  perder unos 5 puntos (sin bajar de 85 %). El freno (`eficiencia.minPct`) no pone un repetidor cuya área nueva sea
+  menor que ese % del área, salvo un relevo hacia un sitio que cubra al menos el doble. En el relieve de lomas de las
+  pruebas, la red del 99,9 % pasa de 26 a 25 repetidores y la opción económica deja 9 con el 95,4 %.
+- **Analista** (v14, `src/lib/radio/analista.ts`): veredicto, hallazgos y recomendaciones de la red del área con los
+  precios de Trama (`costoRedTrama`), la capacidad por frecuencia (`SF_TRAMA`), las 4 radios y 19 celdas por sitio
+  (`CAPACIDAD_TRAMA`) y el alcance por terreno del departamento (`TERRENOS_TRAMA`). El presupuesto cuenta lo nuevo (lo
+  que ya estaba en el área no se vuelve a comprar).
 - **Todo un municipio** (v12.7): «ármame una red media estable que cubra todo el municipio de Barranca de Upía, Meta»
   diseña sobre el contorno del municipio (de los límites del DANE empaquetados; Barranca de Upía: 40.919 ha); también
   «la zona norte, sur, oriental u occidental del municipio» (la mitad desde el centro de su caja; o un cuarto, como
@@ -688,6 +746,9 @@ Ninguna es obligatoria: sin ellas se usan las fuentes abiertas por defecto. Los 
 | `NEXT_PUBLIC_DICTADO_MOTOR_URL`    | Carpeta del motor ONNX Runtime (`*.asyncify.mjs/.wasm`)    |
 | `NEXT_PUBLIC_DICTADO_MODELOS_URL`  | Servidor de modelos (por defecto Hugging Face)             |
 | `NEXT_PUBLIC_DICTADO_MODELO`       | Modelo Whisper del dictado privado (`Xenova/whisper-base`) |
+| `NEXT_PUBLIC_IA_LOCAL_LIBRERIA_URL` | Biblioteca WebLLM de la IA local (por defecto `@mlc-ai/web-llm@0.2.86` en jsDelivr) |
+| `NEXT_PUBLIC_IA_LOCAL_LIBRERIA_SHA256` | Huella SHA-256 de esa biblioteca (con la de por defecto ya va fijada) |
+| `NEXT_PUBLIC_IA_LOCAL_MODELO`      | Modelo de la IA local por defecto (`Qwen3.5-4B-q4f16_1-MLC`) |
 
 ## Privacidad
 
@@ -702,6 +763,12 @@ solo arranca si el micrófono ya está permitido (nunca pide permiso por sorpres
 deja el micrófono abierto para medir el nivel de la voz dentro de la página (ese audio no se guarda ni se envía) y se ve con el oído verde en el botón
 de Melki; «Melki, apaga el micrófono» lo apaga del todo y en Ajustes de voz se quita («Escucharme siempre en esta
 página»). «Melki, deja de escuchar» o la X de la barra lo devuelven al reposo.
+
+**IA local (opcional, v14):** no sale nada del equipo. Con la opción encendida y el modelo descargado, el pedido y un
+resumen del escenario se le pasan al modelo dentro del navegador (en la tarjeta gráfica); solo se descargan, una vez,
+la biblioteca WebLLM (fijada en su versión y verificada con su huella SHA-256), el programa del modelo y sus pesos
+abiertos (de Hugging Face), que quedan en el almacenamiento del navegador (IndexedDB) hasta «Borrar el modelo de este
+equipo». Sin la opción no se descarga nada.
 
 **Conversar con IA (opcional, v13):** solo con la opción encendida y una clave puesta. Mientras la conversación está
 abierta, el audio del micrófono, un resumen del escenario (piezas, posiciones, cobertura y costos) y los resultados de

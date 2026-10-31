@@ -617,6 +617,7 @@ export function Simulador() {
       repetidor: nuevaPieza("repetidor", 0, 0, lista, o.alturaRepetidorM),
       parametros: e.escenario.parametros,
       maxRepetidores: o.maxRepetidores,
+      eficiencia: o.eficiencia ?? null,
     };
     return m.disenar(pedidoDiseno, f).catch(() => null);
   }, []);

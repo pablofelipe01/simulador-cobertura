@@ -39,6 +39,18 @@ export const CONFIG = {
     modelos: process.env.NEXT_PUBLIC_DICTADO_MODELOS_URL || "https://huggingface.co/",
     modelo: process.env.NEXT_PUBLIC_DICTADO_MODELO || "Xenova/whisper-base",
   },
+  /**
+   * IA local de Melki (un modelo de lenguaje abierto que corre en la tarjeta gráfica del equipo con WebGPU, sin
+   * instalar nada y sin mandar nada a internet). Se descarga una vez, cuando la persona la activa, y queda guardada en
+   * el navegador. La biblioteca (WebLLM) va fijada en su versión y se verifica con su huella SHA-256 antes de usarla.
+   */
+  iaLocal: {
+    libreria: process.env.NEXT_PUBLIC_IA_LOCAL_LIBRERIA_URL || "https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.86/lib/index.js",
+    /** Huella de la biblioteca de arriba; con otra URL, la suya (vacía = sin verificar). */
+    huella: process.env.NEXT_PUBLIC_IA_LOCAL_LIBRERIA_URL ? process.env.NEXT_PUBLIC_IA_LOCAL_LIBRERIA_SHA256 || "" : "ae2642e73a4a9896c21efb3a067c4666446f8b49cbe2012f4b576f5d83d5f206",
+    /** Modelo por defecto (uno de MODELOS_LOCALES); vacío = el recomendado. */
+    modelo: process.env.NEXT_PUBLIC_IA_LOCAL_MODELO || "",
+  },
   atribucion: {
     esri: "Imágenes y referencias © Esri, Maxar, Earthstar Geographics y la comunidad de usuarios SIG",
     osm: "© colaboradores de OpenStreetMap",
