@@ -1419,7 +1419,7 @@ await flujo(
     await hud.waitFor();
     await esperarEstado(/^esperando$/);
     await callado();
-    afirmar(/Hola, señor\. Bienvenido\./.test(await dicho()) && /presto a seguir sus órdenes/.test(await dicho()), `No saludó en voz alta: ${await dicho()}`);
+    afirmar(/(?:Hola|Buenos días|Buenas tardes|Buenas noches), señor\. Bienvenido\./.test(await dicho()) && /presto a seguir sus órdenes/.test(await dicho()), `No saludó en voz alta: ${await dicho()}`);
     afirmar((await page.getByRole("button", { name: "Apagar el Asistente Melki" }).first().getAttribute("aria-pressed")) === "true", "El botón de la barra debería quedar encendido");
     await panel.waitFor({ state: "hidden", timeout: 5000 });
     await resultados.waitFor({ state: "hidden", timeout: 5000 });
@@ -1436,7 +1436,7 @@ await flujo(
 
     // Solo su nombre: contesta como un mayordomo y queda atento (también «Hello Melky», como lo escribe el reconocimiento)
     await decir("Hola Melki");
-    await page.waitForFunction(() => /Hola, mi señor\. Le escucho; estoy atento y presto a seguir sus órdenes\./.test(window.__voz.dicho.join(" ")), null, { timeout: 15000 });
+    await page.waitForFunction(() => /(?:Hola, mi señor|(?:Buenos días|Buenas tardes|Buenas noches), señor)\. Le escucho; estoy atento y presto a seguir sus órdenes\./.test(window.__voz.dicho.join(" ")), null, { timeout: 15000 });
     await esperarEstado(/^atento$/);
     await callado();
     await decir("Hello Melky");
@@ -1446,7 +1446,7 @@ await flujo(
     // Con su nombre y los números en palabras: lo hace, lo dice y, con el panel oculto, ofrece mostrar las herramientas
     await decir("Hola Melki, inscribe un nodo antena en cuatro punto dos cinco, menos setenta y tres punto tres cero");
     await page.waitForFunction((n) => document.querySelectorAll("[data-tour=lista-antenas] > li").length === n + 1, nodos, { timeout: 20000 });
-    await page.waitForFunction(() => /inscribí el nodo antena/.test(window.__voz.dicho.join(" ")), null, { timeout: 20000 });
+    await page.waitForFunction(() => /[Ii]nscribí el nodo antena/.test(window.__voz.dicho.join(" ")), null, { timeout: 20000 });
     await page.waitForFunction(() => /le muestro el panel de herramientas, señor\?/.test(window.__voz.dicho.join(" ")), null, { timeout: 20000 });
     await foto("orden-por-voz");
     await sinProgreso();
@@ -1615,7 +1615,7 @@ await flujo(
     // Solo su nombre: se activa y contesta como un mayordomo
     await decir("Hola Melki");
     await hud.waitFor({ timeout: 10000 });
-    await page.waitForFunction(() => /Hola, mi señor\. Le escucho; estoy atento y presto a seguir sus órdenes/.test(window.__voz.dicho.join(" ")), null, { timeout: 15000 });
+    await page.waitForFunction(() => /(?:Hola, mi señor|(?:Buenos días|Buenas tardes|Buenas noches), señor)\. Le escucho; estoy atento y presto a seguir sus órdenes/.test(window.__voz.dicho.join(" ")), null, { timeout: 15000 });
     await callado();
     await foto("llamado");
     await hud.getByRole("button", { name: "Apagar el Asistente Melki" }).first().click();
@@ -1665,7 +1665,7 @@ await flujo(
     await foto("lugar");
     // Si duda, pregunta; «sí» elige la primera opción
     await decir("Melki, ubícame en barranco vía");
-    await oido(/No estoy seguro de haber entendido barranco via\. ¿Se refiere a Barranca de Upía \(Meta\)/);
+    await oido(/No estoy seguro de haber entendido barranco via\. ¿Se refiere a Barranca de Upía(, Meta| \(Meta\))/);
     await callado();
     await decir("Melki, sí");
     await page.waitForFunction(() => window.__voz.dicho.filter((x) => /Esto es Barranca de Upía/.test(x)).length >= 2, null, { timeout: 20000 });
@@ -1676,11 +1676,11 @@ await flujo(
     await callado();
     // «¿Dónde estamos?»: el municipio que se ve
     await decir("Melki, ¿dónde estamos?");
-    await oido(/Estamos viendo Barranca de Upía \(Meta\)/);
+    await oido(/Estamos viendo Barranca de Upía(, Meta| \(Meta\))/);
     await callado();
     // La red de todo el municipio de la conversación (sin repetir el nombre)
     await decir("Melki, ármame una red que cubra todo el municipio");
-    await oido(/Diseño la malla para 409\d\d hectáreas \(409 coma \d kilómetros cuadrados\) en todo el municipio de Barranca de Upía \(Meta\)/);
+    await oido(/Diseño la malla para 409\d\d hectáreas( \(409 coma \d kilómetros cuadrados\))? en todo el municipio de Barranca de Upía(, Meta| \(Meta\))/);
     const chat = page.getByRole("region", { name: "Conversación con Melki" });
     await page.getByRole("button", { name: /^Abrir a Melki/ }).click();
     await chat.getByText(/^(Listo: la malla cubre|Llegué al)/).waitFor({ timeout: 420000 });
@@ -1964,7 +1964,7 @@ await flujo(
     afirmar(!(await page.evaluate(() => window.__voz.dicho.join(" "))).includes("Bienvenido"), "Sin un toque el navegador no deja hablar");
     await foto("sin-tocar");
     await oirme.click();
-    await page.waitForFunction(() => /Hola, señor\. Bienvenido\./.test(window.__voz.dicho.join(" ")), null, { timeout: 15000 });
+    await page.waitForFunction(() => /(?:Hola|Buenos días|Buenas tardes|Buenas noches), señor\. Bienvenido\./.test(window.__voz.dicho.join(" ")), null, { timeout: 15000 });
     await oirme.waitFor({ state: "detached", timeout: 5000 });
     afirmar(await escuchaTrasHablar(page), "Debería quedar escuchando");
     // Ajustes del asistente: trato, voz, activarse al abrir y el permiso del micrófono
@@ -1974,9 +1974,14 @@ await flujo(
     await ajustes.getByRole("radio", { name: "Señora" }).click();
     afirmar((await ajustes.getByRole("switch", { name: /Activarme al abrir el simulador/ }).getAttribute("aria-checked")) === "true", "El interruptor de activarse al abrir debería estar encendido");
     afirmar(/Micrófono permitido/.test(await ajustes.innerText()), "Debería decir que el micrófono está permitido");
+    // Tipo de voz: de fábrica, masculina serena (al estilo de JARVIS); se puede escoger la femenina
+    const tipoVoz = ajustes.getByRole("radiogroup", { name: "Tipo de voz" });
+    afirmar((await tipoVoz.getByRole("radio", { name: /Masculina serena/ }).getAttribute("aria-checked")) === "true", "La voz de fábrica debería ser la masculina serena");
+    await tipoVoz.getByRole("radio", { name: /Femenina/ }).click();
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem("simulador-cobertura-melki-v1") ?? "{}")?.manos?.genero === "femenina", null, { timeout: 5000 });
     // (exacto: en los mismos ajustes está «Probar conexión» de la IA)
     await ajustes.getByRole("button", { name: "Probar", exact: true }).click();
-    await page.waitForFunction(() => /Hola, señora\. Así sonará mi voz/.test(window.__voz.dicho.join(" ")), null, { timeout: 15000 });
+    await page.waitForFunction(() => /(?:Hola|Buenos días|Buenas tardes|Buenas noches), señora\. Así sonará mi voz/.test(window.__voz.dicho.join(" ")), null, { timeout: 15000 });
     await foto("ajustes");
     await page.getByRole("button", { name: "Apagar el Asistente Melki" }).first().click();
     await hud.waitFor({ state: "detached" });
@@ -2894,6 +2899,11 @@ await flujo(
     // Lo que está fuera del simulador
     await decir("hazme el café por favor");
     await ultimo().getByText(/fui diseñado y creado para cumplir órdenes y procesos dentro de este simulador/).waitFor({ timeout: 10000 });
+    // v16: un formato que no exporta lo dice (antes descargaba un KMZ) y la hora, como una persona
+    await decir("exporta un pdf");
+    await ultimo().getByText(/Ese formato no lo exporto/).waitFor({ timeout: 10000 });
+    await decir("¿qué hora es?");
+    await ultimo().getByText(/(Son las|Es la) \d{1,2}:\d{2} de la/).waitFor({ timeout: 10000 });
     // Por un nodo del mapa con otras palabras: cómo está ese nodo (las reglas daban qué es un gateway en general)
     await decir("dime cómo anda el gateway");
     await ultimo().locator("[data-nota-modelo]").getByText("Entendí: «¿cómo está el Ejemplo?».").waitFor({ timeout: 15000 });
