@@ -535,13 +535,20 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
     botón "Usar la opción económica" quita los repetidores que menos
     aportan y mide de nuevo la cobertura del área.
  w) IA local (opcional): en la conversación con Melki toque el engranaje
-    (Ajustes de voz) y busque "IA local en este equipo (Qwen3.5)".
+    (Ajustes de voz) y busque "IA local en este equipo (Qwen3)".
     Encienda "Usar la IA local" y toque "Descargar y activar" (unos
-    2,4 GB, solo la primera vez; necesita Chrome o Edge con tarjeta
+    2,3 GB, solo la primera vez; necesita Chrome o Edge con tarjeta
     gráfica). Corre en este equipo, sin internet y sin enviar nada.
     Melki la usa cuando no entiende un pedido: lo pasa a órdenes que
     verifica antes de hacerlas. "Borrar el modelo de este equipo" libera
     el espacio.
+    Si la tarjeta gráfica deja de responder mientras la usa (puede
+    pasar en equipos con gráficos integrados), Melki apaga la IA local
+    solo, se lo dice y no lo vuelve a intentar. Cierre el navegador por
+    completo y vuelva a abrirlo para que recupere la tarjeta gráfica;
+    sus diseños no se pierden. Si la quiere volver a probar, actívela
+    con el navegador recién abierto y, si se repite, use el modelo
+    liviano o déjela apagada.
 
 
 3. BUENO SABER
