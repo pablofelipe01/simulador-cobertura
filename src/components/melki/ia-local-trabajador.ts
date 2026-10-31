@@ -4,10 +4,11 @@
 // 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
 
 // Código del trabajador (Web Worker clásico, que importa la biblioteca con import()) de la IA local de Melki: un
-// modelo de lenguaje abierto (Qwen3.5) que corre en la tarjeta gráfica del equipo con WebGPU, por medio de WebLLM.
+// modelo de lenguaje abierto (Qwen3) que corre en la tarjeta gráfica del equipo con WebGPU, por medio de WebLLM.
 // Nada sale del equipo: solo se descargan, una vez, la biblioteca (verificada con su huella SHA-256), el programa del
 // modelo y sus pesos, que quedan guardados en el navegador (IndexedDB) para usarlos sin internet. Se guarda como texto
-// para crearlo desde un Blob (funciona igual en el servidor y en la versión HTML).
+// para crearlo desde un Blob (funciona igual en el servidor y en la versión HTML). Si la tarjeta gráfica deja de
+// responder (WebLLM lo avisa por la consola: «Device was lost…»), el motor se suelta y la página se entera.
 
 export const CODIGO_IA_LOCAL = String.raw`
 const BASE = "melki-ia-local-v1";
@@ -16,6 +17,26 @@ let W = null;
 let motor = null;
 let modeloCargado = null;
 let cargando = null;
+let perdida = null;
+
+// La tarjeta gráfica se bloqueó o se reinició: WebLLM descarga el modelo por su cuenta y lo dice por la consola
+const TARJETA = /device (was )?lost|DEVICE_HUNG|DEVICE_REMOVED|DEVICE_RESET|DXGI_ERROR|Model not loaded|has already been disposed|Instance\.dispose|GPU (process|device) (was )?(lost|crashed)|context lost/i;
+function tarjetaPerdida(texto) {
+  if (perdida) return;
+  perdida = String(texto).slice(0, 300);
+  motor = null;
+  modeloCargado = null;
+  self.postMessage({ tipo: "perdida", mensaje: perdida });
+}
+// Antes de importar la biblioteca: su registro (loglevel) toma console.error al cargarse
+const errorDeConsola = console.error.bind(console);
+console.error = function () {
+  try {
+    const t = Array.prototype.map.call(arguments, (x) => String(x && x.message ? x.message : x)).join(" ");
+    if (TARJETA.test(t)) tarjetaPerdida(t);
+  } catch (e) {}
+  return errorDeConsola.apply(null, arguments);
+};
 
 function abrir() {
   return new Promise((ok, mal) => {
@@ -62,7 +83,7 @@ async function biblioteca(m) {
   if (W) return W;
   let lib = await leer("lib:" + m.libreria);
   if (!lib) {
-    self.postMessage({ tipo: "progreso", fase: "biblioteca", avance: 0, texto: "Descargando el motor de la IA local (unos 7 MB)…" });
+    self.postMessage({ tipo: "progreso", fase: "biblioteca", avance: 0, texto: "Descargando el motor de la IA local (unos 6,5 MB)…" });
     const r = await fetch(m.libreria);
     if (!r.ok) throw new Error("No pude descargar el motor de la IA local (" + r.status + "). Revise la conexión a internet.");
     lib = await r.blob();
@@ -77,12 +98,19 @@ async function biblioteca(m) {
   return W;
 }
 
+// La caché en IndexedDB (useIndexedDBCache en WebLLM 0.2.82; cacheBackend desde la 0.2.85)
 function configuracion() {
-  return Object.assign({}, W.prebuiltAppConfig, { cacheBackend: "indexeddb" });
+  return Object.assign({}, W.prebuiltAppConfig, { useIndexedDBCache: true, cacheBackend: "indexeddb" });
 }
 
 async function cargar(m) {
   await biblioteca(m);
+  // Tras una tarjeta perdida, la persona la activó de nuevo: un motor nuevo (el anterior quedó sin dispositivo)
+  if (perdida) {
+    perdida = null;
+    motor = null;
+    modeloCargado = null;
+  }
   if (motor && modeloCargado === m.modelo) {
     self.postMessage({ tipo: "listo", modelo: m.modelo });
     return;
@@ -101,6 +129,7 @@ async function cargar(m) {
 
 async function completar(m) {
   if (cargando) await cargando;
+  if (perdida) throw new Error("Device was lost: " + perdida);
   if (!motor) throw new Error("La IA local no está lista.");
   const pedido = {
     messages: m.mensajes,
@@ -149,7 +178,15 @@ self.onmessage = async (e) => {
       self.postMessage({ tipo: "descargada", id: m.id });
     }
   } catch (err) {
-    self.postMessage({ tipo: "error", id: m.id, mensaje: String((err && err.message) || err) });
+    const mensaje = String((err && err.message) || err);
+    const gpu = TARJETA.test(mensaje);
+    if (gpu) {
+      // Sin modelo en la tarjeta: el motor no sirve más (se crea otro si la persona la activa de nuevo)
+      if (!perdida) perdida = mensaje.slice(0, 300);
+      motor = null;
+      modeloCargado = null;
+    }
+    self.postMessage({ tipo: "error", id: m.id, mensaje, gpu });
   }
 };
 `;

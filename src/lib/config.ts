@@ -43,11 +43,13 @@ export const CONFIG = {
    * IA local de Melki (un modelo de lenguaje abierto que corre en la tarjeta gráfica del equipo con WebGPU, sin
    * instalar nada y sin mandar nada a internet). Se descarga una vez, cuando la persona la activa, y queda guardada en
    * el navegador. La biblioteca (WebLLM) va fijada en su versión y se verifica con su huella SHA-256 antes de usarla.
+   * Va la 0.2.82: desde la 0.2.83, WebLLM bloquea la tarjeta gráfica en equipos con Windows y gráficos AMD integrados
+   * (DXGI_ERROR_DEVICE_HUNG con pedidos largos; mlc-ai/web-llm#844), y así pasó con la 0.2.86 en una prueba real.
    */
   iaLocal: {
-    libreria: process.env.NEXT_PUBLIC_IA_LOCAL_LIBRERIA_URL || "https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.86/lib/index.js",
+    libreria: process.env.NEXT_PUBLIC_IA_LOCAL_LIBRERIA_URL || "https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.82/lib/index.js",
     /** Huella de la biblioteca de arriba; con otra URL, la suya (vacía = sin verificar). */
-    huella: process.env.NEXT_PUBLIC_IA_LOCAL_LIBRERIA_URL ? process.env.NEXT_PUBLIC_IA_LOCAL_LIBRERIA_SHA256 || "" : "ae2642e73a4a9896c21efb3a067c4666446f8b49cbe2012f4b576f5d83d5f206",
+    huella: process.env.NEXT_PUBLIC_IA_LOCAL_LIBRERIA_URL ? process.env.NEXT_PUBLIC_IA_LOCAL_LIBRERIA_SHA256 || "" : "4c89beb3ed13946e6f1ca9376f33062b5c64765c26f3ddaba045df6a13dda858",
     /** Modelo por defecto (uno de MODELOS_LOCALES); vacío = el recomendado. */
     modelo: process.env.NEXT_PUBLIC_IA_LOCAL_MODELO || "",
   },
