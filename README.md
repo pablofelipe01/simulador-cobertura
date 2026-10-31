@@ -168,6 +168,23 @@ ve la simulación detrás) y un botón para que hable en voz alta o no, a mano.
   antena a 300 m de altura; «¿cómo está el Repetidor 3?» le cambiaba el rol; «una red de 2 km de diámetro» preguntaba
   por un municipio llamado «diámetro» y, con un lugar después, no lo encontraba; y un diseño «con un presupuesto de 80
   millones para 300 familias» se volvía el dimensionamiento sin mapa
+- **Voz humana, al estilo de JARVIS** (v16; Ajustes de voz → «Tipo de voz»): con la voz encendida (de fábrica sigue
+  apagada: Melki responde por escrito) habla con la voz masculina más natural del equipo —en Edge, Gonzalo de
+  Colombia, neuronal; «Femenina» elige Salomé— y dice las respuestas como lo haría una persona: lo esencial (el
+  detalle queda escrito), las cifras redondeadas («45 %», «10 km», «82 millones de pesos»), sin leer coordenadas («en
+  ese punto») ni paréntesis técnicos, con el trato elegido y sin repetir siempre «Listo» («Hecho, señor.», «Muy bien,
+  señor.»). Saluda según la hora («Buenas tardes, señor»), contesta «buenos días» como una persona, dice la hora y la
+  fecha, habla más despacio o más rápido si se lo piden («habla más despacio») y repite lo último («repite lo que
+  dijiste»). Mientras habla, la conversación lo muestra con su onda; mientras piensa algo que tarda (un cálculo, la IA
+  local, varios pasos), con tres puntos
+- **Lo que faltaba** (v16, al probar frases reales): «que todos los repetidores queden a 15 m»; «Cámbiale el nombre al
+  gateway por Hacienda Central» (antes llevaba el mapa al gateway por la palabra «Central»); «mete 500 personas»
+  (antes ponía una sola); «…y mira si aguanta»; «súbelo» sin decir cuánto (pregunta la altura, con la de ahora y un
+  botón); un formato que no exporta (PDF o imagen: lo dice y ofrece KMZ, CSV o JSON, en vez de descargar un KMZ);
+  «dame el presupuesto detallado». Conocimiento nuevo: qué es LoRa, la lluvia (a 915 MHz casi no atenúa) y la energía
+  solar de noche (pilas del repetidor y kit solar del gateway). Si las reglas solo encontraron una palabra suelta y el
+  Modelo Melki está muy seguro de otra cosa («¿cuánto cuesta cada repetidor?», «¿cuántas personas quedaron sin
+  señal?», «muévete el Repetidor 3…»), gana el modelo; los saludos y las gracias no se cambian
 - **IA local en este equipo** (v14; Ajustes de voz → «IA local en este equipo (Qwen3)»): un modelo de lenguaje
   abierto (Qwen3 de Alibaba; 4B recomendado, 1.7B liviano u 8B máximo) que corre en la tarjeta gráfica con WebGPU, sin
   instalar nada en el sistema y sin mandar nada a internet. Se descarga una sola vez (unos 2,3 GB el recomendado), solo
@@ -505,6 +522,8 @@ src/
                             hora, micrófono abierto y nivel de la voz);
                             Asistente Melki (manos-libres.ts: llamado, controles, frases de mayordomo, resumen para la
                             voz y eco; numeros.ts: números en palabras → cifras; hud-voz.tsx: la barra del asistente);
+                            la voz humana (habla.ts: cómo dice Melki las respuestas, al estilo de JARVIS; voz.ts: la
+                            voz más natural del tipo escogido, masculina o femenina, y su ritmo);
                             conversar con IA (ia-live.ts: la conexión con Gemini Live y su reanudación; audio-ia.ts: el
                             micrófono a PCM de 16 kHz y la voz del modelo; herramientas-ia.ts: lo que la IA puede hacer
                             y quién es Melki para ella); el pitch (robot.tsx: el robot en vectores; presentacion.tsx:
