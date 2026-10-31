@@ -58,7 +58,10 @@ function interpretarPoblar(texto: string, tn: string, api: Api): Orden | null {
   if (/\b(quita\w*|borra\w*|elimina\w*|saca\w*|limpia\w*)\b/.test(tn) && /\b(pobladas?|poblacion|al azar|aleatori\w*|repartidas?)\b/.test(tn)) return { tipo: "quitar-pobladas" };
   const verbo = /\b(pobla\w*|puebla\w*|popula\w*|reparte\w*|repart\w*|distribu\w*|esparc\w*|riega\w*|regad\w*)\b/.test(tn);
   const azar = /\b(al azar|aleatori\w*|por (toda )?la (malla|red|zona)|por todo el area|regad\w*)\b/.test(tn) && /\b(pon\w*|mete\w*|agrega\w*|coloca\w*|crea\w*|genera\w*|simula\w*)\b/.test(tn);
-  if (!verbo && !azar) return null;
+  // «Mete 500 personas», «agrega 300 usuarios»: muchas personas a la vez (sin coordenada) es poblar, no una pieza
+  const muchas = tn.match(new RegExp(`\\b(?:pon\\w*|mete\\w*|agrega\\w*|anade\\w*|coloca\\w*|crea\\w*|genera\\w*|suma\\w*)\\b.*?\\b${NUM}\\s*${GENTE}`));
+  const varias = Boolean(muchas && numero(`${muchas[1]}${muchas[2] ? " mil" : ""}`) >= 5 && !/-?\d{1,2}[.,]\d+\s*,\s*-?\d{1,3}[.,]\d+/.test(texto));
+  if (!verbo && !azar && !varias) return null;
   // «poblar personas» sin decir cuántas: 250, como en el ejemplo del Inge
   const cantidad = tn.match(new RegExp(`${NUM}\\s*${GENTE}`)) ?? tn.match(new RegExp(`\\b(?:con|son|unas|unos|de)\\s+${NUM}\\b(?!\\s*(?:km|%|m\\b|metros|saltos))`));
   if (!cantidad && !/\b(personas?|usuari\w*|gente|billeteras?|habitantes?|familias?|zona|area|malla|red)\b/.test(tn)) return null;
@@ -315,7 +318,10 @@ function interpretarEstres(texto: string, tn: string): Orden | null {
     /\b(cada|por|el|un|del)\s+(repetidor|zona|antena|nodo)\b.*\b(aguant\w*|soport\w*|resist\w*|revient\w*|colaps\w*|capacidad|satur\w*)\b/.test(tn) ||
     /\b(aguant\w*|soport\w*|resist\w*)\b.*\b(cada|por) (repetidor|zona|antena|nodo)\b/.test(tn) ||
     /\bque tan (colapsad\w*|saturad\w*|cargad\w*|estresad\w*)\b/.test(tn) ||
-    /\bhasta (que|donde) punto\b.*\b(aguant\w*|estres\w*|carga|malla|red)\b/.test(tn);
+    /\bhasta (que|donde) punto\b.*\b(aguant\w*|estres\w*|carga|malla|red)\b/.test(tn) ||
+    // «…y mira si aguanta», «a ver si la red aguanta», «¿la red aguanta 500 personas?»
+    /^(y )?(mira|mirar|mire|ver|a ver|prueba|probar|pruebe|revisa|revisar|chequea) si (la red |la malla )?(aguanta|soporta|resiste)\b/.test(tn) ||
+    /\b(la red|la malla)\s+(aguanta|soporta|resiste)\s+(a\s+)?\d[\d.]*\s*(personas|usuarios|gente|familias|billeteras)\b/.test(tn);
   if (!pide) return null;
   if (/^(que|como|por que|para que)\s+(es|son|significa|quiere decir)\b/.test(tn)) return null;
   return { tipo: "estres", opciones: opcionesEstres(tn) };

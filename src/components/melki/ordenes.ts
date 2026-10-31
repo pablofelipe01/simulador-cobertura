@@ -1307,7 +1307,7 @@ function interpretarCosto(tn: string, antenas: Antena[]): Orden | null {
   if (!antenas.some((a) => a.activa)) return null;
   if (/\b(optimiz\w*|ajust\w*|reduc\w*|baj\w*|menor costo|menos costo|abarat\w*)\b/.test(tn)) return null;
   if (!/\b(cuanto (cuesta|vale|costaria|sale|saldria|valdria|necesito)|que (costo|precio|valor|inversion) tiene|cual es el (costo|precio|valor|presupuesto)|costo|presupuesto|inversion|precio)\b/.test(tn)) return null;
-  if (!/\b(red|malla|esto|todo|diseno|montaje|proyecto|obra|instalar\w*|montar\w*|construir\w*)\b/.test(tn)) return null;
+  if (!/\b(red|malla|esto|todo|diseno|montaje|proyecto|obra|instalar\w*|montar\w*|construir\w*|detallad\w*|desglos\w*|total|completo)\b/.test(tn)) return null;
   if (/\b(departamento|pais|colombia|por (persona|usuario)|de un repetidor|un gateway|una persona|cada repetidor|starlink)\b/.test(tn)) return null;
   return { tipo: "costo-red" };
 }
@@ -1334,7 +1334,7 @@ function interpretarLote(texto: string, tn: string, antenas: Antena[]): Orden | 
   const nombre = grupo === "menos-gateway" ? "todos los nodos menos el gateway" : `${/^(personas|gente|antenas|torres|piezas)$/.test(grupo) ? "todas las" : "todos los"} ${grupo === "gente" ? "personas" : grupo}`;
   if (/\b(borra\w*|elimina\w*|quita\w*|saca\w*|suprim\w*)\b/.test(tn) && !/\bpasarela\b/.test(tn)) return { tipo: "eliminar-varios", ids, descripcion: nombre };
   const alturaTxt = texto.match(/(\d{1,3}(?:[.,]\d+)?)\s*(?:m|mts?|metros?)\b/i);
-  if (alturaTxt && /\b(sube|subir|subelos|baja|bajar|bajalos|pon\w*|cambia\w*|deja\w*|altura)\b/.test(tn)) {
+  if (alturaTxt && /\b(sube|subir|subelos|baja|bajar|bajalos|pon\w*|cambia\w*|deja\w*|altura|queden|quede|quedan|esten|este|estan|ubica\w*|eleva\w*)\b/.test(tn)) {
     const h = Math.min(300, Math.max(0.5, num(alturaTxt[1])));
     return { tipo: "editar-varios", ids, cambios: { alturaM: h }, descripcion: `${nombre} quedan a ${fn(h)} m` };
   }
@@ -1716,9 +1716,9 @@ function interpretarOrdenBase(dicho: string, api: Api, pendiente: Pendiente, con
     if (/\b(elimina\w*|borra\w*|quita\w*|suprim\w*|saca\w*)\b/.test(tn) && !/\bpasarela\b/.test(tn)) return { tipo: "eliminar", id: nodo.id };
     if (/\b(duplic\w*|copia\w*|clona\w*)\b/.test(tn)) return { tipo: "duplicar", id: nodo.id };
     if (/^(selecciona\w*|elige|escoge|abre|muestrame|ver|enfoca\w*)\b/.test(tn) && !/\b(perfil|informe|senal|distancia)\b/.test(tn)) return { tipo: "seleccionar", id: nodo.id };
-    if (/\b(mueve|mover|muevela|muevelo|traslad\w*|reubic\w*|desplaz\w*|cambia la ubicacion|cambiar la ubicacion|cambia las coordenadas|cambiar las coordenadas)\b/.test(tn))
+    if (/\b(mueve|mover|muevela|muevelo|muevete|muevele|muevanlo|muevanla|traslad\w*|reubic\w*|desplaz\w*|cambia la ubicacion|cambiar la ubicacion|cambia las coordenadas|cambiar las coordenadas)\b/.test(tn))
       return { tipo: "mover", id: nodo.id, coord: coord ?? undefined };
-    const ren = texto.match(/(?:renombr\w*|cambi\w* (?:el )?nombre(?: de)?|ll[aá]mal[ao])\b.*?\b(?:a|por|como)\s+["“«]?([^"”»,.;]{2,40})["”»]?\s*$/i);
+    const ren = texto.match(/(?:renombr\w*|c[aá]mbi\w* (?:el )?nombre(?: de)?|ll[aá]mal[ao])\b.*?\b(?:a|por|como)\s+["“«]?([^"”»,.;]{2,40})["”»]?\s*$/i);
     if (ren) return { tipo: "renombrar", id: nodo.id, nombre: ren[1].trim() };
     if (/\b(como pasarela|sea (la )?pasarela|es la pasarela|hazla pasarela|hazlo pasarela|marca\w* .*pasarela|pon\w* .*pasarela)\b/.test(tn) && !/\b(quita|ya no|no es)\b/.test(tn))
       return { tipo: "editar", id: nodo.id, cambios: { pasarela: true }, descripcion: "ahora es pasarela" };
@@ -1784,6 +1784,19 @@ function interpretarOrdenBase(dicho: string, api: Api, pendiente: Pendiente, con
     if (pot && /\b(potencia|pon\w*|cambi\w*|sube|baja)\b/.test(tn)) return { tipo: "editar", id: nodo.id, cambios: { potenciaDbm: num(pot[1]), equipo: "personalizado" }, descripcion: `potencia ${f1(num(pot[1]))} dBm` };
     const gan = texto.match(/(\d{1,2}(?:[.,]\d+)?)\s*dbi\b/i);
     if (gan && /\b(ganancia|antena de|pon\w*|cambi\w*)\b/.test(tn)) return { tipo: "editar", id: nodo.id, cambios: { gananciaDbi: num(gan[1]), equipo: "personalizado" }, descripcion: `ganancia ${f1(num(gan[1]))} dBi` };
+    // «Súbelo», «el Repetidor 1 está muy bajito, súbelo»: sin la altura, la pregunta (con la de ahora y un ejemplo)
+    const sinNombre = tn.replace(new RegExp(`\\b${escRe(n(nodo.nombre))}\\b`, "g"), " ");
+    if (/\b(sube|subelo|subela|subele|eleva\w*|baja|bajalo|bajala|bajale)\b/.test(tn) && !/\d/.test(sinNombre) && !/\b(potencia|ganancia|volumen)\b/.test(tn)) {
+      const sube = /\b(sube|subelo|subela|subele|eleva\w*)\b/.test(tn);
+      const sugerida = sube ? Math.min(30, Math.max(6, Math.round(nodo.alturaM) + 6)) : Math.max(2, Math.round(nodo.alturaM) - 4);
+      const fem = /^(persona|antena|torre)\b/i.test(nodo.nombre);
+      const el = `${fem ? "la" : "el"} ${nodo.nombre}`;
+      return {
+        tipo: "aviso",
+        texto: `¿A qué altura ${sube ? "subo" : "bajo"} ${el}? Hoy está a ${fn(nodo.alturaM)} m. Dígame, por ejemplo, «${sube ? "sube" : "baja"} ${el} a ${sugerida} m».`,
+        acciones: [{ texto: `${sube ? "Subir" : "Bajar"}${fem ? "la" : "lo"} a ${sugerida} m`, accion: "orden", orden: { tipo: "editar", id: nodo.id, cambios: { alturaM: sugerida }, descripcion: `altura ${sugerida} m` } }],
+      };
+    }
   }
 
   // Inscribir un nodo nuevo
@@ -1881,6 +1894,17 @@ function interpretarOrdenBase(dicho: string, api: Api, pendiente: Pendiente, con
     if (/\b(kmz|kml|google earth)\b/.test(tn)) return { tipo: "exportar", formato: "kmz" };
     if (/\b(csv|excel)\b/.test(tn)) return { tipo: "exportar", formato: "csv" };
     if (/\b(json|escenario)\b/.test(tn)) return { tipo: "exportar", formato: "json" };
+    // Lo que no exporta: lo dice y ofrece lo que sí (sin descargar otra cosa por su cuenta)
+    if (/\b(pdf|word|docx|imagen|imagenes|png|jpg|jpeg|foto|captura|pantallazo|powerpoint|presentacion)\b/.test(tn))
+      return {
+        tipo: "aviso",
+        texto: "Ese formato no lo exporto. Le puedo dar el KMZ para Google Earth (la cobertura y los nodos), la tabla en CSV para Excel o el escenario completo en JSON para volver a abrirlo. Para un PDF, abra el KMZ en Google Earth o imprima la página del navegador (Ctrl + P).",
+        acciones: [
+          { texto: "KMZ (Google Earth)", accion: "orden", orden: { tipo: "exportar", formato: "kmz" } },
+          { texto: "CSV (Excel)", accion: "orden", orden: { tipo: "exportar", formato: "csv" } },
+          { texto: "Escenario (JSON)", accion: "orden", orden: { tipo: "exportar", formato: "json" } },
+        ],
+      };
   }
   if (coord) return { tipo: "coordenada-sola", coord };
   return null;
