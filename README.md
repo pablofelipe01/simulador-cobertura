@@ -137,17 +137,26 @@ ve la simulación detrás) y un botón para que hable en voz alta o no, a mano.
     ni de torres de 30 m: la opción económica (menos repetidores por unos puntos de cobertura, con su ahorro y el
     botón «Usar la opción económica», que los quita y mide de nuevo el área), radios de más en el gateway, afirmar los
     enlaces débiles o seguir sin el freno
-- **IA local en este equipo** (v14; Ajustes de voz → «IA local en este equipo (Qwen3.5)»): un modelo de lenguaje
-  abierto (Qwen3.5 de Alibaba; 4B recomendado, 2B liviano o 9B máximo) que corre en la tarjeta gráfica con WebGPU, sin
-  instalar nada en el sistema y sin mandar nada a internet. Se descarga una sola vez (unos 2,4 GB el recomendado), solo
+- **IA local en este equipo** (v14; Ajustes de voz → «IA local en este equipo (Qwen3)»): un modelo de lenguaje
+  abierto (Qwen3 de Alibaba; 4B recomendado, 1.7B liviano u 8B máximo) que corre en la tarjeta gráfica con WebGPU, sin
+  instalar nada en el sistema y sin mandar nada a internet. Se descarga una sola vez (unos 2,3 GB el recomendado), solo
   cuando la persona pulsa «Descargar y activar», y queda guardado en el navegador para usarlo sin internet; «Borrar el
   modelo de este equipo» libera el espacio. Melki la usa cuando su intérprete y su cerebro no entienden un pedido: el
   modelo lo pasa a órdenes que el intérprete verifica antes de hacerlas (con «Con la IA local entendí: «…»») o da una
   respuesta corta con los datos del simulador. Una guardia revisa las cifras: una orden con un número que la persona no
   dijo (ni es el nombre de un nodo) no se hace, y una respuesta con una cifra que no está en el simulador no se muestra.
   El diseño, los costos y la cobertura siempre salen del cálculo, nunca del modelo. Claude (Fable u Opus) no se puede
-  instalar en un equipo (solo funciona por internet) y DeepSeek V4 no cabe en un PC; sus versiones locales quedaron
-  atrás frente a Qwen3.5
+  instalar en un equipo (solo funciona por internet) y DeepSeek V4 no cabe en un PC; sus versiones locales razonan en
+  voz alta antes de responder, y en una tarjeta integrada eso las hace mucho más lentas
+- **Red de seguridad de la tarjeta gráfica** (v14.1): en la prueba real de la v14 (Windows, Chrome y gráficos AMD
+  integrados), WebLLM 0.2.86 con Qwen3.5 bloqueó la tarjeta gráfica al pensar el primer pedido (DXGI_ERROR_DEVICE_HUNG;
+  Chrome se queda sin WebGPU hasta reiniciarlo). Es un fallo de WebLLM desde la 0.2.83 (mlc-ai/web-llm#844), así que la
+  IA local usa WebLLM 0.2.82 (fijada por su huella) con Qwen3. Además, si la tarjeta deja de responder (WebLLM lo avisa
+  por la consola del trabajador, o el error trae «Device was lost», DXGI_ERROR_DEVICE_HUNG/REMOVED o «Model not
+  loaded»), la IA local se apaga sola, Melki lo dice («ciérrelo por completo y vuelva a abrirlo; sus diseños no se
+  pierden»), queda anotado en el navegador (con un aviso en Ajustes) y no lo vuelve a intentar hasta que la persona la
+  active. Antes de cargar el modelo comprueba que la tarjeta entregue un dispositivo, una respuesta que tarde más de 90 s
+  se suelta y el pedido al modelo es más corto (18 órdenes de ejemplo y el estado en corto: menos de 2.900 caracteres)
 - **Pitch del modelo de negocio** (v13; botón «Pitch» de la barra de arriba, o «Melki, preséntame el modelo de
   negocio»): el robot de Melki, en vectores, vuela por el mapa de capítulo en capítulo (la cámara lo sigue), señala cada
   antena con un anillo que late y muestra el guion y las cifras en una tarjeta (lo narra en voz alta solo con la voz
@@ -473,9 +482,10 @@ src/
                             voz); llegada.tsx (Melki llega volando a un lugar y, con la voz encendida, lo dice);
                             medidas.ts (v14: km, millas, yardas, pies, cuadras y áreas; el círculo, el rectángulo y el
                             cuadrado de un pedido; los números en palabras junto a la unidad; el presupuesto y la gente);
-                            la IA local (ia-local.ts: el modelo Qwen3.5 en la tarjeta gráfica con WebGPU, su descarga y
-                            su estado; ia-local-trabajador.ts: el trabajador con WebLLM y la caché en IndexedDB;
-                            pensar.ts: el catálogo de órdenes, el JSON del modelo y la guardia de cifras)
+                            la IA local (ia-local.ts: el modelo Qwen3 en la tarjeta gráfica con WebGPU, su descarga, su
+                            estado y la red de seguridad de la tarjeta; ia-local-trabajador.ts: el trabajador con WebLLM
+                            0.2.82 y la caché en IndexedDB; pensar.ts: el catálogo de órdenes, el estado en corto, el
+                            JSON del modelo y la guardia de cifras)
   datos/geo/                límites, nombres y ríos de referencia (ver LEEME.md: fuentes y licencias)
   lib/autoria.ts            autoría, titulares y licencia (los usan «Acerca del simulador», Melki y la versión HTML)
   lib/geo/                  consultas locales: municipio de un punto, búsqueda de lugares, contorno de un municipio
@@ -746,9 +756,9 @@ Ninguna es obligatoria: sin ellas se usan las fuentes abiertas por defecto. Los 
 | `NEXT_PUBLIC_DICTADO_MOTOR_URL`    | Carpeta del motor ONNX Runtime (`*.asyncify.mjs/.wasm`)    |
 | `NEXT_PUBLIC_DICTADO_MODELOS_URL`  | Servidor de modelos (por defecto Hugging Face)             |
 | `NEXT_PUBLIC_DICTADO_MODELO`       | Modelo Whisper del dictado privado (`Xenova/whisper-base`) |
-| `NEXT_PUBLIC_IA_LOCAL_LIBRERIA_URL` | Biblioteca WebLLM de la IA local (por defecto `@mlc-ai/web-llm@0.2.86` en jsDelivr) |
+| `NEXT_PUBLIC_IA_LOCAL_LIBRERIA_URL` | Biblioteca WebLLM de la IA local (por defecto `@mlc-ai/web-llm@0.2.82` en jsDelivr; desde la 0.2.83 bloquea la tarjeta gráfica en Windows con gráficos AMD integrados) |
 | `NEXT_PUBLIC_IA_LOCAL_LIBRERIA_SHA256` | Huella SHA-256 de esa biblioteca (con la de por defecto ya va fijada) |
-| `NEXT_PUBLIC_IA_LOCAL_MODELO`      | Modelo de la IA local por defecto (`Qwen3.5-4B-q4f16_1-MLC`) |
+| `NEXT_PUBLIC_IA_LOCAL_MODELO`      | Modelo de la IA local por defecto (`Qwen3-4B-q4f16_1-MLC`; también `Qwen3-1.7B-…` y `Qwen3-8B-…`) |
 
 ## Privacidad
 
