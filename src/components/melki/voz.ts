@@ -4,28 +4,55 @@
 // 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
 
 // Voz de Melki con la síntesis de voz del navegador (sin servicios externos). Elige sola la voz más natural en
-// español que tenga el equipo (las neuronales «Natural» de Edge, como Salomé de Colombia o Dalia de México, o las de
-// Google) y habla un poco más pausado, para que no suene robótica. En Ajustes de voz se puede escoger otra.
+// español que tenga el equipo (las neuronales «Natural» de Edge, como Gonzalo o Salomé de Colombia, o las de Google),
+// del tipo escogido en Ajustes (masculina serena, como un mayordomo al estilo de JARVIS, o femenina), y habla un poco
+// más pausado, para que no suene robótica. En Ajustes de voz también se puede escoger una voz en particular.
 
 export function vozDisponible(): boolean {
   return typeof window !== "undefined" && "speechSynthesis" in window;
 }
 
-/** Nombres de voces femeninas en español, de tono suave (Edge, Windows, Chrome, macOS, Android). */
-const SUAVES = /\b(salom[eé]|dalia|paloma|elvira|ximena|camila|larissa|beatriz|valentina|renata|catalina|marina|lupe|paulina|m[oó]nica|helena|laura|sabina|luc[ií]a|elena|soledad|vera|sof[ií]a|isabela|abril|irene|triana|estrella)\b/i;
+/** Nombres de voces femeninas en español (Edge, Windows, Chrome, macOS, Android). */
+const FEMENINAS = /\b(salom[eé]|dalia|paloma|elvira|ximena|camila|larissa|beatriz|valentina|renata|catalina|marina|lupe|paulina|m[oó]nica|helena|laura|sabina|luc[ií]a|elena|soledad|vera|sof[ií]a|isabela|abril|irene|triana|estrella|karla|mar[ií]a|andrea|tania|yolanda|margarita|teresa|belkys|ramona|lorena|emilia|carlota|nuria|esperanza|ir[eé]n)\b/i;
+/** Nombres de voces masculinas en español (las neuronales de Edge por país, las de Windows, macOS y Android). */
+const MASCULINAS = /\b(gonzalo|jorge|[aá]lvaro|alonso|tom[aá]s|lorenzo|alex|sebasti[aá]n|luis|marcelo|mateo|mario|juan|roberto|emilio|andr[eé]s|carlos|federico|v[ií]ctor|rodrigo|javier|manuel|pablo|ra[uú]l|diego|enrique|jaime|antonio|arnau|dar[ií]o|gerardo|liberto|sa[uú]l|yago|rafael|cristian|eduardo|gabriel|hugo|ignacio|joaqu[ií]n|santiago|mart[ií]n|cecilio|pedro|teo)\b/i;
 
-/** Qué tan bien suena una voz (más es mejor); las voces en otro idioma no cuentan. */
-export function puntajeVoz(v: { name: string; lang: string; localService?: boolean }): number {
+/** El tipo de voz: masculina serena (de fábrica, al estilo de JARVIS) o femenina. */
+export type GeneroVoz = "masculina" | "femenina";
+
+/** Si el nombre de la voz dice si es masculina o femenina (las de Google no lo dicen). */
+export function generoDeVoz(nombre: string): GeneroVoz | null {
+  return MASCULINAS.test(nombre) ? "masculina" : FEMENINAS.test(nombre) ? "femenina" : null;
+}
+
+let generoPreferido: GeneroVoz = "masculina";
+/** El tipo de voz escogido en Ajustes (de fábrica, masculina). */
+export function fijarGeneroVoz(g: GeneroVoz) {
+  generoPreferido = g;
+}
+
+/**
+ * Qué tan bien suena una voz (más es mejor); las voces en otro idioma no cuentan. Primero lo natural (una voz neuronal
+ * del otro tipo gana a una robótica del tipo escogido), luego el tipo de voz y luego el acento (Colombia primero).
+ */
+export function puntajeVoz(v: { name: string; lang: string; localService?: boolean }, genero: GeneroVoz = generoPreferido): number {
   const lang = v.lang.replace("_", "-").toLowerCase();
   if (!lang.startsWith("es")) return -1;
   let p = 10;
   if (/natural|neural|online|premium|enhanced|mejorada/i.test(v.name)) p += 60;
   else if (/google/i.test(v.name)) p += 35;
   if (/espeak|robot|compact/i.test(v.name)) p -= 50;
-  if (SUAVES.test(v.name)) p += 12;
+  if (generoDeVoz(v.name) === genero) p += 20;
   p += lang === "es-co" ? 16 : lang === "es-419" || lang === "es-mx" || lang === "es-us" ? 11 : lang === "es-es" ? 6 : 3;
   return p;
 }
+
+let ritmo = 1;
+/** El ritmo de la voz que pidió la persona («habla más despacio»: 0,85; «más rápido»: 1,15; normal: 1). */
+export function fijarRitmoVoz(f: number) {
+  ritmo = Math.min(1.3, Math.max(0.75, f));
+}
+export const ritmoVoz = () => ritmo;
 
 let preferida: string | null = null;
 /** Voz escogida en Ajustes (por nombre); `null` vuelve a la elección automática. */
@@ -204,7 +231,7 @@ export function hablar(texto: string, alTerminar?: () => void, alFallar?: (error
     const natural = voz ? puntajeVoz(voz) >= 70 : false;
     if (voz) u.voice = voz;
     u.lang = voz?.lang ?? "es-CO";
-    u.rate = natural ? 0.98 : 0.94;
+    u.rate = (natural ? 0.98 : 0.94) * ritmo;
     u.pitch = 1;
     u.volume = 1;
     let listo = false;

@@ -14,17 +14,18 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const entrada = `
 export { interpretarOrden, ejecutarOrden, extraerCoordenadas, extraerVariasCoordenadas, dividirEnPasos, leerNumero, areaEnTexto } from "./src/components/melki/ordenes";
-export { responder, noEntendiOrden, respuestaNoEntendi } from "./src/components/melki/cerebro";
+export { responder, noEntendiOrden, respuestaNoEntendi, horaHablada } from "./src/components/melki/cerebro";
 export { areaM2, poligonoCirculo, recortarPoligono } from "./src/lib/radio/area";
 export { claveFonetica, parecidoFonetico } from "./src/lib/geo/fonetica";
 export { normalizarDictado, componerTexto, quitarRepeticiones, corregirPalabras, clavePalabras, quitarTartamudeo, loNuevo, iniciarDictado } from "./src/components/melki/dictado";
 export { TOURS } from "./src/components/melki/tours";
 export { pedidoDeTour } from "./src/components/melki/cerebro";
 export { numerosEnPalabras } from "./src/components/melki/numeros";
-export { detectarActivacion, controlDeVoz, limpiarComando, textoParaVoz, pareceEco, empiezaConNombre, AYUDA_VOZ, SALUDO_MANOS_LIBRES, esNombre, frases, elegirAlternativa } from "./src/components/melki/manos-libres";
+export { detectarActivacion, controlDeVoz, limpiarComando, textoParaVoz, pareceEco, empiezaConNombre, AYUDA_VOZ, SALUDO_MANOS_LIBRES, esNombre, frases, elegirAlternativa, saludoDelDia } from "./src/components/melki/manos-libres";
 export { buscarLugares, cargarReferencia, pareceNombre, reconocerLugares, decidirLugar, contornoLugar, nombresParaVoz, textoUbicacion } from "./src/lib/geo/referencia";
 export { costoRedTrama } from "./src/lib/radio/trama";
-export { paraHablar, puntajeVoz, trozosVoz, hablar, callar } from "./src/components/melki/voz";
+export { paraHablar, puntajeVoz, trozosVoz, hablar, callar, generoDeVoz } from "./src/components/melki/voz";
+export { hablaNatural, suavizarCifras, plataHablada, sinCoordenadas, sinParentesis } from "./src/components/melki/habla";
 export { estadoInicial, reductor } from "./src/components/simulador/estado";
 export { estadoRed } from "./src/lib/radio/estado-red";
 export { FICHA_GATEWAY } from "./src/lib/radio/protocolos";
@@ -1371,6 +1372,26 @@ function crearApi(antenas) {
     { name: "Google US English", lang: "en-US" },
   ].sort((a, b) => m.puntajeVoz(b) - m.puntajeVoz(a));
   caso("Elige la voz neuronal colombiana, luego las naturales y Google; las robóticas al final", voces[0].name.includes("Salome") && voces[1].name.includes("Dalia") && voces[2].name.startsWith("Google español") && m.puntajeVoz({ name: "eSpeak Spanish", lang: "es" }) < m.puntajeVoz({ name: "Microsoft Sabina - Spanish (Mexico)", lang: "es-MX" }) && m.puntajeVoz({ name: "Google US English", lang: "en-US" }) < 0, voces.map((v) => v.name.split(" ")[1]).join(" > "));
+  // v16: la voz tipo JARVIS (masculina serena, de fábrica) y cómo habla una persona
+  const conHombres = [
+    { name: "Microsoft Salome Online (Natural) - Spanish (Colombia)", lang: "es-CO" },
+    { name: "Microsoft Gonzalo Online (Natural) - Spanish (Colombia)", lang: "es-CO" },
+    { name: "Microsoft Jorge Online (Natural) - Spanish (Mexico)", lang: "es-MX" },
+    { name: "Microsoft Raul - Spanish (Mexico)", lang: "es-MX" },
+    { name: "Google español", lang: "es-ES" },
+  ];
+  const orden = (g) => [...conHombres].sort((a, b) => m.puntajeVoz(b, g) - m.puntajeVoz(a, g)).map((v) => v.name.split(" ")[1]);
+  caso("v16: de fábrica, la voz masculina serena más natural (Gonzalo de Colombia, luego Jorge); femenina, Salomé", orden("masculina").slice(0, 2).join() === "Gonzalo,Jorge" && orden("femenina")[0] === "Salome" && m.puntajeVoz(conHombres[0]) < m.puntajeVoz(conHombres[1]), `${orden("masculina").join(" > ")} | ${orden("femenina").join(" > ")}`);
+  caso("v16: lo natural pesa más que el tipo: Google (femenina) antes que una masculina robótica", orden("masculina").indexOf("español") < orden("masculina").indexOf("Raul") && m.generoDeVoz("Microsoft Raul - Spanish (Mexico)") === "masculina" && m.generoDeVoz("Google español") === null && m.generoDeVoz("Microsoft Dalia Online (Natural)") === "femenina", orden("masculina").join(" > "));
+  caso("v16: las cifras como las diría una persona (45 %, 10 km, 99,9 %, 3,2 km, 251 km²)", m.suavizarCifras("45,1 % a 10,00 km; 99,9 % y 3,25 km en 251,1 km²") === "45 % a 10 km; 99,9 % y 3,3 km en 251 km²", m.suavizarCifras("45,1 % a 10,00 km; 99,9 % y 3,25 km en 251,1 km²"));
+  caso("v16: la plata en palabras de persona (150 millones, 1,3 millones, 350 mil pesos)", m.plataHablada("cuesta $150.000.000, $1.250.000 o $350.000.") === "cuesta 150 millones de pesos, 1,3 millones de pesos o 350 mil pesos." && m.plataHablada("$1.000.000") === "1 millón de pesos", m.plataHablada("cuesta $150.000.000, $1.250.000 o $350.000."));
+  caso("v16: no lee coordenadas ni paréntesis técnicos; el departamento sí («Barranca de Upía, Meta»)", m.sinCoordenadas("puse la persona en 4.35, -72.9.") === "puse la persona en ese punto." && m.sinParentesis("llega en 2 saltos (Persona 1 → Repetidor 2 → Gateway), con 36 dB (≥ 30 dB).") === "llega en 2 saltos, con 36 dB." && m.sinParentesis("Esto es Barranca de Upía (Meta): un municipio") === "Esto es Barranca de Upía, Meta: un municipio", m.sinParentesis("llega en 2 saltos (Persona 1 → Repetidor 2 → Gateway), con 36 dB (≥ 30 dB)."));
+  const dichoA = m.hablaNatural("Listo: puse el repetidor «Repetidor 4» en 4.35, -72.9 (a 2,15 km del Gateway). La red cubre el 94,3 % del área útil.", { trato: "senor", vez: 0 });
+  const dichoB = m.hablaNatural("Listo: puse la persona.", { trato: "senor", vez: 1 });
+  caso("v16: confirma como una persona y varía («Hecho, señor.», «Muy bien, señor.»), sin coordenadas ni paréntesis («Puse el Repetidor 4 en ese punto»)", dichoA === "Hecho, señor. Puse el Repetidor 4 en ese punto. La red cubre el 94 % del área útil.", dichoA);
+  caso("v16: …y no repite siempre lo mismo; sin trato, sin «señor»", dichoB === "Muy bien, señor. Puse la persona." && m.hablaNatural("Listo: puse la persona.", { trato: "ninguno", vez: 2 }) === "Listo. Puse la persona.", `${dichoB} | ${m.hablaNatural("Listo: puse la persona.", { trato: "ninguno", vez: 2 })}`);
+  caso("v16: en voz dice lo esencial y deja el detalle escrito; completo, si se pide", /Le dejé el detalle escrito\.$/.test(m.hablaNatural("La red tiene 3 repetidores. Cubre el 90 %. Cuesta $80.000.000. Tiene 2 saltos. Aguanta 400 personas.", { vez: 3 })) && !/detalle escrito/.test(m.hablaNatural("La red tiene 3 repetidores. Cubre el 90 %. Cuesta $80.000.000. Tiene 2 saltos.", { completo: true, vez: 3 })), m.hablaNatural("La red tiene 3 repetidores. Cubre el 90 %. Cuesta $80.000.000. Tiene 2 saltos. Aguanta 400 personas.", { vez: 3 }));
+  caso("v16: saluda según la hora (buenos días, buenas tardes, buenas noches)", m.saludoDelDia(8) === "Buenos días" && m.saludoDelDia(15) === "Buenas tardes" && m.saludoDelDia(21) === "Buenas noches" && m.saludoDelDia(2) === "Buenas noches" && /^Buenas tardes, señor\. Bienvenido\./.test(m.frases("senor", 15).bienvenida(true)) && m.frases("senor", 9).llamado(0, false) === "Buenos días, señor. Le escucho; estoy atento y presto a seguir sus órdenes." && /^Buenas noches, señora\. Así sonará mi voz/.test(m.frases("senora", 22).prueba), m.frases("senor", 15).bienvenida(true).slice(0, 40));
 
   // Pantalla limpia: los paneles de los lados
   const api = crearApi([base("g", "Gateway", 4.2, -73.37, { pasarela: true })]);
@@ -1490,7 +1511,7 @@ function crearApi(antenas) {
 
   // Fuera del simulador: con respeto, y retoma el trabajo
   const cR = { antenas: [], parametros: PARAMETROS, resultado: null, desactualizado: false, relieve: "teselas", modo: "sembrar" };
-  for (const q of ["¿quién ganó el partido de ayer?", "cuéntame un chiste", "¿qué hora es?", "¿cómo está el clima hoy?", "¿cuál es la capital de Francia?", "escríbeme un poema"]) {
+  for (const q of ["¿quién ganó el partido de ayer?", "cuéntame un chiste", "¿cómo se prepara un sancocho?", "¿cómo está el clima hoy?", "¿cuál es la capital de Francia?", "escríbeme un poema"]) {
     const r = m.responder(q, cR);
     caso(`Fuera del simulador: «${q}»`, /^Mi señor, fui diseñado y creado para cumplir órdenes y procesos dentro de este simulador/.test(r.texto) && /Barranca de Upía/.test(r.texto), r.texto.slice(0, 70));
   }
@@ -2317,6 +2338,22 @@ function crearApi(antenas) {
   caso("v15: «ármame una red de 2 km de diámetro» no pregunta por un municipio llamado «diámetro»", oF("ármame una red de 2 km de diámetro")?.tipo === "disenar");
   caso("v15: «…de 2 km de diámetro en Villavicencio» encuentra Villavicencio después de «diámetro»", /Villavicencio/.test(oF("ármame una red de 2 km de diámetro en Villavicencio")?.area?.centro?.nombre ?? ""));
   caso("v15: un diseño con presupuesto y familias es un diseño (no el dimensionamiento sin mapa)", oF("ármame una red de 4 km a la redonda con un presupuesto de $80.000.000 para 300 familias")?.tipo === "disenar" && oF("dimensiona la red para 5000 usuarios")?.tipo === "trama-dimensionar");
+
+  // ─── v16: lo que faltaba al probar frases reales ───
+  const o16 = (f) => m.interpretarOrden(f, g(), null);
+  const cM16 = { ...cM, antenas: g().antenas() };
+  caso("v16: «que todos los repetidores queden a 15 metros» los deja a 15 m (también «que todas las antenas estén a 20 m»)", o16("que todos los repetidores queden a 15 metros")?.tipo === "editar-varios" && o16("que todos los repetidores queden a 15 metros").cambios.alturaM === 15 && o16("que todas las antenas estén a 20 m")?.cambios?.alturaM === 20, JSON.stringify(o16("que todos los repetidores queden a 15 metros")));
+  caso("v16: «Cámbiale el nombre al gateway por Hacienda Central» lo renombra (antes llevaba el mapa al gateway por la palabra «Central»)", o16("cámbiale el nombre al gateway por Hacienda Central")?.tipo === "renombrar" && o16("cámbiale el nombre al gateway por Hacienda Central").nombre === "Hacienda Central", JSON.stringify(o16("cámbiale el nombre al gateway por Hacienda Central")));
+  caso("v16: «mete 500 personas» puebla la zona con 500 (antes ponía una sola persona); una sola o con coordenada sigue siendo una pieza", o16("mete 500 personas")?.tipo === "poblar" && o16("mete 500 personas").pedido.n === 500 && o16("agrega una persona")?.tipo === "pieza" && o16("pon una persona en 4.2, -73.4")?.tipo === "pieza", JSON.stringify(o16("mete 500 personas")));
+  caso("v16: «…y mira si aguanta» y «¿la red aguanta a 500 personas?» hacen la prueba de estrés", o16("mira si aguanta")?.tipo === "estres" && o16("¿la red aguanta a 500 personas?")?.tipo === "estres", `${o16("mira si aguanta")?.tipo} ${o16("¿la red aguanta a 500 personas?")?.tipo}`);
+  const sube16 = o16("el repetidor 1 está muy bajito, súbelo");
+  caso("v16: «súbelo» sin decir cuánto pregunta la altura (con la de ahora) y ofrece un botón; «bajito» no lo confunde", sube16?.tipo === "aviso" && /^¿A qué altura subo el Repetidor 1\? Hoy está a 15 m\./.test(sube16.texto) && sube16.acciones?.[0]?.orden?.cambios?.alturaM === 21 && o16("sube el repetidor 1 a 12 m")?.cambios?.alturaM === 12, sube16?.texto);
+  const pdf16 = o16("exporta un pdf");
+  caso("v16: un formato que no exporta (PDF, imagen) lo dice y ofrece KMZ, CSV y JSON (antes descargaba un KMZ)", pdf16?.tipo === "aviso" && pdf16.acciones?.map((a) => a.orden?.formato).join() === "kmz,csv,json" && o16("descárgame una imagen del mapa")?.tipo === "aviso" && o16("exporta en excel")?.formato === "csv", pdf16?.texto);
+  caso("v16: «dame el presupuesto detallado» es el costo de la red (no el presupuesto de enlace)", o16("dame el presupuesto detallado")?.tipo === "costo-red", o16("dame el presupuesto detallado")?.tipo);
+  caso("v16: Melki sabe de LoRa, de la lluvia y de la energía solar de noche", /^LoRa es la forma de radio/.test(m.responder("¿qué es lora?", cM16).texto) && /^Sí funciona con lluvia/.test(m.responder("¿funciona cuando llueve?", cM16).texto) && /de noche funciona con ellas/.test(m.responder("¿qué pasa de noche con los paneles solares?", cM16).texto) && /de noche funciona con ellas/.test(m.responder("¿cuánto dura la batería de un repetidor?", cM16).texto), m.responder("¿qué es lora?", cM16).texto.slice(0, 60));
+  caso("v16: dice la hora y la fecha como una persona, y responde el saludo del día", /^(Son las|Es la) \d{1,2}:\d{2} de la (madrugada|mañana|tarde|noche), señor\.$/.test(m.responder("¿qué hora es?", cM16).texto) && /^Hoy es \p{L}+, \d{1,2} de \p{L}+ de \d{4}, señor\.$/u.test(m.responder("¿qué día es hoy?", cM16).texto) && /^Buenas tardes, señor\. Es un gusto saludarle\./.test(m.responder("buenas tardes melki", cM16).texto) && m.horaHablada(new Date(2026, 9, 31, 15, 5)) === "Son las 3:05 de la tarde" && m.horaHablada(new Date(2026, 9, 31, 13, 0)) === "Es la 1:00 de la tarde", m.responder("¿qué hora es?", cM16).texto);
+  caso("v16: «gracias Melki, buen trabajo» se agradece (no se toma por otra pregunta); «¿quién es el Inge?» es la autoría", /^Muchas gracias, señor/.test(m.responder("gracias melki, buen trabajo", cM16).texto) && m.responder("¿quién es el inge?", cM16).tema === "autoria", m.responder("gracias melki, buen trabajo", cM16).texto);
 }
 
 console.log(fallos ? `\n✗ ${fallos} prueba(s) fallaron` : "\n✓ Melki verificado");

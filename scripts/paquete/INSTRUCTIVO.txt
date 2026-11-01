@@ -28,6 +28,12 @@ sale todo?") y los convierte en las órdenes que Melki sabe hacer. Corre
 en el procesador de este equipo, sin internet, sin tarjeta gráfica y
 sin descargar nada; si no está seguro, pregunta con botones, y aprende
 de lo que usted le aclara.
+Y ahora habla más humano, al estilo de JARVIS: si le pide que hable
+("háblame"), lo hace con una voz masculina serena (o femenina, si la
+escoge en Ajustes de voz) y le dice lo esencial como una persona:
+cifras redondeadas, sin leer coordenadas, con su trato ("Hecho,
+señor"); saluda según la hora, le dice la hora si se la pregunta,
+habla más despacio si se lo pide y repite lo último que dijo.
 También: cuando le pide a Melki ir a un lugar ("ubícame en Barranca de
 Upía"), en vez del punto rojo su robot vuela hasta allá y lo saluda, con
 una nube que escribe qué hay ahí y qué se puede hacer. El "Recorrido" de
@@ -361,8 +367,9 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
     con la X vuelve al reposo y los paneles vuelven. En Ajustes de voz
     (la tuerca de la conversación): cómo le trata (señor, señora o sin
     tratamiento), "Hablar en voz alta" (apagado: no habla; encendido
-    aparecen la voz, "Probar", "Uso audífonos" y leer las respuestas
-    completas), dejar el mapa libre, "Activarme al abrir el simulador"
+    aparecen el tipo de voz -"Masculina serena", al estilo de JARVIS,
+    o "Femenina"-, la voz, "Probar", "Uso audífonos" y leer las
+    respuestas completas), dejar el mapa libre, "Activarme al abrir el simulador"
     (con el micrófono permitido, saluda por escrito al entrar), seguir
     la conversación, el sonido al activarse y "Dar acceso" al
     micrófono para que el navegador no vuelva a preguntar.
@@ -404,7 +411,10 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
     le pide y le deja la respuesta escrita. Si quiere oírlo, dígale
     "háblame", toque el parlante de la conversación o active "Hablar
     en voz alta" en Ajustes de voz; "no hables" lo vuelve a callar y al
-    recargar la página vuelve a no hablar. Con la voz encendida y
+    recargar la página vuelve a no hablar. En voz dice lo esencial
+    (el detalle queda escrito) y como lo diría una persona; "habla más
+    despacio", "más rápido" y "habla normal" cambian su ritmo, y
+    "repite lo que dijiste" lo vuelve a decir. Con la voz encendida y
     parlantes, no escucha mientras habla (así no se oye a sí mismo) y
     se le calla con el cuadrito (■) de su barra; con "Uso audífonos" lo
     escucha mientras habla y puede decirle "Melki, silencio".

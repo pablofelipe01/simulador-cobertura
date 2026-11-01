@@ -60,7 +60,6 @@ import {
   limpiarComando,
   pareceEco,
   parteDeLoDicho,
-  textoParaVoz,
   type EstadoManosLibres,
   type Trato,
 } from "./manos-libres";
@@ -85,7 +84,8 @@ import {
 } from "./dictado";
 import { accionAjuste, dividirEnPasos, ejecutarOrden, interpretarOrden, textoCoberturaUtil, textoRed, type Api, type ContextoOrden, type LlegadaMelki, type Orden, type Pendiente, type ResultadoOrden } from "./ordenes";
 import type { IdTour } from "./tours";
-import { alCargarVoces, callar, fijarVozPreferida, hablar, puntajeVoz, sonando, vocesEspanol, vozDisponible } from "./voz";
+import { hablaNatural } from "./habla";
+import { alCargarVoces, callar, fijarGeneroVoz, fijarRitmoVoz, fijarVozPreferida, hablar, puntajeVoz, sonando, vocesEspanol, vozDisponible, type GeneroVoz } from "./voz";
 
 /** «nota»: una línea pequeña sobre la respuesta (cómo entendió el Modelo Melki lo que se pidió). */
 type Mensaje = { id: number; de: "melki" | "usuario"; texto: string; acciones?: AccionRespuesta[]; voz?: boolean; nota?: string };
@@ -95,6 +95,12 @@ const ACTIVAR_ASISTENTE = /\b(activa|enciende|prende|pon|inicia|abre|llama)\w* (
 const DESACTIVAR_ASISTENTE = /\b(desactiva|apaga|quita|termina|cierra)\w* (el )?(modo )?(manos libres|jarvis|escucha|asistente( melki| de voz| por voz)?)\b|\bdeja de escuchar\b/;
 const ACTIVAR_VOZ = /\b(activa|enciende|prende|pon)\w* (tu |la )?voz\b|\bhablame\b|\blee(me)? en voz alta\b/;
 const CALLAR_VOZ = /\b(desactiva|apaga|quita|silencia)\w* (tu |la )?voz\b|\bcallate\b|\bsilencio\b|\bno hables\b/;
+/** El ritmo de la voz: «habla más despacio», «más rápido», «habla normal». */
+const VOZ_LENTA = /\b(habla|hablame|lee|leeme|dilo|dimelo)\w*\s+(un poco\s+)?(mas\s+)?(despacio|lento|lentamente|pausado|calmado|tranquilo)\b|^(mas despacio|mas lento)( por favor)?$/;
+const VOZ_RAPIDA = /\b(habla|hablame|lee|leeme|dilo|dimelo)\w*\s+(un poco\s+)?(mas\s+)?(rapido|deprisa|aprisa|ligero)\b|^(mas rapido)( por favor)?$/;
+const VOZ_NORMAL = /\b(habla|hablame)\w*\s+(normal|a ritmo normal|como antes|a tu ritmo)\b/;
+/** «Repite lo que dijiste», «¿me lo repites?»: lo último que dijo Melki, otra vez. */
+const REPETIR = /^(repite|repitelo|repiteme|repitemelo|me lo repites|me repites|puedes repetir|podrias repetir|repetir|otra vez)( lo que (dijiste|me dijiste|acabas de decir|dijo))?( eso)?( por favor)?( melki)?$/;
 const DESHACER = /\b(deshac\w*|deshaz|revierte|revertir|anula lo [uú]ltimo)\b/i;
 const sinTildesMinusculas = (t: string) => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 /** Una aclaración del Modelo Melki dura esto esperando la respuesta («la primera», «sí», «ninguna»). */
@@ -117,10 +123,13 @@ const f1 = (x: number, d = 1) => x.toFixed(d).replace(".", ",");
 /**
  * Asistente Melki: seguir la conversación sin repetir «Melki», leer las respuestas completas, el sonido al activarse,
  * ocultar los paneles al activarse, activarse al abrir el simulador, escuchar en reposo su nombre (como Siri, con el
- * micrófono ya permitido), el trato (señor, señora o ninguno) y la voz.
+ * micrófono ya permitido), el trato (señor, señora o ninguno), el tipo de voz (masculina serena, de fábrica, o
+ * femenina) y la voz.
  */
-type PreferenciasManos = { seguir: boolean; completo: boolean; sonido: boolean; ocultar: boolean; siempre: boolean; pasiva: boolean; trato: Trato; voz: string | null; audifonos: boolean };
-const MANOS_DEFECTO: PreferenciasManos = { seguir: true, completo: false, sonido: true, ocultar: true, siempre: false, pasiva: true, trato: "senor", voz: null, audifonos: false };
+type PreferenciasManos = { seguir: boolean; completo: boolean; sonido: boolean; ocultar: boolean; siempre: boolean; pasiva: boolean; trato: Trato; genero: GeneroVoz; voz: string | null; audifonos: boolean };
+const MANOS_DEFECTO: PreferenciasManos = { seguir: true, completo: false, sonido: true, ocultar: true, siempre: false, pasiva: true, trato: "senor", genero: "masculina", voz: null, audifonos: false };
+/** La hora del equipo, para saludar según el momento del día (fuera del componente: no se lee al dibujar). */
+const horaLocal = () => new Date().getHours();
 /**
  * Con parlantes, lo que suena (su voz) entra por el micrófono: mientras habla no escucha, y vuelve a escuchar un instante
  * después (lo que tarda en apagarse el sonido en la sala). Con audífonos se le puede hablar encima.
@@ -472,6 +481,16 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   const captura = useRef<string[] | null>(null);
   /** Órdenes que siguen calculando (sembrado, diseño, prueba de estrés…). */
   const trabajos = useRef(0);
+  /** Hay algo en curso (un cálculo largo, la IA local, varios pasos): Melki muestra que está pensando. */
+  const [ocupado, setOcupado] = useState(false);
+  const empezarTrabajo = () => {
+    trabajos.current++;
+    setOcupado(true);
+  };
+  const terminarTrabajo = () => {
+    trabajos.current = Math.max(0, trabajos.current - 1);
+    if (trabajos.current === 0) setOcupado(false);
+  };
   const ml = useRef({
     activo: false,
     estado: "apagado" as EstadoManosLibres,
@@ -562,10 +581,16 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     };
   }, []);
   /** Las frases del asistente con el trato elegido. */
-  const fr = () => frases(actual.current.manos.trato);
+  const fr = () => frases(actual.current.manos.trato, horaLocal());
   useEffect(() => {
     fijarVozPreferida(manos.voz);
   }, [manos.voz]);
+  // El tipo de voz (masculina serena o femenina): cambia cuál es «la más natural» y el orden de la lista
+  useEffect(() => {
+    fijarGeneroVoz(manos.genero === "femenina" ? "femenina" : "masculina");
+    const t = window.setTimeout(() => setVoces(vocesEspanol().map((v) => ({ nombre: v.name, idioma: v.lang, natural: puntajeVoz(v) >= 70 }))), 0);
+    return () => window.clearTimeout(t);
+  }, [manos.genero]);
   /**
    * Enciende o apaga la voz de Melki. Lo que responda enseguida ya lo sabe (sin esperar a que la pantalla se entere):
    * con «no hables», ni la confirmación suena.
@@ -766,7 +791,8 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     }
     if (!actual.current.vozActiva) return;
     setHablando(true);
-    hablar(t, () => setHablando(false));
+    // En voz, lo esencial y como lo diría una persona (lo escrito queda completo en la conversación)
+    hablar(hablaNatural(t, { trato: actual.current.manos.trato, completo: actual.current.manos.completo }), () => setHablando(false));
   };
 
   /**
@@ -830,7 +856,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     const m = ml.current;
     m.trasHablar = despues;
     if (guardar) m.ultimoCompleto = escrito;
-    m.cola.push(textoParaVoz(texto, completo));
+    m.cola.push(hablaNatural(texto, { trato: actual.current.manos.trato, completo }));
     window.clearTimeout(m.pensando);
     if (m.estado !== "hablando") siguienteVoz();
   };
@@ -1733,16 +1759,14 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     if (!res.luego && !(res.esperar && VER_RESULTADOS.has(orden.tipo))) sugerirPanel(orden.tipo);
     // Órdenes que tardan (el sembrado automático, el diseño por área): la respuesta llega cuando el motor termina
     if (res.luego) {
-      trabajos.current++;
+      empezarTrabajo();
       void res.luego
         .then((r) => {
           agregarMelki(r);
           sugerirPanel(orden.tipo);
         })
         .catch(() => agregarMelki({ texto: "No pude terminar ese cálculo. Intente de nuevo." }))
-        .finally(() => {
-          trabajos.current = Math.max(0, trabajos.current - 1);
-        });
+        .finally(terminarTrabajo);
     }
   };
 
@@ -1872,6 +1896,21 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       agregarMelki({ texto: reposo ? fr().reposo : "Listo, ya no escucho. Cuando quiera, toque «Asistente Melki» o dígame «activa el asistente»." });
       return;
     }
+    // El ritmo de la voz (y si dice «háblame más despacio», además enciende la voz)
+    const orden = sinAcentos.replace(/[¿?¡!.,;:«»"]/g, " ").replace(/\s+/g, " ").trim();
+    const ritmo = VOZ_LENTA.test(orden) ? 0.85 : VOZ_RAPIDA.test(orden) ? 1.15 : VOZ_NORMAL.test(orden) ? 1 : null;
+    if (ritmo !== null && vozDisponible()) {
+      fijarRitmoVoz(ritmo);
+      if (/\bhablame\b/.test(orden) && !actual.current.vozActiva) fijarVoz(true);
+      const s = actual.current.manos.trato === "ninguno" ? "" : actual.current.manos.trato === "senora" ? ", señora" : ", señor";
+      agregarMelki({ texto: `Como usted diga${s}. ${ritmo < 1 ? "Hablaré más despacio." : ritmo > 1 ? "Hablaré un poco más rápido." : "Vuelvo a mi ritmo normal."}` });
+      return;
+    }
+    if (REPETIR.test(orden)) {
+      const previo = [...actual.current.mensajes].reverse().find((x) => x.de === "melki");
+      agregarMelki({ texto: previo ? previo.texto : "Aún no le he dicho nada que repetir." });
+      return;
+    }
     if (ACTIVAR_VOZ.test(sinAcentos) && vozDisponible()) {
       fijarVoz(true);
       agregarMelki({ texto: "Listo, ahora le leo en voz alta lo que respondo (hasta que me diga «no hables» o recargue la página)." });
@@ -1909,10 +1948,8 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     if (pasos.length > 1 && !(entera && ["disenar", "elegir", "pedir-diseno", "pedir-lugar", "aviso"].includes(entera.tipo))) {
       const primera = interpretarOrden(pasos[0], api, pendiente.current, contextoOrden());
       if (primera) {
-        trabajos.current++;
-        void ejecutarPlan(pasos, primera).finally(() => {
-          trabajos.current = Math.max(0, trabajos.current - 1);
-        });
+        empezarTrabajo();
+        void ejecutarPlan(pasos, primera).finally(terminarTrabajo);
         return;
       }
     }
@@ -1931,12 +1968,16 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     // Un tema elegido con pocas palabras clave: si el Modelo Melki está muy seguro de que se pregunta otro, gana el modelo
     // («¿cuántas veces rebota un mensaje?» es de los saltos, aunque diga «mensaje»), y también si se pregunta por un nodo
     // del mapa («¿por qué la Persona 1 no tiene señal?» es cómo está ella, no qué equipo lleva una persona)
-    if (!r.noEntendido && r.tema && (r.puntos ?? 99) < 4 && !desdeModelo && actual.current.modeloPref.activo) {
+    // También una orden que el modelo entiende muy bien cuando las reglas solo encontraron una palabra suelta («muévete el
+    // Repetidor 3 un km al norte», «¿cuántas personas quedaron sin señal?»). Los saludos y las gracias no se cambian.
+    const debil = r.tema && !["saludo", "gracias", "quien", "capacidades"].includes(r.tema) ? (r.puntos ?? 99) : 99;
+    if (!r.noEntendido && debil < 5 && !desdeModelo && actual.current.modeloPref.activo) {
       const m = modeloMelki();
       const d = m ? entender(m, pregunta, { api: actual.current.api, memoria: actual.current.memoriaModelo, verificar: entiendeFrase }) : null;
-      const otroTema = d?.tipo === "tema" && d.opcion.tema !== r.tema;
-      const unNodo = d?.tipo === "hacer" && d.opcion.id === "info-nodo";
-      if ((d?.tipo === "tema" || d?.tipo === "hacer") && (otroTema || unNodo) && d.opcion.p >= 0.9) {
+      const otroTema = d?.tipo === "tema" && d.opcion.tema !== r.tema && d.opcion.p >= 0.9;
+      const unNodo = d?.tipo === "hacer" && d.opcion.id === "info-nodo" && d.opcion.p >= 0.9 && debil < 4;
+      const unaOrden = d?.tipo === "hacer" && d.opcion.p >= 0.95 && debil < 4;
+      if ((d?.tipo === "tema" || d?.tipo === "hacer") && (otroTema || unNodo || unaOrden)) {
         hacerOpcion(d.opcion, pregunta, deVoz, true);
         return;
       }
@@ -2139,7 +2180,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
    */
   const pensarConIALocal = async (pregunta: string, sinEntender: Respuesta) => {
     const pref = actual.current.iaLocal;
-    trabajos.current++;
+    empezarTrabajo();
     try {
       if (!iaLocalLista()) {
         if (!(await modeloLocalDescargado(pref.modelo))) {
@@ -2202,7 +2243,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     } catch {
       sinIALocal(sinEntender);
     } finally {
-      trabajos.current = Math.max(0, trabajos.current - 1);
+      terminarTrabajo();
     }
   };
 
@@ -3340,7 +3381,20 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
             <MelkiAvatar className="h-10 w-10" hablando={hablando} />
             <div className="min-w-0 flex-1">
               <p className="font-cond text-[17px] leading-tight font-semibold">Melki</p>
-              <p className="text-[12px] text-tenue">Asistente del simulador</p>
+              <p className="flex h-[18px] items-center gap-1.5 text-[12px] text-tenue" data-hablando={hablando ? "si" : "no"}>
+                {hablando ? (
+                  <>
+                    <span className="inline-flex h-4 items-center gap-[2px]" aria-hidden="true">
+                      {[0, 1, 2, 3, 4].map((k) => (
+                        <i key={k} className="barra-voz activa block w-[2.5px] rounded-full bg-melki" style={{ animationDelay: `${k * 0.11}s` }} />
+                      ))}
+                    </span>
+                    <span className="text-melki-oscura">Hablando</span>
+                  </>
+                ) : (
+                  "Asistente del simulador"
+                )}
+              </p>
             </div>
             {vozDisponible() && (
               <button
@@ -3715,6 +3769,27 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
               )}
               {vozDisponible() && vozActiva && (
                 <>
+                  <p className="mb-1 text-[12.5px] font-medium text-carbon">Tipo de voz</p>
+                  <div className="mb-2 flex gap-1" role="radiogroup" aria-label="Tipo de voz">
+                    {(
+                      [
+                        ["masculina", "Masculina serena", "Al estilo de JARVIS"],
+                        ["femenina", "Femenina", "Cálida"],
+                      ] as const
+                    ).map(([g, nombre, detalle]) => (
+                      <button
+                        key={g}
+                        type="button"
+                        role="radio"
+                        aria-checked={manos.genero === g}
+                        onClick={() => fijarManos({ genero: g, voz: null })}
+                        className={`flex-1 rounded-lg px-2 py-1.5 text-left text-[12.5px] font-medium ring-1 transition-colors ${manos.genero === g ? "bg-salvia-clara/70 text-carbon ring-salvia" : "bg-white text-carbon-2 ring-linea hover:bg-papel-2"}`}
+                      >
+                        {nombre}
+                        <span className="block text-[11px] font-normal text-tenue">{detalle}</span>
+                      </button>
+                    ))}
+                  </div>
                   <label className="mb-1 block text-[12.5px] font-medium text-carbon" htmlFor="voz-asistente">
                     Voz
                   </label>
@@ -3738,7 +3813,9 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
                     </button>
                   </div>
                   {!voces.some((v) => v.natural) && (
-                    <p className="mb-2 text-[12px] leading-snug text-tenue">Para una voz más natural, abra el simulador en Microsoft Edge: trae voces neuronales en español, como Salomé (Colombia) o Dalia (México).</p>
+                    <p className="mb-2 text-[12px] leading-snug text-tenue">
+                      Para una voz más natural, abra el simulador en Microsoft Edge: trae voces neuronales en español, como Gonzalo y Salomé (Colombia) o Jorge y Dalia (México).
+                    </p>
                   )}
                 </>
               )}
@@ -3867,6 +3944,16 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
                 </div>
               </div>
             ))}
+            {ocupado && (
+              <div className="melki-pensando flex gap-2" role="status" data-pensando="">
+                <MelkiAvatar className="mt-0.5 h-7 w-7 shrink-0" />
+                <div className="flex items-center gap-1 rounded-2xl rounded-tl-md bg-papel px-3 py-2.5" aria-label="Melki está pensando">
+                  <span className="melki-punto" />
+                  <span className="melki-punto" />
+                  <span className="melki-punto" />
+                </div>
+              </div>
+            )}
           </div>
           <div className="flex flex-wrap gap-1.5 px-3.5 pb-2">
             {SUGERENCIAS.map((s) => (

@@ -128,7 +128,19 @@ const ME_ESCUCHAS = /^(?:(?:hola|oye|hey)\s+)?(?:melki\s+)?(?:me (?:escuchas|oye
 /** «¿Dónde estamos?», «¿qué municipio es este?»: el municipio que se ve en el mapa. */
 const DONDE_ESTAMOS = /\b(?:donde (?:estamos|estoy|queda esto|es esto)|en que (?:municipio|departamento|lugar|parte|zona) (?:estamos|estoy|esta el mapa|queda esto|es esto)|que (?:lugar|municipio|zona|pueblo) es (?:este|esta|esto)|que estoy viendo|que estamos viendo)\b/;
 /** «Muy bien», «excelente trabajo», «eres el mejor»: agradece con cortesía y sigue. */
-const ELOGIO = /^(?:muy bien|excelente|buen trabajo|buenisimo|que bien|lo hiciste bien|bien hecho|eres (?:el|la) mejor|eres genial|me gusta|me encanta|increible|espectacular|asi me gusta)(?:\s+(?:melki|trabajo|hecho))*$/;
+const ELOGIO = /^(?:(?:gracias|muchas gracias)\s+)?(?:melki\s+)?(?:muy bien|excelente|buen trabajo|buenisimo|que bien|lo hiciste bien|bien hecho|eres (?:el|la) mejor|eres genial|me gusta|me encanta|increible|espectacular|asi me gusta|te luciste)(?:\s+(?:melki|trabajo|hecho))*$/;
+/** «Buenas tardes, Melki» (solo el saludo): se responde igual, como una persona. */
+const SALUDO_DEL_DIA = /^(?:(?:hola|hey|oye)\s+)?(buenos dias|buenas tardes|buenas noches)(?:\s+melki)?$/;
+const PIDE_HORA = /^(?:melki\s+)?(?:que hora es|que horas son|me dices la hora|me das la hora|dime la hora|la hora)(?:\s+(?:por favor|melki))*$/;
+const PIDE_FECHA = /^(?:melki\s+)?(?:que dia es hoy|que fecha es hoy|a que estamos hoy|que dia es|que fecha es|en que fecha estamos)(?:\s+(?:por favor|melki))*$/;
+
+/** «Son las 3:05 de la tarde», como lo diría una persona (con la hora del equipo). */
+export function horaHablada(d: Date): string {
+  const h = d.getHours();
+  const h12 = h % 12 || 12;
+  const parte = h < 5 ? "de la madrugada" : h < 12 ? "de la mañana" : h < 19 ? "de la tarde" : "de la noche";
+  return `${h12 === 1 ? "Es la" : "Son las"} ${h12}:${String(d.getMinutes()).padStart(2, "0")} ${parte}`;
+}
 
 /**
  * No se entendió lo que dijo (sobre todo por voz, cuando el dictado escribe algo sin sentido): se disculpa, dice lo que
@@ -395,6 +407,31 @@ const TEMAS: Tema[] = [
     responder: (c) => ({
       texto: `En Colombia, la ANE (Resolución 000028 de 2026) reconoce el uso libre de 915 a 928 MHz. Trama usa cuatro frecuencias por sitio —${CAPACIDAD_TRAMA.frecuenciasMhz.map((x) => f(x, x % 1 ? 1 : 0)).join(", ")} MHz—, una por cada radio del gateway, para atender cuatro veces más gente en el mismo lugar. Ojo: el documento habla de 902–928 MHz y ~8 canales; las antenas son de 902–928, pero aquí solo vale de 915 a 928 MHz (conviene confirmarlo con el Inge). El ajuste de EE. UU. de MeshCore (910,525 MHz) queda por fuera. La simulación usa ${f(c.parametros.frecuenciaMhz, 3)} MHz; entre 915 y 928 MHz el alcance casi no cambia.`,
       acciones: [{ texto: "Ir a parámetros", accion: "parametros" }],
+    }),
+  },
+  {
+    id: "lora",
+    claves: ["lora", "que es lora", "modulacion lora", "modulacion", "chirp", "espectro ensanchado", "spread spectrum", "factor de dispersion", "spreading factor", "largo alcance"],
+    responder: (c) => {
+      const p = presetPorId(c.parametros.preset);
+      return {
+        texto: `LoRa es la forma de radio de largo alcance y bajo consumo que usan MeshCore y Meshtastic: manda pocos datos (de unos cientos de bits por segundo a unos pocos kb/s, según el factor de dispersión, de SF7 a SF12) pero llega lejos —varios kilómetros con línea de vista— gastando muy poca energía, por eso los repetidores funcionan con un panel solar pequeño. Trama la usa en la banda libre de 915 a 928 MHz. Aquí el preset fija el factor de dispersión, el ancho de banda y la sensibilidad: ahora ${p.nombre}, con SF${p.sf}. A más SF, más alcance y menos velocidad.`,
+        acciones: [{ texto: "Ir a parámetros", accion: "parametros" }],
+      };
+    },
+  },
+  {
+    id: "lluvia",
+    claves: ["lluvia", "llueve", "llover", "cuando llueve", "si llueve", "con lluvia", "aguacero", "tormenta", "neblina", "niebla", "humedad", "invierno", "temporada de lluvias"],
+    responder: () => ({
+      texto: "Sí funciona con lluvia: a 915 MHz el agua del aire casi no atenúa (menos de 0,01 dB por kilómetro aun en un aguacero), así que el alcance no cambia por el clima del día. Lo que sí pesa es el relieve, la vegetación (mojada atenúa un poco más) y la altura de las antenas; y el clima de la región cambia algo la refractividad del aire, que se ajusta en «Clima» (parámetros de Radio Mobile). Las tormentas eléctricas sí son un riesgo para los equipos: las torres llevan polo a tierra.",
+    }),
+  },
+  {
+    id: "energia",
+    claves: ["energia", "de noche", "por la noche", "en la noche", "noche", "paneles solares", "panel solar", "solar", "sol", "nublado", "sin sol", "bateria", "baterias", "pilas", "autonomia", "electricidad", "luz electrica", "consumo", "dura la bateria", "duran las pilas", "cuanto dura la bateria"],
+    responder: () => ({
+      texto: `Los repetidores son solares: el SenseCAP P1 carga de día sus pilas (cuatro 18650 de unos 3.000 mAh) y de noche funciona con ellas; como un repetidor LoRa gasta muy poco, una noche no le pesa y aguanta varios días nublados seguidos. Las pilas se cambian cada cierto tiempo (≈ ${pesos(60_000)} el juego) y eso ya está en la operación de la red. El gateway, si no hay red eléctrica, lleva un kit solar para el Starlink (≈ 400 W de panel y una batería de ≈ 2 kWh, porque el Starlink gasta 75 a 100 W).`,
     }),
   },
   {
@@ -765,6 +802,10 @@ const TEMAS: Tema[] = [
       "quien desarrollo",
       "quien programo",
       "quien es el autor",
+      "quien es el inge",
+      "el inge",
+      "pablo felipe",
+      "ingeniero pablo",
       "autor del simulador",
       "autor",
       "autoria",
@@ -849,7 +890,7 @@ const TEMAS: Tema[] = [
         "• En reposo, como Siri o el Asistente de Google: con el micrófono permitido me quedo escuchando solo mi nombre aunque la barra esté cerrada; diga «Hey Melki», «Hola Melki» o «Hello Melki» y me activo sin tocar ningún botón. «Deja de escuchar» me devuelve al reposo y «apaga el micrófono» me apaga del todo.",
         "• Mi barra se arrastra a cualquier parte del mapa (doble clic la devuelve a su sitio), se achica sola mientras espero mi nombre y crece cuando me hablan; también puede dejarla siempre pequeña.",
         "• No hablo en voz alta: le escucho todo el tiempo, sin pausas, hago lo que me pida y le dejo la respuesta escrita. Si quiere oírme, diga «háblame» o active «Hablar en voz alta» en Ajustes de voz («no hables» me vuelve a callar); entonces, con parlantes, mientras hablo dejo de escuchar (así mi voz no entra por el micrófono) y me calla con el cuadrito ■ de mi barra, y con «Uso audífonos» puede hablarme encima. Lo que se cuele de mi voz justo después tampoco lo tomo como pedido, y no repito la misma respuesta ni me disculpo dos veces seguidas por mi eco. Cada frase la tomo una sola vez, aunque el navegador la mande repetida. Si el navegador deja de escuchar tras un silencio o se va el internet, vuelvo a escuchar solo, sin prender y apagar el micrófono; las barritas de mi orbe siguen su voz.",
-        "• En Ajustes de voz elige cómo le trato (señor, señora o sin tratamiento), si además le hablo en voz alta y con qué voz (la más natural que tenga su equipo; en Edge hay voces neuronales como Salomé de Colombia), si le escucho siempre en reposo y si me activo solo al abrir el simulador, con el micrófono permitido.",
+        "• En Ajustes de voz elige cómo le trato (señor, señora o sin tratamiento), si además le hablo en voz alta, con qué tipo de voz (masculina serena, al estilo de JARVIS, o femenina) y con cuál (la más natural que tenga su equipo; en Edge hay voces neuronales como Gonzalo y Salomé de Colombia), si le escucho siempre en reposo y si me activo solo al abrir el simulador, con el micrófono permitido.",
         "• Si me pide algo que se sale del simulador, se lo digo con respeto y retomamos la red; y si me pide «una red sostenible y viable en Barranca de Upía de 11.226 hectáreas», la diseño y le cuento su viabilidad técnica y su costo con los precios de Trama.",
         "• Entiendo los municipios aunque el dictado los escriba mal al hablar rápido («barranca de UPA meta», «barranco vía meta» → Barranca de Upía, Meta): comparo cómo suenan y uso el departamento que se dice o el que se ve en el mapa. Si dudo entre varios, le pregunto «¿se refiere a…?» («sí», «la segunda» o el nombre); si no le entiendo, le pido con gusto que me lo repita.",
         "• Recuerdo el lugar del que hablamos: «ubícame en Barranca de Upía, Meta» y luego «ármame una red que cubra todo el municipio», «la zona norte del municipio», «3.000 hectáreas ahí» o «lo que estoy viendo»; y con «puntos de popularidad… hasta dónde aguanta antes de quebrarse», después del diseño pongo la gente y hago la prueba de estrés subiendo la carga.",
@@ -1098,7 +1139,7 @@ const TEMAS: Tema[] = [
   },
   {
     id: "gracias",
-    claves: ["gracias", "muchas gracias", "listo", "perfecto", "excelente", "genial"],
+    claves: ["gracias", "muchas gracias", "listo", "perfecto", "excelente", "genial", "buen trabajo", "bien hecho", "excelente trabajo", "te luciste", "muy bien"],
     responder: () => ({ texto: "Con gusto. Aquí sigo si necesita algo más." }),
   },
 ];
@@ -1233,6 +1274,21 @@ export function responder(pregunta: string, c: ContextoMelki): Respuesta {
   if (ELOGIO.test(limpio)) {
     const s = tratoDe(c);
     return { texto: `Muchas gracias${s ? `, ${s}` : ""}; es un gusto ayudarle. ¿Qué más hacemos?` };
+  }
+  const saludoDia = limpio.match(SALUDO_DEL_DIA);
+  if (saludoDia) {
+    const s = tratoDe(c);
+    const dicho = saludoDia[1].replace("dias", "días");
+    return { texto: `${dicho.charAt(0).toUpperCase()}${dicho.slice(1)}${s ? `, ${s}` : ""}. Es un gusto saludarle. ¿En qué le sirvo hoy?` };
+  }
+  // Como una persona: la hora y la fecha del equipo
+  if (PIDE_HORA.test(limpio)) {
+    const s = tratoDe(c);
+    return { texto: `${horaHablada(new Date())}${s ? `, ${s}` : ""}.` };
+  }
+  if (PIDE_FECHA.test(limpio)) {
+    const s = tratoDe(c);
+    return { texto: `Hoy es ${new Date().toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}${s ? `, ${s}` : ""}.` };
   }
   if (DONDE_ESTAMOS.test(t) && !/\b(nodo|antena|gateway|repetidor\w*|persona|torre)\b/.test(t))
     return c.vista

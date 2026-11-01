@@ -222,22 +222,30 @@ export type Trato = "senor" | "senora" | "ninguno";
  * Las frases del Asistente Melki, con el trato cortés y elegante de un mayordomo. `vez` va contando los llamados para
  * no repetir siempre lo mismo.
  */
-export function frases(trato: Trato) {
+/** «Buenos días» hasta el mediodía, «Buenas tardes» hasta las 7 de la noche y luego «Buenas noches». */
+export const saludoDelDia = (hora: number) => (hora < 5 ? "Buenas noches" : hora < 12 ? "Buenos días" : hora < 19 ? "Buenas tardes" : "Buenas noches");
+
+/**
+ * Las frases del asistente con el trato elegido. Con `hora` (la del equipo) saluda como una persona, según el momento
+ * del día («Buenas tardes, señor. Bienvenido.»); sin ella, con «Hola».
+ */
+export function frases(trato: Trato, hora?: number) {
   const s = trato === "senor" ? "señor" : trato === "senora" ? "señora" : "";
   /** «…, señor» o nada. */
   const coma = (frase: string) => (s ? `${frase}, ${s}` : frase);
+  const hola = hora === undefined ? "Hola" : saludoDelDia(hora);
   const bienvenido = trato === "senora" ? "Bienvenida" : trato === "senor" ? "Bienvenido" : "Le doy la bienvenida";
   const llamados = [coma("Dígame") + ".", coma("A sus órdenes") + ".", coma("Le escucho") + ".", `¿En qué le sirvo${s ? `, ${s}` : ""}?`];
   return {
     bienvenida: (primera: boolean) =>
       primera
-        ? `${coma("Hola")}. ${bienvenido}. Soy Melki, su asistente: estoy atento y presto a seguir sus órdenes. Cuando me necesite, diga «Hola Melki», aunque esta barra esté cerrada.`
+        ? `${coma(hola)}. ${bienvenido}. Soy Melki, su asistente: estoy atento y presto a seguir sus órdenes. Cuando me necesite, diga «Hola Melki», aunque esta barra esté cerrada.`
         : `${coma("A su servicio")}. Diga «Hola Melki» cuando me necesite.`,
     llamado: (vez: number, ingles: boolean) =>
       ingles
         ? `Hello${s ? `, ${trato === "senora" ? "madam" : "sir"}` : ""}. Le escucho.`
         : vez === 0
-          ? `${s ? `Hola, mi ${s}` : "Hola"}. Le escucho; estoy atento y presto a seguir sus órdenes.`
+          ? `${hora === undefined ? (s ? `Hola, mi ${s}` : "Hola") : coma(hola)}. Le escucho; estoy atento y presto a seguir sus órdenes.`
           : llamados[(vez - 1) % llamados.length],
     despedida: `Con su permiso${s ? `, ${s}` : ""}, dejo de escuchar. Aquí estaré cuando me necesite.`,
     /** Al apagarlo con la escucha en reposo: sigue atento a su nombre. */
@@ -254,7 +262,7 @@ export function frases(trato: Trato) {
     verHerramientas: `Para revisar los nodos y los parámetros, ¿le muestro el panel de herramientas${s ? `, ${s}` : ""}?`,
     mostrando: (panel: "resultados" | "herramientas") => `${coma("Con gusto")}. Aquí tiene el panel de ${panel}.`,
     sinPanel: `Como usted diga${s ? `, ${s}` : ""}. Lo dejo oculto; cuando lo necesite, pídamelo o toque el botón de mi barra.`,
-    prueba: `${coma("Hola")}. Así sonará mi voz. Estoy a sus órdenes.`,
+    prueba: `${coma(hola)}. Así sonará mi voz. Los sistemas del simulador están listos y quedo a sus órdenes.`,
   };
 }
 
