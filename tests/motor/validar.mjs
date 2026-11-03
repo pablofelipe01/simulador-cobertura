@@ -46,6 +46,7 @@ export { costoTorre, costoNodo, ALTURA_MAXIMA_M } from "./src/lib/radio/costos";
 export { costoRedTrama, OPERACION_TRAMA, SF_TRAMA } from "./src/lib/radio/trama";
 export { armarPitch, equilibrio, usuariosParaEquilibrio, pesosHablados, departamentoTrama, PAGOS_DIA_DEFECTO } from "./src/lib/negocio/pitch";
 export { armarRecorrido, resumenRecorrido, buscarParada, MAX_PUNTOS_RECORRIDO } from "./src/lib/negocio/recorrido-red";
+export { modoBilingue, recibirDelMotor, fijarIdioma, tieneMarcas } from "./src/lib/idioma";
 `;
 const tmp = mkdtempSync(path.join(os.tmpdir(), "motor-"));
 const archivo = path.join(tmp, "motor.mjs");
@@ -789,6 +790,26 @@ caso("Sin D, todas conectadas", sinD.nodos.every((n) => n.saltos !== null));
     const o = opt.opciones[opt.recomendada];
     caso("Optimizar: misma meta con menos costo", opt.modo === "optimizar" && o && o.resumen.factible && o.costoRelativo < 1, o ? `costo relativo ${o.costoRelativo.toFixed(2)} · ${opt.opciones.map((x) => `${x.id} ${x.costoRelativo.toFixed(2)} ${x.resumen.utilPct.toFixed(1)}%`).join(" | ")} · inicial ${opt.inicial.utilPct.toFixed(1)}%` : "sin opciones");
   }
+}
+
+// v17: el motor en los dos idiomas. En el Web Worker escribe cada texto en los dos idiomas (marcados) y la pantalla
+// muestra el suyo: resuelto en español es lo mismo de siempre, y en inglés no queda ninguna marca ni texto en español
+{
+  const comparable = (x) => JSON.stringify(x, (k, v) => (k === "duracionMs" ? undefined : ArrayBuffer.isView(v) ? Array.from(v) : v));
+  const normal = await m.simular(20, antenas, p, { tipo: "plano" }, ctx);
+  m.modoBilingue(true);
+  const doble = await m.simular(20, antenas, p, { tipo: "plano" }, ctx);
+  m.modoBilingue(false);
+  caso("Motor bilingüe: trae los textos marcados", JSON.stringify(doble).includes("\u0001") || comparable(doble).includes("\\u0001"));
+  const es = m.recibirDelMotor(doble, "es");
+  caso("Motor bilingüe: resuelto en español es igual a lo de siempre", comparable(es) === comparable(normal));
+  const en = m.recibirDelMotor(doble, "en");
+  caso("Motor bilingüe: en inglés, sin marcas", !comparable(en).includes("\\u0001") && !comparable(en).includes("\\u0002"));
+  caso("Motor bilingüe: la factibilidad en inglés", en.factibilidad.titulo === "Not feasible yet" && en.factibilidad.recomendaciones.some((t) => t.startsWith("D doesn't reach")), `${en.factibilidad.titulo} · ${en.factibilidad.recomendaciones[0]}`);
+  m.fijarIdioma("en");
+  const directo = await m.simular(21, antenas, p, { tipo: "plano" }, ctx);
+  m.fijarIdioma("es");
+  caso("Motor en inglés directo (sin el Web Worker) igual al resuelto en inglés", comparable(directo.factibilidad) === comparable(en.factibilidad));
 }
 
 console.log(fallos ? `\n✗ ${fallos} caso(s) con fallo` : "\n✓ Motor verificado");
