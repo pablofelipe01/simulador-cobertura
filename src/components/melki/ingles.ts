@@ -229,6 +229,8 @@ const ENTEROS: Regla[] = [
   // Paneles
   [/^(?:clean|clear) (?:the |up the )?screen$|^(?:hide|close) (?:all |both |the )?(?:panels|sidebars)$|^(?:just|only) the map$|^full ?screen(?: map)?$|^map only$/i, "pantalla limpia"],
   [/^(?:show|open|bring back) (?:all |both |the )?(?:panels|sidebars)$/i, "muestra los paneles"],
+  [/^(?:show|open|display|bring back) (?:me )?(?:the )?(?:top bar|top toolbar|toolbar|tool bar|menu bar|top menu)$/i, "muestra la barra de arriba"],
+  [/^(?:hide|close) (?:the )?(?:top bar|top toolbar|toolbar|tool bar|menu bar|top menu)$/i, "oculta la barra de arriba"],
   [/^(?:show|open|display) (?:me )?(?:the )?results panel$|^open (?:the )?results$/i, "abre el panel de resultados"],
   [/^(?:hide|close) (?:the )?results(?: panel)?$/i, "oculta el panel de resultados"],
   [/^(?:show|open|display) (?:me )?(?:the )?(?:tools(?: panel)?|left panel|side panel|tool panel)$/i, "abre el panel de herramientas"],
