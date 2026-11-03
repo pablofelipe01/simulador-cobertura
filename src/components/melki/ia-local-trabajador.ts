@@ -8,7 +8,8 @@
 // Nada sale del equipo: solo se descargan, una vez, la biblioteca (verificada con su huella SHA-256), el programa del
 // modelo y sus pesos, que quedan guardados en el navegador (IndexedDB) para usarlos sin internet. Se guarda como texto
 // para crearlo desde un Blob (funciona igual en el servidor y en la versión HTML). Si la tarjeta gráfica deja de
-// responder (WebLLM lo avisa por la consola: «Device was lost…»), el motor se suelta y la página se entera.
+// responder (WebLLM lo avisa por la consola: «Device was lost…»), el motor se suelta y la página se entera. Los avisos
+// propios llevan una clave (además del texto en español): la página los dice en el idioma de la pantalla.
 
 export const CODIGO_IA_LOCAL = String.raw`
 const BASE = "melki-ia-local-v1";
@@ -18,6 +19,14 @@ let motor = null;
 let modeloCargado = null;
 let cargando = null;
 let perdida = null;
+
+// Un error propio: el texto en español y su clave (la página lo traduce con la clave)
+function falla(clave, texto, dato) {
+  const e = new Error(texto);
+  e.clave = clave;
+  e.dato = dato;
+  return e;
+}
 
 // La tarjeta gráfica se bloqueó o se reinició: WebLLM descarga el modelo por su cuenta y lo dice por la consola
 const TARJETA = /device (was )?lost|DEVICE_HUNG|DEVICE_REMOVED|DEVICE_RESET|DXGI_ERROR|Model not loaded|has already been disposed|Instance\.dispose|GPU (process|device) (was )?(lost|crashed)|context lost/i;
@@ -83,13 +92,13 @@ async function biblioteca(m) {
   if (W) return W;
   let lib = await leer("lib:" + m.libreria);
   if (!lib) {
-    self.postMessage({ tipo: "progreso", fase: "biblioteca", avance: 0, texto: "Descargando el motor de la IA local (unos 6,5 MB)…" });
+    self.postMessage({ tipo: "progreso", fase: "biblioteca", clave: "motor", avance: 0, texto: "Descargando el motor de la IA local (unos 6,5 MB)…" });
     const r = await fetch(m.libreria);
-    if (!r.ok) throw new Error("No pude descargar el motor de la IA local (" + r.status + "). Revise la conexión a internet.");
+    if (!r.ok) throw falla("descarga-motor", "No pude descargar el motor de la IA local (" + r.status + "). Revise la conexión a internet.", r.status);
     lib = await r.blob();
     if (m.huella) {
       const h = await huella(lib);
-      if (h !== m.huella) throw new Error("El motor de la IA local que llegó no es el esperado (su huella SHA-256 no coincide): no lo uso.");
+      if (h !== m.huella) throw falla("huella", "El motor de la IA local que llegó no es el esperado (su huella SHA-256 no coincide): no lo uso.");
     }
     await escribir("lib:" + m.libreria, lib);
   }
@@ -115,7 +124,7 @@ async function cargar(m) {
     self.postMessage({ tipo: "listo", modelo: m.modelo });
     return;
   }
-  if (!navigator.gpu) throw new Error("Este navegador no tiene WebGPU: use Chrome o Edge actualizados en un equipo con tarjeta gráfica.");
+  if (!navigator.gpu) throw falla("sin-webgpu", "Este navegador no tiene WebGPU: use Chrome o Edge actualizados en un equipo con tarjeta gráfica.");
   const avance = (p) => self.postMessage({ tipo: "progreso", fase: "modelo", avance: typeof p.progress === "number" ? p.progress : 0, texto: String(p.text || "") });
   if (motor) {
     motor.setInitProgressCallback && motor.setInitProgressCallback(avance);
@@ -130,7 +139,7 @@ async function cargar(m) {
 async function completar(m) {
   if (cargando) await cargando;
   if (perdida) throw new Error("Device was lost: " + perdida);
-  if (!motor) throw new Error("La IA local no está lista.");
+  if (!motor) throw falla("no-lista", "La IA local no está lista.");
   const pedido = {
     messages: m.mensajes,
     temperature: typeof m.temperatura === "number" ? m.temperatura : 0.2,
@@ -186,7 +195,7 @@ self.onmessage = async (e) => {
       motor = null;
       modeloCargado = null;
     }
-    self.postMessage({ tipo: "error", id: m.id, mensaje, gpu });
+    self.postMessage({ tipo: "error", id: m.id, mensaje, gpu, clave: (err && err.clave) || undefined, dato: err ? err.dato : undefined });
   }
 };
 `;

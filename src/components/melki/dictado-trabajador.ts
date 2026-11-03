@@ -135,7 +135,7 @@ self.onmessage = async (e) => {
       // Tope de palabras según la duración y sin repetir frases (evita los bucles típicos de Whisper)
       const segundos = m.audio.length / 16000;
       const salida = await transcriptor(m.audio, {
-        language: "spanish",
+        language: m.idioma === "english" ? "english" : "spanish",
         task: "transcribe",
         max_new_tokens: Math.max(16, Math.min(200, Math.ceil(segundos * 9) + 10)),
         no_repeat_ngram_size: 4,

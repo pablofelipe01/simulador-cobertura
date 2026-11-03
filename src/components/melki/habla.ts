@@ -8,6 +8,8 @@
 // redondeadas («45,1 %» → «45 %», «10,00 km» → «10 km», «$150.000.000» → «150 millones de pesos»), sin los
 // paréntesis técnicos ni las coordenadas («en ese punto»), y empieza variando como lo haría alguien de verdad («Hecho,
 // señor.», «Muy bien, señor.») en vez de repetir siempre «Listo:».
+import { idioma } from "@/lib/idioma";
+
 import { textoParaVoz, type Trato } from "./manos-libres";
 
 export type OpcionesHabla = {
@@ -84,12 +86,80 @@ function apertura(texto: string, trato: Trato, vez: number): string {
   return `${inicio}${conTrato ? `, ${s}` : ""}. ${resto.charAt(0).toUpperCase()}${resto.slice(1)}`;
 }
 
+/* ───────────── En inglés ───────────── */
+
+const APERTURAS_EN = ["Done", "Very well", "All set", "Certainly"];
+const quitarCerosEn = (t: string) => t.replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
+
+/** Las cifras en inglés como las diría una persona («45.1%» → «45%», «10.00 km» → «10 km», «2.35 km» → «2.4 km»). */
+export function suavizarCifrasEn(texto: string): string {
+  return texto.replace(/(?<![\d,.])(\d+)\.(\d+)(\s?%)?/g, (todo, entero: string, dec: string, pct: string | undefined, i: number, s: string) => {
+    if (/^(\d|\.\d)/.test(s.slice(i + todo.length, i + todo.length + 2))) return todo;
+    const v = Number(`${entero}.${dec}`);
+    if (!Number.isFinite(v)) return todo;
+    if (pct && v >= 99 && v < 100) return `${quitarCerosEn(v.toFixed(1))}${pct}`;
+    if (v >= 10) return `${Math.round(v)}${pct ?? ""}`;
+    return `${quitarCerosEn(v.toFixed(1))}${pct ?? ""}`;
+  });
+}
+
+/** «COP 150,000,000» → «150 million pesos»; «COP 1,250,000» → «1.3 million pesos»; «COP 350,000» → «350 thousand pesos». */
+export function plataHabladaEn(texto: string): string {
+  return texto.replace(/\bCOP\s?\$?\s?(\d{1,3}(?:,\d{3})+|\d+)(?![\d.,]*\d)(?:\s+pesos)?/g, (_todo, cifra: string) => {
+    const v = Number(cifra.replace(/,/g, ""));
+    if (!Number.isFinite(v)) return cifra;
+    if (v >= 1e9) return `${quitarCerosEn((v / 1e9).toFixed(1))} billion pesos`;
+    if (v >= 1e6) {
+      const m = v / 1e6;
+      return `${m >= 10 ? String(Math.round(m)) : quitarCerosEn(m.toFixed(1))} million pesos`;
+    }
+    if (v >= 1000) return `${Math.round(v / 1000)} thousand pesos`;
+    return `${v} pesos`;
+  });
+}
+
+/** Las coordenadas no se leen en voz alta: «at 4.35, -72.9» → «at that point». */
+export function sinCoordenadasEn(texto: string): string {
+  return texto
+    .replace(/\b(at|in|to|from|near|towards?|on)\s+\(?-?\d{1,2}\.\d{1,7}\s*,\s*-?\d{1,3}\.\d{1,7}\)?/gi, "$1 that point")
+    .replace(/\(?-?\d{1,2}\.\d{1,7}\s*,\s*-?\d{1,3}\.\d{1,7}\)?/g, "that point");
+}
+
+/** «Done: I placed…» → «Done, sir. I placed…» (variando cómo empieza). */
+function aperturaEn(texto: string, trato: Trato, vez: number): string {
+  const m = texto.match(/^Done[:,.]\s*/);
+  if (!m) return texto;
+  const resto = texto.slice(m[0].length);
+  if (!resto) return texto;
+  const s = trato === "senor" ? "sir" : trato === "senora" ? "ma'am" : "";
+  const conTrato = s && !/\b(sir|ma'am|madam)\b/i.test(resto.split(/[.!?]/)[0] ?? "");
+  const inicio = APERTURAS_EN[vez % APERTURAS_EN.length];
+  return `${inicio}${conTrato ? `, ${s}` : ""}. ${resto.charAt(0).toUpperCase()}${resto.slice(1)}`;
+}
+
+function hablaNaturalEn(texto: string, o: OpcionesHabla, vez: number): string {
+  const base = textoParaVoz(texto, o.completo ?? false);
+  let t = sinCoordenadasEn(base);
+  if (!o.completo) t = sinParentesis(t);
+  t = plataHabladaEn(suavizarCifrasEn(t));
+  // «the repeater “Repeater 4”» se dice «Repeater 4»
+  t = t.replace(/\bthe (repeater|gateway|person|antenna|node) “([^”]+)”/gi, (todo, tipo: string, nombre: string) => (nombre.toLowerCase().startsWith(tipo.toLowerCase()) ? nombre : todo));
+  t = aperturaEn(t, o.trato ?? "senor", vez);
+  return t
+    .replace(/\s+([.,;:])/g, "$1")
+    .replace(/([,;:])\s*\./g, ".")
+    .replace(/\.{2,}/g, ".")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 /**
  * Lo que Melki dice en voz alta de una respuesta escrita: lo esencial (o completo, si así se pidió en Ajustes), dicho
  * como lo diría una persona. El texto escrito no cambia.
  */
 export function hablaNatural(texto: string, o: OpcionesHabla = {}): string {
   const vez = o.vez ?? vecesDicho++;
+  if (idioma() === "en") return hablaNaturalEn(texto, o, vez);
   const base = textoParaVoz(texto, o.completo ?? false);
   let t = sinCoordenadas(base);
   if (!o.completo) t = sinParentesis(t);

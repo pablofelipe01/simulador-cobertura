@@ -17,7 +17,9 @@
 import { ChevronRight, MessageSquareText, Volume2, VolumeX, X } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
+import { tx } from "@/lib/idioma";
 import type { CifraPitch } from "@/lib/negocio/pitch";
+import { useIdioma } from "@/lib/use-idioma";
 
 const TONOS: Record<NonNullable<CifraPitch["tono"]>, string> = {
   bien: "text-buena",
@@ -70,7 +72,7 @@ export function NubeMapa({
   cuenta = null,
   onSobre,
   onCerrar,
-  etiquetaCerrar = "Cerrar",
+  etiquetaCerrar,
   estilo = "vidrio",
   voz,
   siguiendoVoz = false,
@@ -114,6 +116,8 @@ export function NubeMapa({
   siguiendoVoz?: boolean;
   tramoVoz?: TramoVoz | null;
 }) {
+  useIdioma();
+  const cerrar = etiquetaCerrar ?? tx("Cerrar", "Close");
   const caja = useRef<HTMLDivElement>(null);
   const [alto, setAlto] = useState(0);
   const total = parrafos.reduce((s, p) => s + p.length, 0);
@@ -355,13 +359,17 @@ export function NubeMapa({
             holo ? (voz.activa ? "holo-voz-encendida text-[#ffe0c9]" : "holo-voz text-white/80 hover:text-white") : voz.activa ? "bg-melki-clara text-melki-oscura ring-1 ring-melki/40" : "bg-black/5 text-carbon-2 hover:bg-black/10"
           }`}
           style={{ left: left + W - (onCerrar ? 36 : 8) - anchoVoz, top: top + 7, width: anchoVoz }}
-          aria-label="Voz de Melki"
+          aria-label={tx("Voz de Melki", "Melki's voice")}
           aria-pressed={voz.activa}
-          title={voz.activa ? "Melki lo dice en voz alta (toque para que solo lo escriba)" : "Melki solo lo escribe (toque para que lo diga en voz alta)"}
+          title={
+            voz.activa
+              ? tx("Melki lo dice en voz alta (toque para que solo lo escriba)", "Melki says it out loud (tap so he only writes it)")
+              : tx("Melki solo lo escribe (toque para que lo diga en voz alta)", "Melki only writes it (tap so he says it out loud)")
+          }
           data-voz={voz.activa ? "encendida" : "apagada"}
         >
           {voz.activa ? <Volume2 size={14} aria-hidden="true" /> : <VolumeX size={14} aria-hidden="true" />}
-          <span>Voz</span>
+          <span>{tx("Voz", "Voice")}</span>
           {voz.activa && (
             <span className={`holo-ecualizador ${voz.hablando ? "activo" : ""}`} aria-hidden="true">
               <i />
@@ -378,8 +386,8 @@ export function NubeMapa({
           {...sobreHandlers}
           className={`pointer-events-auto absolute rounded-full p-1 ${holo ? "text-white/70 hover:bg-white/10 hover:text-white" : "text-carbon-2/75 hover:bg-black/5 hover:text-carbon"}`}
           style={{ left: left + W - 34, top: top + 8 }}
-          aria-label={etiquetaCerrar}
-          title={etiquetaCerrar}
+          aria-label={cerrar}
+          title={cerrar}
         >
           <X size={16} />
         </button>

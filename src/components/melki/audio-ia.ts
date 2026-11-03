@@ -7,7 +7,8 @@
 // de eco, supresión de ruido y control de ganancia del navegador), y la voz del modelo (PCM a 24 kHz) en cola, sin
 // cortes entre trozos (con un colchón al empezar, por si la red trae los trozos a saltos), con la posibilidad de
 // callarla de golpe cuando la persona habla encima. Si el micrófono se desconecta o el navegador pausa el audio (la
-// pestaña en segundo plano, el celular), se avisa o se reanuda solo.
+// pestaña en segundo plano, el celular), se avisa o se reanuda solo. Los avisos, en el idioma de la pantalla.
+import { tx } from "@/lib/idioma";
 
 const TASA_ENTRADA = 16000;
 const TROZO = 1600; // 100 ms a 16 kHz
@@ -74,13 +75,19 @@ registerProcessor("melki-captura", MelkiCaptura);
  * permiso.
  */
 export async function abrirMicrofonoIA(onPcm: (pcm: Int16Array) => void, onNivel?: (nivel: number) => void, onFin?: () => void): Promise<MicrofonoIA> {
-  if (!navigator.mediaDevices?.getUserMedia) throw new Error("Este navegador no deja usar el micrófono.");
+  if (!navigator.mediaDevices?.getUserMedia) throw new Error(tx("Este navegador no deja usar el micrófono.", "This browser doesn't allow using the microphone."));
   let stream: MediaStream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
   } catch (e) {
     const n = (e as DOMException)?.name;
-    throw new Error(n === "NotAllowedError" ? "El navegador no tiene permiso para usar el micrófono." : n === "NotFoundError" ? "No encontré un micrófono en este equipo." : "No pude abrir el micrófono.");
+    throw new Error(
+      n === "NotAllowedError"
+        ? tx("El navegador no tiene permiso para usar el micrófono.", "The browser doesn't have permission to use the microphone.")
+        : n === "NotFoundError"
+          ? tx("No encontré un micrófono en este equipo.", "I couldn't find a microphone on this computer.")
+          : tx("No pude abrir el micrófono.", "I couldn't open the microphone."),
+    );
   }
   const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
   const ctx = new Ctx();

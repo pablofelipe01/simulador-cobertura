@@ -11,6 +11,9 @@
 import { Check } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
+import { tx } from "@/lib/idioma";
+import { useIdioma } from "@/lib/use-idioma";
+
 import { MelkiAvatar } from "./avatar";
 import type { ApiTour, FotoTour, Preparacion, Tour } from "./tours";
 import { callar, hablar } from "./voz";
@@ -54,6 +57,7 @@ type Props = {
 };
 
 export function Recorrido({ tour, t, preparar, voz, onTerminar }: Props) {
+  const lengua = useIdioma();
   const pasos = tour.pasos;
   const practico = Boolean(tour.practica);
   const [i, setI] = useState(0);
@@ -133,7 +137,7 @@ export function Recorrido({ tour, t, preparar, voz, onTerminar }: Props) {
   // Hecho: se celebra un momento y se pasa solo al siguiente
   useEffect(() => {
     if (!hecho) return;
-    if (voz) hablar(hecho === "usted" ? (paso.tarea?.aviso ?? "¡Bien hecho!") : "Listo.");
+    if (voz) hablar(hecho === "usted" ? (paso.tarea?.aviso ?? tx("¡Bien hecho!", "Well done!")) : tx("Listo.", "Done."));
     const s = window.setTimeout(() => ir(i + 1), 1300);
     return () => window.clearTimeout(s);
   }, [hecho]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -142,7 +146,8 @@ export function Recorrido({ tour, t, preparar, voz, onTerminar }: Props) {
     if (!voz) return;
     const detener = final ? hablar(`${tour.final}`) : hablar(`${paso.titulo}. ${paso.texto}`);
     return detener;
-  }, [i, final, voz]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Con otro idioma, lo vuelve a decir en ese idioma
+  }, [i, final, voz, lengua]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const tecla = (e: KeyboardEvent) => {
@@ -207,7 +212,7 @@ export function Recorrido({ tour, t, preparar, voz, onTerminar }: Props) {
   if (typeof estilo.left === "number" && ventana.w) estilo.left = Math.min(Math.max(12, estilo.left), Math.max(12, ventana.w - ancho - 12));
 
   const ultimo = i === pasos.length - 1;
-  const etiqueta = i === 0 ? "Introducción" : `Paso ${i} de ${pasos.length - 1}`;
+  const etiqueta = i === 0 ? tx("Introducción", "Introduction") : tx(`Paso ${i} de ${pasos.length - 1}`, `Step ${i} of ${pasos.length - 1}`);
   const boton = "rounded-lg px-2.5 py-1.5 text-[13px] font-medium";
   const principal = `${boton} bg-carbon text-white hover:bg-carbon-2`;
   const secundario = `${boton} ring-1 ring-linea hover:bg-papel-2`;
@@ -233,9 +238,9 @@ export function Recorrido({ tour, t, preparar, voz, onTerminar }: Props) {
               {tour.nombre}
               {!final && <span className="font-normal text-tenue normal-case"> · {etiqueta}</span>}
             </p>
-            <p className="font-cond text-[18px] leading-tight font-semibold">{final ? "¡Terminó el tour!" : paso.titulo}</p>
+            <p className="font-cond text-[18px] leading-tight font-semibold">{final ? tx("¡Terminó el tour!", "Tour complete!") : paso.titulo}</p>
             <p className="mt-1 text-[14px] leading-snug text-carbon-2">
-              {final ? `${tour.final}${practico ? " Al cerrar, su escenario vuelve tal cual." : ""}` : paso.texto}
+              {final ? `${tour.final}${practico ? tx(" Al cerrar, su escenario vuelve tal cual.", " When you close it, your scenario goes back exactly as it was.") : ""}` : paso.texto}
             </p>
           </div>
         </div>
@@ -244,15 +249,15 @@ export function Recorrido({ tour, t, preparar, voz, onTerminar }: Props) {
           <div className={`mt-3 flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[12.5px] leading-snug ${hecho ? "bg-salvia-clara/70 text-carbon" : "bg-papel text-carbon-2"}`} role="status">
             {hecho ? (
               <>
-                <Check size={15} className="shrink-0 text-salvia-oscura" /> {hecho === "usted" ? (paso.tarea.aviso ?? "¡Bien hecho!") : "Listo, lo hice por usted."}
+                <Check size={15} className="shrink-0 text-salvia-oscura" /> {hecho === "usted" ? (paso.tarea.aviso ?? tx("¡Bien hecho!", "Well done!")) : tx("Listo, lo hice por usted.", "Done, I did it for you.")}
               </>
             ) : revisando ? (
               <>
-                <Check size={15} className="shrink-0 text-salvia-oscura" /> Ya está listo; siga cuando quiera.
+                <Check size={15} className="shrink-0 text-salvia-oscura" /> {tx("Ya está listo; siga cuando quiera.", "It's already done; carry on whenever you like.")}
               </>
             ) : (
               <>
-                <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-melki" aria-hidden="true" /> Hágalo en la pantalla; le aviso cuando esté.
+                <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-melki" aria-hidden="true" /> {tx("Hágalo en la pantalla; le aviso cuando esté.", "Do it on the screen; I'll let you know when it's done.")}
               </>
             )}
           </div>
@@ -262,35 +267,35 @@ export function Recorrido({ tour, t, preparar, voz, onTerminar }: Props) {
           {final ? (
             <>
               <button type="button" onClick={() => onTerminar(true)} className={secundario}>
-                Otro tour
+                {tx("Otro tour", "Another tour")}
               </button>
               <button type="button" autoFocus onClick={() => onTerminar()} className={principal}>
-                Cerrar
+                {tx("Cerrar", "Close")}
               </button>
             </>
           ) : (
             <>
               <button type="button" onClick={() => onTerminar()} className={`${boton} mr-auto font-normal text-carbon-2 hover:bg-black/5`}>
-                Salir
+                {tx("Salir", "Exit")}
               </button>
               {i > 0 && !tarea && !hecho && (
                 <button type="button" onClick={() => ir(i - 1, true)} className={secundario}>
-                  Anterior
+                  {tx("Anterior", "Back")}
                 </button>
               )}
               {tarea && !hecho ? (
                 <>
                   <button type="button" onClick={() => ir(i + 1)} className={secundario}>
-                    Omitir paso
+                    {tx("Omitir paso", "Skip step")}
                   </button>
                   <button type="button" autoFocus onClick={hacerPorMi} className={principal}>
-                    Hágalo por mí
+                    {tx("Hágalo por mí", "Do it for me")}
                   </button>
                 </>
               ) : (
                 !hecho && (
                   <button type="button" autoFocus onClick={() => ir(i + 1)} className={principal}>
-                    {i === 0 ? "Empezar" : ultimo ? "Terminar" : "Siguiente"}
+                    {i === 0 ? tx("Empezar", "Start") : ultimo ? tx("Terminar", "Finish") : tx("Siguiente", "Next")}
                   </button>
                 )
               )}

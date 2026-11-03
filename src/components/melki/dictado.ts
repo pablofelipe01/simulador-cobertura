@@ -9,9 +9,10 @@
 //  • «privado»: el audio no sale del equipo. Usa el reconocimiento en el dispositivo del navegador si existe
 //    (Chrome; Edge en versiones nuevas) y, si no, Whisper dentro de la página (ver dictado-trabajador.ts).
 import { CONFIG } from "@/lib/config";
+import { idioma, tx } from "@/lib/idioma";
 
 import { CODIGO_TRABAJADOR } from "./dictado-trabajador";
-import { numerosEnPalabras } from "./numeros";
+import { numerosEnPalabras, numerosEnPalabrasEn } from "./numeros";
 
 export type ModoDictado = "navegador" | "privado";
 export type EstadoDictado = "preparando" | "escuchando" | "transcribiendo" | "inactivo";
@@ -120,10 +121,35 @@ export function corregirPalabras(texto: string): string {
     .replace(/\b(ub[ií]came|ll[eé]vame|mu[eé]strame)(en|a|al)\b/gi, "$1 $2");
 }
 
+/** Lo mismo en inglés: «gate way» → «gateway», «mesh core» → «MeshCore», «star link» → «Starlink»… */
+function corregirPalabrasIngles(texto: string): string {
+  return texto
+    .replace(/\b(gate\s+way|gait\s*way|gateaway|get\s*way)\b/gi, "gateway")
+    .replace(/\b(mesh|mash|mush)\s*(core|chore|cor)\b/gi, "MeshCore")
+    .replace(/\bmesh\s*tastic\b/gi, "Meshtastic")
+    .replace(/\b(star\s+link|starling)\b/gi, "Starlink")
+    .replace(/\b(whats\s+app|what's\s+app)\b/gi, "WhatsApp")
+    .replace(/\blow\s+ra\b|\blaura\b(?=\s+(network|mesh|radio|signal))/gi, "LoRa")
+    .replace(/\b(?:s\s+f|ess\s+eff)\s*(\d{1,2})\b/gi, "SF$1")
+    .replace(/\b(hectors|hectars|hecktares)\b/gi, "hectares")
+    .replace(/\b(repeat her|repeat er|re peter|repeter)\b/gi, "repeater");
+}
+
+/** Ajusta lo dictado en inglés para las órdenes: «minus 73» → «-73», «4 degrees» → «4°». */
+function normalizarDictadoIngles(texto: string): string {
+  let t = corregirPalabrasIngles(texto.replace(/\s+/g, " ").trim());
+  t = t.replace(/(\d)\s+point\s+(\d)/gi, "$1.$2");
+  t = t.replace(/\b(?:minus|negative)\s+(\d)/gi, "-$1");
+  t = t.replace(/(\d)\s*degrees?\b/gi, "$1°");
+  t = t.replace(/(\d)\s+(m|meters|metres)\b/gi, "$1 m");
+  return t;
+}
+
 /**
  * Ajusta lo dictado para las órdenes: «4 punto 25» → «4.25», «menos 73» → «-73», «4 grados 30 minutos» → «4°30'».
  */
 export function normalizarDictado(texto: string): string {
+  if (idioma() === "en") return normalizarDictadoIngles(texto);
   let t = corregirPalabras(texto.replace(/\s+/g, " ").trim());
   t = t.replace(/(\d)\s+(?:punto|coma)\s+(\d)/gi, "$1.$2");
   t = t.replace(/\bmenos\s+(\d)/gi, "-$1");
@@ -137,13 +163,13 @@ export function normalizarDictado(texto: string): string {
 
 /** Junta lo que ya estaba escrito con lo dictado (números en cifras y mayúscula inicial si la caja estaba vacía). */
 export function componerTexto(base: string, dictado: string): string {
-  const d = normalizarDictado(numerosEnPalabras(dictado));
+  const d = normalizarDictado(idioma() === "en" ? numerosEnPalabrasEn(dictado) : numerosEnPalabras(dictado));
   if (!base.trim()) return d.charAt(0).toUpperCase() + d.slice(1);
   return d ? `${base.replace(/\s+$/, "")} ${d}` : base;
 }
 
 /** Frases que Whisper suele inventar con silencio o ruido. */
-const ALUCINACIONES = /^(¡?gracias( por (ver|mirar|su atenci[oó]n))?[.!]*|subt[ií]tulos?.*|.*amara\.org.*|suscr[ií]bete.*|\[.*\]|\(.*\)|\.+|…)$/i;
+const ALUCINACIONES = /^(¡?gracias( por (ver|mirar|su atenci[oó]n))?[.!]*|subt[ií]tulos?.*|.*amara\.org.*|suscr[ií]bete.*|\[.*\]|\(.*\)|\.+|…|thank you( (so|very) much)?( for watching)?[.!]*|thanks for watching.*|please subscribe.*|subscribe.*|you[.!]*)$/i;
 /** Quita frases repetidas seguidas («no podemos decir que no podemos decir que…»). */
 export function quitarRepeticiones(t: string): string {
   let x = t;
@@ -292,14 +318,28 @@ async function abrirMicrofono(onNivel?: (nivel: number, voz: boolean) => void): 
 
 /* ───────────── Modo navegador (y en el dispositivo, si el navegador lo trae) ───────────── */
 
-const IDIOMAS = ["es-CO", "es-419", "es-US", "es-MX", "es-ES"];
+/** Los idiomas del reconocimiento, del preferido al último (en inglés, el de EE. UU. es el que mejor entiende). */
+const idiomasReconocimiento = () => (idioma() === "en" ? ["en-US", "en-GB"] : ["es-CO", "es-419", "es-US", "es-MX", "es-ES"]);
 
 const ERRORES: Record<string, string> = {
-  "not-allowed": "No tengo permiso para usar el micrófono. Permítalo en el candado de la barra de direcciones y vuelva a tocar el micrófono.",
-  "service-not-allowed": "El navegador no permite el dictado en esta página. Pruebe el dictado privado (en Ajustes de voz).",
-  "audio-capture": "No encuentro un micrófono. Revise que esté conectado y que Windows le dé permiso al navegador.",
-  network: "El dictado del navegador necesita internet. Sin conexión, use el dictado privado (en Ajustes de voz).",
-  "language-not-supported": "El reconocimiento no admite español en este equipo.",
+  get "not-allowed"() {
+    return tx(
+      "No tengo permiso para usar el micrófono. Permítalo en el candado de la barra de direcciones y vuelva a tocar el micrófono.",
+      "I don't have permission to use the microphone. Allow it in the padlock of the address bar and tap the microphone again.",
+    );
+  },
+  get "service-not-allowed"() {
+    return tx("El navegador no permite el dictado en esta página. Pruebe el dictado privado (en Ajustes de voz).", "The browser doesn't allow dictation on this page. Try private dictation (in Voice settings).");
+  },
+  get "audio-capture"() {
+    return tx("No encuentro un micrófono. Revise que esté conectado y que Windows le dé permiso al navegador.", "I can't find a microphone. Check that it's connected and that Windows lets the browser use it.");
+  },
+  get network() {
+    return tx("El dictado del navegador necesita internet. Sin conexión, use el dictado privado (en Ajustes de voz).", "Browser dictation needs internet. Offline, use private dictation (in Voice settings).");
+  },
+  get "language-not-supported"() {
+    return tx("El reconocimiento no admite español en este equipo.", "Speech recognition doesn't support English on this device.");
+  },
 };
 
 /** Errores tras los que no tiene sentido volver a escuchar (falta permiso o el idioma). */
@@ -307,8 +347,16 @@ const FATALES = new Set(["not-allowed", "service-not-allowed", "language-not-sup
 /** El micrófono ocupado o desconectado un momento (otra app, el celular cambiando de audio): se reintenta unas veces. */
 const CAPTURAS_MAX = 5;
 /** Aviso cuando la escucha se cae seguido (sigue intentando sola, más despacio). */
-const AVISO_RED = "Sin conexión con el servicio de voz: sigo intentando cada pocos segundos. Sin internet, use el dictado privado (en Ajustes de voz).";
-const AVISO_MIC = "El micrófono deja de escuchar a cada momento: sigo intentando. Revise que esté conectado y que otra aplicación no lo esté usando.";
+const avisoRed = () =>
+  tx(
+    "Sin conexión con el servicio de voz: sigo intentando cada pocos segundos. Sin internet, use el dictado privado (en Ajustes de voz).",
+    "No connection with the speech service: I keep trying every few seconds. Without internet, use private dictation (in Voice settings).",
+  );
+const avisoMic = () =>
+  tx(
+    "El micrófono deja de escuchar a cada momento: sigo intentando. Revise que esté conectado y que otra aplicación no lo esté usando.",
+    "The microphone keeps dropping out: I keep trying. Check that it's connected and that no other app is using it.",
+  );
 
 /**
  * Escucha con el reconocimiento del navegador. Lo que el navegador hace distinto se arregla aquí, una sola vez:
@@ -483,7 +531,7 @@ function conReconocedor(Clase: ClaseReconocedor, idioma: string, local: boolean,
         // Un momento sin micrófono (otra app lo tomó, el celular cambió de audio): se reintenta; solo seguido es fatal
         capturas++;
         if (capturas > CAPTURAS_MAX || !opciones.continuo) fatal = ERRORES["audio-capture"];
-      } else if (FATALES.has(e.error)) fatal = ERRORES[e.error] ?? `El dictado se detuvo (${e.error}).`;
+      } else if (FATALES.has(e.error)) fatal = ERRORES[e.error] ?? tx(`El dictado se detuvo (${e.error}).`, `Dictation stopped (${e.error}).`);
       else red = true;
     };
     r.onend = () => {
@@ -506,12 +554,12 @@ function conReconocedor(Clase: ClaseReconocedor, idioma: string, local: boolean,
         capturas = 0;
         if (avisado) {
           avisado = false;
-          eventos.onEstado("escuchando", local ? "en este equipo" : undefined);
+          eventos.onEstado("escuchando", local ? tx("en este equipo", "on this device") : undefined);
         }
       }
       if (fallos >= 6 && !avisado) {
         avisado = true;
-        eventos.onEstado("preparando", red ? AVISO_RED : AVISO_MIC);
+        eventos.onEstado("preparando", red ? avisoRed() : avisoMic());
       }
       reintento = window.setTimeout(arrancar, fallos >= 6 ? 8000 : fallos ? Math.min(4000, 250 * 2 ** (fallos - 1)) : 60);
     };
@@ -522,19 +570,19 @@ function conReconocedor(Clase: ClaseReconocedor, idioma: string, local: boolean,
       actual = null;
       fallos++;
       if (fallos >= 6 && !opciones.continuo) {
-        eventos.onError("No pude encender el micrófono. Revise que esté conectado y que el navegador tenga permiso.");
+        eventos.onError(tx("No pude encender el micrófono. Revise que esté conectado y que el navegador tenga permiso.", "I couldn't turn on the microphone. Check that it's connected and that the browser has permission."));
         return terminar();
       }
       if (fallos >= 6 && !avisado) {
         avisado = true;
-        eventos.onEstado("preparando", AVISO_MIC);
+        eventos.onEstado("preparando", avisoMic());
       }
       reintento = window.setTimeout(arrancar, fallos >= 6 ? 8000 : Math.min(4000, 250 * 2 ** (fallos - 1)));
       return;
     }
     if (!empezo) {
       empezo = true;
-      eventos.onEstado("escuchando", local ? "en este equipo" : undefined);
+      eventos.onEstado("escuchando", local ? tx("en este equipo", "on this device") : undefined);
     }
     mantenerMicrofono();
   };
@@ -585,7 +633,7 @@ function conReconocedor(Clase: ClaseReconocedor, idioma: string, local: boolean,
 /** Reconocimiento en el dispositivo del navegador, si existe para español (lo instala si hace falta). */
 async function idiomaEnDispositivo(Clase: ClaseReconocedor | null, eventos: EventosDictado): Promise<string | null> {
   if (!Clase?.available) return null;
-  for (const lang of IDIOMAS) {
+  for (const lang of idiomasReconocimiento()) {
     let estado = "unavailable";
     try {
       estado = await Clase.available({ langs: [lang], processLocally: true });
@@ -594,7 +642,7 @@ async function idiomaEnDispositivo(Clase: ClaseReconocedor | null, eventos: Even
     }
     if (estado === "available") return lang;
     if ((estado === "downloadable" || estado === "downloading") && Clase.install) {
-      eventos.onEstado("preparando", "Descargando el español del navegador para dictar sin internet…");
+      eventos.onEstado("preparando", tx("Descargando el español del navegador para dictar sin internet…", "Downloading the browser's English to dictate without internet…"));
       try {
         if (await Clase.install({ langs: [lang], processLocally: true })) return lang;
       } catch {
@@ -637,10 +685,10 @@ function prepararWhisper(eventos: EventosDictado): Promise<void> {
         eventos.onEstado(
           "preparando",
           guardado
-            ? "Cargando el reconocedor privado guardado en este equipo…"
+            ? tx("Cargando el reconocedor privado guardado en este equipo…", "Loading the private recognizer saved on this device…")
             : m.total > 0
-              ? `Descargando el reconocedor privado: ${mb(m.cargado)} de ${mb(m.total)} MB (solo la primera vez)…`
-              : "Preparando el reconocedor privado…",
+              ? tx(`Descargando el reconocedor privado: ${mb(m.cargado)} de ${mb(m.total)} MB (solo la primera vez)…`, `Downloading the private recognizer: ${mb(m.cargado)} of ${mb(m.total)} MB (only the first time)…`)
+              : tx("Preparando el reconocedor privado…", "Preparing the private recognizer…"),
         );
       } else if (m.tipo === "listo") {
         oyentes.delete(oir);
@@ -670,7 +718,7 @@ function transcribir(audio: Float32Array): Promise<string> {
       }
     };
     oyentes.add(oir);
-    w.postMessage({ tipo: "transcribir", id, audio }, [audio.buffer]);
+    w.postMessage({ tipo: "transcribir", id, audio, idioma: idioma() === "en" ? "english" : "spanish" }, [audio.buffer]);
   });
 }
 
@@ -694,7 +742,7 @@ function a16k(x: Float32Array, frecuencia: number): Float32Array {
  * en el trabajador y se agrega al texto.
  */
 async function conWhisper(eventos: EventosDictado, control: ControlDictado): Promise<Dictado> {
-  eventos.onEstado("preparando", "Preparando el reconocedor privado…");
+  eventos.onEstado("preparando", tx("Preparando el reconocedor privado…", "Preparing the private recognizer…"));
   // Primero el reconocedor (la primera vez se descarga) y después el micrófono, para no dejarlo abierto
   await prepararWhisper(eventos);
   if (control.cancelado) throw new DictadoCancelado();
@@ -768,10 +816,10 @@ async function conWhisper(eventos: EventosDictado, control: ControlDictado): Pro
         if (x) eventos.onFrase?.(x, { inicio });
         eventos.onTexto(final, "");
       })
-      .catch((e: Error) => !cancelado && eventos.onError(`No pude transcribir: ${e.message}`))
+      .catch((e: Error) => !cancelado && eventos.onError(tx(`No pude transcribir: ${e.message}`, `I couldn't transcribe: ${e.message}`)))
       .finally(() => {
         pendientes--;
-        if (!detenido && !cancelado) eventos.onEstado("escuchando", "en este equipo");
+        if (!detenido && !cancelado) eventos.onEstado("escuchando", tx("en este equipo", "on this device"));
         terminarSiCorresponde();
       });
   };
@@ -817,7 +865,7 @@ async function conWhisper(eventos: EventosDictado, control: ControlDictado): Pro
     if (silencioS > 0.8 || duracion > 20) enviarFrase();
   };
 
-  eventos.onEstado("escuchando", "en este equipo");
+  eventos.onEstado("escuchando", tx("en este equipo", "on this device"));
   let cerrado = false;
   const cerrar = () => {
     if (cerrado) return;
@@ -863,14 +911,14 @@ export class DictadoCancelado extends Error {
 export async function iniciarDictado(modo: ModoDictado, eventos: EventosDictado, control: ControlDictado = {}, opciones: OpcionesDictado = {}): Promise<Dictado> {
   const Clase = claseReconocedor();
   if (modo === "navegador") {
-    if (!Clase) throw new Error("Este navegador no trae dictado por voz. Use Edge o Chrome, o el dictado privado (en Ajustes de voz).");
-    return conReconocedor(Clase, "es-CO", false, eventos, opciones);
+    if (!Clase) throw new Error(tx("Este navegador no trae dictado por voz. Use Edge o Chrome, o el dictado privado (en Ajustes de voz).", "This browser has no voice dictation. Use Edge or Chrome, or private dictation (in Voice settings)."));
+    return conReconocedor(Clase, idiomasReconocimiento()[0], false, eventos, opciones);
   }
-  eventos.onEstado("preparando", "Preparando el dictado privado…");
+  eventos.onEstado("preparando", tx("Preparando el dictado privado…", "Preparing private dictation…"));
   const enDispositivo = await idiomaEnDispositivo(Clase, eventos);
   if (control.cancelado) throw new DictadoCancelado();
   if (enDispositivo && Clase) return conReconocedor(Clase, enDispositivo, true, eventos, opciones);
-  if (!hayMicrofono()) throw new Error("Este navegador no permite usar el micrófono en esta página.");
+  if (!hayMicrofono()) throw new Error(tx("Este navegador no permite usar el micrófono en esta página.", "This browser doesn't allow using the microphone on this page."));
   try {
     return await conWhisper(eventos, control);
   } catch (e) {
@@ -878,7 +926,8 @@ export async function iniciarDictado(modo: ModoDictado, eventos: EventosDictado,
     const nombre = e instanceof Error ? `${e.name} ${e.message}` : String(e);
     if (/NotAllowed|Permission|denied|SecurityError/i.test(nombre)) throw new Error(ERRORES["not-allowed"]);
     if (/NotFound|DevicesNotFound|NotReadable/i.test(nombre)) throw new Error(ERRORES["audio-capture"]);
-    throw new Error(`No pude preparar el dictado privado (${e instanceof Error ? e.message : String(e)}). La primera vez necesita internet para descargar el reconocedor.`);
+    const detalle = e instanceof Error ? e.message : String(e);
+    throw new Error(tx(`No pude preparar el dictado privado (${detalle}). La primera vez necesita internet para descargar el reconocedor.`, `I couldn't prepare private dictation (${detalle}). The first time it needs internet to download the recognizer.`));
   }
 }
 

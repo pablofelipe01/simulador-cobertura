@@ -6,12 +6,20 @@
 // Conexión de Melki con un modelo de voz en vivo (Gemini Live de Google): una sola conexión WebSocket por la que va el
 // audio del micrófono (PCM de 16 bits a 16 kHz) y vuelve la voz del modelo (PCM a 24 kHz). El modelo oye el audio
 // directo, sin pasarlo a texto, y puede pedirle al simulador que haga cosas (herramientas). La clave la pone la persona
-// en Ajustes y queda solo en su navegador; nunca va en el código ni en el repositorio.
+// en Ajustes y queda solo en su navegador; nunca va en el código ni en el repositorio. El idioma en que habla el modelo
+// lo deciden sus instrucciones (herramientas-ia.ts): la configuración no fija un idioma de voz, porque los modelos de
+// audio nativo rechazan `speechConfig.languageCode` («Unsupported language code», error 1007) y la sesión no abriría.
+import { tx } from "@/lib/idioma";
 
-/** Modelos de voz en vivo con capa gratuita (Google AI Studio). */
+/** Modelos de voz en vivo con capa gratuita (Google AI Studio). El nombre, en el idioma de la pantalla. */
 export const MODELOS_IA = [
   { id: "gemini-3.8-live", nombre: "Gemini 3.8 Live" },
-  { id: "gemini-3.1-flash-live-preview", nombre: "Gemini 3.1 Flash Live (vista previa)" },
+  {
+    id: "gemini-3.1-flash-live-preview",
+    get nombre() {
+      return tx("Gemini 3.1 Flash Live (vista previa)", "Gemini 3.1 Flash Live (preview)");
+    },
+  },
 ] as const;
 export const MODELO_IA_DEFECTO = MODELOS_IA[0].id;
 
@@ -134,15 +142,15 @@ const CLAVE_MALA = /api key|API_KEY|permission|unauthori[sz]ed|PERMISSION_DENIED
 const SIN_CUPO = /quota|RESOURCE_EXHAUSTED|rate/i;
 const SIN_MODELO = /not found|NOT_FOUND|model/i;
 
-/** Explica en español por qué se cerró la conexión. */
+/** Explica, en el idioma de la pantalla, por qué se cerró la conexión. */
 export function motivoCierre(codigo: number, motivo: string): string {
   const m = motivo || "";
-  if (CLAVE_MALA.test(m)) return "La clave de Google AI Studio no es válida o no tiene permiso para este modelo.";
-  if (SIN_CUPO.test(m)) return "Se acabó el cupo gratuito de hoy (o de este minuto). Vuelva a intentar más tarde.";
-  if (SIN_MODELO.test(m) && codigo !== 1000) return `El modelo no está disponible para esta clave (${m.slice(0, 120)}).`;
-  if (codigo === 1006) return "No se pudo conectar con Google (sin internet o la red lo bloquea).";
-  if (codigo === 1000) return "La conversación terminó.";
-  return m ? `Se cerró la conexión: ${m.slice(0, 160)}` : `Se cerró la conexión (código ${codigo}).`;
+  if (CLAVE_MALA.test(m)) return tx("La clave de Google AI Studio no es válida o no tiene permiso para este modelo.", "The Google AI Studio key isn't valid or doesn't have permission for this model.");
+  if (SIN_CUPO.test(m)) return tx("Se acabó el cupo gratuito de hoy (o de este minuto). Vuelva a intentar más tarde.", "Today's free quota (or this minute's) has run out. Please try again later.");
+  if (SIN_MODELO.test(m) && codigo !== 1000) return tx(`El modelo no está disponible para esta clave (${m.slice(0, 120)}).`, `The model isn't available for this key (${m.slice(0, 120)}).`);
+  if (codigo === 1006) return tx("No se pudo conectar con Google (sin internet o la red lo bloquea).", "Couldn't connect to Google (no internet, or the network is blocking it).");
+  if (codigo === 1000) return tx("La conversación terminó.", "The conversation ended.");
+  return m ? tx(`Se cerró la conexión: ${m.slice(0, 160)}`, `The connection closed: ${m.slice(0, 160)}`) : tx(`Se cerró la conexión (código ${codigo}).`, `The connection closed (code ${codigo}).`);
 }
 
 /** ¿Sirve reanudar la conversación en otra conexión? No, si el problema es la clave, el cupo o el modelo. */
@@ -190,7 +198,7 @@ export class SesionLive {
         mal(new Error(m));
       };
       const t = setTimeout(() => {
-        fallar("Google no respondió a tiempo. Revise el internet e intente de nuevo.");
+        fallar(tx("Google no respondió a tiempo. Revise el internet e intente de nuevo.", "Google didn't respond in time. Check your internet connection and try again."));
         this.cerrar();
       }, limiteMs);
       let ws: WebSocket;

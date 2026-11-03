@@ -3,10 +3,12 @@
 // artificial. Prohibido su uso, copia, modificación o distribución sin licencia escrita de los titulares (Ley 23 de
 // 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
 
-// Voz de Melki con la síntesis de voz del navegador (sin servicios externos). Elige sola la voz más natural en
-// español que tenga el equipo (las neuronales «Natural» de Edge, como Gonzalo o Salomé de Colombia, o las de Google),
-// del tipo escogido en Ajustes (masculina serena, como un mayordomo al estilo de JARVIS, o femenina), y habla un poco
-// más pausado, para que no suene robótica. En Ajustes de voz también se puede escoger una voz en particular.
+// Voz de Melki con la síntesis de voz del navegador (sin servicios externos). Elige sola la voz más natural del idioma
+// de la pantalla que tenga el equipo (en español, las neuronales «Natural» de Edge, como Gonzalo o Salomé de Colombia,
+// o las de Google; en inglés, las británicas primero, como Ryan o Thomas: un mayordomo al estilo de JARVIS), del tipo
+// escogido en Ajustes (masculina serena o femenina), y habla un poco más pausado, para que no suene robótica. En
+// Ajustes de voz también se puede escoger una voz en particular.
+import { idioma, type Idioma } from "@/lib/idioma";
 
 export function vozDisponible(): boolean {
   return typeof window !== "undefined" && "speechSynthesis" in window;
@@ -17,12 +19,21 @@ const FEMENINAS = /\b(salom[eé]|dalia|paloma|elvira|ximena|camila|larissa|beatr
 /** Nombres de voces masculinas en español (las neuronales de Edge por país, las de Windows, macOS y Android). */
 const MASCULINAS = /\b(gonzalo|jorge|[aá]lvaro|alonso|tom[aá]s|lorenzo|alex|sebasti[aá]n|luis|marcelo|mateo|mario|juan|roberto|emilio|andr[eé]s|carlos|federico|v[ií]ctor|rodrigo|javier|manuel|pablo|ra[uú]l|diego|enrique|jaime|antonio|arnau|dar[ií]o|gerardo|liberto|sa[uú]l|yago|rafael|cristian|eduardo|gabriel|hugo|ignacio|joaqu[ií]n|santiago|mart[ií]n|cecilio|pedro|teo)\b/i;
 
+/** Voces en inglés (Edge «Natural», Windows, Google, macOS, Android): masculinas y femeninas. */
+const MASCULINAS_EN = /\b(ryan|thomas|george|daniel|arthur|oliver|guy|andrew|brian|christopher|eric|roger|steffan|davis|david|mark|alex|fred|elliot|ethan|noah|alfie|william|liam|james|connor|mitchell|tony|jason|brandon|aaron|male)\b/i;
+const FEMENINAS_EN = /\b(sonia|libby|maisie|hazel|susan|kate|serena|aria|jenny|ana|michelle|emma|ava|zira|samantha|karen|moira|tessa|fiona|victoria|olivia|hollie|bella|abbi|natasha|clara|emily|nancy|jane|sara|amber|ashley|cora|elizabeth|monica|female)\b/i;
+
 /** El tipo de voz: masculina serena (de fábrica, al estilo de JARVIS) o femenina. */
 export type GeneroVoz = "masculina" | "femenina";
 
-/** Si el nombre de la voz dice si es masculina o femenina (las de Google no lo dicen). */
+/** Si el nombre de la voz dice si es masculina o femenina (las de Google en español no lo dicen). */
 export function generoDeVoz(nombre: string): GeneroVoz | null {
-  return MASCULINAS.test(nombre) ? "masculina" : FEMENINAS.test(nombre) ? "femenina" : null;
+  if (MASCULINAS.test(nombre)) return "masculina";
+  if (FEMENINAS.test(nombre)) return "femenina";
+  // «Google UK English Female»: «female» antes que «male», que también está dentro
+  if (FEMENINAS_EN.test(nombre)) return "femenina";
+  if (MASCULINAS_EN.test(nombre)) return "masculina";
+  return null;
 }
 
 let generoPreferido: GeneroVoz = "masculina";
@@ -33,17 +44,19 @@ export function fijarGeneroVoz(g: GeneroVoz) {
 
 /**
  * Qué tan bien suena una voz (más es mejor); las voces en otro idioma no cuentan. Primero lo natural (una voz neuronal
- * del otro tipo gana a una robótica del tipo escogido), luego el tipo de voz y luego el acento (Colombia primero).
+ * del otro tipo gana a una robótica del tipo escogido), luego el tipo de voz y luego el acento (en español, Colombia
+ * primero; en inglés, Reino Unido primero: la voz serena al estilo de JARVIS).
  */
-export function puntajeVoz(v: { name: string; lang: string; localService?: boolean }, genero: GeneroVoz = generoPreferido): number {
+export function puntajeVoz(v: { name: string; lang: string; localService?: boolean }, genero: GeneroVoz = generoPreferido, lengua: Idioma = idioma()): number {
   const lang = v.lang.replace("_", "-").toLowerCase();
-  if (!lang.startsWith("es")) return -1;
+  if (!lang.startsWith(lengua)) return -1;
   let p = 10;
   if (/natural|neural|online|premium|enhanced|mejorada/i.test(v.name)) p += 60;
   else if (/google/i.test(v.name)) p += 35;
-  if (/espeak|robot|compact/i.test(v.name)) p -= 50;
+  if (/espeak|robot|compact|novelty|whisper|bells|bubbles|cellos|jester|organ|trinoids|zarvox|bahh|boing|albert|bad news|good news|superstar|wobble/i.test(v.name)) p -= 50;
   if (generoDeVoz(v.name) === genero) p += 20;
-  p += lang === "es-co" ? 16 : lang === "es-419" || lang === "es-mx" || lang === "es-us" ? 11 : lang === "es-es" ? 6 : 3;
+  if (lengua === "en") p += lang === "en-gb" ? 16 : lang === "en-us" ? 11 : lang === "en-ie" || lang === "en-au" || lang === "en-ca" || lang === "en-nz" ? 8 : 3;
+  else p += lang === "es-co" ? 16 : lang === "es-419" || lang === "es-mx" || lang === "es-us" ? 11 : lang === "es-es" ? 6 : 3;
   return p;
 }
 
@@ -60,8 +73,8 @@ export function fijarVozPreferida(nombre: string | null) {
   preferida = nombre;
 }
 
-/** Voces en español que tiene el equipo, de la que mejor suena a la que peor. */
-export function vocesEspanol(): SpeechSynthesisVoice[] {
+/** Voces del idioma de la pantalla que tiene el equipo, de la que mejor suena a la que peor. */
+export function vocesDelIdioma(): SpeechSynthesisVoice[] {
   if (!vozDisponible()) return [];
   return window.speechSynthesis
     .getVoices()
@@ -69,8 +82,11 @@ export function vocesEspanol(): SpeechSynthesisVoice[] {
     .sort((a, b) => puntajeVoz(b) - puntajeVoz(a));
 }
 
+/** El nombre de antes (en inglés da las voces en inglés): las voces del idioma de la pantalla. */
+export const vocesEspanol = vocesDelIdioma;
+
 function elegirVoz(): SpeechSynthesisVoice | undefined {
-  const voces = vocesEspanol();
+  const voces = vocesDelIdioma();
   return (preferida && voces.find((v) => v.name === preferida)) || voces[0];
 }
 
@@ -84,6 +100,40 @@ export function alCargarVoces(fn: () => void): () => void {
 
 /** El texto como se debe oír: unidades en palabras y sin los símbolos que la voz deletrea. */
 export function paraHablar(texto: string): string {
+  return idioma() === "en" ? paraHablarIngles(texto) : paraHablarEspanol(texto);
+}
+
+/** En inglés: las voces leen bien los números (1,234.5) y el «%»; las unidades y los símbolos, en palabras. */
+function paraHablarIngles(texto: string): string {
+  return texto
+    .replace(/[«»"“”■]/g, "")
+    .replace(/[≈~]\s?/g, "about ")
+    .replace(/(\d)\s?°/g, "$1 degrees")
+    .replace(/×\s?(\d)/g, "times $1")
+    .replace(/\bdBm\b/g, "d B m")
+    .replace(/\bdBi\b/g, "d B i")
+    .replace(/\bdB\b/g, "decibels")
+    .replace(/km²/g, "square kilometers")
+    .replace(/\bkm\b/g, "kilometers")
+    .replace(/(\d) m\b/g, "$1 meters")
+    .replace(/(\d) s\b/g, "$1 seconds")
+    .replace(/(\d) min\b/g, "$1 minutes")
+    .replace(/(\d) ha\b/g, "$1 hectares")
+    .replace(/(\d) B\b/g, "$1 bytes")
+    .replace(/\bWh\b/g, "watt hours")
+    .replace(/\bkbps\b/g, "kilobits per second")
+    .replace(/\bbps\b/g, "bits per second")
+    .replace(/\bMHz\b/g, "megahertz")
+    .replace(/\bkHz\b/g, "kilohertz")
+    .replace(/\/h\b/g, " per hour")
+    .replace(/\bSF ?(\d+)\b/g, "S F $1")
+    .replace(/\bCOP\b\s?/g, "")
+    .replace(/[→·•]/g, ",")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function paraHablarEspanol(texto: string): string {
   return texto
     .replace(/[«»"■]/g, "")
     .replace(/(\d),(\d)/g, "$1 coma $2")
@@ -154,9 +204,9 @@ export function trozosVoz(texto: string, max = MAX_TROZO): string[] {
 /** Las frases en curso: si el recolector de basura se las lleva, Chrome deja de avisar que terminaron. */
 const vivas = new Set<SpeechSynthesisUtterance>();
 
-/** Una voz en español del propio equipo (no en línea): para seguir si la voz en línea falla por la red. */
+/** Una voz del idioma del propio equipo (no en línea): para seguir si la voz en línea falla por la red. */
 function vozDelEquipo(): SpeechSynthesisVoice | undefined {
-  return vocesEspanol().find((v) => v.localService);
+  return vocesDelIdioma().find((v) => v.localService);
 }
 
 /**
@@ -230,7 +280,7 @@ export function hablar(texto: string, alTerminar?: () => void, alFallar?: (error
     // Las voces neuronales ya suenan naturales a su ritmo; las demás, un poco más pausadas y sin subir el tono
     const natural = voz ? puntajeVoz(voz) >= 70 : false;
     if (voz) u.voice = voz;
-    u.lang = voz?.lang ?? "es-CO";
+    u.lang = voz?.lang ?? (idioma() === "en" ? "en-GB" : "es-CO");
     u.rate = (natural ? 0.98 : 0.94) * ritmo;
     u.pitch = 1;
     u.volume = 1;
