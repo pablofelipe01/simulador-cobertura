@@ -4,6 +4,7 @@
 // 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
 
 // Convierte el resultado de la simulación en una imagen RGBA para superponer en el mapa.
+import { tx } from "@/lib/idioma";
 import { CLASES } from "@/lib/radio/constantes";
 import type { ResultadoSimulacion } from "@/lib/radio/tipos";
 import type { EscalaSenal, ModoMapa, Vista } from "./estado";
@@ -12,11 +13,32 @@ import type { EscalaSenal, ModoMapa, Vista } from "./estado";
 export const ARCOIRIS = ["#5B2C83", "#2F6DB5", "#1F9C99", "#57B65A", "#F5D33B", "#F08A2C", "#D93A2E"];
 /** Color de las zonas por debajo del nivel mínimo en el arcoíris (el rojo ahí significa señal fuerte). */
 export const COLOR_BAJO_ESCALA = "#5F6B6D";
-export const COLORES_UMBRAL = [
-  { color: "#1E7B34", nombre: "Verde" },
-  { color: "#2F6DB5", nombre: "Azul" },
-  { color: "#8E57B8", nombre: "Morado" },
-  { color: "#F08A2C", nombre: "Naranja" },
+/** Colores del umbral; el nombre, en el idioma de la pantalla. */
+export const COLORES_UMBRAL: { color: string; nombre: string }[] = [
+  {
+    color: "#1E7B34",
+    get nombre() {
+      return tx("Verde", "Green");
+    },
+  },
+  {
+    color: "#2F6DB5",
+    get nombre() {
+      return tx("Azul", "Blue");
+    },
+  },
+  {
+    color: "#8E57B8",
+    get nombre() {
+      return tx("Morado", "Purple");
+    },
+  },
+  {
+    color: "#F08A2C",
+    get nombre() {
+      return tx("Naranja", "Orange");
+    },
+  },
 ];
 
 export type OpcionesEscala = Pick<Vista, "escala" | "escalaMinDbm" | "escalaMaxDbm" | "umbralDbm" | "colorUmbral">;
@@ -25,11 +47,36 @@ export const opcionesEscala = (v: Vista): OpcionesEscala => ({ escala: v.escala,
 /** Colores para distinguir antenas en el modo «mejor antena» (fuera de la paleta de señal). */
 export const COLORES_ANTENA = ["#2F6DB5", "#8E57B8", "#1F9C99", "#C04F7C", "#5A6FD8", "#A8792A", "#3D8F5A", "#D0662F", "#6B7686", "#B23A48"];
 
-export const COLORES_REDUNDANCIA = [
-  { n: 0, nombre: "Sin servicio", color: "#D93A2E" },
-  { n: 1, nombre: "1 antena", color: "#F5D33B" },
-  { n: 2, nombre: "2 antenas", color: "#8BD17C" },
-  { n: 3, nombre: "3 o más", color: "#1E7B34" },
+/** Colores del modo «Respaldo» (cuántos nodos antena dan servicio); el nombre, en el idioma de la pantalla. */
+export const COLORES_REDUNDANCIA: { n: number; nombre: string; color: string }[] = [
+  {
+    n: 0,
+    get nombre() {
+      return tx("Sin servicio", "No service");
+    },
+    color: "#D93A2E",
+  },
+  {
+    n: 1,
+    get nombre() {
+      return tx("1 antena", "1 antenna");
+    },
+    color: "#F5D33B",
+  },
+  {
+    n: 2,
+    get nombre() {
+      return tx("2 antenas", "2 antennas");
+    },
+    color: "#8BD17C",
+  },
+  {
+    n: 3,
+    get nombre() {
+      return tx("3 o más", "3 or more");
+    },
+    color: "#1E7B34",
+  },
 ];
 
 function rgb(hex: string): [number, number, number] {

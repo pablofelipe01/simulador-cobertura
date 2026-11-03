@@ -4,6 +4,7 @@
 // 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
 
 // Utilidades geográficas: distancias, Web Mercator y coordenadas en grados-minutos-segundos.
+import { decimalLocal, numeroLocal, tx } from "../idioma";
 import { RADIO_TIERRA_M } from "./constantes";
 
 const RAD = Math.PI / 180;
@@ -104,9 +105,10 @@ export function leerPar(texto: string): { lat: number; lon: number } | null {
   return lat !== null && lon !== null ? { lat, lon } : null;
 }
 
-/** Formato GMS en español: 4°27'36,2" N · 72°58'12,1" O */
+/** Formato GMS en el idioma de la pantalla: 4°27'36,2" N · 72°58'12,1" O (en inglés, 72°58'12.1" W). */
 export function aGMS(valor: number, eje: "lat" | "lon"): string {
   const hemisferio = eje === "lat" ? (valor >= 0 ? "N" : "S") : valor >= 0 ? "E" : "O";
+  const hemisferioEn = hemisferio === "O" ? "W" : hemisferio;
   let abs = Math.abs(valor);
   let g = Math.floor(abs);
   abs = (abs - g) * 60;
@@ -120,7 +122,11 @@ export function aGMS(valor: number, eje: "lat" | "lon"): string {
     m = 0;
     g += 1;
   }
-  return `${g}°${String(m).padStart(2, "0")}'${s.toFixed(1).replace(".", ",").padStart(4, "0")}" ${hemisferio}`;
+  const segundos = s.toFixed(1);
+  return tx(
+    `${g}°${String(m).padStart(2, "0")}'${segundos.replace(".", ",").padStart(4, "0")}" ${hemisferio}`,
+    `${g}°${String(m).padStart(2, "0")}'${segundos.padStart(4, "0")}" ${hemisferioEn}`,
+  );
 }
 
 export function aDecimal(valor: number): string {
@@ -149,27 +155,30 @@ export function longitudRutaM(puntos: [number, number][], cerrada = false): numb
 }
 
 const ROSA = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSO", "SO", "OSO", "O", "ONO", "NO", "NNO"];
+/** La rosa de los vientos en inglés (W en vez de O), en el mismo orden. */
+const ROSA_EN = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
 
 /** Rumbo con su punto cardinal: «34° (NE)». */
 export function rumboTexto(grados: number): string {
   const g = ((grados % 360) + 360) % 360;
-  return `${Math.round(g)}° (${ROSA[Math.round(g / 22.5) % 16]})`;
+  return `${Math.round(g)}° (${puntoCardinal(g)})`;
 }
 
 export function puntoCardinal(grados: number): string {
   const g = ((grados % 360) + 360) % 360;
-  return ROSA[Math.round(g / 22.5) % 16];
+  const k = Math.round(g / 22.5) % 16;
+  return tx(ROSA[k], ROSA_EN[k]);
 }
 
-/** «850 m», «3,42 km». */
+/** «850 m», «3,42 km» (en inglés, «3.42 km»). */
 export function formatoDistancia(m: number): string {
   if (m < 1000) return `${Math.round(m)} m`;
-  return `${(m / 1000).toFixed(m < 10000 ? 2 : 1).replace(".", ",")} km`;
+  return `${decimalLocal(m / 1000, m < 10000 ? 2 : 1)} km`;
 }
 
-/** «4.500 m²», «12,3 ha», «45,6 km²». */
+/** «4.500 m²», «12,3 ha», «45,6 km²» (con los separadores del idioma). */
 export function formatoArea(m2: number): string {
-  if (m2 < 10000) return `${Math.round(m2).toLocaleString("es-CO")} m²`;
-  if (m2 < 1e6) return `${(m2 / 10000).toFixed(2).replace(".", ",")} ha`;
-  return `${(m2 / 1e6).toFixed(2).replace(".", ",")} km² (${Math.round(m2 / 10000).toLocaleString("es-CO")} ha)`;
+  if (m2 < 10000) return `${numeroLocal(Math.round(m2))} m²`;
+  if (m2 < 1e6) return `${decimalLocal(m2 / 10000, 2)} ha`;
+  return `${decimalLocal(m2 / 1e6, 2)} km² (${numeroLocal(Math.round(m2 / 10000))} ha)`;
 }

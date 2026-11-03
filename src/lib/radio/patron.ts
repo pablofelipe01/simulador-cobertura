@@ -8,6 +8,7 @@
 // en horizontal y en vertical, hasta la relación frente/espalda. El ancho del haz se deduce de la
 // ganancia (G ≈ 27 000 / (θh·θv), en grados), así que una antena de más ganancia es más angosta.
 // La omnidireccional no tiene atenuación: es la misma de las pruebas de Radio Mobile que calibraron el modelo.
+import { tx } from "../idioma";
 import { RADIO_EFECTIVO_M } from "./constantes";
 import type { Antena, PatronId } from "./tipos";
 
@@ -23,13 +24,25 @@ type Patron = {
   frenteEspaldaDb: number;
 };
 
+/** Patrón con su nombre y su descripción en los dos idiomas (getters: salen en el idioma de la pantalla). */
+const nuevoPatron = (id: PatronId, nombre: [string, string], descripcion: [string, string], resto: Pick<Patron, "gananciaTipica" | "anchoH" | "frenteEspaldaDb">): Patron => ({
+  id,
+  get nombre() {
+    return tx(nombre[0], nombre[1]);
+  },
+  get descripcion() {
+    return tx(descripcion[0], descripcion[1]);
+  },
+  ...resto,
+});
+
 export const PATRONES: readonly Patron[] = [
-  { id: "omni", nombre: "Omnidireccional", descripcion: "Igual en todas las direcciones (fibra de vidrio o látigo).", gananciaTipica: 5.8, anchoH: null, frenteEspaldaDb: 0 },
-  { id: "yagi", nombre: "Yagi", descripcion: "Direccional, para enlaces punto a punto o llegar lejos en una dirección.", gananciaTipica: 11, anchoH: null, frenteEspaldaDb: 16 },
-  { id: "panel", nombre: "Panel", descripcion: "Plana y direccional, haz amplio.", gananciaTipica: 9, anchoH: null, frenteEspaldaDb: 20 },
-  { id: "sectorial-90", nombre: "Sectorial 90°", descripcion: "Cubre un cuarto del horizonte con haz vertical angosto.", gananciaTipica: 13, anchoH: 90, frenteEspaldaDb: 25 },
-  { id: "sectorial-120", nombre: "Sectorial 120°", descripcion: "Cubre un tercio del horizonte con haz vertical angosto.", gananciaTipica: 12, anchoH: 120, frenteEspaldaDb: 25 },
-  { id: "parabolica", nombre: "Parabólica (rejilla)", descripcion: "Haz muy angosto para enlaces largos punto a punto.", gananciaTipica: 22, anchoH: null, frenteEspaldaDb: 28 },
+  nuevoPatron("omni", ["Omnidireccional", "Omnidirectional"], ["Igual en todas las direcciones (fibra de vidrio o látigo).", "The same in every direction (fiberglass or whip)."], { gananciaTipica: 5.8, anchoH: null, frenteEspaldaDb: 0 }),
+  nuevoPatron("yagi", ["Yagi", "Yagi"], ["Direccional, para enlaces punto a punto o llegar lejos en una dirección.", "Directional, for point-to-point links or reaching far in one direction."], { gananciaTipica: 11, anchoH: null, frenteEspaldaDb: 16 }),
+  nuevoPatron("panel", ["Panel", "Panel"], ["Plana y direccional, haz amplio.", "Flat and directional, wide beam."], { gananciaTipica: 9, anchoH: null, frenteEspaldaDb: 20 }),
+  nuevoPatron("sectorial-90", ["Sectorial 90°", "90° sector"], ["Cubre un cuarto del horizonte con haz vertical angosto.", "Covers a quarter of the horizon with a narrow vertical beam."], { gananciaTipica: 13, anchoH: 90, frenteEspaldaDb: 25 }),
+  nuevoPatron("sectorial-120", ["Sectorial 120°", "120° sector"], ["Cubre un tercio del horizonte con haz vertical angosto.", "Covers a third of the horizon with a narrow vertical beam."], { gananciaTipica: 12, anchoH: 120, frenteEspaldaDb: 25 }),
+  nuevoPatron("parabolica", ["Parabólica (rejilla)", "Parabolic (grid)"], ["Haz muy angosto para enlaces largos punto a punto.", "Very narrow beam for long point-to-point links."], { gananciaTipica: 22, anchoH: null, frenteEspaldaDb: 28 }),
 ];
 
 export const patronPorId = (id: PatronId | undefined) => PATRONES.find((p) => p.id === (id ?? "omni")) ?? PATRONES[0];

@@ -6,6 +6,8 @@
 // Entrena el Modelo Melki y lo guarda en src/datos/modelo/melki.json (con su informe en scripts/modelo-melki/INFORME.md).
 //   npm run modelo:entrenar               entrena con la semilla fija (sale siempre el mismo modelo)
 //   npm run modelo:entrenar -- --muestras  solo muestra frases de entrenamiento de cada intención
+//   npm run modelo:entrenar -- --idioma en el modelo en inglés (las mismas intenciones): src/datos/modelo/melki-en.json
+//                                          y scripts/modelo-melki/INFORME-EN.md, con las plantillas y pruebas «-en»
 // Opciones: --dim 32 --epocas 14 --tasa 0.35 --por 650 --casillas 131072 --minimo 8 --semilla 20261031
 // Todo es JavaScript puro (sin bibliotecas de IA): las frases salen de las plantillas, la red se entrena con descenso
 // por gradiente, se poda, se cuantiza a enteros de 8 bits y se evalúa con el mismo código que usa el navegador.
@@ -14,11 +16,23 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { azar, compilarTodas, ensuciar, expandir, pulir } from "./gramatica.mjs";
-import { MACROS, ORDENES, ranurasBase } from "./plantillas.mjs";
-import { FUERA, plantillasDeTemas, RANURAS_FUERA, RUIDO } from "./preguntas.mjs";
-import { PRUEBA } from "./prueba.mjs";
-import { PRUEBA_CIEGA } from "./prueba-ciega.mjs";
+import * as gramaticaEs from "./gramatica.mjs";
+import * as plantillasEs from "./plantillas.mjs";
+import * as preguntasEs from "./preguntas.mjs";
+import { PRUEBA as PRUEBA_ES } from "./prueba.mjs";
+import { PRUEBA_CIEGA as PRUEBA_CIEGA_ES } from "./prueba-ciega.mjs";
+
+// El idioma del modelo: español (el de siempre) o inglés (--idioma en: otra gramática, otras plantillas y otras pruebas)
+const iIdioma = process.argv.indexOf("--idioma");
+const INGLES = iIdioma >= 0 && process.argv[iIdioma + 1] === "en";
+const { azar, compilarTodas, ensuciar, expandir, pulir } = INGLES ? await import("./gramatica-en.mjs") : gramaticaEs;
+const { MACROS, ORDENES, ranurasBase } = INGLES ? await import("./plantillas-en.mjs") : plantillasEs;
+const { FUERA, plantillasDeTemas, RANURAS_FUERA, RUIDO } = INGLES ? await import("./preguntas-en.mjs") : preguntasEs;
+const PRUEBA = INGLES ? (await import("./prueba-en.mjs")).PRUEBA : PRUEBA_ES;
+const PRUEBA_CIEGA = INGLES ? (await import("./prueba-ciega-en.mjs")).PRUEBA_CIEGA : PRUEBA_CIEGA_ES;
+/** Dónde queda el modelo y su informe. */
+const ARCHIVO_MODELO = INGLES ? "melki-en.json" : "melki.json";
+const ARCHIVO_INFORME = INGLES ? "INFORME-EN.md" : "INFORME.md";
 
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const arg = (nombre, defecto) => {
@@ -75,7 +89,10 @@ const COMUNES = new Set([
   "el espino", "el reten", "el playon", "el aguila", "el carmen", "el cairo", "el calvario", "el penon", "el pinon",
   "el rosario", "los andes", "los patios", "los santos", "los palmitos", "los cordobas"
 ]);
-const lugaresModelo = new Set([...municipios, ...departamentos].map((x) => M.normalizarFrase(x)).filter((x) => x.length >= 4 && !COMUNES.has(x)));
+// En inglés las palabras españolas de arriba solo aparecen como nombres de lugar; las que se cruzan son otras («turbo»,
+// «tame», «honda»…). «Colombia» es el país.
+const COMUNES_EN = new Set(["colombia", "tame", "turbo", "pore", "hobo", "silos", "colon", "chia", "honda", "plato", "margarita", "sora"]);
+const lugaresModelo = new Set([...municipios, ...departamentos].map((x) => M.normalizarFrase(x)).filter((x) => x.length >= 4 && !(INGLES ? COMUNES_EN : COMUNES).has(x)));
 const macros = compilarTodas(MACROS);
 const plantillas = compilarTodas({ ...ORDENES, ...plantillasDeTemas(), fuera: FUERA, ruido: RUIDO });
 
@@ -126,6 +143,14 @@ const entreno = datos.slice(nVal);
 for (const d of datos) d.x = Int32Array.from(M.rasgos(d.norm, OPC.casillas));
 log(`Frases: ${datos.length} (${entreno.length} para aprender, ${validacion.length} para validar), ${choques.length} repetidas entre intenciones (no se usan), ${ids.length} intenciones`);
 if (choques.length) log(`  Ejemplos repetidos: ${choques.slice(0, 12).map(([n, e]) => `«${n}» (${[...e.ids].join(" / ")})`).join("; ")}`);
+if (INGLES) {
+  // Las pruebas escritas a mano no deben salir tal cual de las plantillas (si salen, no miden frases nuevas)
+  const vistas = new Set(datos.map((d) => d.norm));
+  for (const [nombre, prueba] of [["ciega", PRUEBA_CIEGA], ["aparte", PRUEBA]]) {
+    const iguales = Object.values(prueba).flat().filter((f) => vistas.has(M.normalizarFrase(f, lugaresModelo)));
+    log(`  Prueba ${nombre}: ${iguales.length} frases salen tal cual de las plantillas${iguales.length ? ` (${iguales.slice(0, 20).map((f) => `«${f}»`).join(", ")})` : ""}`);
+  }
+}
 
 /* ───────────── La red: vectores de rasgos → promedio → capa de salida → softmax ───────────── */
 
@@ -285,7 +310,9 @@ const esTema = (id) => grupo[id] === "pregunta" || ["capacidades", "saludo", "gr
 function modeloCon(umbrales, evaluacion) {
   return {
     formato: "melki-1",
-    version: "1.0",
+    // El de inglés con otra versión: la memoria de Melki guarda los vectores por versión y frase
+    version: INGLES ? "1.0-en" : "1.0",
+    ...(INGLES ? { idioma: "en" } : {}),
     dim: D,
     casillas: B,
     intenciones: ids,
@@ -371,7 +398,7 @@ json.evaluacion.ciega = { frases: ciega.length, aciertos: Number(acierto(ciega).
 const destinoModelo = carpetaSalida ?? path.join(raiz, "src/datos/modelo");
 mkdirSync(destinoModelo, { recursive: true });
 const texto = `${JSON.stringify(json)}\n`;
-writeFileSync(path.join(destinoModelo, "melki.json"), texto);
+writeFileSync(path.join(destinoModelo, ARCHIVO_MODELO), texto);
 
 /* ───────────── El informe ───────────── */
 
@@ -416,8 +443,79 @@ const informe = [
   ...(confusiones.size ? [...confusiones.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15).map(([k, v]) => `- ${k}: ${v}`) : ["- Ninguna."]),
   "",
 ];
-writeFileSync(carpetaSalida ? path.join(carpetaSalida, "INFORME.md") : path.join(raiz, "scripts/modelo-melki/INFORME.md"), informe.join("\n"));
-log(`\nGuardado ${path.relative(raiz, path.join(destinoModelo, "melki.json"))} (${(texto.length / 1024).toFixed(0)} KB, ${filas.length} filas) en ${((Date.now() - t0) / 1000).toFixed(0)} s`);
+
+// La prueba ciega sin las frases que también salen tal cual de las plantillas (lo más honesto: solo frases nuevas)
+const normalizadas = INGLES ? new Set(datos.map((d) => d.norm)) : null;
+const ciegaNueva = INGLES ? ciega.filter((x) => !normalizadas.has(M.normalizarFrase(x.frase, lugaresModelo))) : [];
+
+/** El informe del modelo en inglés: lo mismo, más los aciertos por grupo de intenciones y las confusiones de las dos pruebas. */
+function informeIngles() {
+  const grupos = [...new Set(M.INTENCIONES.map((i) => i.grupo))];
+  const porGrupo = (lista) => grupos.map((g) => [g, lista.filter((x) => grupo[x.id] === g)]).filter(([, l]) => l.length);
+  const fila = ([g, l]) => `| ${g} | ${l.length} | ${pct(acierto(l))} | ${pct(top3(l))} |`;
+  const ambas = [...prueba, ...ciega].filter((x) => x.pred !== x.id);
+  const mezclas = new Map();
+  for (const x of ambas) mezclas.set(`${x.id} → ${x.pred}`, (mezclas.get(`${x.id} → ${x.pred}`) ?? 0) + 1);
+  return [
+    "# Modelo Melki en inglés · informe del entrenamiento",
+    "",
+    `Versión ${json.version}. Generado con \`npm run modelo:entrenar -- --idioma en\` (semilla ${OPC.semilla}; con la misma semilla sale el mismo modelo). Lo usa Melki con la pantalla en inglés: entiende QUÉ se pide (las mismas ${C} intenciones del modelo en español); los datos del pedido y la orden que se hace siguen en español.`,
+    "",
+    "## Lo que es",
+    "",
+    `La misma red del tipo fastText del modelo en español, con la misma normalización (src/components/melki/modelo/rasgos.ts): ${C} intenciones, rasgos de palabras, pares de palabras y pedazos de 3 a 5 letras en ${B.toLocaleString("es-CO")} casillas, vectores de ${D} dimensiones y una capa de salida con softmax. Pesa ${(texto.length / 1024 / 1024).toFixed(2).replace(".", ",")} MB (enteros de 8 bits en base64) y corre en el procesador del navegador.`,
+    "",
+    "## Datos",
+    "",
+    `- ${datos.length.toLocaleString("es-CO")} frases distintas en inglés generadas con plantillas (scripts/modelo-melki/plantillas-en.mjs, preguntas-en.mjs y gramatica-en.mjs): imperativos, «please», «can you…», «would you mind…», «I want…», preguntas, contracciones con y sin apóstrofo, errores de tecleo y de dictado, números en cifras y en palabras, nodos en inglés («Repeater 3», «Person 2», «the gateway») y en español («Repetidor 3»), y lugares de Colombia.`,
+    `- ${entreno.length.toLocaleString("es-CO")} para aprender y ${validacion.length.toLocaleString("es-CO")} para validar; ${choques.length} frases que salían igual en dos intenciones no se usaron.`,
+    `- La prueba aparte: ${prueba.length} frases escritas a mano (scripts/modelo-melki/prueba-en.mjs), que el modelo nunca vio; fija los umbrales.`,
+    `- La prueba ciega: ${ciega.length} frases escritas a mano (scripts/modelo-melki/prueba-ciega-en.mjs) que no se usaron para nada más.`,
+    "",
+    "## Resultados (con el modelo cuantizado, el mismo del navegador)",
+    "",
+    `- Validación (frases generadas que no vio): ${pct(acierto(val))} de aciertos.`,
+    `- Prueba aparte: ${pct(evaluacion.aciertos)} de aciertos; la correcta está entre las 3 primeras en ${pct(evaluacion.top3)}.`,
+    `- Prueba ciega: ${pct(acierto(ciega))} de aciertos, top 3 ${pct(top3(ciega))}; lo que haría sin preguntar acierta ${pct(hacerCiega.precision)}.`,
+    `- Prueba ciega sin las ${ciega.length - ciegaNueva.length} frases que las plantillas también generan tal cual (frases cortas y naturales): ${pct(acierto(ciegaNueva))} de aciertos en ${ciegaNueva.length}, top 3 ${pct(top3(ciegaNueva))}.`,
+    `- Hacer sin preguntar (probabilidad ≥ ${umbrales.hacer} y ${umbrales.margen} por encima de la segunda): en la prueba aparte acierta ${pct(evaluacion.precisionHacer)} de las veces y cubre ${pct(evaluacion.coberturaHacer)} de las órdenes.`,
+    `- Umbrales: hacer ${umbrales.hacer}, margen ${umbrales.margen}, aclarar ${umbrales.aclarar}, tema ${umbrales.tema}, fuera ${umbrales.fuera}.`,
+    "",
+    "## Aciertos por grupo",
+    "",
+    "Prueba ciega:",
+    "",
+    "| Grupo | Frases | Aciertos | Top 3 |",
+    "|---|---|---|---|",
+    ...porGrupo(ciega).map(fila),
+    "",
+    "Prueba aparte:",
+    "",
+    "| Grupo | Frases | Aciertos | Top 3 |",
+    "|---|---|---|---|",
+    ...porGrupo(prueba).map(fila),
+    "",
+    "## Errores en la prueba ciega",
+    "",
+    ...(ciega.some((x) => x.pred !== x.id) ? ciega.filter((x) => x.pred !== x.id).map((x) => `- “${x.frase}”: era ${x.id}, dijo ${x.pred} (${pct(x.p1)})`) : ["- Ninguno."]),
+    "",
+    "## Errores en la prueba aparte",
+    "",
+    ...(errores.length ? errores.map((x) => `- “${x.frase}”: era ${x.id}, dijo ${x.pred} (${pct(x.p1)})`) : ["- Ninguno."]),
+    "",
+    "## Confusiones más comunes (las dos pruebas)",
+    "",
+    ...(mezclas.size ? [...mezclas.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15).map(([k, v]) => `- ${k}: ${v}`) : ["- Ninguna."]),
+    "",
+  ];
+}
+writeFileSync(carpetaSalida ? path.join(carpetaSalida, ARCHIVO_INFORME) : path.join(raiz, "scripts/modelo-melki", ARCHIVO_INFORME), (INGLES ? informeIngles() : informe).join("\n"));
+log(`\nGuardado ${path.relative(raiz, path.join(destinoModelo, ARCHIVO_MODELO))} (${(texto.length / 1024).toFixed(0)} KB, ${filas.length} filas) en ${((Date.now() - t0) / 1000).toFixed(0)} s`);
+if (INGLES) {
+  const grupos = [...new Set(M.INTENCIONES.map((i) => i.grupo))];
+  log(`Por grupo (ciega): ${grupos.map((g) => [g, ciega.filter((x) => grupo[x.id] === g)]).filter(([, l]) => l.length).map(([g, l]) => `${g} ${pct(acierto(l))} (${l.length})`).join(" · ")}`);
+  log(`Ciega solo con frases que las plantillas no generan: ${pct(acierto(ciegaNueva))} en ${ciegaNueva.length} (top 3: ${pct(top3(ciegaNueva))})`);
+}
 log(`Prueba ciega ${pct(acierto(ciega))} (top 3: ${pct(top3(ciega))}, hacer: ${pct(hacerCiega.precision)})${ciega.some((x) => x.pred !== x.id) ? `:\n${ciega.filter((x) => x.pred !== x.id).map((x) => `  «${x.frase}» ${x.id} → ${x.pred} ${x.p1.toFixed(2)}`).join("\n")}` : ""}`);
 log(`Validación ${pct(acierto(val))} · prueba aparte ${pct(evaluacion.aciertos)} (top 3: ${pct(evaluacion.top3)}) · hacer: precisión ${pct(evaluacion.precisionHacer)}, cobertura ${pct(evaluacion.coberturaHacer)}`);
 log(`Umbrales ${JSON.stringify(umbrales)}`);

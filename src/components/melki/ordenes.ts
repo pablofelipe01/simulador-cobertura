@@ -21,6 +21,7 @@ import { CLIMAS, CONFIABILIDADES, RED_REFERENCIA, SUELOS, VARIABILIDADES } from 
 import type { Antena, AreaObjetivo, EntornoId, Escenario, Medicion, ObjetivoArea, Parametros, PatronId, ResultadoSimulacion, Rol, SueloId, TipoNodo, VariabilidadId } from "@/lib/radio/tipos";
 import { textoNivel, uvADbm, type UnidadId } from "@/lib/radio/unidades";
 import { decidirLugar, nombreLugar, pareceNombre, type CandidatoLugar, type Lugar } from "@/lib/geo/referencia";
+import { decimalLocal, numeroLocal, retraducir, tx } from "@/lib/idioma";
 
 import type { CurvaCargaResultado, ResultadoCarga } from "@/lib/radio/carga";
 import type { ResultadoEstres, LimitePunto } from "@/lib/radio/estres";
@@ -36,7 +37,7 @@ import type { AreaPoblar, OpcionesCarga, PedidoPoblar, ResultadoPoblar } from ".
 import type { CentroZona, OpcionesEstres, PedidoPunto, PedidoZonas, ResultadoPunto, ResultadoZonas } from "../simulador/panel-estres";
 import { ejecutarCapacidad, interpretarCapacidad, seguirConZonas } from "./capacidad";
 import {
-  cifra,
+  cifraLocal,
   circuloEnTexto,
   distancia,
   factorArea,
@@ -49,6 +50,7 @@ import {
   rectanguloEnTexto,
   sinTildes,
   textoDicho,
+  textoDichoLocal,
   textoDistancia,
   textoMetros,
   tieneDistancia,
@@ -397,9 +399,14 @@ const n = (t: string) =>
 /** La frase como la compara el intérprete (también la usa el Modelo Melki para sacar sus datos). */
 export const textoOrden = n;
 const num = (s: string) => Number(s.replace(",", "."));
-const f1 = (x: number, d = 1) => x.toFixed(d).replace(".", ",");
+/** «1,5» o «1.5»: con `d` decimales y el separador del idioma de la pantalla (solo para mostrar). */
+const f1 = (x: number, d = 1) => decimalLocal(x, d);
 /** Número sin decimales si es entero (20 m), con uno si no (1,5 m). */
 const fn = (x: number) => (Number.isInteger(x) ? String(x) : f1(x));
+/** El artículo en inglés antes de un número dicho: «an 18 m tower», «a 15 m tower». */
+const articuloIngles = (cifra: string) => (/^(?:8|1[18](?![\d]))/.test(cifra) ? "an" : "a");
+/** Una lista en inglés con «and» al final («roads, rivers and links»); en español esas listas van con comas. */
+const listaIngles = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}` : (xs[0] ?? ""));
 
 /* ───────────── Coordenadas en texto libre ───────────── */
 
@@ -583,6 +590,9 @@ function presetEnTexto(tn: string): PresetId | null {
 
 /* ───────────── Antenas direccionales, red y vista ───────────── */
 
+/** El nombre del tipo de antena dentro de una frase en inglés («a Yagi antenna», «a panel antenna»). */
+const nombreAntenaIngles = (p: PatronId) => patronPorId(p).nombre.toLowerCase().replace(/\byagi\b/, "Yagi");
+
 /** Tipo de antena mencionado en el texto. */
 function patronEnTexto(tn: string): PatronId | null {
   if (/\byagi\b/.test(tn)) return "yagi";
@@ -688,15 +698,15 @@ export function areaEnTexto(bajo: string): { m2: number; unidad: string; dicho?:
   if (!(m2 > 0)) return null;
   const valor = m2 / factorArea(unidad);
   const imperial = unidadAreaImperial(unidad, valor);
-  return { m2, unidad, ...(imperial ? { dicho: `${cifra(valor)} ${imperial} (${m2 >= 1e6 ? `${cifra(m2 / 1e6)} km²` : `${cifra(m2 / 1e4)} ha`})` } : {}) };
+  return { m2, unidad, ...(imperial ? { dicho: `${cifraLocal(valor)} ${imperial} (${m2 >= 1e6 ? `${cifraLocal(m2 / 1e6)} km²` : `${cifraLocal(m2 / 1e4)} ha`})` } : {}) };
 }
 
-/** «11.226 ha (112,26 km²)», «850 ha», «3,5 ha». */
+/** «11.226 ha (112,26 km²)», «850 ha», «3,5 ha» (en inglés «11,226 ha (112.26 km²)»). */
 export function textoArea(m2: number): string {
   const ha = m2 / 1e4;
-  const haTxt = ha >= 100 ? Math.round(ha).toLocaleString("es-CO") : f1(ha, ha < 10 ? 1 : 0);
+  const haTxt = ha >= 100 ? numeroLocal(Math.round(ha)) : f1(ha, ha < 10 ? 1 : 0);
   const km2 = m2 / 1e6;
-  const kmTxt = km2 >= 1000 ? Math.round(km2).toLocaleString("es-CO") : f1(km2, km2 >= 100 ? 1 : 2).replace(/,0+$/, "");
+  const kmTxt = km2 >= 1000 ? numeroLocal(Math.round(km2)) : f1(km2, km2 >= 100 ? 1 : 2).replace(/[.,]0+$/, "");
   return m2 >= 1e6 ? `${haTxt} ha (${kmTxt} km²)` : `${haTxt} ha`;
 }
 
@@ -824,14 +834,39 @@ function lugarDeConsulta(consulta: string, api: Api): { lugar: Lugar | null; sug
 
 /** «¿Se refiere a…?» con las opciones (nombres repetidos: «Hay tres municipios llamados Granada. ¿Cuál…?»). */
 function preguntaLugar(opciones: OpcionLugar[], dicho: string): string {
-  const lista = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(", ")} o ${xs[xs.length - 1]}` : (xs[0] ?? ""));
+  const lista = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(", ")}${tx(" o ", " or ")}${xs[xs.length - 1]}` : (xs[0] ?? ""));
   const lugares = opciones.flatMap((o) => (o.lugar ? [o.lugar] : []));
   const mismos = lugares.length > 1 && new Set(lugares.map((l) => n(l.nombre))).size === 1;
-  if (mismos) return `Hay ${lugares.length === 2 ? "dos lugares" : `${lugares.length} lugares`} llamados ${lugares[0].nombre}. ¿Cuál: ${lista(lugares.map(nombreLugar))}?`;
-  return `No estoy seguro de haber entendido «${dicho}». ¿Se refiere a ${lista(lugares.map(nombreLugar))}?`;
+  if (mismos)
+    return tx(
+      `Hay ${lugares.length === 2 ? "dos lugares" : `${lugares.length} lugares`} llamados ${lugares[0].nombre}. ¿Cuál: ${lista(lugares.map(nombreLugar))}?`,
+      `There are ${lugares.length === 2 ? "two places" : `${lugares.length} places`} called ${lugares[0].nombre}. Which one: ${lista(lugares.map(nombreLugar))}?`,
+    );
+  return tx(`No estoy seguro de haber entendido «${dicho}». ¿Se refiere a ${lista(lugares.map(nombreLugar))}?`, `I'm not sure I understood “${dicho}”. Do you mean ${lista(lugares.map(nombreLugar))}?`);
 }
 
 export const RUMBOS = "norte|sur|este|oeste|oriente|occidente|noreste|noroeste|sureste|suroeste|nororiente|noroccidente|suroriente|suroccidente|sudeste|sudoeste";
+
+/** Cada rumbo dicho (de `RUMBOS`) en inglés, para mostrarlo: «al nororiente» → «northeast». */
+const RUMBO_INGLES: Record<string, string> = {
+  norte: "north",
+  sur: "south",
+  este: "east",
+  oriente: "east",
+  oeste: "west",
+  occidente: "west",
+  noreste: "northeast",
+  nororiente: "northeast",
+  noroeste: "northwest",
+  noroccidente: "northwest",
+  sureste: "southeast",
+  suroriente: "southeast",
+  sudeste: "southeast",
+  suroeste: "southwest",
+  suroccidente: "southwest",
+  sudoeste: "southwest",
+};
+const rumboIngles = (t: string) => RUMBO_INGLES[t] ?? t;
 
 /**
  * Posición relativa: «a 10 km al norte del gateway», «2 km al noreste de Repetidor 1», «a 500 m al sur de
@@ -856,7 +891,7 @@ function relativaEnTexto(texto: string, tn: string, api: Api, antenas: Antena[],
     const g = CARDINALES.find(([re]) => re.test(c[3]))?.[1];
     if (g === undefined || !(metrosC > 0) || metrosC > 200000) return null;
     const q = desplazar(desde.lat, desde.lon, metrosC, g);
-    return { lat: q.lat, lon: q.lon, desde: `a ${dicho(c[1], c[2], metrosC)} al ${c[3]} de ${desde.nombre}` };
+    return { lat: q.lat, lon: q.lon, desde: tx(`a ${dicho(c[1], c[2], metrosC)} al ${c[3]} de ${desde.nombre}`, `${dicho(c[1], c[2], metrosC)} ${rumboIngles(c[3])} of ${desde.nombre}`) };
   }
   const metros = enMetros((a ?? b)![1], (a ?? b)![2]);
   const rumboTxt = a ? a[3] : b![4];
@@ -868,7 +903,7 @@ function relativaEnTexto(texto: string, tn: string, api: Api, antenas: Antena[],
   if (nodo) base = { lat: nodo.lat, lon: nodo.lon, nombre: nodo.nombre };
   if (!base) {
     const c = extraerCoordenadas(texto);
-    if (c) base = { lat: c.lat, lon: c.lon, nombre: "ese punto" };
+    if (c) base = { lat: c.lat, lon: c.lon, nombre: tx("ese punto", "that point") };
   }
   if (!base) {
     const l = lugarEnTexto(`en${frase}`, api);
@@ -876,7 +911,11 @@ function relativaEnTexto(texto: string, tn: string, api: Api, antenas: Antena[],
   }
   if (!base) return null;
   const q = desplazar(base.lat, base.lon, metros, grados);
-  return { lat: q.lat, lon: q.lon, desde: `a ${dicho((a ?? b)![1], (a ?? b)![2], metros)} al ${rumboTxt} de ${base.nombre}` };
+  return {
+    lat: q.lat,
+    lon: q.lon,
+    desde: tx(`a ${dicho((a ?? b)![1], (a ?? b)![2], metros)} al ${rumboTxt} de ${base.nombre}`, `${dicho((a ?? b)![1], (a ?? b)![2], metros)} ${rumboIngles(rumboTxt)} of ${base.nombre}`),
+  };
 }
 
 /**
@@ -904,7 +943,7 @@ function ubicacionEnTexto(texto: string, tn: string, api: Api, antenas: Antena[]
   if (c) return c;
   if (!conLugar) return null;
   const l = lugarEnTexto(tn, api);
-  return l ? { lat: l.lat, lon: l.lon, desde: `en ${l.nombre}${l.tipo === "municipio" ? ` (${l.detalle})` : ""}`, lugar: l } : null;
+  return l ? { lat: l.lat, lon: l.lon, desde: tx(`en ${l.nombre}${l.tipo === "municipio" ? ` (${l.detalle})` : ""}`, `in ${l.nombre}${l.tipo === "municipio" ? ` (${l.detalle})` : ""}`), lugar: l } : null;
 }
 
 /* ───────────── Zonas para el diseño: un municipio entero, una parte, lo que se ve ───────────── */
@@ -947,6 +986,7 @@ const RUMBO_DE: Record<string, Rumbo> = {
   suroccidente: "suroeste",
 };
 const ADJETIVO_RUMBO: Record<Rumbo, string> = { norte: "norte", sur: "sur", este: "oriental", oeste: "occidental", noreste: "nororiental", noroeste: "noroccidental", sureste: "suroriental", suroeste: "suroccidental" };
+const ADJETIVO_RUMBO_INGLES: Record<Rumbo, string> = { norte: "northern", sur: "southern", este: "eastern", oeste: "western", noreste: "northeastern", noroeste: "northwestern", sureste: "southeastern", suroeste: "southwestern" };
 
 type ZonaDiseno = { puntos: Poligono; nombre: string; etiqueta: string; lugar?: Lugar } | { aviso: string };
 
@@ -975,7 +1015,7 @@ function zonaDeDiseno(tn: string, api: Api, contexto: ContextoOrden): ZonaDiseno
     const caja = api.cajaMapa?.();
     if (!caja) return null;
     const puntos = poligonoCaja(caja);
-    return { puntos, nombre: "en la zona que está viendo en el mapa", etiqueta: "Lo que se ve del mapa" };
+    return { puntos, nombre: tx("en la zona que está viendo en el mapa", "in the area you're viewing on the map"), etiqueta: tx("Lo que se ve del mapa", "Visible map area") };
   }
   if (!rumbo && !entero && !(ese && contexto.ultimoLugar)) return null;
   let lugar = (todoLugar ? lugarEnTexto(`en ${todoLugar[1]}`, api) : null) ?? lugarEnTexto(tn, api);
@@ -984,27 +1024,45 @@ function zonaDeDiseno(tn: string, api: Api, contexto: ContextoOrden): ZonaDiseno
     usarLugar(lugar);
   }
   lugar ??= lugarDeLaVista(api);
-  if (!lugar) return { aviso: "¿Qué municipio cubro? Dígame el nombre y el departamento, por ejemplo «todo el municipio de Barranca de Upía, Meta»." };
+  if (!lugar) return { aviso: tx("¿Qué municipio cubro? Dígame el nombre y el departamento, por ejemplo «todo el municipio de Barranca de Upía, Meta».", "Which municipality should I cover? Tell me its name and department, for example “the whole municipality of Barranca de Upía, Meta”.") };
   if (departamento && lugar.tipo === "municipio") {
     const d = candidatosLugar(lugar.detalle, api).find((c) => c.lugar.tipo === "departamento" && c.exacto);
     if (d) lugar = d.lugar;
   }
-  if (lugar.tipo === "pais") return { aviso: "Un país entero es demasiado para diseñarlo de una vez. Dígame un municipio, por ejemplo «todo el municipio de Barranca de Upía, Meta»." };
+  if (lugar.tipo === "pais") return { aviso: tx("Un país entero es demasiado para diseñarlo de una vez. Dígame un municipio, por ejemplo «todo el municipio de Barranca de Upía, Meta».", "A whole country is too much to design at once. Tell me a municipality, for example “the whole municipality of Barranca de Upía, Meta”.") };
   const contorno = api.contornoLugar?.(lugar);
-  if (!contorno) return { aviso: `No tengo el contorno de ${nombreLugar(lugar)} para cubrirlo entero. Dígame un tamaño, por ejemplo «11.226 hectáreas en ${lugar.nombre}».` };
+  if (!contorno)
+    return {
+      aviso: tx(
+        `No tengo el contorno de ${nombreLugar(lugar)} para cubrirlo entero. Dígame un tamaño, por ejemplo «11.226 hectáreas en ${lugar.nombre}».`,
+        `I don't have the boundary of ${nombreLugar(lugar)} to cover it entirely. Tell me a size, for example “11,226 hectares in ${lugar.nombre}”.`,
+      ),
+    };
   const puntos = rumbo ? recortarPoligono(contorno, rumbo) : contorno;
   const area = areaM2(puntos);
   const quien = lugar.tipo === "municipio" ? `el municipio de ${lugar.nombre} (${lugar.detalle})` : nombreLugar(lugar);
   const deQuien = quien.replace(/^el /, "del ");
+  const quienEn = lugar.tipo === "municipio" ? `the municipality of ${lugar.nombre} (${lugar.detalle})` : nombreLugar(lugar);
   if (area > 3e9)
-    return { aviso: `${quien.charAt(0).toUpperCase()}${quien.slice(1)}${rumbo ? `, en su zona ${ADJETIVO_RUMBO[rumbo]},` : ""} mide ${textoArea(area)}: es demasiado para diseñarlo de una vez (el tope es 300.000 ha). Pídamelo por partes: un municipio o una zona («la zona norte del municipio de …»).` };
+    return {
+      aviso: tx(
+        `${quien.charAt(0).toUpperCase()}${quien.slice(1)}${rumbo ? `, en su zona ${ADJETIVO_RUMBO[rumbo]},` : ""} mide ${textoArea(area)}: es demasiado para diseñarlo de una vez (el tope es 300.000 ha). Pídamelo por partes: un municipio o una zona («la zona norte del municipio de …»).`,
+        `${quienEn.charAt(0).toUpperCase()}${quienEn.slice(1)}${rumbo ? `, in its ${ADJETIVO_RUMBO_INGLES[rumbo]} zone,` : ""} measures ${textoArea(area)}: that's too much to design at once (the limit is 300,000 ha). Ask me for it in parts: a municipality or a zone (“the northern zone of the municipality of …”).`,
+      ),
+    };
   return {
     puntos,
-    nombre: rumbo ? `en la zona ${ADJETIVO_RUMBO[rumbo]} ${deQuien.startsWith("del ") ? deQuien : `de ${deQuien}`}` : `en todo ${quien}`,
-    etiqueta: `${lugar.nombre}${lugar.tipo === "municipio" ? ` (${lugar.detalle})` : ""}${rumbo ? ` · zona ${ADJETIVO_RUMBO[rumbo]}` : ""}`,
+    nombre: tx(
+      rumbo ? `en la zona ${ADJETIVO_RUMBO[rumbo]} ${deQuien.startsWith("del ") ? deQuien : `de ${deQuien}`}` : `en todo ${quien}`,
+      rumbo ? `in the ${ADJETIVO_RUMBO_INGLES[rumbo]} zone of ${quienEn}` : lugar.tipo === "municipio" ? `in the whole municipality of ${lugar.nombre} (${lugar.detalle})` : `in all of ${quienEn}`,
+    ),
+    etiqueta: `${lugar.nombre}${lugar.tipo === "municipio" ? ` (${lugar.detalle})` : ""}${rumbo ? tx(` · zona ${ADJETIVO_RUMBO[rumbo]}`, ` · ${ADJETIVO_RUMBO_INGLES[rumbo]} zone`) : ""}`,
     lugar,
   };
 }
+
+/** La clase de señal de los diseños de los botones: media o mejor (≥ 30 dB). */
+const clasesMedia = () => tx("señal media o mejor (buena, estable o media; ≥ 30 dB)", "fair or better signal (good, stable or fair; ≥ 30 dB)");
 
 /** El diseño de todo un municipio (o su zona), sostenible: señal media o mejor en el 95 % (lo que ofrecen los botones). */
 function disenoDeZona(z: Extract<ZonaDiseno, { puntos: Poligono }>, sostenible = true): Orden {
@@ -1012,7 +1070,7 @@ function disenoDeZona(z: Extract<ZonaDiseno, { puntos: Poligono }>, sostenible =
     tipo: "disenar",
     area: { forma: "poligono", puntos: z.puntos, nombre: z.nombre, dibujar: true, etiqueta: z.etiqueta },
     margenDb: 30,
-    clases: "señal media o mejor (buena, estable o media; ≥ 30 dB)",
+    clases: clasesMedia(),
     porcentaje: 95,
     respaldo: false,
     alturaM: ALTURA_REPETIDOR_DEFECTO,
@@ -1041,13 +1099,13 @@ function margenPedido(tn: string): { margenDb: number; clases: string } {
   const db = zona.match(/\b(\d{1,2})\s*db\b/);
   if (db && /\b(margen|al menos|minimo|sobre|mayor|mas de)\b/.test(zona)) {
     const v = Math.min(60, Math.max(10, Number(db[1])));
-    return { margenDb: v, clases: `margen de al menos ${v} dB` };
+    return { margenDb: v, clases: tx(`margen de al menos ${v} dB`, `margin of at least ${v} dB`) };
   }
   // También lo dicho justo después de «red» o «malla»: «una red media estable», «una malla estable»
   const pegado = tn.match(/\b(?:red|redes|malla|mallas)\s+((?:(?:de\s+)?(?:senal\s+)?(?:buenas?|estables?|medias?|bajas?|confiables?)\s*(?:y|o|,)?\s*){1,3})/)?.[1] ?? "";
   const halladas = UMBRALES_SENAL.filter(([re]) => re.test(zona) || re.test(pegado)).map(([, v]) => v);
   const m = halladas.length ? Math.min(...halladas) : 30;
-  const clases = m >= 45 ? "señal buena (≥ 45 dB)" : m >= 37 ? "señal estable o mejor (≥ 37 dB)" : m >= 30 ? "señal media o mejor (buena, estable o media; ≥ 30 dB)" : "servicio (≥ 20 dB)";
+  const clases = m >= 45 ? tx("señal buena (≥ 45 dB)", "good signal (≥ 45 dB)") : m >= 37 ? tx("señal estable o mejor (≥ 37 dB)", "stable or better signal (≥ 37 dB)") : m >= 30 ? clasesMedia() : tx("servicio (≥ 20 dB)", "service (≥ 20 dB)");
   return { margenDb: m, clases };
 }
 
@@ -1083,7 +1141,7 @@ function interpretarAjuste(texto: string, tn: string, antenas: Antena[]): Orden 
   const alto = tn.match(/\b(?:sin pasar de|maximo|max|hasta|no mas de|como mucho|menos de|de maximo)\s+(?:de\s+)?(\d{1,3})\s*(?:m|mts?|metros?)\b/);
   if (alto) {
     const h = Number(alto[1]);
-    if (h > 30) avisos.push(`Más de 30 m no lo propongo: exige torres autosoportadas, mucho más costosas; trabajo con hasta 30 m.`);
+    if (h > 30) avisos.push(tx(`Más de 30 m no lo propongo: exige torres autosoportadas, mucho más costosas; trabajo con hasta 30 m.`, `I don't propose more than 30 m: it requires self-supporting towers, which are much more expensive; I work with up to 30 m.`));
     opciones.alturaMaxM = Math.max(6, Math.min(30, h));
   }
   const cuantas = tn.match(/\b(?:maximo|max|no mas de|hasta|como mucho|con)\s+(?:de\s+)?(\d{1,2}|una|un|dos|tres|cuatro|cinco)\s+(?:antenas?|apoyos?|repetidor\w*|nodos?)(?: de apoyo)?\b/);
@@ -1102,7 +1160,7 @@ function interpretarAjuste(texto: string, tn: string, antenas: Antena[]): Orden 
   // Sitios dados: coordenadas en el pedido («las antenas de apoyo pueden ir en …», «usa estos puntos …»)
   const coords = extraerVariasCoordenadas(texto);
   if (coords.length && /\b(apoyo|sitios?|puntos?|fincas?|coordenadas|lugares|ubicaciones|pueden ir|podrian ir|disponibles|posibles)\b/.test(tn)) {
-    opciones.sitios = coords.map((c, i) => ({ lat: c.lat, lon: c.lon, nombre: `el sitio ${i + 1}` }));
+    opciones.sitios = coords.map((c, i) => ({ lat: c.lat, lon: c.lon, nombre: tx(`el sitio ${i + 1}`, `site ${i + 1}`) }));
   }
   return { tipo: "ajustar", aplicar: !pregunta, opcion, opciones, avisos };
 }
@@ -1188,54 +1246,72 @@ function interpretarDiseno(texto: string, tn: string, api: Api, antenas: Antena[
     // zona norte de Barranca de Upía»: el centro de esa zona), «aquí» (lo que se ve) o «ahí» / «ese municipio» (el
     // último lugar del que se habló)
     let centro: CentroArea | null = null;
-    let u: (Coordenada & { desde?: string; lugar?: Lugar }) | null = gateway ? { ...gateway, desde: "alrededor del gateway" } : null;
+    let u: (Coordenada & { desde?: string; lugar?: Lugar }) | null = gateway ? { ...gateway, desde: tx("alrededor del gateway", "around the gateway") } : null;
     const nodo = !u && (circulo || area) && /\b(a la redonda|alrededor|en torno|desde|centrad\w*|radio)\b/.test(tn) ? nodosMencionados(tn, antenas)[0] : undefined;
-    if (nodo) u = { lat: nodo.lat, lon: nodo.lon, desde: `alrededor de ${nodo.nombre}` };
+    if (nodo) u = { lat: nodo.lat, lon: nodo.lon, desde: tx(`alrededor de ${nodo.nombre}`, `around ${nodo.nombre}`) };
     if (!u && AQUI.test(tn)) centro = { tipo: "mapa" };
     if (!u && !centro) u = ubicacionEnTexto(texto, tn, api, antenas, true);
     if (!u && !centro && contexto.ultimoLugar && ESE_LUGAR.test(tn)) {
       const l = contexto.ultimoLugar;
       usarLugar(l);
-      u = { lat: l.lat, lon: l.lon, desde: `en ${nombreLugar(l)}`, lugar: l };
+      u = { lat: l.lat, lon: l.lon, desde: tx(`en ${nombreLugar(l)}`, `in ${nombreLugar(l)}`), lugar: l };
     }
     const rumboTxt = u?.lugar ? tn.match(ZONA_RUMBO) : null;
     const contorno = u?.lugar && rumboTxt ? api.contornoLugar?.(u.lugar) : null;
     if (u && u.lugar && rumboTxt && contorno) {
       const r = RUMBO_DE[rumboTxt[1] ?? rumboTxt[2]];
       const b = cajaPoligono(recortarPoligono(contorno, r));
-      u = { lat: (b.sur + b.norte) / 2, lon: (b.oeste + b.este) / 2, desde: `en la zona ${ADJETIVO_RUMBO[r]} de ${nombreLugar(u.lugar)}`, lugar: u.lugar };
+      u = { lat: (b.sur + b.norte) / 2, lon: (b.oeste + b.este) / 2, desde: tx(`en la zona ${ADJETIVO_RUMBO[r]} de ${nombreLugar(u.lugar)}`, `in the ${ADJETIVO_RUMBO_INGLES[r]} zone of ${nombreLugar(u.lugar)}`), lugar: u.lugar };
     }
     if (u) centro = { tipo: "coord", coord: { lat: u.lat, lon: u.lon }, nombre: u.desde };
     else if (!centro && antenas.some((a) => a.pasarela && a.activa)) centro = { tipo: "gateway" };
     else if (!centro) centro = { tipo: "mapa" };
     if (lado) {
       const l = lado.metros;
-      pedida = { forma: "cuadrado", areaM2: l * l, anchoM: l, altoM: l, centro, medida: `un cuadrado de ${textoDistancia(lado)} de lado`, etiqueta: `cuadrado de ${textoDicho(lado)} de lado` };
+      pedida = {
+        forma: "cuadrado",
+        areaM2: l * l,
+        anchoM: l,
+        altoM: l,
+        centro,
+        medida: tx(`un cuadrado de ${textoDistancia(lado)} de lado`, `a square ${textoDistancia(lado)} on each side`),
+        etiqueta: tx(`cuadrado de ${textoDicho(lado)} de lado`, `square of ${textoDichoLocal(lado)} per side`),
+      };
     } else if (rect && !area) {
       const a1 = rect.ancho.metros;
       const a2 = rect.alto.metros;
       const metrico = (d: Distancia) => d.unidad === "km" || d.unidad === "m";
-      const dicho = `${textoDicho(rect.ancho)} × ${textoDicho(rect.alto)}`;
+      const dicho = tx(`${textoDicho(rect.ancho)} × ${textoDicho(rect.alto)}`, `${textoDichoLocal(rect.ancho)} × ${textoDichoLocal(rect.alto)}`);
+      const conversion = metrico(rect.ancho) && metrico(rect.alto) ? "" : ` (${textoMetros(a1)} × ${textoMetros(a2)})`;
       pedida = {
         forma: "rectangulo",
         areaM2: a1 * a2,
         anchoM: a1,
         altoM: a2,
         centro,
-        medida: `un rectángulo de ${dicho}${metrico(rect.ancho) && metrico(rect.alto) ? "" : ` (${textoMetros(a1)} × ${textoMetros(a2)})`}`,
+        medida: tx(`un rectángulo de ${dicho}${conversion}`, `a rectangle of ${dicho}${conversion}`),
         etiqueta: dicho,
       };
     } else if (circulo && !area) {
       const r = circulo.radio.metros;
       pedida =
         circulo.como === "diametro"
-          ? { forma: "circulo", areaM2: Math.PI * r * r, centro, medida: `un círculo de ${textoDistancia(circulo.dicho)} de diámetro (radio de ${textoMetros(r)})`, etiqueta: `diámetro de ${textoDicho(circulo.dicho)}` }
+          ? {
+              forma: "circulo",
+              areaM2: Math.PI * r * r,
+              centro,
+              medida: tx(`un círculo de ${textoDistancia(circulo.dicho)} de diámetro (radio de ${textoMetros(r)})`, `a circle ${textoDistancia(circulo.dicho)} in diameter (radius of ${textoMetros(r)})`),
+              etiqueta: tx(`diámetro de ${textoDicho(circulo.dicho)}`, `diameter of ${textoDichoLocal(circulo.dicho)}`),
+            }
           : {
               forma: "circulo",
               areaM2: Math.PI * r * r,
               centro,
-              medida: `un círculo de ${textoDistancia(circulo.radio)} de radio${circulo.como === "supuesto" ? ` (tomé los ${textoDicho(circulo.dicho)} como radio, a la redonda)` : ""}`,
-              etiqueta: `radio de ${textoDistancia(circulo.radio)}`,
+              medida: tx(
+                `un círculo de ${textoDistancia(circulo.radio)} de radio${circulo.como === "supuesto" ? ` (tomé los ${textoDicho(circulo.dicho)} como radio, a la redonda)` : ""}`,
+                `a circle with a radius of ${textoDistancia(circulo.radio)}${circulo.como === "supuesto" ? ` (I took the ${textoDichoLocal(circulo.dicho)} as the radius, all around)` : ""}`,
+              ),
+              etiqueta: tx(`radio de ${textoDistancia(circulo.radio)}`, `radius of ${textoDistancia(circulo.radio)}`),
             };
     } else if (area) {
       const cuadrado = /\bcuadrad\w*/.test(tn) && !/\b(millas?|yardas?|pies|kilometros?|metros?)\s+cuadrad/.test(tn);
@@ -1264,9 +1340,9 @@ function interpretarPedidoDeRed(texto: string, tn: string, api: Api, antenas: An
   if (!u && contexto.ultimoLugar && ESE_LUGAR.test(tn)) {
     const l = contexto.ultimoLugar;
     usarLugar(l);
-    u = { lat: l.lat, lon: l.lon, desde: `en ${nombreLugar(l)}`, lugar: l };
+    u = { lat: l.lat, lon: l.lon, desde: tx(`en ${nombreLugar(l)}`, `in ${nombreLugar(l)}`), lugar: l };
   }
-  const lugar: LugarPedido | undefined = u ? { lat: u.lat, lon: u.lon, nombre: u.desde ?? `en ${aDecimal(u.lat)}, ${aDecimal(u.lon)}`, ...(u.lugar ? { lugar: u.lugar } : {}) } : undefined;
+  const lugar: LugarPedido | undefined = u ? { lat: u.lat, lon: u.lon, nombre: u.desde ?? tx(`en ${aDecimal(u.lat)}, ${aDecimal(u.lon)}`, `at ${aDecimal(u.lat)}, ${aDecimal(u.lon)}`), ...(u.lugar ? { lugar: u.lugar } : {}) } : undefined;
   if (!sostenible && !lugar) return null;
   return { tipo: "pedir-diseno", lugar, sostenible };
 }
@@ -1283,7 +1359,7 @@ function lugarDePunto(api: Api, lat: number, lon: number): Lugar | null {
 function completarDiseno(texto: string, tn: string, api: Api, antenas: Antena[], p: Extract<NonNullable<Pendiente>, { tipo: "disenar" }>, contexto: ContextoOrden = {}): Orden | null {
   const bajo = sinTildes(texto);
   const u = ubicacionEnTexto(texto, tn, api, antenas, true);
-  const lugar: LugarPedido | undefined = u ? { lat: u.lat, lon: u.lon, nombre: u.desde ?? `en ${aDecimal(u.lat)}, ${aDecimal(u.lon)}`, ...(u.lugar ? { lugar: u.lugar } : {}) } : p.lugar;
+  const lugar: LugarPedido | undefined = u ? { lat: u.lat, lon: u.lon, nombre: u.desde ?? tx(`en ${aDecimal(u.lat)}, ${aDecimal(u.lon)}`, `at ${aDecimal(u.lat)}, ${aDecimal(u.lon)}`), ...(u.lugar ? { lugar: u.lugar } : {}) } : p.lugar;
   // «Todo», «el municipio completo», «la zona norte»: el municipio del lugar pedido (o donde caen sus coordenadas)
   const soloTodo = /^(tod[oa]|tod[oa] el municipio|el municipio( completo| entero)?|complet[oa]|enter[oa]|tod[oa] completo)$/.test(tn.replace(/[.,!]/g, "").trim());
   const zonaDicha = soloTodo || MUNICIPIO_ENTERO.test(tn) || ZONA_RUMBO.test(tn) || TODO_LUGAR.test(tn) || VISTA_MAPA.test(tn);
@@ -1331,19 +1407,44 @@ function interpretarLote(texto: string, tn: string, antenas: Antena[]): Orden | 
       return true;
     })
     .map((a) => a.id);
-  const nombre = grupo === "menos-gateway" ? "todos los nodos menos el gateway" : `${/^(personas|gente|antenas|torres|piezas)$/.test(grupo) ? "todas las" : "todos los"} ${grupo === "gente" ? "personas" : grupo}`;
+  const nombreEs = grupo === "menos-gateway" ? "todos los nodos menos el gateway" : `${/^(personas|gente|antenas|torres|piezas)$/.test(grupo) ? "todas las" : "todos los"} ${grupo === "gente" ? "personas" : grupo}`;
+  const nombre = tx(nombreEs, grupo === "menos-gateway" ? "all nodes except the gateway" : `all ${GRUPO_INGLES[grupo] ?? grupo}`);
   if (/\b(borra\w*|elimina\w*|quita\w*|saca\w*|suprim\w*)\b/.test(tn) && !/\bpasarela\b/.test(tn)) return { tipo: "eliminar-varios", ids, descripcion: nombre };
   const alturaTxt = texto.match(/(\d{1,3}(?:[.,]\d+)?)\s*(?:m|mts?|metros?)\b/i);
   if (alturaTxt && /\b(sube|subir|subelos|baja|bajar|bajalos|pon\w*|cambia\w*|deja\w*|altura|queden|quede|quedan|esten|este|estan|ubica\w*|eleva\w*)\b/.test(tn)) {
     const h = Math.min(300, Math.max(0.5, num(alturaTxt[1])));
-    return { tipo: "editar-varios", ids, cambios: { alturaM: h }, descripcion: `${nombre} quedan a ${fn(h)} m` };
+    return { tipo: "editar-varios", ids, cambios: { alturaM: h }, descripcion: tx(`${nombre} quedan a ${fn(h)} m`, `${nombre} now at ${fn(h)} m`) };
   }
-  if (/\b(desactiv\w*|exclu\w*|apaga\w*)\b/.test(tn)) return { tipo: "editar-varios", ids, cambios: { activa: false }, descripcion: `${nombre} quedan fuera de la simulación` };
-  if (/\b(activ\w*|inclu\w*|enciend\w*|prende\w*)\b/.test(tn)) return { tipo: "editar-varios", ids, cambios: { activa: true }, descripcion: `${nombre} vuelven a la simulación` };
+  if (/\b(desactiv\w*|exclu\w*|apaga\w*)\b/.test(tn)) return { tipo: "editar-varios", ids, cambios: { activa: false }, descripcion: tx(`${nombre} quedan fuera de la simulación`, `${nombre} now excluded from the simulation`) };
+  if (/\b(activ\w*|inclu\w*|enciend\w*|prende\w*)\b/.test(tn)) return { tipo: "editar-varios", ids, cambios: { activa: true }, descripcion: tx(`${nombre} vuelven a la simulación`, `${nombre} back in the simulation`) };
   const rol = rolEnTexto(tn);
-  if (rol) return { tipo: "editar-varios", ids, cambios: { rol }, descripcion: `${nombre} quedan como ${rol === "REPETIDOR" ? "repetidores" : rol === "ROOM_SERVER" ? "room server" : "companion (no retransmiten)"}` };
+  if (rol)
+    return {
+      tipo: "editar-varios",
+      ids,
+      cambios: { rol },
+      descripcion: tx(
+        `${nombre} quedan como ${rol === "REPETIDOR" ? "repetidores" : rol === "ROOM_SERVER" ? "room server" : "companion (no retransmiten)"}`,
+        `${nombre} now set as ${rol === "REPETIDOR" ? "repeaters" : rol === "ROOM_SERVER" ? "room servers" : "companions (they don't retransmit)"}`,
+      ),
+    };
   return null;
 }
+
+/** Los grupos de «todos los…» en inglés, para mostrarlos. */
+const GRUPO_INGLES: Record<string, string> = {
+  repetidores: "repeaters",
+  repetidoras: "repeaters",
+  personas: "people",
+  gente: "people",
+  "nodos de campo": "field nodes",
+  "nodos antena": "antenna nodes",
+  antenas: "antennas",
+  nodos: "nodes",
+  torres: "towers",
+  gateways: "gateways",
+  piezas: "pieces",
+};
 
 /** Rol MeshCore en el texto («como repetidor», «que no retransmita», «room server»); acepta también los nombres viejos. */
 function rolEnTexto(tn: string): Rol | null {
@@ -1412,24 +1513,34 @@ function interpretarPantalla(tn: string): Orden | null {
           : /\b(calles|callejero|openstreetmap|osm|carreteras)\b/.test(tn) && /\bmapa de\b/.test(tn)
             ? "calles"
             : null;
-    if (fondo) return { tipo: "vista", cambios: { fondo }, descripcion: { satelite: "se ve con imágenes satelitales", topografico: "se ve con el mapa topográfico", opentopomap: "se ve con OpenTopoMap (curvas de nivel, ríos y quebradas)", calles: "se ve con el mapa de calles" }[fondo] };
+    if (fondo)
+      return {
+        tipo: "vista",
+        cambios: { fondo },
+        descripcion: {
+          satelite: tx("se ve con imágenes satelitales", "now shows satellite imagery"),
+          topografico: tx("se ve con el mapa topográfico", "now shows the topographic map"),
+          opentopomap: tx("se ve con OpenTopoMap (curvas de nivel, ríos y quebradas)", "now shows OpenTopoMap (contour lines, rivers and streams)"),
+          calles: tx("se ve con el mapa de calles", "now shows the street map"),
+        }[fondo],
+      };
   }
   if (!on && !off) return null;
   // Con cantidades («radio de 12 km», «20 m», «-100 dBm») es un parámetro o un nodo, no una capa
   if (/\d\s*(km|kilometros?|m|metros?|millas?|yardas?|pies|cuadras?|db|dbm|dbi|mhz)\b/.test(tn)) return null;
   const valor = !off;
   const capas: [RegExp, keyof CambiosVista, string][] = [
-    [/\b(vias|carreteras|caminos|trochas)\b/, "refVias", "las vías"],
-    [/\b(rios|quebradas|cauces)\b/, "refRios", "los ríos"],
-    [/\b(limites|division politica|municipios|departamentos|fronteras)\b/, "refDivision", "los límites de municipios y departamentos"],
-    [/\b(nombres|etiquetas|poblados|pueblos|veredas)\b/, "refNombres", "los nombres de poblados y lugares"],
-    [/\benlaces\b/, "mostrarEnlaces", "los enlaces entre nodos"],
-    [/\b(alcance|rango de alcance|contorno\w*)\b/, "mostrarAlcance", "el rango de alcance"],
-    [/\b(circulos|circulos de estudio)\b/, "mostrarCirculos", "los círculos de estudio"],
-    [/\b(3d|tres dimensiones|relieve en 3d|relieve 3d)\b/, "relieve3d", "el relieve en 3D"],
-    [/\b(zonas? sin servicio|areas? sin servicio|lo rojo)\b/, "mostrarSinServicio", "las zonas sin servicio"],
-    [/\banillos\b/, "mostrarAnillos", "los anillos de distancia"],
-    [/\b(haces|direccion de las antenas)\b/, "mostrarHaces", "la dirección de las antenas direccionales"],
+    [/\b(vias|carreteras|caminos|trochas)\b/, "refVias", tx("las vías", "roads")],
+    [/\b(rios|quebradas|cauces)\b/, "refRios", tx("los ríos", "rivers")],
+    [/\b(limites|division politica|municipios|departamentos|fronteras)\b/, "refDivision", tx("los límites de municipios y departamentos", "municipal and departmental boundaries")],
+    [/\b(nombres|etiquetas|poblados|pueblos|veredas)\b/, "refNombres", tx("los nombres de poblados y lugares", "names of towns and places")],
+    [/\benlaces\b/, "mostrarEnlaces", tx("los enlaces entre nodos", "links between nodes")],
+    [/\b(alcance|rango de alcance|contorno\w*)\b/, "mostrarAlcance", tx("el rango de alcance", "the range")],
+    [/\b(circulos|circulos de estudio)\b/, "mostrarCirculos", tx("los círculos de estudio", "the study circles")],
+    [/\b(3d|tres dimensiones|relieve en 3d|relieve 3d)\b/, "relieve3d", tx("el relieve en 3D", "the terrain in 3D")],
+    [/\b(zonas? sin servicio|areas? sin servicio|lo rojo)\b/, "mostrarSinServicio", tx("las zonas sin servicio", "areas with no service")],
+    [/\banillos\b/, "mostrarAnillos", tx("los anillos de distancia", "distance rings")],
+    [/\b(haces|direccion de las antenas)\b/, "mostrarHaces", tx("la dirección de las antenas direccionales", "the direction of directional antennas")],
   ];
   const cambios: CambiosVista = {};
   const partes: string[] = [];
@@ -1441,22 +1552,22 @@ function interpretarPantalla(tn: string): Orden | null {
   // Modo del mapa de cobertura
   if (valor && /\b(mejor antena|mejor servidor|quien atiende|que antena atiende|servidor)\b/.test(tn)) {
     cambios.modo = "servidor";
-    partes.push("cuál nodo antena atiende cada zona");
+    partes.push(tx("cuál nodo antena atiende cada zona", "which antenna node serves each area"));
   } else if (valor && /\b(mapa|modo|ver|muestra\w*)\b.*\b(respaldo|redundancia)\b/.test(tn)) {
     cambios.modo = "redundancia";
-    partes.push("el respaldo (cuántos nodos antena llegan a cada punto)");
+    partes.push(tx("el respaldo (cuántos nodos antena llegan a cada punto)", "the backup (how many antenna nodes reach each point)"));
   } else if (valor && /\b(mapa|modo) de (la )?senal\b/.test(tn)) {
     cambios.modo = "senal";
-    partes.push("el mapa de señal");
+    partes.push(tx("el mapa de señal", "the signal map"));
   }
   const op = tn.match(/\b(opacidad|transparencia)\b\D{0,14}(\d{1,3})\s*%?/);
   if (op) {
     const v = Math.min(100, Math.max(5, Number(op[2]))) / 100;
     cambios.opacidad = op[1] === "transparencia" ? Math.max(0.05, 1 - v) : v;
-    partes.push(`la cobertura con ${Math.round((cambios.opacidad ?? 0) * 100)} % de opacidad`);
+    partes.push(tx(`la cobertura con ${Math.round((cambios.opacidad ?? 0) * 100)} % de opacidad`, `the coverage at ${Math.round((cambios.opacidad ?? 0) * 100)}% opacity`));
   }
   if (!partes.length) return null;
-  return { tipo: "vista", cambios, descripcion: `${valor ? "ahora muestra" : "ya no muestra"} ${partes.join(", ")}` };
+  return { tipo: "vista", cambios, descripcion: tx(`${valor ? "ahora muestra" : "ya no muestra"} ${partes.join(", ")}`, `${valor ? "now shows" : "no longer shows"} ${listaIngles(partes)}`) };
 }
 
 /* ───────────── Varias órdenes en un mensaje ───────────── */
@@ -1512,7 +1623,7 @@ export function interpretarOrden(texto: string, api: Api, pendiente: Pendiente, 
     const duda = sesion.dudas[0];
     if (duda && !contexto.forzarLugar && o.tipo !== "elegir" && o.tipo !== "pedir-lugar" && o.tipo !== "aviso") {
       const opciones = opcionesDeLugar(texto, api, pendiente, contexto, duda.dicho, duda.opciones.map((c) => c.lugar));
-      if (opciones.length === 1) opciones[0] = { ...opciones[0], texto: `Sí, ${opciones[0].texto}` };
+      if (opciones.length === 1) opciones[0] = { ...opciones[0], texto: tx(`Sí, ${opciones[0].texto}`, `Yes, ${opciones[0].texto}`) };
       if (opciones.length) return { tipo: "elegir", pregunta: preguntaLugar(opciones, duda.dicho), opciones, dicho: duda.dicho, original: texto };
     }
     // Una red pedida «en» un lugar que no se reconoció iría al centro del mapa: mejor preguntar
@@ -1520,10 +1631,13 @@ export function interpretarOrden(texto: string, api: Api, pendiente: Pendiente, 
     if (!duda && intento?.opciones.length && !contexto.forzarLugar && o.tipo === "disenar" && "centro" in o.area && o.area.centro.tipo !== "coord") {
       const opciones = opcionesDeLugar(texto, api, pendiente, contexto, intento.dicho, intento.opciones.map((c) => c.lugar));
       const sugerido = opciones.map((x) => x.texto);
-      opciones.push({ texto: "En el centro del mapa", orden: o });
+      opciones.push({ texto: tx("En el centro del mapa", "At the center of the map"), orden: o });
       return {
         tipo: "elegir",
-        pregunta: `No reconocí «${intento.dicho}» como un municipio. ¿Se refiere a ${sugerido.length > 1 ? `${sugerido.slice(0, -1).join(", ")} o ${sugerido[sugerido.length - 1]}` : (sugerido[0] ?? "otro lugar")}? Si no, dígame el municipio y el departamento, o la armo en el centro del mapa.`,
+        pregunta: tx(
+          `No reconocí «${intento.dicho}» como un municipio. ¿Se refiere a ${sugerido.length > 1 ? `${sugerido.slice(0, -1).join(", ")} o ${sugerido[sugerido.length - 1]}` : (sugerido[0] ?? "otro lugar")}? Si no, dígame el municipio y el departamento, o la armo en el centro del mapa.`,
+          `I didn't recognize “${intento.dicho}” as a municipality. Do you mean ${sugerido.length > 1 ? `${sugerido.slice(0, -1).join(", ")} or ${sugerido[sugerido.length - 1]}` : (sugerido[0] ?? "another place")}? If not, tell me the municipality and the department, or I'll build it at the center of the map.`,
+        ),
         opciones,
         dicho: intento.dicho,
         original: texto,
@@ -1531,7 +1645,7 @@ export function interpretarOrden(texto: string, api: Api, pendiente: Pendiente, 
     }
     const lugar = o.lugarUsado ?? sesion.usados[sesion.usados.length - 1];
     const corregido = sesion.corregidos[0];
-    return { ...o, ...(lugar ? { lugarUsado: lugar } : {}), ...(corregido && !o.nota ? { nota: `Entendí «${nombreLugar(corregido.lugar)}».` } : {}) };
+    return { ...o, ...(lugar ? { lugarUsado: lugar } : {}), ...(corregido && !o.nota ? { nota: tx(`Entendí «${nombreLugar(corregido.lugar)}».`, `I understood “${nombreLugar(corregido.lugar)}”.`) } : {}) };
   } finally {
     sesionLugares = previa;
   }
@@ -1653,7 +1767,7 @@ function interpretarOrdenBase(dicho: string, api: Api, pendiente: Pendiente, con
   const nombreEsc = texto.match(/(?:(?:ll[aá]ma|nombra|renombra|ponle (?:de )?nombre|nombre)\s+(?:al|el)\s+escenario|escenario\s+(?:se llama|llamado))\s*(?:como|a|:)?\s*["“«]?([^"”»]{2,60}?)["”»]?\s*$/i);
   if (nombreEsc) return { tipo: "nombre-escenario", nombre: nombreEsc[1].trim() };
   const recep = texto.match(/(?:ganancia del? receptor|receptor (?:con|de))\D{0,14}(\d{1,2}(?:[.,]\d+)?)\s*dbi\b/i);
-  if (recep) return { tipo: "parametros", cambios: { gananciaRxDbi: num(recep[1]) }, descripcion: `la ganancia del receptor a ${recep[1]} dBi` };
+  if (recep) return { tipo: "parametros", cambios: { gananciaRxDbi: num(recep[1]) }, descripcion: tx(`la ganancia del receptor a ${recep[1]} dBi`, `the receiver gain to ${recep[1].replace(",", ".")} dBi`) };
 
   // Agente: cobertura del área medida, diseño por área, órdenes en lote y vista del mapa
   if (/\b(cuanto|que porcentaje|que %|como (queda|esta|va)|que tanto)\b.*\b(cubr\w*|cobertura|senal)\b.*\b(area|zona|poligono)\b/.test(tn)) {
@@ -1721,13 +1835,13 @@ function interpretarOrdenBase(dicho: string, api: Api, pendiente: Pendiente, con
     const ren = texto.match(/(?:renombr\w*|c[aá]mbi\w* (?:el )?nombre(?: de)?|ll[aá]mal[ao])\b.*?\b(?:a|por|como)\s+["“«]?([^"”»,.;]{2,40})["”»]?\s*$/i);
     if (ren) return { tipo: "renombrar", id: nodo.id, nombre: ren[1].trim() };
     if (/\b(como pasarela|sea (la )?pasarela|es la pasarela|hazla pasarela|hazlo pasarela|marca\w* .*pasarela|pon\w* .*pasarela)\b/.test(tn) && !/\b(quita|ya no|no es)\b/.test(tn))
-      return { tipo: "editar", id: nodo.id, cambios: { pasarela: true }, descripcion: "ahora es pasarela" };
-    if (/\b(quita\w* .*pasarela|ya no (es|sea) pasarela|no es pasarela|sin pasarela)\b/.test(tn)) return { tipo: "editar", id: nodo.id, cambios: { pasarela: false }, descripcion: "ya no es pasarela" };
-    if (/\b(desactiv\w*|exclu\w*|apag\w*|oculta\w*|saca de la simulacion)\b/.test(tn)) return { tipo: "editar", id: nodo.id, cambios: { activa: false }, descripcion: "quedó fuera de la simulación" };
-    if (/\b(activ\w*|inclu\w*|enciend\w*|prend\w*)\b/.test(tn) && !/\b(no )?activa la regla\b/.test(tn)) return { tipo: "editar", id: nodo.id, cambios: { activa: true }, descripcion: "volvió a la simulación" };
+      return { tipo: "editar", id: nodo.id, cambios: { pasarela: true }, descripcion: tx("ahora es pasarela", "now the gateway") };
+    if (/\b(quita\w* .*pasarela|ya no (es|sea) pasarela|no es pasarela|sin pasarela)\b/.test(tn)) return { tipo: "editar", id: nodo.id, cambios: { pasarela: false }, descripcion: tx("ya no es pasarela", "no longer a gateway") };
+    if (/\b(desactiv\w*|exclu\w*|apag\w*|oculta\w*|saca de la simulacion)\b/.test(tn)) return { tipo: "editar", id: nodo.id, cambios: { activa: false }, descripcion: tx("quedó fuera de la simulación", "now excluded from the simulation") };
+    if (/\b(activ\w*|inclu\w*|enciend\w*|prend\w*)\b/.test(tn) && !/\b(no )?activa la regla\b/.test(tn)) return { tipo: "editar", id: nodo.id, cambios: { activa: true }, descripcion: tx("volvió a la simulación", "back in the simulation") };
     if (/\b(convier\w*|cambi\w* .*tipo|vuelve\w*|hazl[ao])\b.*\b(nodo de campo|nodo|antena|nodo antena)\b/.test(tn)) {
       const t = /nodo antena|\bantena\b/.test(tn.split(/convier\w*|cambi\w*|vuelve\w*|hazl[ao]/).pop() ?? "") ? "antena" : "nodo";
-      return { tipo: "editar", id: nodo.id, cambios: { tipo: t }, descripcion: t === "antena" ? "ahora es un nodo antena" : "ahora es un nodo de campo" };
+      return { tipo: "editar", id: nodo.id, cambios: { tipo: t }, descripcion: t === "antena" ? tx("ahora es un nodo antena", "now an antenna node") : tx("ahora es un nodo de campo", "now a field node") };
     }
     if (!PREGUNTA.test(tn) && !/\b(informe|reporte|radioenlace|radio enlace|perfil)\b/.test(tn)) {
       // Tipo de antena: «ponle una Yagi a Ejemplo», «Ejemplo con antena sectorial de 120»
@@ -1736,7 +1850,7 @@ function interpretarOrdenBase(dicho: string, api: Api, pendiente: Pendiente, con
       const otro = nodosMencionados(tn, antenas).find((x) => x.id !== nodo.id);
       const azimut = otro && apuntar ? Math.round(rumbo(nodo.lat, nodo.lon, otro.lat, otro.lon) * 10) / 10 : azimutEnTexto(texto, tn);
       if (patron && patron !== (nodo.patron ?? "omni")) {
-        if (patron === "omni") return { tipo: "editar", id: nodo.id, cambios: { patron: undefined, azimutDeg: undefined, elevacionDeg: undefined }, descripcion: "ahora tiene antena omnidireccional" };
+        if (patron === "omni") return { tipo: "editar", id: nodo.id, cambios: { patron: undefined, azimutDeg: undefined, elevacionDeg: undefined }, descripcion: tx("ahora tiene antena omnidireccional", "now with an omnidirectional antenna") };
         const g = texto.match(/(\d{1,2}(?:[.,]\d+)?)\s*dbi\b/i);
         const ganancia = g ? num(g[1]) : patronPorId(patron).gananciaTipica;
         const az = azimut ?? nodo.azimutDeg ?? 0;
@@ -1745,12 +1859,15 @@ function interpretarOrdenBase(dicho: string, api: Api, pendiente: Pendiente, con
           tipo: "editar",
           id: nodo.id,
           cambios: { patron, gananciaDbi: ganancia, equipo: "personalizado", azimutDeg: az, elevacionDeg: nodo.elevacionDeg ?? 0 },
-          descripcion: `ahora tiene antena ${patronPorId(patron).nombre.toLowerCase()} de ${fn(ganancia)} dBi apuntando a ${rumboTexto(az)}${otro && apuntar ? `, hacia ${otro.nombre}` : ""} (haz de ≈ ${Math.round(haz.h)}°)`,
+          descripcion: tx(
+            `ahora tiene antena ${patronPorId(patron).nombre.toLowerCase()} de ${fn(ganancia)} dBi apuntando a ${rumboTexto(az)}${otro && apuntar ? `, hacia ${otro.nombre}` : ""} (haz de ≈ ${Math.round(haz.h)}°)`,
+            `now with a ${nombreAntenaIngles(patron)} antenna of ${fn(ganancia)} dBi pointing at ${rumboTexto(az)}${otro && apuntar ? `, toward ${otro.nombre}` : ""} (≈ ${Math.round(haz.h)}° beam)`,
+          ),
         };
       }
       if (apuntar && azimut !== null) {
         if (!esDireccional(nodo)) return { tipo: "apuntar-omni", id: nodo.id, azimutDeg: azimut, destino: otro?.nombre };
-        return { tipo: "editar", id: nodo.id, cambios: { azimutDeg: azimut }, descripcion: `apunta a ${rumboTexto(azimut)}${otro ? `, hacia ${otro.nombre}` : ""}` };
+        return { tipo: "editar", id: nodo.id, cambios: { azimutDeg: azimut }, descripcion: tx(`apunta a ${rumboTexto(azimut)}${otro ? `, hacia ${otro.nombre}` : ""}`, `pointing at ${rumboTexto(azimut)}${otro ? `, toward ${otro.nombre}` : ""}`) };
       }
       // Inclinación del haz: «inclina Ejemplo 5° hacia abajo»
       const incl = texto.match(/(-?\d{1,2}(?:[.,]\d+)?)\s*(?:°|º|grados?)/i);
@@ -1760,7 +1877,12 @@ function interpretarOrdenBase(dicho: string, api: Api, pendiente: Pendiente, con
         else if (/\b(arriba|sube)\b/.test(tn)) e = Math.abs(e);
         e = Math.min(45, Math.max(-45, e));
         if (!esDireccional(nodo)) return { tipo: "apuntar-omni", id: nodo.id, azimutDeg: nodo.azimutDeg ?? 0 };
-        return { tipo: "editar", id: nodo.id, cambios: { elevacionDeg: e }, descripcion: `el haz queda ${e === 0 ? "horizontal" : `${fn(Math.abs(e))}° hacia ${e < 0 ? "abajo" : "arriba"}`}` };
+        return {
+          tipo: "editar",
+          id: nodo.id,
+          cambios: { elevacionDeg: e },
+          descripcion: tx(`el haz queda ${e === 0 ? "horizontal" : `${fn(Math.abs(e))}° hacia ${e < 0 ? "abajo" : "arriba"}`}`, `the beam is now ${e === 0 ? "horizontal" : `${fn(Math.abs(e))}° ${e < 0 ? "down" : "up"}`}`),
+        };
       }
     }
     // Sin el nombre del nodo: en «sube el Repetidor 3 como a 12 m», «repetidor» es el nombre, no el rol
@@ -1770,20 +1892,25 @@ function interpretarOrdenBase(dicho: string, api: Api, pendiente: Pendiente, con
         tipo: "editar",
         id: nodo.id,
         cambios: { rol },
-        descripcion: rol === "REPETIDOR" ? "queda como repetidor (pasa los paquetes de los demás)" : rol === "ROOM_SERVER" ? "queda como room server (guarda mensajes; no retransmite)" : "queda como companion (envía y recibe lo suyo; no retransmite)",
+        descripcion:
+          rol === "REPETIDOR"
+            ? tx("queda como repetidor (pasa los paquetes de los demás)", "now a repeater (relays everyone else's packets)")
+            : rol === "ROOM_SERVER"
+              ? tx("queda como room server (guarda mensajes; no retransmite)", "now a room server (stores messages; doesn't retransmit)")
+              : tx("queda como companion (envía y recibe lo suyo; no retransmite)", "now a companion (sends and receives its own; doesn't retransmit)"),
       };
     const eq = equipoEnTexto(tn);
     if (eq) {
       const q = EQUIPOS.find((x) => x.id === eq)!;
-      return { tipo: "editar", id: nodo.id, cambios: { equipo: q.id, potenciaDbm: q.potenciaDbm, gananciaDbi: q.gananciaDbi, perdidaCableDb: q.perdidaCableDb }, descripcion: `ahora usa el equipo «${q.nombre}»` };
+      return { tipo: "editar", id: nodo.id, cambios: { equipo: q.id, potenciaDbm: q.potenciaDbm, gananciaDbi: q.gananciaDbi, perdidaCableDb: q.perdidaCableDb }, descripcion: tx(`ahora usa el equipo «${q.nombre}»`, `now using the “${q.nombre}” device`) };
     }
     const alturaTxt = texto.match(/(\d{1,3}(?:[.,]\d+)?)\s*(?:m|mts?|metros?)\b(?!\s*s\.?\s*n)/i);
     if (alturaTxt && /\b(altura|sube|subir|subela|subelo|eleva\w*|baja|bajar|bajala|bajalo|pon\w*|cambi\w*|deja\w*)\b/.test(tn) && !/\breceptor\b/.test(tn))
-      return { tipo: "editar", id: nodo.id, cambios: { alturaM: Math.min(300, Math.max(0.5, num(alturaTxt[1]))) }, descripcion: `altura ${fn(num(alturaTxt[1]))} m` };
+      return { tipo: "editar", id: nodo.id, cambios: { alturaM: Math.min(300, Math.max(0.5, num(alturaTxt[1]))) }, descripcion: tx(`altura ${fn(num(alturaTxt[1]))} m`, `height ${fn(num(alturaTxt[1]))} m`) };
     const pot = texto.match(/(\d{1,2}(?:[.,]\d+)?)\s*dbm\b/i);
-    if (pot && /\b(potencia|pon\w*|cambi\w*|sube|baja)\b/.test(tn)) return { tipo: "editar", id: nodo.id, cambios: { potenciaDbm: num(pot[1]), equipo: "personalizado" }, descripcion: `potencia ${f1(num(pot[1]))} dBm` };
+    if (pot && /\b(potencia|pon\w*|cambi\w*|sube|baja)\b/.test(tn)) return { tipo: "editar", id: nodo.id, cambios: { potenciaDbm: num(pot[1]), equipo: "personalizado" }, descripcion: tx(`potencia ${f1(num(pot[1]))} dBm`, `power ${f1(num(pot[1]))} dBm`) };
     const gan = texto.match(/(\d{1,2}(?:[.,]\d+)?)\s*dbi\b/i);
-    if (gan && /\b(ganancia|antena de|pon\w*|cambi\w*)\b/.test(tn)) return { tipo: "editar", id: nodo.id, cambios: { gananciaDbi: num(gan[1]), equipo: "personalizado" }, descripcion: `ganancia ${f1(num(gan[1]))} dBi` };
+    if (gan && /\b(ganancia|antena de|pon\w*|cambi\w*)\b/.test(tn)) return { tipo: "editar", id: nodo.id, cambios: { gananciaDbi: num(gan[1]), equipo: "personalizado" }, descripcion: tx(`ganancia ${f1(num(gan[1]))} dBi`, `gain ${f1(num(gan[1]))} dBi`) };
     // «Súbelo», «el Repetidor 1 está muy bajito, súbelo»: sin la altura, la pregunta (con la de ahora y un ejemplo)
     const sinNombre = tn.replace(new RegExp(`\\b${escRe(n(nodo.nombre))}\\b`, "g"), " ");
     if (/\b(sube|subelo|subela|subele|eleva\w*|baja|bajalo|bajala|bajale)\b/.test(tn) && !/\d/.test(sinNombre) && !/\b(potencia|ganancia|volumen)\b/.test(tn)) {
@@ -1793,8 +1920,17 @@ function interpretarOrdenBase(dicho: string, api: Api, pendiente: Pendiente, con
       const el = `${fem ? "la" : "el"} ${nodo.nombre}`;
       return {
         tipo: "aviso",
-        texto: `¿A qué altura ${sube ? "subo" : "bajo"} ${el}? Hoy está a ${fn(nodo.alturaM)} m. Dígame, por ejemplo, «${sube ? "sube" : "baja"} ${el} a ${sugerida} m».`,
-        acciones: [{ texto: `${sube ? "Subir" : "Bajar"}${fem ? "la" : "lo"} a ${sugerida} m`, accion: "orden", orden: { tipo: "editar", id: nodo.id, cambios: { alturaM: sugerida }, descripcion: `altura ${sugerida} m` } }],
+        texto: tx(
+          `¿A qué altura ${sube ? "subo" : "bajo"} ${el}? Hoy está a ${fn(nodo.alturaM)} m. Dígame, por ejemplo, «${sube ? "sube" : "baja"} ${el} a ${sugerida} m».`,
+          `To what height should I ${sube ? "raise" : "lower"} ${nodo.nombre}? It's at ${fn(nodo.alturaM)} m now. Tell me, for example, “${sube ? "raise" : "lower"} ${nodo.nombre} to ${sugerida} m”.`,
+        ),
+        acciones: [
+          {
+            texto: tx(`${sube ? "Subir" : "Bajar"}${fem ? "la" : "lo"} a ${sugerida} m`, `${sube ? "Raise" : "Lower"} it to ${sugerida} m`),
+            accion: "orden",
+            orden: { tipo: "editar", id: nodo.id, cambios: { alturaM: sugerida }, descripcion: tx(`altura ${sugerida} m`, `height ${sugerida} m`) },
+          },
+        ],
       };
     }
   }
@@ -1814,14 +1950,14 @@ function interpretarOrdenBase(dicho: string, api: Api, pendiente: Pendiente, con
     if (proto.protocolo && proto.protocolo !== deAhora) {
       cambios.preset = presetEquivalente(actual.preset, proto.protocolo);
       cambios.limiteSaltos = Math.min(actual.limiteSaltos, PROTOCOLOS[proto.protocolo].saltosMax);
-      partes.push(`el protocolo a ${PROTOCOLOS[proto.protocolo].nombre} (ajuste ${presetPorId(cambios.preset).nombre})`);
+      partes.push(tx(`el protocolo a ${PROTOCOLOS[proto.protocolo].nombre} (ajuste ${presetPorId(cambios.preset).nombre})`, `the protocol to ${PROTOCOLOS[proto.protocolo].nombre} (preset ${presetPorId(cambios.preset).nombre})`));
     }
     if (proto.usuariosRepiten !== undefined && (proto.protocolo ?? deAhora) === "meshtastic" && (actual.usuariosRepiten !== false) !== proto.usuariosRepiten) {
       cambios.usuariosRepiten = proto.usuariosRepiten ? undefined : false;
-      partes.push(proto.usuariosRepiten ? "los equipos de las personas a CLIENT (repiten)" : "los equipos de las personas a CLIENT_MUTE (no repiten)");
+      partes.push(proto.usuariosRepiten ? tx("los equipos de las personas a CLIENT (repiten)", "people's devices to CLIENT (they repeat)") : tx("los equipos de las personas a CLIENT_MUTE (no repiten)", "people's devices to CLIENT_MUTE (they don't repeat)"));
     }
-    if (partes.length) return { tipo: "parametros", cambios, descripcion: partes.join(" y ") };
-    if (proto.protocolo) return { tipo: "aviso", texto: `La red ya está en ${PROTOCOLOS[proto.protocolo].nombre}. ${PROTOCOLOS[proto.protocolo].quienRetransmite}.` };
+    if (partes.length) return { tipo: "parametros", cambios, descripcion: partes.join(tx(" y ", " and ")) };
+    if (proto.protocolo) return { tipo: "aviso", texto: tx(`La red ya está en ${PROTOCOLOS[proto.protocolo].nombre}. ${PROTOCOLOS[proto.protocolo].quienRetransmite}.`, `The network is already on ${PROTOCOLOS[proto.protocolo].nombre}. ${PROTOCOLOS[proto.protocolo].quienRetransmite}.`) };
   }
 
   // Parámetros de la simulación
@@ -1829,22 +1965,22 @@ function interpretarOrdenBase(dicho: string, api: Api, pendiente: Pendiente, con
   // «SF9» en una red Meshtastic es su preset de SF9 (MediumFast); un preset de Meshtastic por su nombre cambia el protocolo
   const preset = presetDicho && !/^MT_/.test(presetDicho) ? presetEquivalente(presetDicho, presetPorId(api.parametros().preset).protocolo) : presetDicho;
   if (preset && /\b(usa|usar|cambia\w*|pon\w*|configura\w*|preset|modo|simula con|prueba con)\b/.test(tn))
-    return { tipo: "parametros", cambios: { preset }, descripcion: `el preset a ${presetPorId(preset).nombre}` };
+    return { tipo: "parametros", cambios: { preset }, descripcion: tx(`el preset a ${presetPorId(preset).nombre}`, `the preset to ${presetPorId(preset).nombre}`) };
   const radio = tn.match(/\bradio(?: de estudio)?\s*(?:de|a|en)?\s*(\d{1,2}(?:[.,]\d+)?)\s*(?:km|kilometros?)\b/);
-  if (radio) return { tipo: "parametros", cambios: { radioKm: Math.min(40, Math.max(1, num(radio[1]))) }, descripcion: `el radio de estudio a ${f1(num(radio[1]), 0)} km` };
+  if (radio) return { tipo: "parametros", cambios: { radioKm: Math.min(40, Math.max(1, num(radio[1]))) }, descripcion: tx(`el radio de estudio a ${f1(num(radio[1]), 0)} km`, `the study radius to ${f1(num(radio[1]), 0)} km`) };
   const resol = tn.match(/\bresolucion\s*(?:a|en)?\s*(rapida|normal|fina)\b/);
-  if (resol) return { tipo: "parametros", cambios: { resolucion: resol[1] as Parametros["resolucion"] }, descripcion: `la resolución a ${resol[1]}` };
+  if (resol) return { tipo: "parametros", cambios: { resolucion: resol[1] as Parametros["resolucion"] }, descripcion: tx(`la resolución a ${resol[1]}`, `the resolution to ${({ rapida: "fast", normal: "normal", fina: "fine" } as Record<string, string>)[resol[1]] ?? resol[1]}`) };
   const saltos = tn.match(/\b(?:limite de saltos|hop ?limit|flood ?max|saltos)\s*(?:a|de|en)?\s*(\d{1,2})\b/);
   if (saltos && /\b(cambia\w*|pon\w*|sube|baja|usa|configura\w*|limite)\b/.test(tn)) {
     const v = Math.min(LIMITE_SALTOS_MAXIMO, Math.max(1, Number(saltos[1])));
-    return { tipo: "parametros", cambios: { limiteSaltos: v }, descripcion: `el límite de saltos del diseño a ${v}` };
+    return { tipo: "parametros", cambios: { limiteSaltos: v }, descripcion: tx(`el límite de saltos del diseño a ${v}`, `the design hop limit to ${v}`) };
   }
   const frec = texto.match(/(\d{3}(?:[.,]\d+)?)\s*mhz\b/i);
-  if (frec && /\b(frecuencia|canal|cambia\w*|pon\w*|usa)\b/.test(tn)) return { tipo: "parametros", cambios: { frecuenciaMhz: num(frec[1]) }, descripcion: `la frecuencia a ${frec[1]} MHz` };
+  if (frec && /\b(frecuencia|canal|cambia\w*|pon\w*|usa)\b/.test(tn)) return { tipo: "parametros", cambios: { frecuenciaMhz: num(frec[1]) }, descripcion: tx(`la frecuencia a ${frec[1]} MHz`, `the frequency to ${frec[1].replace(",", ".")} MHz`) };
   const rx = texto.match(/receptor.*?(\d{1,2}(?:[.,]\d+)?)\s*(?:m|metros?)\b/i);
-  if (rx) return { tipo: "parametros", cambios: { alturaRxM: num(rx[1]) }, descripcion: `la altura del receptor a ${rx[1]} m` };
+  if (rx) return { tipo: "parametros", cambios: { alturaRxM: num(rx[1]) }, descripcion: tx(`la altura del receptor a ${rx[1]} m`, `the receiver height to ${rx[1].replace(",", ".")} m`) };
   const extra = texto.match(/p[eé]rdida (?:extra|adicional).*?(\d{1,2}(?:[.,]\d+)?)\s*db\b/i);
-  if (extra) return { tipo: "parametros", cambios: { perdidaExtraDb: num(extra[1]) }, descripcion: `la pérdida extra a ${extra[1]} dB` };
+  if (extra) return { tipo: "parametros", cambios: { perdidaExtraDb: num(extra[1]) }, descripcion: tx(`la pérdida extra a ${extra[1]} dB`, `the extra loss to ${extra[1].replace(",", ".")} dB`) };
   const ordenRed = interpretarRed(texto, tn, api);
   if (ordenRed) return ordenRed;
 
@@ -1898,11 +2034,14 @@ function interpretarOrdenBase(dicho: string, api: Api, pendiente: Pendiente, con
     if (/\b(pdf|word|docx|imagen|imagenes|png|jpg|jpeg|foto|captura|pantallazo|powerpoint|presentacion)\b/.test(tn))
       return {
         tipo: "aviso",
-        texto: "Ese formato no lo exporto. Le puedo dar el KMZ para Google Earth (la cobertura y los nodos), la tabla en CSV para Excel o el escenario completo en JSON para volver a abrirlo. Para un PDF, abra el KMZ en Google Earth o imprima la página del navegador (Ctrl + P).",
+        texto: tx(
+          "Ese formato no lo exporto. Le puedo dar el KMZ para Google Earth (la cobertura y los nodos), la tabla en CSV para Excel o el escenario completo en JSON para volver a abrirlo. Para un PDF, abra el KMZ en Google Earth o imprima la página del navegador (Ctrl + P).",
+          "I don't export that format. I can give you the KMZ for Google Earth (the coverage and the nodes), the CSV table for Excel, or the full scenario in JSON to open it again later. For a PDF, open the KMZ in Google Earth or print the browser page (Ctrl + P).",
+        ),
         acciones: [
           { texto: "KMZ (Google Earth)", accion: "orden", orden: { tipo: "exportar", formato: "kmz" } },
           { texto: "CSV (Excel)", accion: "orden", orden: { tipo: "exportar", formato: "csv" } },
-          { texto: "Escenario (JSON)", accion: "orden", orden: { tipo: "exportar", formato: "json" } },
+          { texto: tx("Escenario (JSON)", "Scenario (JSON)"), accion: "orden", orden: { tipo: "exportar", formato: "json" } },
         ],
       };
   }
@@ -1947,8 +2086,8 @@ function interpretarMalla(texto: string, tn: string, api: Api, coord: Coordenada
   if (/\bmodo (avanzado|completo|experto)\b/.test(tn) && !/\bque es\b/.test(tn)) return { tipo: "modo", modo: "avanzado" };
   if (/\b(modo (sembrar|siembra|sencillo|facil|simple|trama)|sembrar la malla|vuelve a sembrar|volver a sembrar)\b/.test(tn) && !/\b(repetidor\w*|hacia|conecta\w*)\b/.test(tn)) return { tipo: "modo", modo: "sembrar" };
   // Animación del flujo de la información
-  if (/\b(quita\w*|apaga\w*|desactiva\w*|deten\w*|para|pausa\w*|sin|no quiero)\b.*\b(animacion|animaciones|flujo|parpadeo|destellos)\b/.test(tn)) return { tipo: "vista", cambios: { animarRed: false }, descripcion: "quieta, sin la animación del flujo" };
-  if (/\b(anima\w*|activa\w*|enciende|prende|muestra\w*|pon\w*)\b.*\b(animacion|animaciones|flujo|destellos)\b/.test(tn) || /\banima la (red|malla)\b/.test(tn)) return { tipo: "vista", cambios: { animarRed: true }, descripcion: "con el flujo animado hacia el gateway" };
+  if (/\b(quita\w*|apaga\w*|desactiva\w*|deten\w*|para|pausa\w*|sin|no quiero)\b.*\b(animacion|animaciones|flujo|parpadeo|destellos)\b/.test(tn)) return { tipo: "vista", cambios: { animarRed: false }, descripcion: tx("quieta, sin la animación del flujo", "still, without the flow animation") };
+  if (/\b(anima\w*|activa\w*|enciende|prende|muestra\w*|pon\w*)\b.*\b(animacion|animaciones|flujo|destellos)\b/.test(tn) || /\banima la (red|malla)\b/.test(tn)) return { tipo: "vista", cambios: { animarRed: true }, descripcion: tx("con el flujo animado hacia el gateway", "with the flow animated toward the gateway") };
   // Aceptar o descartar la propuesta del sembrado
   if (api.propuesta()) {
     if (/\b(descart\w*|no los pongas|no la quiero|cancela\w*|olvidalo)\b/.test(tn)) return { tipo: "descartar-siembra" };
@@ -1963,7 +2102,7 @@ function interpretarMalla(texto: string, tn: string, api: Api, coord: Coordenada
   const sembrar = /\b(siembra|siembrame|siembre|sembrar|conecta|conectame|conectalos|conectalas|conectala|conectalo|conectar|conecte|conectelos|conectelas|conectela|conectelo|lleva\w* la (red|malla|senal|cobertura)|llevar la (red|malla|senal|cobertura)|extiend\w* la (red|malla)|ampli\w* la (red|malla))\b/.test(tn);
   if (sembrar && !/\b(internet|starlink|pc|computador|celular)\b.*\bconecta/.test(tn)) {
     if (/\b(faltan|falta|sin cobertura|sin senal|rojas?|rojos?|desconectad\w*|aislad\w*|todas? las personas|todos|toda la gente)\b/.test(tn)) return { tipo: "sembrar", destino: "faltantes" };
-    if (coord) return { tipo: "sembrar", destino: { coord, nombre: "El punto pedido" } };
+    if (coord) return { tipo: "sembrar", destino: { coord, nombre: tx("El punto pedido", "The requested point") } };
     const persona = nodosMencionados(tn, antenas).find((a) => !a.pasarela);
     if (persona) return { tipo: "sembrar", destino: { id: persona.id } };
     const consulta = tn.replace(/.*\b(hacia|hasta|a)\b\s+/, "").replace(/\b(el|la|los|las|municipio de|por favor|porfa)\b/g, " ").replace(/\s+/g, " ").trim();
@@ -2001,37 +2140,49 @@ function textoSiembra(s: Siembra, destinos: DestinoSiembra[]): Respuesta {
   const resultado = s.destinos
     .map((d, i) => {
       const saltos = s.saltos?.[i];
-      return `${destinos[i]?.nombre ?? "El punto"} ${d.llega ? `quedaría con ${f1(d.margenDb, 0)} dB desde ${d.desde}${saltos ? `, a ${saltos} ${saltos === 1 ? "salto" : "saltos"} del gateway` : ""}` : `no se alcanza: ${d.motivo}`}`;
+      return tx(
+        `${destinos[i]?.nombre ?? "El punto"} ${d.llega ? `quedaría con ${f1(d.margenDb, 0)} dB desde ${d.desde}${saltos ? `, a ${saltos} ${saltos === 1 ? "salto" : "saltos"} del gateway` : ""}` : `no se alcanza: ${d.motivo}`}`,
+        `${destinos[i]?.nombre ?? "The point"} ${d.llega ? `would get ${f1(d.margenDb, 0)} dB from ${d.desde}${saltos ? `, ${saltos} ${saltos === 1 ? "hop" : "hops"} from the gateway` : ""}` : `can't be reached: ${d.motivo}`}`,
+      );
     })
     .join("; ");
   const subio = s.alturaM !== undefined && s.alturaPedidaM !== undefined && s.alturaM > s.alturaPedidaM;
   if (!n) {
     const algun = s.destinos.some((d) => d.llega);
     return {
-      texto: algun ? `No hace falta ningún repetidor: ${resultado}.` : `No encontré cómo llegar: ${resultado}`,
-      acciones: algun && destinos.some((d) => !d.antena) ? [{ texto: "Poner una persona ahí", accion: "orden", orden: { tipo: "aceptar-siembra" } }] : undefined,
+      texto: algun ? tx(`No hace falta ningún repetidor: ${resultado}.`, `No repeater is needed: ${resultado}.`) : tx(`No encontré cómo llegar: ${resultado}`, `I found no way to get there: ${resultado}`),
+      acciones: algun && destinos.some((d) => !d.antena) ? [{ texto: tx("Poner una persona ahí", "Place a person there"), accion: "orden", orden: { tipo: "aceptar-siembra" } }] : undefined,
     };
   }
-  const lista = s.puntos.map((q, k) => `Propuesto ${k + 1} a ${f1(q.distanciaKm)} km de ${q.desde} (${f1(q.margenDb, 0)} dB, suelo a ${Math.round(q.sueloM)} m)`).join("; ");
+  const lista = s.puntos.map((q, k) => tx(`Propuesto ${k + 1} a ${f1(q.distanciaKm)} km de ${q.desde} (${f1(q.margenDb, 0)} dB, suelo a ${Math.round(q.sueloM)} m)`, `Proposed ${k + 1}, ${f1(q.distanciaKm)} km from ${q.desde} (${f1(q.margenDb, 0)} dB, ground at ${Math.round(q.sueloM)} m)`)).join("; ");
   return {
-    texto: `Propongo ${n === 1 ? "un repetidor" : `${n} repetidores`}${s.alturaM ? ` en torre de ${fn(s.alturaM)} m` : ""}: ${lista}. ${resultado}.${subio ? ` Con torres de ${fn(s.alturaPedidaM!)} m la ruta pasaba del límite de saltos, así que subí a ${fn(s.alturaM!)} m para dar pasos más largos.` : ""} Los ve en el mapa como torres naranjas punteadas; busqué las lomas con enlace sólido (≥ 30 dB). Revise el sitio y el acceso en campo antes de instalar.`,
+    texto: tx(
+      `Propongo ${n === 1 ? "un repetidor" : `${n} repetidores`}${s.alturaM ? ` en torre de ${fn(s.alturaM)} m` : ""}: ${lista}. ${resultado}.${subio ? ` Con torres de ${fn(s.alturaPedidaM!)} m la ruta pasaba del límite de saltos, así que subí a ${fn(s.alturaM!)} m para dar pasos más largos.` : ""} Los ve en el mapa como torres naranjas punteadas; busqué las lomas con enlace sólido (≥ 30 dB). Revise el sitio y el acceso en campo antes de instalar.`,
+      `I propose ${n === 1 ? "one repeater" : `${n} repeaters`}${s.alturaM ? (n === 1 ? ` on ${articuloIngles(fn(s.alturaM))} ${fn(s.alturaM)} m tower` : ` on ${fn(s.alturaM)} m towers`) : ""}: ${lista}. ${resultado}.${subio ? ` With ${fn(s.alturaPedidaM!)} m towers the route went over the hop limit, so I raised them to ${fn(s.alturaM!)} m for longer hops.` : ""} You'll see them on the map as dotted orange towers; I looked for hills with a solid link (≥ 30 dB). Check the site and the access in the field before installing.`,
+    ),
     acciones: [
-      { texto: `Poner ${n === 1 ? "el repetidor" : `los ${n} repetidores`}`, accion: "orden", orden: { tipo: "aceptar-siembra" } },
-      { texto: "Descartar", accion: "orden", orden: { tipo: "descartar-siembra" } },
+      { texto: tx(`Poner ${n === 1 ? "el repetidor" : `los ${n} repetidores`}`, `Place ${n === 1 ? "the repeater" : `the ${n} repeaters`}`), accion: "orden", orden: { tipo: "aceptar-siembra" } },
+      { texto: tx("Descartar", "Discard"), accion: "orden", orden: { tipo: "descartar-siembra" } },
     ],
   };
 }
 
 /** Resumen corto de la red sembrada: personas conectadas, sin cobertura y territorio cubierto. */
 export function textoRed(r: EstadoRed, limiteSaltos: number): string {
-  if (!r.gateways.length) return "Aún no hay gateway: es el primer paso, el sitio donde entra el internet.";
-  if (!r.alDia) return "La red se está calculando.";
-  const partes = [`${r.conectadas.length} de ${r.personas.length} ${r.personas.length === 1 ? "persona conectada" : "personas conectadas"}`];
-  if (r.sinCobertura.length) partes.push(`${r.sinCobertura.length} sin cobertura (${r.sinCobertura.map((a) => a.nombre).join(", ")})`);
-  if (r.lejos.length) partes.push(`${r.lejos.length} con más de ${limiteSaltos} saltos`);
-  if (r.aislados.length) partes.push(`${r.aislados.length === 1 ? "un repetidor" : `${r.aislados.length} repetidores`} sin red (${r.aislados.map((a) => a.nombre).join(", ")})`);
-  partes.push(`${f1(r.areaKm2, r.areaKm2 < 10 ? 1 : 0)} km² cubiertos`);
-  return `La red: ${partes.join(", ")}.`;
+  if (!r.gateways.length) return tx("Aún no hay gateway: es el primer paso, el sitio donde entra el internet.", "There's no gateway yet: it's the first step, the site where the internet comes in.");
+  if (!r.alDia) return tx("La red se está calculando.", "The network is being calculated.");
+  const partes = [tx(`${r.conectadas.length} de ${r.personas.length} ${r.personas.length === 1 ? "persona conectada" : "personas conectadas"}`, `${r.conectadas.length} of ${r.personas.length} ${r.personas.length === 1 ? "person connected" : "people connected"}`)];
+  if (r.sinCobertura.length) partes.push(tx(`${r.sinCobertura.length} sin cobertura (${r.sinCobertura.map((a) => a.nombre).join(", ")})`, `${r.sinCobertura.length} without coverage (${r.sinCobertura.map((a) => a.nombre).join(", ")})`));
+  if (r.lejos.length) partes.push(tx(`${r.lejos.length} con más de ${limiteSaltos} saltos`, `${r.lejos.length} more than ${limiteSaltos} hops away`));
+  if (r.aislados.length)
+    partes.push(
+      tx(
+        `${r.aislados.length === 1 ? "un repetidor" : `${r.aislados.length} repetidores`} sin red (${r.aislados.map((a) => a.nombre).join(", ")})`,
+        `${r.aislados.length === 1 ? "one repeater" : `${r.aislados.length} repeaters`} cut off from the network (${r.aislados.map((a) => a.nombre).join(", ")})`,
+      ),
+    );
+  partes.push(tx(`${f1(r.areaKm2, r.areaKm2 < 10 ? 1 : 0)} km² cubiertos`, `${f1(r.areaKm2, r.areaKm2 < 10 ? 1 : 0)} km² covered`));
+  return tx(`La red: ${partes.join(", ")}.`, `The network: ${partes.join(", ")}.`);
 }
 
 /** Parámetros de red (como en Radio Mobile), entorno, modelo y vista del mapa de señal. */
@@ -2041,35 +2192,50 @@ function interpretarRed(texto: string, tn: string, api: Api): Orden | null {
   const verbo = /\b(usa\w*|cambia\w*|pon\w*|configura\w*|simula\w*|prueba\w*|calcula\w*|activa\w*|selecciona\w*|elige|escoge|aplica\w*|considera\w*|toma\w*|agrega\w*|suma\w*|quiero|necesito|deja\w*|con|en|a)\b/;
   // Restablecer los parámetros de Radio Mobile
   if (/\b(restablec\w*|reinici\w*|vuelve\w*|devuelve\w*|regresa\w*|resetea\w*|valores? (de|por) (defecto|referencia)|como (estaba|en las pruebas))\b/.test(tn) && /\b(parametro\w*|radio mobile|red|propagacion|referencia)\b/.test(tn))
-    return { tipo: "parametros", cambios: { ...RED_REFERENCIA }, descripcion: "los parámetros de red a los de Radio Mobile (ecuatorial, vertical, suelo promedio, N = 360, móvil 50 % / 70 %)" };
+    return {
+      tipo: "parametros",
+      cambios: { ...RED_REFERENCIA },
+      descripcion: tx("los parámetros de red a los de Radio Mobile (ecuatorial, vertical, suelo promedio, N = 360, móvil 50 % / 70 %)", "the network parameters to Radio Mobile's (equatorial, vertical, average ground, N = 360, mobile 50% / 70%)"),
+    };
   // Modelo
-  if (/\b(longley\w*|itm|irregular terrain)\b/.test(tn) && verbo.test(tn) && p.modelo !== "itm") return { tipo: "parametros", cambios: { modelo: "itm" }, descripcion: "el modelo a Longley-Rice (ITM), como Radio Mobile" };
-  if (/\b(modelo calibrado|calibrado)\b/.test(tn) && verbo.test(tn) && p.modelo !== "calibrado") return { tipo: "parametros", cambios: { modelo: "calibrado" }, descripcion: "el modelo al calibrado (recomendado)" };
+  if (/\b(longley\w*|itm|irregular terrain)\b/.test(tn) && verbo.test(tn) && p.modelo !== "itm") return { tipo: "parametros", cambios: { modelo: "itm" }, descripcion: tx("el modelo a Longley-Rice (ITM), como Radio Mobile", "the model to Longley-Rice (ITM), as in Radio Mobile") };
+  if (/\b(modelo calibrado|calibrado)\b/.test(tn) && verbo.test(tn) && p.modelo !== "calibrado") return { tipo: "parametros", cambios: { modelo: "calibrado" }, descripcion: tx("el modelo al calibrado (recomendado)", "the model to the calibrated one (recommended)") };
   // Polarización
   if (/\bpolariz\w*/.test(tn)) {
     const pol = /\bhorizontal\w*/.test(tn) ? "horizontal" : /\bvertical\w*/.test(tn) ? "vertical" : null;
-    if (pol) return { tipo: "parametros", cambios: { polarizacion: pol }, descripcion: `la polarización a ${pol}` };
+    if (pol) return { tipo: "parametros", cambios: { polarizacion: pol }, descripcion: tx(`la polarización a ${pol}`, `the polarization to ${pol}`) };
   }
   // Clima
   if (/\bclima\b/.test(tn)) {
     const c = climaEnTexto(tn);
     const datos = CLIMAS.find((x) => x.id === c);
-    if (datos) return { tipo: "parametros", cambios: { clima: datos.id, refractividad: datos.refractividad }, descripcion: `el clima a ${datos.nombre.toLowerCase()} (refractividad N = ${datos.refractividad})` };
+    if (datos)
+      return {
+        tipo: "parametros",
+        cambios: { clima: datos.id, refractividad: datos.refractividad },
+        descripcion: tx(`el clima a ${datos.nombre.toLowerCase()} (refractividad N = ${datos.refractividad})`, `the climate to ${datos.nombre.toLowerCase()} (refractivity N = ${datos.refractividad})`),
+      };
   }
   // Refractividad
   const nref = tn.match(/\brefractividad\b\D{0,12}(\d{3})\b/);
-  if (nref) return { tipo: "parametros", cambios: { refractividad: Math.min(400, Math.max(250, Number(nref[1]))) }, descripcion: `la refractividad a N = ${nref[1]}` };
+  if (nref) return { tipo: "parametros", cambios: { refractividad: Math.min(400, Math.max(250, Number(nref[1]))) }, descripcion: tx(`la refractividad a N = ${nref[1]}`, `the refractivity to N = ${nref[1]}`) };
   // Suelo
   if (/\b(suelo|terreno|tierra)\b/.test(tn) && /\b(suelo|conductividad|permitividad)\b|\bterreno (humedo|seco|arenoso|pobre|bueno|promedio)\b/.test(tn)) {
     const sid = sueloEnTexto(tn.replace(/.*\b(suelo|terreno|tierra)\b/, ""));
     const x = SUELOS.find((q) => q.id === sid);
-    if (x) return { tipo: "parametros", cambios: { suelo: x.id, permitividad: x.permitividad, conductividad: x.conductividad }, descripcion: `el suelo a ${x.nombre.toLowerCase()} (εr ${x.permitividad}, σ ${String(x.conductividad).replace(".", ",")} S/m)` };
+    if (x)
+      return {
+        tipo: "parametros",
+        cambios: { suelo: x.id, permitividad: x.permitividad, conductividad: x.conductividad },
+        descripcion: tx(`el suelo a ${x.nombre.toLowerCase()} (εr ${x.permitividad}, σ ${String(x.conductividad).replace(".", ",")} S/m)`, `the ground to ${x.nombre.toLowerCase()} (εr ${x.permitividad}, σ ${String(x.conductividad)} S/m)`),
+      };
   }
   // Modo estadístico
   const modo = tn.match(/\bmodo (?:estadistico |de variabilidad )?(movil|accidental|puntual|spot|difusion|broadcast)\b/);
   if (modo) {
     const id: VariabilidadId = modo[1] === "spot" ? "puntual" : modo[1] === "broadcast" ? "difusion" : (modo[1] as VariabilidadId);
-    return { tipo: "parametros", cambios: { variabilidad: id }, descripcion: `el modo estadístico a ${VARIABILIDADES.find((v) => v.id === id)?.nombre.toLowerCase()}` };
+    const nombre = VARIABILIDADES.find((v) => v.id === id)?.nombre.toLowerCase();
+    return { tipo: "parametros", cambios: { variabilidad: id }, descripcion: tx(`el modo estadístico a ${nombre}`, `the statistical mode to ${nombre}`) };
   }
   // Confiabilidad: «confiabilidad alta», «confiabilidad del 90 %», «95 % del tiempo», «80 % de las situaciones»
   const pctTiempo = tn.match(/(\d{1,2}(?:[.,]\d+)?)\s*%?\s*(?:por ciento )?(?:del|de el)? ?tiempo\b/);
@@ -2081,26 +2247,33 @@ function interpretarRed(texto: string, tn: string, api: Api): Orden | null {
     const lim = (x: string) => Math.min(99, Math.max(1, num(x)));
     if (pctTiempo) {
       cambios.tiempoPct = lim(pctTiempo[1]);
-      partes.push(`${fn(cambios.tiempoPct)} % del tiempo`);
+      partes.push(tx(`${fn(cambios.tiempoPct)} % del tiempo`, `${fn(cambios.tiempoPct)}% of the time`));
     }
     if (pctUbi) {
       cambios.ubicacionesPct = lim(pctUbi[1]);
-      partes.push(`${fn(cambios.ubicacionesPct)} % de las ubicaciones`);
+      partes.push(tx(`${fn(cambios.ubicacionesPct)} % de las ubicaciones`, `${fn(cambios.ubicacionesPct)}% of locations`));
     }
     if (pctSit) {
       cambios.situacionesPct = lim(pctSit[1]);
-      partes.push(`${fn(cambios.situacionesPct)} % de las situaciones`);
+      partes.push(tx(`${fn(cambios.situacionesPct)} % de las situaciones`, `${fn(cambios.situacionesPct)}% of situations`));
     }
-    return { tipo: "parametros", cambios, descripcion: `la confiabilidad a ${partes.join(", ")}` };
+    return { tipo: "parametros", cambios, descripcion: tx(`la confiabilidad a ${partes.join(", ")}`, `the reliability to ${listaIngles(partes)}`) };
   }
   if (/\bconfiabilidad\b|\bconfiable al\b/.test(tn)) {
     const pct = texto.match(/(\d{1,2}(?:[.,]\d+)?)\s*(?:%|por ciento)/i) ?? tn.match(/\bconfiab\w*\s+(?:del?|al?)\s+(\d{1,2}(?:[.,]\d+)?)\b/);
     const nivel = /\bmuy alta\b/.test(tn) ? CONFIABILIDADES[2] : /\balta\b/.test(tn) ? CONFIABILIDADES[1] : /\b(normal|baja|estandar|de radio mobile)\b/.test(tn) ? CONFIABILIDADES[0] : null;
     if (pct) {
       const v = Math.min(99, Math.max(1, num(pct[1])));
-      return { tipo: "parametros", cambios: { tiempoPct: v, ubicacionesPct: v, situacionesPct: v }, descripcion: `la confiabilidad al ${fn(v)} % (tiempo, ubicaciones y situaciones)` };
+      return { tipo: "parametros", cambios: { tiempoPct: v, ubicacionesPct: v, situacionesPct: v }, descripcion: tx(`la confiabilidad al ${fn(v)} % (tiempo, ubicaciones y situaciones)`, `the reliability to ${fn(v)}% (time, locations and situations)`) };
     }
-    if (nivel) return { tipo: "parametros", cambios: { tiempoPct: nivel.tiempoPct, ubicacionesPct: nivel.ubicacionesPct, situacionesPct: nivel.situacionesPct }, descripcion: `la confiabilidad a ${nivel.nombre.toLowerCase()}: ${nivel.descripcion.charAt(0).toLowerCase()}${nivel.descripcion.slice(1).replace(/\.$/, "")}` };
+    if (nivel) {
+      const detalle = `${nivel.descripcion.charAt(0).toLowerCase()}${nivel.descripcion.slice(1).replace(/\.$/, "")}`;
+      return {
+        tipo: "parametros",
+        cambios: { tiempoPct: nivel.tiempoPct, ubicacionesPct: nivel.ubicacionesPct, situacionesPct: nivel.situacionesPct },
+        descripcion: tx(`la confiabilidad a ${nivel.nombre.toLowerCase()}: ${detalle}`, `the reliability to ${nivel.nombre.toLowerCase()}: ${detalle}`),
+      };
+    }
   }
   // Entorno (vegetación o construcciones)
   const ent = entornoEnTexto(tn);
@@ -2110,7 +2283,13 @@ function interpretarRed(texto: string, tn: string, api: Api): Orden | null {
     return {
       tipo: "parametros",
       cambios: { entorno: ent },
-      descripcion: ent === "abierto" ? "el entorno a campo abierto (sin pérdidas por vegetación ni edificios)" : `el entorno a ${e.nombre.toLowerCase()}: ≈ ${f1(perdida)} dB menos para el receptor a ${fn(p.alturaRxM)} m y para los equipos por debajo de ${fn(e.alturaM)} m`,
+      descripcion:
+        ent === "abierto"
+          ? tx("el entorno a campo abierto (sin pérdidas por vegetación ni edificios)", "the environment to open field (no losses from vegetation or buildings)")
+          : tx(
+              `el entorno a ${e.nombre.toLowerCase()}: ≈ ${f1(perdida)} dB menos para el receptor a ${fn(p.alturaRxM)} m y para los equipos por debajo de ${fn(e.alturaM)} m`,
+              `the environment to ${e.nombre.toLowerCase()}: ≈ ${f1(perdida)} dB less for the receiver at ${fn(p.alturaRxM)} m and for equipment below ${fn(e.alturaM)} m`,
+            ),
     };
   }
   // Vista del mapa de señal: unidades y escala de colores
@@ -2120,7 +2299,14 @@ function interpretarRed(texto: string, tn: string, api: Api): Orden | null {
   const partes: string[] = [];
   if (unidad && mostrar && /\b(en|a|unidad\w*|muestra\w*|ver|pinta\w*|expresa\w*)\b/.test(tn)) {
     cambios.unidad = unidad;
-    partes.push({ margen: "como margen en dB", dbm: "en dBm", uv: "en microvoltios (µV)", dbuvm: "como campo en dBµV/m" }[unidad]);
+    partes.push(
+      {
+        margen: tx("como margen en dB", "as margin in dB"),
+        dbm: tx("en dBm", "in dBm"),
+        uv: tx("en microvoltios (µV)", "in microvolts (µV)"),
+        dbuvm: tx("como campo en dBµV/m", "as field strength in dBµV/m"),
+      }[unidad],
+    );
   }
   const s = presetPorId(p.preset).sensibilidadDbm;
   let escala: EscalaSenal | null = /\barco ?iris\b|\brainbow\b|\bdegradado\b/.test(tn) ? "arcoiris" : /\bumbral\b/.test(tn) && !/\bservicio\b/.test(tn) ? "umbral" : /\b(por clases|en clases|clases|colores de radio mobile|colores normales)\b/.test(tn) ? "clases" : null;
@@ -2131,14 +2317,15 @@ function interpretarRed(texto: string, tn: string, api: Api): Orden | null {
       cambios.escalaMinDbm = Math.min(niveles[0], niveles[1]);
       cambios.escalaMaxDbm = Math.max(niveles[0], niveles[1]);
     }
-    partes.push("con colores arcoíris");
+    partes.push(tx("con colores arcoíris", "with rainbow colors"));
   } else if (escala === "umbral") {
     cambios.escala = "umbral";
     if (niveles.length) cambios.umbralDbm = niveles[0];
-    partes.push(`solo donde la señal supera el umbral${niveles.length ? ` de ${textoNivel(niveles[0], unidad ?? "dbm", { sensibilidadDbm: s, gananciaRxDbi: p.gananciaRxDbi, frecuenciaMhz: p.frecuenciaMhz }, 1)}` : ""}`);
+    const nivel = niveles.length ? textoNivel(niveles[0], unidad ?? "dbm", { sensibilidadDbm: s, gananciaRxDbi: p.gananciaRxDbi, frecuenciaMhz: p.frecuenciaMhz }, 1) : "";
+    partes.push(tx(`solo donde la señal supera el umbral${niveles.length ? ` de ${nivel}` : ""}`, `only where the signal exceeds the threshold${niveles.length ? ` of ${nivel}` : ""}`));
   } else if (escala === "clases") {
     cambios.escala = "clases";
-    partes.push("con las clases de Radio Mobile");
+    partes.push(tx("con las clases de Radio Mobile", "with the Radio Mobile classes"));
   } else escala = null;
   if (Object.keys(cambios).length) {
     cambios.modo = "senal";
@@ -2193,13 +2380,16 @@ function datosCoordenada(api: Api, lat: number, lon: number): { datos: CifraPitc
   const m = r ? margenEnPunto(r, lat, lon) : NaN;
   if (r && Number.isFinite(m)) {
     const clase = CLASES.find((c) => m >= c.minimoDb) ?? CLASES[CLASES.length - 1];
-    datos.push({ etiqueta: "Señal aquí", valor: `${Math.round(m)} dB`, detalle: `${clase.nombre} · ≈ ${Math.round(m + r.sensibilidadDbm)} dBm`, tono: tonoMargen(m) });
-    senal = m >= UMBRAL_SERVICIO_DB ? ` Con la última simulación aquí la señal llega con ${Math.round(m)} decibeles de margen: ${clase.nombre.toLowerCase()}.` : " Con la última simulación aquí todavía no llega señal.";
+    datos.push({ etiqueta: tx("Señal aquí", "Signal here"), valor: `${Math.round(m)} dB`, detalle: `${clase.nombre} · ≈ ${Math.round(m + r.sensibilidadDbm)} dBm`, tono: tonoMargen(m) });
+    senal =
+      m >= UMBRAL_SERVICIO_DB
+        ? tx(` Con la última simulación aquí la señal llega con ${Math.round(m)} decibeles de margen: ${clase.nombre.toLowerCase()}.`, ` With the last simulation, the signal reaches this spot with ${Math.round(m)} decibels of margin: ${clase.nombre.toLowerCase()}.`)
+        : tx(" Con la última simulación aquí todavía no llega señal.", " With the last simulation, no signal reaches this spot yet.");
   }
   const antenas = api.antenas();
   if (antenas.length) {
     const cerca = antenas.map((a) => ({ a, d: distanciaM(lat, lon, a.lat, a.lon) })).sort((x, y) => x.d - y.d)[0];
-    datos.push({ etiqueta: "Nodo más cercano", valor: cerca.a.nombre, detalle: `a ${formatoDistancia(cerca.d)}` });
+    datos.push({ etiqueta: tx("Nodo más cercano", "Nearest node"), valor: cerca.a.nombre, detalle: tx(`a ${formatoDistancia(cerca.d)}`, `${formatoDistancia(cerca.d)} away`) });
   }
   return { datos, senal };
 }
@@ -2209,9 +2399,14 @@ function datosMunicipio(l: Lugar, area: number, contorno: Poligono, antenas: Ant
   const [ha, km] = (textoArea(area).match(/^(.*?)(?: \((.*)\))?$/) ?? []).slice(1);
   const dentro = antenas.filter((a) => dentroPoligono(a.lon, a.lat, contorno)).length;
   return [
-    { etiqueta: "Área", valor: ha || textoArea(area), detalle: km },
-    { etiqueta: "Departamento", valor: l.detalle },
-    { etiqueta: "Nodos en el municipio", valor: String(dentro), detalle: dentro ? "del escenario, dentro de su contorno" : "todavía no hay red aquí", tono: dentro ? undefined : "alerta" },
+    { etiqueta: tx("Área", "Area"), valor: ha || textoArea(area), detalle: km },
+    { etiqueta: tx("Departamento", "Department"), valor: l.detalle },
+    {
+      etiqueta: tx("Nodos en el municipio", "Nodes in the municipality"),
+      valor: String(dentro),
+      detalle: dentro ? tx("del escenario, dentro de su contorno", "from the scenario, inside its boundary") : tx("todavía no hay red aquí", "no network here yet"),
+      tono: dentro ? undefined : "alerta",
+    },
   ];
 }
 
@@ -2219,19 +2414,32 @@ function datosMunicipio(l: Lugar, area: number, contorno: Poligono, antenas: Ant
 function datosAntena(api: Api, a: Antena): CifraPitch[] {
   const r = api.resultado();
   const res = r?.antenas.find((x) => x.id === a.id);
-  const datos: CifraPitch[] = [{ etiqueta: "Altura de la antena", valor: `${fn(a.alturaM)} m`, detalle: res ? `sobre un terreno a ${Math.round(res.elevacionM)} m s. n. m.` : undefined }];
+  const datos: CifraPitch[] = [
+    { etiqueta: tx("Altura de la antena", "Antenna height"), valor: `${fn(a.alturaM)} m`, detalle: res ? tx(`sobre un terreno a ${Math.round(res.elevacionM)} m s. n. m.`, `on terrain at ${Math.round(res.elevacionM)} m above sea level`) : undefined },
+  ];
   if (!r || !res) {
-    datos.push({ etiqueta: "Potencia", valor: `${fn(a.potenciaDbm)} dBm`, detalle: `antena de ${fn(a.gananciaDbi)} dBi` });
+    datos.push({ etiqueta: tx("Potencia", "Power"), valor: `${fn(a.potenciaDbm)} dBm`, detalle: tx(`antena de ${fn(a.gananciaDbi)} dBi`, `${fn(a.gananciaDbi)} dBi antenna`) });
     return datos;
   }
-  datos.push({ etiqueta: "Alcance con servicio", valor: `${f1(res.alcanceKm)} km`, detalle: `confiable hasta ${f1(res.alcanceConfiableKm)} km` });
+  datos.push({ etiqueta: tx("Alcance con servicio", "Range with service"), valor: `${f1(res.alcanceKm)} km`, detalle: tx(`confiable hasta ${f1(res.alcanceConfiableKm)} km`, `reliable up to ${f1(res.alcanceConfiableKm)} km`) });
   const enlaces = r.enlaces.filter((e) => (e.a === a.id || e.b === a.id) && e.margen >= UMBRAL_SERVICIO_DB);
   const mejor = enlaces.length ? Math.max(...enlaces.map((e) => e.margen)) : NaN;
   // (un enlace es sólido desde 30 dB, como en el mapa de la malla)
-  datos.push({ etiqueta: "Enlaces", valor: String(enlaces.length), detalle: enlaces.length ? `el mejor con ${Math.round(mejor)} dB de margen` : "sin enlace con la malla", tono: !enlaces.length ? "mal" : mejor >= ENLACES.solido.minimoDb ? "bien" : "alerta" });
+  datos.push({
+    etiqueta: tx("Enlaces", "Links"),
+    valor: String(enlaces.length),
+    detalle: enlaces.length ? tx(`el mejor con ${Math.round(mejor)} dB de margen`, `the best one with ${Math.round(mejor)} dB of margin`) : tx("sin enlace con la malla", "no link to the mesh"),
+    tono: !enlaces.length ? "mal" : mejor >= ENLACES.solido.minimoDb ? "bien" : "alerta",
+  });
   const nodo = r.nodos.find((x) => x.id === a.id);
-  if (a.pasarela) datos.push({ etiqueta: "Área con servicio", valor: `${f1(res.areaServicioKm2)} km²`, detalle: "la entrada de la red a internet" });
-  else if (nodo) datos.push({ etiqueta: "Saltos al gateway", valor: nodo.saltos === null ? "Sin ruta" : String(nodo.saltos), detalle: nodo.saltos === null ? "no llega al gateway" : nodo.critico ? "punto único de falla" : undefined, tono: nodo.saltos === null ? "mal" : nodo.critico ? "alerta" : "bien" });
+  if (a.pasarela) datos.push({ etiqueta: tx("Área con servicio", "Area with service"), valor: `${f1(res.areaServicioKm2)} km²`, detalle: tx("la entrada de la red a internet", "the network's way into the internet") });
+  else if (nodo)
+    datos.push({
+      etiqueta: tx("Saltos al gateway", "Hops to the gateway"),
+      valor: nodo.saltos === null ? tx("Sin ruta", "No route") : String(nodo.saltos),
+      detalle: nodo.saltos === null ? tx("no llega al gateway", "doesn't reach the gateway") : nodo.critico ? tx("punto único de falla", "single point of failure") : undefined,
+      tono: nodo.saltos === null ? "mal" : nodo.critico ? "alerta" : "bien",
+    });
   return datos;
 }
 
@@ -2239,7 +2447,8 @@ function textoCoord(c: { lat: number; lon: number }) {
   return `${aGMS(c.lat, "lat")}, ${aGMS(c.lon, "lon")} (${aDecimal(c.lat)}, ${aDecimal(c.lon)})`;
 }
 
-const EJEMPLO_COORD = "4.5123, -73.1234 o 4°30'44\" N, 73°07'24\" O";
+/** Cómo se escribe una coordenada (el ejemplo que da Melki). */
+const ejemploCoord = () => tx("4.5123, -73.1234 o 4°30'44\" N, 73°07'24\" O", "4.5123, -73.1234 or 4°30'44\" N, 73°07'24\" W");
 
 /** Ejecuta la orden; si entendió un lugar mal dicho, lo dice primero («Entendí «Barranca de Upía (Meta)».»). */
 export function ejecutarOrden(o: Orden, api: Api): ResultadoOrden {
@@ -2254,7 +2463,9 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
   const porId = new Map(antenas.map((a) => [a.id, a]));
   const antes = api.instantanea();
   const puntoDe = (r: Referencia) => (r.tipo === "nodo" ? porId.get(r.id) : r.coord);
-  const nombreDe = (r: Referencia) => (r.tipo === "nodo" ? (porId.get(r.id)?.nombre ?? "el nodo") : `${aGMS(r.coord.lat, "lat")} ${aGMS(r.coord.lon, "lon")}`);
+  const nombreDe = (r: Referencia) => (r.tipo === "nodo" ? (porId.get(r.id)?.nombre ?? tx("el nodo", "the node")) : `${aGMS(r.coord.lat, "lat")} ${aGMS(r.coord.lon, "lon")}`);
+  const noEncontreNodo = () => tx("No encontré ese nodo.", "I couldn't find that node.");
+  const deshacer = (): AccionRespuesta => ({ texto: tx("Deshacer", "Undo"), accion: "deshacer", escenario: antes });
 
   switch (o.tipo) {
     case "agregar": {
@@ -2262,8 +2473,11 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
       if (!o.coord) {
         const datos = o.datos;
         return {
-          texto: `Con gusto. Escríbame la coordenada del ${clase}, por ejemplo ${EJEMPLO_COORD}. También puede ubicarlo con un clic en el mapa.`,
-          acciones: [{ texto: "Ubicar en el mapa", accion: "agregar" }],
+          texto: tx(
+            `Con gusto. Escríbame la coordenada del ${clase}, por ejemplo ${ejemploCoord()}. También puede ubicarlo con un clic en el mapa.`,
+            `Gladly. Type the ${o.datos.tipo === "nodo" ? "node" : "antenna node"}'s coordinate, for example ${ejemploCoord()}. You can also place it with a click on the map.`,
+          ),
+          acciones: [{ texto: tx("Ubicar en el mapa", "Place on the map"), accion: "agregar" }],
           pendiente: { tipo: "agregar", datos },
         };
       }
@@ -2273,8 +2487,11 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
       const tipoTxt = (nueva.tipo ?? "antena") === "nodo" ? "el nodo" : "el nodo antena";
       const extras = [`${fn(nueva.alturaM)} m de altura`, `${fn(nueva.gananciaDbi)} dBi`, `${fn(nueva.potenciaDbm)} dBm`].join(", ");
       return {
-        texto: `Listo: inscribí ${tipoTxt} «${nueva.nombre}» en ${textoCoord({ lat, lon })}${lugar ? `, en ${lugar}` : ""}, con ${extras}${nueva.pasarela ? "; es la pasarela" : ""}.${o.coord.corregido ? " Tomé la longitud como oeste (negativa), como corresponde en Colombia." : ""} Ya estoy simulando su alcance; en un momento le cuento el resultado.`,
-        acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }],
+        texto: tx(
+          `Listo: inscribí ${tipoTxt} «${nueva.nombre}» en ${textoCoord({ lat, lon })}${lugar ? `, en ${lugar}` : ""}, con ${extras}${nueva.pasarela ? "; es la pasarela" : ""}.${o.coord.corregido ? " Tomé la longitud como oeste (negativa), como corresponde en Colombia." : ""} Ya estoy simulando su alcance; en un momento le cuento el resultado.`,
+          `Done: I added the ${(nueva.tipo ?? "antena") === "nodo" ? "node" : "antenna node"} “${nueva.nombre}” at ${textoCoord({ lat, lon })}${lugar ? `, in ${lugar}` : ""}, with a height of ${fn(nueva.alturaM)} m, ${fn(nueva.gananciaDbi)} dBi and ${fn(nueva.potenciaDbm)} dBm${nueva.pasarela ? "; it's the gateway" : ""}.${o.coord.corregido ? " I took the longitude as west (negative), as is correct in Colombia." : ""} I'm already simulating its range; I'll tell you the result in a moment.`,
+        ),
+        acciones: [deshacer()],
         deshacer: antes,
         esperar: nueva.id,
         nodo: nueva.id,
@@ -2282,14 +2499,14 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
     }
     case "mover": {
       const a = porId.get(o.id);
-      if (!a) return { texto: "No encontré ese nodo." };
-      if (!o.coord) return { texto: `¿A qué coordenada muevo «${a.nombre}»? Por ejemplo ${EJEMPLO_COORD}.`, pendiente: { tipo: "mover", id: a.id } };
+      if (!a) return { texto: noEncontreNodo() };
+      if (!o.coord) return { texto: tx(`¿A qué coordenada muevo «${a.nombre}»? Por ejemplo ${ejemploCoord()}.`, `To what coordinate should I move “${a.nombre}”? For example ${ejemploCoord()}.`), pendiente: { tipo: "mover", id: a.id } };
       api.editar(a.id, { lat: Number(o.coord.lat.toFixed(6)), lon: Number(o.coord.lon.toFixed(6)) });
       api.centrar(o.coord.lat, o.coord.lon);
       const lugar = api.ubicacion(o.coord.lat, o.coord.lon);
       return {
-        texto: `Moví «${a.nombre}» a ${textoCoord(o.coord)}${lugar ? `, en ${lugar}` : ""}. Recalculo la simulación.`,
-        acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }],
+        texto: tx(`Moví «${a.nombre}» a ${textoCoord(o.coord)}${lugar ? `, en ${lugar}` : ""}. Recalculo la simulación.`, `I moved “${a.nombre}” to ${textoCoord(o.coord)}${lugar ? `, in ${lugar}` : ""}. Recalculating the simulation.`),
+        acciones: [deshacer()],
         deshacer: antes,
         esperar: a.id,
         nodo: a.id,
@@ -2297,73 +2514,95 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
     }
     case "eliminar": {
       const a = porId.get(o.id);
-      if (!a) return { texto: "No encontré ese nodo." };
+      if (!a) return { texto: noEncontreNodo() };
       api.eliminar(a.id);
-      return { texto: `Eliminé «${a.nombre}».`, acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }], deshacer: antes };
+      return { texto: tx(`Eliminé «${a.nombre}».`, `I deleted “${a.nombre}”.`), acciones: [deshacer()], deshacer: antes };
     }
     case "renombrar": {
       const a = porId.get(o.id);
-      if (!a) return { texto: "No encontré ese nodo." };
+      if (!a) return { texto: noEncontreNodo() };
       api.editar(a.id, { nombre: o.nombre.slice(0, 60) });
-      return { texto: `Ahora «${a.nombre}» se llama «${o.nombre}».`, acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }], deshacer: antes, nodo: a.id };
+      return { texto: tx(`Ahora «${a.nombre}» se llama «${o.nombre}».`, `“${a.nombre}” is now called “${o.nombre}”.`), acciones: [deshacer()], deshacer: antes, nodo: a.id };
     }
     case "editar": {
       const a = porId.get(o.id);
-      if (!a) return { texto: "No encontré ese nodo." };
+      if (!a) return { texto: noEncontreNodo() };
       api.editar(a.id, o.cambios);
-      return { texto: `Hecho: «${a.nombre}», ${o.descripcion}. Recalculo la simulación.`, acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }], deshacer: antes, esperar: a.id, nodo: a.id };
+      return { texto: tx(`Hecho: «${a.nombre}», ${o.descripcion}. Recalculo la simulación.`, `Done: “${a.nombre}”, ${o.descripcion}. Recalculating the simulation.`), acciones: [deshacer()], deshacer: antes, esperar: a.id, nodo: a.id };
     }
     case "parametros": {
       api.parametrosCambiar(o.cambios);
-      return { texto: `Cambié ${o.descripcion}. Recalculo la simulación.`, acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }], deshacer: antes, esperar: "*" };
+      return { texto: tx(`Cambié ${o.descripcion}. Recalculo la simulación.`, `I changed ${o.descripcion}. Recalculating the simulation.`), acciones: [deshacer()], deshacer: antes, esperar: "*" };
     }
     case "vista":
       api.vista(o.cambios);
       if (o.cambios.animarRed !== undefined)
         return {
           texto: o.cambios.animarRed
-            ? "Listo: la malla se ve con el flujo animado. Las líneas turquesa avanzan hacia el gateway, los pulsos saltan de nodo en nodo, cada pieza destella al retransmitir y la nube «IA» del gateway se enciende cuando le llega algo."
-            : "Listo: la malla queda quieta, sin la animación del flujo. Para volver a verla, dígame «anima la red» o use el interruptor del panel.",
+            ? tx(
+                "Listo: la malla se ve con el flujo animado. Las líneas turquesa avanzan hacia el gateway, los pulsos saltan de nodo en nodo, cada pieza destella al retransmitir y la nube «IA» del gateway se enciende cuando le llega algo.",
+                "Done: the mesh now shows the animated flow. The turquoise lines move toward the gateway, the pulses hop from node to node, each piece flashes when it retransmits, and the gateway's “AI” cloud lights up when something reaches it.",
+              )
+            : tx(
+                "Listo: la malla queda quieta, sin la animación del flujo. Para volver a verla, dígame «anima la red» o use el interruptor del panel.",
+                "Done: the mesh is now still, without the flow animation. To see it again, tell me “animate the network” or use the switch on the panel.",
+              ),
         };
-      if (o.cambios.unidad || o.cambios.escala) return { texto: `Listo: el mapa de señal se ve ${o.descripcion}. Lo puede ajustar en Capas → Escala de la señal.` };
-      return { texto: `Listo: el mapa ${o.descripcion}. Todo esto también está en «Capas».` };
+      if (o.cambios.unidad || o.cambios.escala) return { texto: tx(`Listo: el mapa de señal se ve ${o.descripcion}. Lo puede ajustar en Capas → Escala de la señal.`, `Done: the signal map is now shown ${o.descripcion}. You can adjust it in Layers → Signal scale.`) };
+      return { texto: tx(`Listo: el mapa ${o.descripcion}. Todo esto también está en «Capas».`, `Done: the map ${o.descripcion}. All of this is also under “Layers”.`) };
     case "informe": {
       const a = porId.get(o.a);
       const b = puntoDe(o.b);
-      if (!a || !b) return { texto: "No encontré alguno de los dos extremos." };
+      if (!a || !b) return { texto: tx("No encontré alguno de los dos extremos.", "I couldn't find one of the two endpoints.") };
       api.perfil(a, o.b.tipo === "nodo" ? (b as Antena) : { lat: b.lat, lon: b.lon }, true);
       const r = api.resultado();
       const idB = o.b.tipo === "nodo" ? o.b.id : null;
       const e = idB ? r?.enlaces.find((x) => (x.a === a.id && x.b === idB) || (x.b === a.id && x.a === idB)) : undefined;
       const s = presetPorId(api.parametros().preset).sensibilidadDbm;
       const resumen = e
-        ? ` En la última simulación el enlace tiene ${f1(e.margen)} dB de margen (≈ ${f1(e.margen + s)} dBm recibidos) a ${f1(e.distanciaKm, 2)} km${e.lineaVista ? ", con línea de vista despejada" : ""}.`
+        ? tx(
+            ` En la última simulación el enlace tiene ${f1(e.margen)} dB de margen (≈ ${f1(e.margen + s)} dBm recibidos) a ${f1(e.distanciaKm, 2)} km${e.lineaVista ? ", con línea de vista despejada" : ""}.`,
+            ` In the last simulation the link has ${f1(e.margen)} dB of margin (≈ ${f1(e.margen + s)} dBm received) over ${f1(e.distanciaKm, 2)} km${e.lineaVista ? ", with a clear line of sight" : ""}.`,
+          )
         : "";
       return {
-        texto: `Abrí el informe del radioenlace de ${a.nombre} a ${nombreDe(o.b)}, como «Radio Link» de Radio Mobile: distancia, azimut y ángulo de elevación, peor despeje de Fresnel, PIRE, pérdidas desglosadas y el nivel recibido en dBm, µV y dBµV/m.${resumen} Desde ahí puede copiarlo o descargarlo.`,
+        texto: tx(
+          `Abrí el informe del radioenlace de ${a.nombre} a ${nombreDe(o.b)}, como «Radio Link» de Radio Mobile: distancia, azimut y ángulo de elevación, peor despeje de Fresnel, PIRE, pérdidas desglosadas y el nivel recibido en dBm, µV y dBµV/m.${resumen} Desde ahí puede copiarlo o descargarlo.`,
+          `I opened the radio link report from ${a.nombre} to ${nombreDe(o.b)}, like Radio Mobile's “Radio Link”: distance, azimuth and elevation angle, worst Fresnel clearance, EIRP, itemized losses and the received level in dBm, µV and dBµV/m.${resumen} From there you can copy or download it.`,
+        ),
       };
     }
     case "apuntar-omni": {
       const a = porId.get(o.id);
-      if (!a) return { texto: "No encontré ese nodo." };
+      if (!a) return { texto: noEncontreNodo() };
       return {
-        texto: `«${a.nombre}» tiene antena omnidireccional: irradia igual hacia todos lados y no se puede apuntar. Si quiere concentrar la señal ${o.destino ? `hacia ${o.destino}` : `hacia el ${puntoCardinal(o.azimutDeg)}`}, le pongo una antena direccional:`,
+        texto: tx(
+          `«${a.nombre}» tiene antena omnidireccional: irradia igual hacia todos lados y no se puede apuntar. Si quiere concentrar la señal ${o.destino ? `hacia ${o.destino}` : `hacia el ${puntoCardinal(o.azimutDeg)}`}, le pongo una antena direccional:`,
+          `“${a.nombre}” has an omnidirectional antenna: it radiates equally in every direction and can't be aimed. If you want to concentrate the signal ${o.destino ? `toward ${o.destino}` : `toward the ${puntoCardinal(o.azimutDeg)}`}, I can fit it with a directional antenna:`,
+        ),
         acciones: (["yagi", "sectorial-90", "panel"] as const).map((pt) => ({
-          texto: `${patronPorId(pt).nombre} a ${Math.round(o.azimutDeg)}°`,
+          texto: tx(`${patronPorId(pt).nombre} a ${Math.round(o.azimutDeg)}°`, `${patronPorId(pt).nombre} at ${Math.round(o.azimutDeg)}°`),
           accion: "orden" as const,
           orden: {
             tipo: "editar" as const,
             id: a.id,
             cambios: { patron: pt, gananciaDbi: patronPorId(pt).gananciaTipica, equipo: "personalizado" as const, azimutDeg: o.azimutDeg, elevacionDeg: 0 },
-            descripcion: `ahora tiene antena ${patronPorId(pt).nombre.toLowerCase()} de ${fn(patronPorId(pt).gananciaTipica)} dBi apuntando a ${rumboTexto(o.azimutDeg)}`,
+            descripcion: tx(
+              `ahora tiene antena ${patronPorId(pt).nombre.toLowerCase()} de ${fn(patronPorId(pt).gananciaTipica)} dBi apuntando a ${rumboTexto(o.azimutDeg)}`,
+              `now with a ${nombreAntenaIngles(pt)} antenna of ${fn(patronPorId(pt).gananciaTipica)} dBi pointing at ${rumboTexto(o.azimutDeg)}`,
+            ),
           },
         })),
       };
     }
     case "simular":
-      if (!antenas.some((a) => a.activa)) return { texto: "No hay nodos activos. Inscriba uno con una coordenada o cargue el ejemplo.", acciones: [{ texto: "Cargar el ejemplo", accion: "ejemplo" }] };
+      if (!antenas.some((a) => a.activa))
+        return {
+          texto: tx("No hay nodos activos. Inscriba uno con una coordenada o cargue el ejemplo.", "There are no active nodes. Add one with a coordinate or load the example."),
+          acciones: [{ texto: tx("Cargar el ejemplo", "Load the example"), accion: "ejemplo" }],
+        };
       api.simular();
-      return { texto: "Simulando… en un momento le cuento el resultado.", esperar: "*" };
+      return { texto: tx("Simulando… en un momento le cuento el resultado.", "Simulating… I'll tell you the result in a moment."), esperar: "*" };
     case "ir": {
       // En vez del punto rojo, Melki vuela hasta el sitio (la conversación lo muestra con `llegada`): saluda en un
       // lugar y señala una coordenada o una antena
@@ -2372,20 +2611,23 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
         const lugar = api.ubicacion(o.coord.lat, o.coord.lon);
         const { datos, senal } = datosCoordenada(api, o.coord.lat, o.coord.lon);
         return {
-          texto: `Lo llevé a ${textoCoord(o.coord)}${lugar ? `, en ${lugar}` : ""}. ¿Le inscribo un nodo antena ahí?`,
-          acciones: [{ texto: "Inscribir un nodo antena ahí", accion: "orden", orden: { tipo: "agregar", coord: o.coord, datos: { tipo: "antena" } } }],
+          texto: tx(`Lo llevé a ${textoCoord(o.coord)}${lugar ? `, en ${lugar}` : ""}. ¿Le inscribo un nodo antena ahí?`, `I took you to ${textoCoord(o.coord)}${lugar ? `, in ${lugar}` : ""}. Shall I add an antenna node there?`),
+          acciones: [{ texto: tx("Inscribir un nodo antena ahí", "Add an antenna node there"), accion: "orden", orden: { tipo: "agregar", coord: o.coord, datos: { tipo: "antena" } } }],
           llegada: {
             lat: o.coord.lat,
             lon: o.coord.lon,
             gesto: "senalando",
-            etiqueta: "Melki llegó · Coordenada",
-            titulo: lugar ?? "La coordenada",
+            etiqueta: tx("Melki llegó · Coordenada", "Melki arrived · Coordinate"),
+            titulo: lugar ?? tx("La coordenada", "The coordinate"),
             subtitulo: `${aDecimal(o.coord.lat)}, ${aDecimal(o.coord.lon)}`,
-            parrafos: [`Aquí es: ${aGMS(o.coord.lat, "lat")}, ${aGMS(o.coord.lon, "lon")}${lugar ? `, en ${lugar}` : ""}. Le señalo el punto exacto.`, "¿Le inscribo un nodo antena justo aquí? Con el nodo puesto, el simulador calcula qué cubre desde ahí."],
+            parrafos: [
+              tx(`Aquí es: ${aGMS(o.coord.lat, "lat")}, ${aGMS(o.coord.lon, "lon")}${lugar ? `, en ${lugar}` : ""}. Le señalo el punto exacto.`, `Here it is: ${aGMS(o.coord.lat, "lat")}, ${aGMS(o.coord.lon, "lon")}${lugar ? `, in ${lugar}` : ""}. I'm pointing at the exact spot.`),
+              tx("¿Le inscribo un nodo antena justo aquí? Con el nodo puesto, el simulador calcula qué cubre desde ahí.", "Shall I add an antenna node right here? With the node in place, the simulator works out what it covers from there."),
+            ],
             datos,
             // En voz alta, sin deletrear los grados
-            voz: `Aquí es, le señalo el punto exacto${lugar ? `, en ${lugar}` : ""}.${senal} ¿Le inscribo un nodo antena justo aquí?`,
-            marca: { titulo: "Coordenada", tarjeta: true },
+            voz: tx(`Aquí es, le señalo el punto exacto${lugar ? `, en ${lugar}` : ""}.${senal} ¿Le inscribo un nodo antena justo aquí?`, `Here it is, I'm pointing at the exact spot${lugar ? `, in ${lugar}` : ""}.${senal} Shall I add an antenna node right here?`),
+            marca: { titulo: tx("Coordenada", "Coordinate"), tarjeta: true },
           },
         };
       }
@@ -2395,18 +2637,25 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
           api.centrar(a.lat, a.lon, 13);
           const infra = (a.tipo ?? "antena") === "antena";
           const lugar = api.ubicacion(a.lat, a.lon);
-          const que = a.pasarela ? "el gateway, la entrada de la red a internet" : infra ? "un repetidor de la malla" : "un nodo de campo";
+          const que = a.pasarela
+            ? tx("el gateway, la entrada de la red a internet", "the gateway, the network's way into the internet")
+            : infra
+              ? tx("un repetidor de la malla", "a repeater in the mesh")
+              : tx("un nodo de campo", "a field node");
           return {
-            texto: `Aquí está «${a.nombre}».${infra ? " ¿Le explico por qué quedó aquí y qué papel cumple?" : ""}`,
-            acciones: infra ? [{ texto: "¿Por qué quedó aquí?", accion: "recorrido-red", parada: a.nombre }] : undefined,
+            texto: tx(`Aquí está «${a.nombre}».${infra ? " ¿Le explico por qué quedó aquí y qué papel cumple?" : ""}`, `Here is “${a.nombre}”.${infra ? " Shall I explain why it ended up here and what role it plays?" : ""}`),
+            acciones: infra ? [{ texto: tx("¿Por qué quedó aquí?", "Why is it here?"), accion: "recorrido-red", parada: a.nombre }] : undefined,
             llegada: {
               lat: a.lat,
               lon: a.lon,
               gesto: "senalando",
-              etiqueta: `Melki llegó · ${a.pasarela ? "Gateway" : infra ? "Repetidor" : "Nodo de campo"}`,
+              etiqueta: tx(`Melki llegó · ${a.pasarela ? "Gateway" : infra ? "Repetidor" : "Nodo de campo"}`, `Melki arrived · ${a.pasarela ? "Gateway" : infra ? "Repeater" : "Field node"}`),
               titulo: a.nombre,
               subtitulo: [lugar, `${aDecimal(a.lat)}, ${aDecimal(a.lon)}`].filter(Boolean).join(" · "),
-              parrafos: [`Aquí está «${a.nombre}»: ${que}, con la antena a ${fn(a.alturaM)} m de altura.`, ...(infra ? ["¿Le explico por qué quedó aquí y qué papel cumple en la red? Se lo cuento en el recorrido, punto por punto."] : [])],
+              parrafos: [
+                tx(`Aquí está «${a.nombre}»: ${que}, con la antena a ${fn(a.alturaM)} m de altura.`, `Here is “${a.nombre}”: ${que}, with the antenna ${fn(a.alturaM)} m high.`),
+                ...(infra ? [tx("¿Le explico por qué quedó aquí y qué papel cumple en la red? Se lo cuento en el recorrido, punto por punto.", "Shall I explain why it ended up here and what role it plays in the network? I'll walk you through it, point by point.")] : []),
+              ],
               datos: datosAntena(api, a),
             },
           };
@@ -2419,19 +2668,22 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
         // Con el contorno del municipio: su tamaño y la red para cubrirlo entero, a un toque (o con «sí»)
         const contorno = l.tipo === "municipio" ? api.contornoLugar?.(l) : null;
         const area = contorno ? areaM2(contorno) : 0;
-        const zona = contorno && area <= 3e9 ? ({ puntos: contorno, nombre: `en todo el municipio de ${l.nombre} (${l.detalle})`, etiqueta: `${l.nombre} (${l.detalle})`, lugar: l } as const) : null;
+        const zona = contorno && area <= 3e9 ? ({ puntos: contorno, nombre: tx(`en todo el municipio de ${l.nombre} (${l.detalle})`, `in the whole municipality of ${l.nombre} (${l.detalle})`), etiqueta: `${l.nombre} (${l.detalle})`, lugar: l } as const) : null;
         const segundo =
           l.tipo === "municipio"
             ? zona
-              ? "¿Le armo una red sostenible que cubra todo el municipio, con su viabilidad y su costo? Toque el botón o dígame «sí»."
-              : `Dígame qué hacemos aquí, por ejemplo «hazme una red sostenible en ${l.nombre} de 11.226 hectáreas».`
-            : "Dígame en qué municipio trabajamos («ubícame en» y su nombre) o qué red armamos aquí.";
+              ? tx("¿Le armo una red sostenible que cubra todo el municipio, con su viabilidad y su costo? Toque el botón o dígame «sí».", "Shall I build a sustainable network covering the whole municipality, with its feasibility and its cost? Tap the button or tell me “yes”.")
+              : tx(`Dígame qué hacemos aquí, por ejemplo «hazme una red sostenible en ${l.nombre} de 11.226 hectáreas».`, `Tell me what we'll do here, for example “build me a sustainable network in ${l.nombre} of 11,226 hectares”.`)
+            : tx("Dígame en qué municipio trabajamos («ubícame en» y su nombre) o qué red armamos aquí.", "Tell me which municipality we're working in (“take me to” and its name) or what network we'll build here.");
         return {
-          texto: `Lo llevé a ${nombreLugar(l)}${area ? `, un municipio de ${textoArea(area)}` : ""}.${zona ? " ¿Le armo una red sostenible que cubra todo el municipio, con su viabilidad y su costo?" : ""}`,
+          texto: tx(
+            `Lo llevé a ${nombreLugar(l)}${area ? `, un municipio de ${textoArea(area)}` : ""}.${zona ? " ¿Le armo una red sostenible que cubra todo el municipio, con su viabilidad y su costo?" : ""}`,
+            `I took you to ${nombreLugar(l)}${area ? `, a municipality of ${textoArea(area)}` : ""}.${zona ? " Shall I build a sustainable network covering the whole municipality, with its feasibility and its cost?" : ""}`,
+          ),
           acciones: zona
             ? [
-                { texto: "Sí, la red de todo el municipio", accion: "orden", orden: disenoDeZona(zona) },
-                { texto: "Y probar hasta dónde aguanta", accion: "orden", orden: { ...disenoDeZona(zona), despues: { zonas: { n: 250 }, estres: { rampa: true } } } as Orden },
+                { texto: tx("Sí, la red de todo el municipio", "Yes, the network for the whole municipality"), accion: "orden", orden: disenoDeZona(zona) },
+                { texto: tx("Y probar hasta dónde aguanta", "And test how much it can take"), accion: "orden", orden: { ...disenoDeZona(zona), despues: { zonas: { n: 250 }, estres: { rampa: true } } } as Orden },
               ]
             : undefined,
           lugar: l,
@@ -2439,86 +2691,127 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
             lat: l.lat,
             lon: l.lon,
             gesto: "saludando",
-            etiqueta: `Melki llegó · ${l.tipo === "municipio" ? "Municipio" : l.tipo === "departamento" ? "Departamento" : "País"}`,
+            etiqueta: tx(
+              `Melki llegó · ${l.tipo === "municipio" ? "Municipio" : l.tipo === "departamento" ? "Departamento" : "País"}`,
+              `Melki arrived · ${l.tipo === "municipio" ? "Municipality" : l.tipo === "departamento" ? "Department" : "Country"}`,
+            ),
             titulo: l.nombre,
-            subtitulo: [l.tipo === "municipio" ? l.detalle : null, area ? `municipio de ${textoArea(area)}` : null].filter(Boolean).join(" · ") || undefined,
-            parrafos: [`Esto es ${nombreLugar(l)}${area ? `: un municipio de ${textoArea(area)}` : ""}${l.caja ? `${area ? ", y" : ";"} lo dejé encuadrado en el mapa` : ""}.`, segundo],
+            subtitulo: [l.tipo === "municipio" ? l.detalle : null, area ? tx(`municipio de ${textoArea(area)}`, `municipality of ${textoArea(area)}`) : null].filter(Boolean).join(" · ") || undefined,
+            parrafos: [
+              tx(
+                `Esto es ${nombreLugar(l)}${area ? `: un municipio de ${textoArea(area)}` : ""}${l.caja ? `${area ? ", y" : ";"} lo dejé encuadrado en el mapa` : ""}.`,
+                `This is ${nombreLugar(l)}${area ? `: a municipality of ${textoArea(area)}` : ""}${l.caja ? `${area ? ", and" : ";"} I've framed it on the map` : ""}.`,
+              ),
+              segundo,
+            ],
             datos: contorno && area ? datosMunicipio(l, area, contorno, antenas) : undefined,
             marca: l.tipo === "municipio" ? { titulo: `${l.nombre}, ${l.detalle}`, tarjeta: false } : undefined,
           },
         };
       }
-      return { texto: `No encontré «${o.consulta}». Pruebe con el nombre de un municipio o departamento de Colombia, o con coordenadas como ${EJEMPLO_COORD}.` };
+      return {
+        texto: tx(
+          `No encontré «${o.consulta}». Pruebe con el nombre de un municipio o departamento de Colombia, o con coordenadas como ${ejemploCoord()}.`,
+          `I couldn't find “${o.consulta}”. Try the name of a municipality or department of Colombia, or coordinates such as ${ejemploCoord()}.`,
+        ),
+      };
     }
     case "distancia": {
       const a = puntoDe(o.a);
       const b = puntoDe(o.b);
-      if (!a || !b) return { texto: "No encontré alguno de los dos puntos." };
+      if (!a || !b) return { texto: tx("No encontré alguno de los dos puntos.", "I couldn't find one of the two points.") };
       const d = distanciaM(a.lat, a.lon, b.lat, b.lon);
       const r = rumbo(a.lat, a.lon, b.lat, b.lon);
       api.medir({ id: `m${Date.now().toString(36)}`, nombre: `${nombreDe(o.a)} – ${nombreDe(o.b)}`.slice(0, 60), tipo: "linea", puntos: [[a.lon, a.lat], [b.lon, b.lat]], visible: true });
       return {
-        texto: `De ${nombreDe(o.a)} a ${nombreDe(o.b)} hay ${formatoDistancia(d)} en línea recta, con rumbo ${rumboTexto(r)}. La dejé dibujada como medición en la regla.`,
-        acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }],
+        texto: tx(
+          `De ${nombreDe(o.a)} a ${nombreDe(o.b)} hay ${formatoDistancia(d)} en línea recta, con rumbo ${rumboTexto(r)}. La dejé dibujada como medición en la regla.`,
+          `From ${nombreDe(o.a)} to ${nombreDe(o.b)} it's ${formatoDistancia(d)} in a straight line, bearing ${rumboTexto(r)}. I left it drawn as a ruler measurement.`,
+        ),
+        acciones: [deshacer()],
         deshacer: antes,
       };
     }
     case "perfil": {
       const a = porId.get(o.a);
       const b = puntoDe(o.b);
-      if (!a || !b) return { texto: "No encontré alguno de los dos extremos." };
+      if (!a || !b) return { texto: tx("No encontré alguno de los dos extremos.", "I couldn't find one of the two endpoints.") };
       api.perfil(a, o.b.tipo === "nodo" ? (b as Antena) : { lat: b.lat, lon: b.lon });
-      return { texto: `Abrí el perfil del terreno de ${a.nombre} a ${nombreDe(o.b)}: muestra la línea de vista, la zona de Fresnel y el margen.` };
+      return { texto: tx(`Abrí el perfil del terreno de ${a.nombre} a ${nombreDe(o.b)}: muestra la línea de vista, la zona de Fresnel y el margen.`, `I opened the terrain profile from ${a.nombre} to ${nombreDe(o.b)}: it shows the line of sight, the Fresnel zone and the margin.`) };
     }
     case "senal":
-      if (!antenas.some((a) => a.activa)) return { texto: "Primero inscriba al menos un nodo antena para calcular la señal." };
+      if (!antenas.some((a) => a.activa)) return { texto: tx("Primero inscriba al menos un nodo antena para calcular la señal.", "First add at least one antenna node so I can calculate the signal.") };
       api.senal(o.coord.lat, o.coord.lon);
       api.centrar(o.coord.lat, o.coord.lon);
-      return { texto: `Calculé la señal en ${textoCoord(o.coord)}: está en la tarjeta «Señal en este punto», con el margen desde cada nodo.` };
+      return { texto: tx(`Calculé la señal en ${textoCoord(o.coord)}: está en la tarjeta «Señal en este punto», con el margen desde cada nodo.`, `I calculated the signal at ${textoCoord(o.coord)}: it's on the “Signal at this point” card, with the margin from each node.`) };
     case "donde": {
       const p = puntoDe(o.ref);
-      if (!p) return { texto: "No encontré ese punto." };
+      if (!p) return { texto: tx("No encontré ese punto.", "I couldn't find that point.") };
       const lugar = api.ubicacion(p.lat, p.lon);
-      return { texto: lugar ? `${o.ref.tipo === "nodo" ? `«${nombreDe(o.ref)}»` : "Ese punto"} queda en ${lugar}.` : `${o.ref.tipo === "nodo" ? `«${nombreDe(o.ref)}»` : "Ese punto"} queda fuera de los municipios de Colombia que tengo cargados.` };
+      const quien = tx(o.ref.tipo === "nodo" ? `«${nombreDe(o.ref)}»` : "Ese punto", o.ref.tipo === "nodo" ? `“${nombreDe(o.ref)}”` : "That point");
+      return { texto: lugar ? tx(`${quien} queda en ${lugar}.`, `${quien} is in ${lugar}.`) : tx(`${quien} queda fuera de los municipios de Colombia que tengo cargados.`, `${quien} is outside the Colombian municipalities I have loaded.`) };
     }
     case "listar":
-      if (!antenas.length) return { texto: "Aún no hay nodos. Escríbame, por ejemplo: «inscribe un nodo antena en 4.5123, -73.1234».", acciones: [{ texto: "Cargar el ejemplo", accion: "ejemplo" }] };
+      if (!antenas.length)
+        return {
+          texto: tx("Aún no hay nodos. Escríbame, por ejemplo: «inscribe un nodo antena en 4.5123, -73.1234».", "There are no nodes yet. Tell me, for example: “add an antenna node at 4.5123, -73.1234”."),
+          acciones: [{ texto: tx("Cargar el ejemplo", "Load the example"), accion: "ejemplo" }],
+        };
       return {
-        texto: `Hay ${antenas.length} ${antenas.length === 1 ? "nodo" : "nodos"}: ${antenas
-          .map((a) => `${a.nombre} (${(a.tipo ?? "antena") === "nodo" ? "nodo" : "nodo antena"}, ${fn(a.alturaM)} m, ${aDecimal(a.lat)}, ${aDecimal(a.lon)}${a.pasarela ? ", pasarela" : ""}${a.activa ? "" : ", excluido"})`)
-          .join("; ")}.`,
+        texto: tx(
+          `Hay ${antenas.length} ${antenas.length === 1 ? "nodo" : "nodos"}: ${antenas
+            .map((a) => `${a.nombre} (${(a.tipo ?? "antena") === "nodo" ? "nodo" : "nodo antena"}, ${fn(a.alturaM)} m, ${aDecimal(a.lat)}, ${aDecimal(a.lon)}${a.pasarela ? ", pasarela" : ""}${a.activa ? "" : ", excluido"})`)
+            .join("; ")}.`,
+          `There ${antenas.length === 1 ? "is 1 node" : `are ${antenas.length} nodes`}: ${antenas
+            .map((a) => `${a.nombre} (${(a.tipo ?? "antena") === "nodo" ? "node" : "antenna node"}, ${fn(a.alturaM)} m, ${aDecimal(a.lat)}, ${aDecimal(a.lon)}${a.pasarela ? ", gateway" : ""}${a.activa ? "" : ", excluded"})`)
+            .join("; ")}.`,
+        ),
       };
     case "herramienta":
       api.herramienta(o.herramienta);
       return {
         texto:
           o.herramienta === "regla"
-            ? "Activé la regla. Elija Línea, Trayecto o Área y haga clic en el mapa; doble clic o Enter para terminar. Cada medición queda guardada y se puede editar o borrar."
+            ? tx(
+                "Activé la regla. Elija Línea, Trayecto o Área y haga clic en el mapa; doble clic o Enter para terminar. Cada medición queda guardada y se puede editar o borrar.",
+                "I turned on the ruler. Choose Line, Path or Area and click on the map; double-click or press Enter to finish. Each measurement is saved and can be edited or deleted.",
+              )
             : o.herramienta === "inspeccionar"
-              ? "Activé «Medir señal»: haga clic en el mapa para ver el margen desde cada nodo."
-              : "Haga clic en el mapa donde va el nodo.",
+              ? tx("Activé «Medir señal»: haga clic en el mapa para ver el margen desde cada nodo.", "I turned on “Measure signal”: click on the map to see the margin from each node.")
+              : tx("Haga clic en el mapa donde va el nodo.", "Click on the map where the node goes."),
       };
     case "ejemplo":
       api.ejemplo();
-      return { texto: "Cargué la demostración: un nodo antena llamado «Ejemplo». En un momento le cuento su alcance.", acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }], deshacer: antes, esperar: "*" };
+      return {
+        texto: tx("Cargué la demostración: un nodo antena llamado «Ejemplo». En un momento le cuento su alcance.", "I loaded the demo: an antenna node called “Example”. I'll tell you its range in a moment."),
+        acciones: [deshacer()],
+        deshacer: antes,
+        esperar: "*",
+      };
     case "nuevo":
       if (!o.confirmado)
-        return { texto: "¿Seguro? Se quitarán todos los nodos y mediciones del escenario actual (puede deshacerlo).", acciones: [{ texto: "Sí, empezar de cero", accion: "orden", orden: { tipo: "nuevo", confirmado: true } }] };
+        return {
+          texto: tx("¿Seguro? Se quitarán todos los nodos y mediciones del escenario actual (puede deshacerlo).", "Are you sure? All the nodes and measurements of the current scenario will be removed (you can undo it)."),
+          acciones: [{ texto: tx("Sí, empezar de cero", "Yes, start from scratch"), accion: "orden", orden: { tipo: "nuevo", confirmado: true } }],
+        };
       api.nuevo();
-      return { texto: "Listo, escenario en blanco. Escríbame una coordenada para inscribir el primer nodo antena.", acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }], deshacer: antes };
+      return { texto: tx("Listo, escenario en blanco. Escríbame una coordenada para inscribir el primer nodo antena.", "Done, a blank scenario. Give me a coordinate to add the first antenna node."), acciones: [deshacer()], deshacer: antes };
     case "exportar":
       return api.exportar(o.formato)
-        ? { texto: `Descargué el archivo ${o.formato.toUpperCase()}.` }
-        : { texto: "Para exportar a Google Earth primero necesito una simulación al día.", acciones: [{ texto: "Simular ahora", accion: "simular" }] };
+        ? { texto: tx(`Descargué el archivo ${o.formato.toUpperCase()}.`, `I downloaded the ${o.formato.toUpperCase()} file.`) }
+        : { texto: tx("Para exportar a Google Earth primero necesito una simulación al día.", "To export to Google Earth I first need an up-to-date simulation."), acciones: [{ texto: tx("Simular ahora", "Simulate now"), accion: "simular" }] };
     case "borrar-mediciones":
       api.borrarMediciones();
-      return { texto: "Borré todas las mediciones de la regla.", acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }], deshacer: antes };
+      return { texto: tx("Borré todas las mediciones de la regla.", "I deleted all the ruler measurements."), acciones: [deshacer()], deshacer: antes };
     case "pieza": {
-      const nombrePieza = { gateway: "el gateway", repetidor: "el repetidor", persona: "la persona" }[o.pieza];
+      const nombrePieza = { gateway: tx("el gateway", "the gateway"), repetidor: tx("el repetidor", "the repeater"), persona: tx("la persona", "the person") }[o.pieza];
       if (!o.coord) {
         api.armarPieza(o.pieza);
         return {
-          texto: `Con gusto. Toque el mapa donde va ${nombrePieza}, o escríbame la coordenada, por ejemplo ${EJEMPLO_COORD}.${o.pieza === "repetidor" ? " Busque una loma o una torre que alcance al gateway o a otro repetidor conectado." : ""}`,
+          texto: tx(
+            `Con gusto. Toque el mapa donde va ${nombrePieza}, o escríbame la coordenada, por ejemplo ${ejemploCoord()}.${o.pieza === "repetidor" ? " Busque una loma o una torre que alcance al gateway o a otro repetidor conectado." : ""}`,
+            `Gladly. Tap the map where ${nombrePieza} goes, or give me the coordinate, for example ${ejemploCoord()}.${o.pieza === "repetidor" ? " Look for a hill or a tower that reaches the gateway or another connected repeater." : ""}`,
+          ),
           pendiente: { tipo: "pieza", pieza: o.pieza, datos: o.datos },
         };
       }
@@ -2529,18 +2822,24 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
         api.editar(gw.id, { lat: Number(lat.toFixed(6)), lon: Number(lon.toFixed(6)), activa: true });
         api.centrar(lat, lon);
         return {
-          texto: `Moví el gateway «${gw.nombre}» a ${textoCoord(o.coord)}${lugar ? `, en ${lugar}` : ""}: ahí entra el internet. Calculo de nuevo quién queda conectado.`,
-          acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }],
+          texto: tx(
+            `Moví el gateway «${gw.nombre}» a ${textoCoord(o.coord)}${lugar ? `, en ${lugar}` : ""}: ahí entra el internet. Calculo de nuevo quién queda conectado.`,
+            `I moved the gateway “${gw.nombre}” to ${textoCoord(o.coord)}${lugar ? `, in ${lugar}` : ""}: that's where the internet comes in. I'm recalculating who stays connected.`,
+          ),
+          acciones: [deshacer()],
           deshacer: antes,
           esperar: gw.id,
           nodo: gw.id,
         };
       }
       const nueva = api.ponerPieza(o.pieza, lat, lon, o.datos);
-      const que = { gateway: "el gateway (Gateway + Internet)", repetidor: "el repetidor", persona: "la persona" }[o.pieza];
+      const que = { gateway: tx("el gateway (Gateway + Internet)", "the gateway (Gateway + Internet)"), repetidor: tx("el repetidor", "the repeater"), persona: tx("la persona", "the person") }[o.pieza];
       return {
-        texto: `Listo: puse ${que} «${nueva.nombre}» en ${textoCoord({ lat, lon })}${lugar ? `, en ${lugar}` : ""}, a ${fn(nueva.alturaM)} m.${o.coord.corregido ? " Tomé la longitud como oeste (negativa), como corresponde en Colombia." : ""} Ya calculo con el relieve real si queda conectad${o.pieza === "persona" ? "a" : "o"} al gateway.`,
-        acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }],
+        texto: tx(
+          `Listo: puse ${que} «${nueva.nombre}» en ${textoCoord({ lat, lon })}${lugar ? `, en ${lugar}` : ""}, a ${fn(nueva.alturaM)} m.${o.coord.corregido ? " Tomé la longitud como oeste (negativa), como corresponde en Colombia." : ""} Ya calculo con el relieve real si queda conectad${o.pieza === "persona" ? "a" : "o"} al gateway.`,
+          `Done: I placed ${que} “${nueva.nombre}” at ${textoCoord({ lat, lon })}${lugar ? `, in ${lugar}` : ""}, ${fn(nueva.alturaM)} m high.${o.coord.corregido ? " I took the longitude as west (negative), as is correct in Colombia." : ""} I'm now checking with the real terrain whether it connects to the gateway.`,
+        ),
+        acciones: [deshacer()],
         deshacer: antes,
         esperar: nueva.id,
         nodo: nueva.id,
@@ -2548,68 +2847,95 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
     }
     case "sembrar": {
       const r = api.red();
-      if (!r.gateways.length) return { texto: "Primero hace falta el Gateway + Internet: es el punto de partida de la malla. Dígame dónde va, por ejemplo «pon el gateway en 4.2, -73.37».", acciones: [] };
+      if (!r.gateways.length)
+        return {
+          texto: tx(
+            "Primero hace falta el Gateway + Internet: es el punto de partida de la malla. Dígame dónde va, por ejemplo «pon el gateway en 4.2, -73.37».",
+            "First we need the Gateway + Internet: it's the starting point of the mesh. Tell me where it goes, for example “put the gateway at 4.2, -73.37”.",
+          ),
+          acciones: [],
+        };
       if (!r.alDia) {
         api.simular();
-        return { texto: "Primero termino de calcular la red con el relieve real; pídamelo de nuevo en un momento.", esperar: "*" };
+        return { texto: tx("Primero termino de calcular la red con el relieve real; pídamelo de nuevo en un momento.", "First I'll finish calculating the network with the real terrain; please ask me again in a moment."), esperar: "*" };
       }
       let destinos: DestinoSiembra[];
       if (o.destino === "faltantes") {
-        if (!r.sinCobertura.length) return { texto: r.personas.length ? "Todas las personas ya están conectadas al gateway. 🙂 Si quiere llevar la red más lejos, dígame «lleva la red a» y una coordenada o un municipio." : "Todavía no hay personas en el mapa. Póngalas primero, por ejemplo «pon una persona en 4.25, -73.30»." };
+        if (!r.sinCobertura.length)
+          return {
+            texto: r.personas.length
+              ? tx(
+                  "Todas las personas ya están conectadas al gateway. 🙂 Si quiere llevar la red más lejos, dígame «lleva la red a» y una coordenada o un municipio.",
+                  "Everyone is already connected to the gateway. 🙂 If you'd like to take the network further, tell me “extend the network to” and a coordinate or a municipality.",
+                )
+              : tx("Todavía no hay personas en el mapa. Póngalas primero, por ejemplo «pon una persona en 4.25, -73.30».", "There are no people on the map yet. Place them first, for example “put a person at 4.25, -73.30”."),
+          };
         destinos = r.sinCobertura.map((a) => ({ lat: a.lat, lon: a.lon, nombre: a.nombre, antena: a }));
       } else if ("id" in o.destino) {
         const a = porId.get(o.destino.id);
-        if (!a) return { texto: "No encontré ese nodo." };
+        if (!a) return { texto: noEncontreNodo() };
         destinos = [{ lat: a.lat, lon: a.lon, nombre: a.nombre, antena: a }];
       } else destinos = [{ lat: o.destino.coord.lat, lon: o.destino.coord.lon, nombre: o.destino.nombre }];
       api.cambiarModo("sembrar");
-      const luego = api.sembrar(destinos).then((s) => (s ? textoSiembra(s, destinos) : { texto: "No pude calcular la propuesta. Revise que el gateway esté puesto y la red calculada." }));
+      const luego = api.sembrar(destinos).then((s) => (s ? textoSiembra(s, destinos) : { texto: tx("No pude calcular la propuesta. Revise que el gateway esté puesto y la red calculada.", "I couldn't calculate the proposal. Check that the gateway is placed and the network calculated.") }));
       return {
-        texto: `Busco lomas con buen enlace desde la red conectada hacia ${destinos.length === 1 ? (destinos[0].nombre ?? "ese punto") : `${destinos.length} personas`}. En un momento le muestro la propuesta en el mapa.`,
+        texto: tx(
+          `Busco lomas con buen enlace desde la red conectada hacia ${destinos.length === 1 ? (destinos[0].nombre ?? "ese punto") : `${destinos.length} personas`}. En un momento le muestro la propuesta en el mapa.`,
+          `I'm looking for hills with a good link from the connected network toward ${destinos.length === 1 ? (destinos[0].nombre ?? "that point") : `${destinos.length} people`}. I'll show you the proposal on the map in a moment.`,
+        ),
         luego,
       };
     }
     case "aceptar-siembra": {
       const puestos = api.aceptarSiembra();
-      if (!puestos) return { texto: "No tengo una propuesta pendiente. Pídame, por ejemplo, «conecta a los que faltan»." };
+      if (!puestos) return { texto: tx("No tengo una propuesta pendiente. Pídame, por ejemplo, «conecta a los que faltan».", "I don't have a pending proposal. Ask me, for example, “connect the missing ones”.") };
       return {
-        texto: `Listo: puse ${puestos === 1 ? "1 nodo" : `${puestos} nodos`}. Calculo la red de nuevo y le cuento quién queda conectado.`,
-        acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }],
+        texto: tx(`Listo: puse ${puestos === 1 ? "1 nodo" : `${puestos} nodos`}. Calculo la red de nuevo y le cuento quién queda conectado.`, `Done: I placed ${puestos === 1 ? "1 node" : `${puestos} nodes`}. I'll recalculate the network and tell you who is connected.`),
+        acciones: [deshacer()],
         deshacer: antes,
         esperar: "*",
       };
     }
     case "descartar-siembra":
       api.descartarSiembra();
-      return { texto: "Descarté la propuesta. Puede poner los repetidores a mano con la pieza «Repetidor»." };
+      return { texto: tx("Descarté la propuesta. Puede poner los repetidores a mano con la pieza «Repetidor».", "I discarded the proposal. You can place the repeaters by hand with the “Repeater” piece.") };
     case "mensaje": {
       const r = api.red();
       if (!r.alDia) {
         api.simular();
-        return { texto: "Primero calculo la red; pídame el mensaje otra vez en un momento.", esperar: "*" };
+        return { texto: tx("Primero calculo la red; pídame el mensaje otra vez en un momento.", "First I'll calculate the network; ask me for the message again in a moment."), esperar: "*" };
       }
       const desde =
         (o.id ? porId.get(o.id) : undefined) ??
         [...r.conectadas, ...r.lejos].sort((a, b) => (r.porNodo.get(b.id)?.saltos ?? 0) - (r.porNodo.get(a.id)?.saltos ?? 0))[0] ??
         r.personas[0] ??
         r.repetidores[0];
-      if (!desde) return { texto: "Ponga al menos una persona para enviar un mensaje al gateway." };
-      if (desde.pasarela) return { texto: `«${desde.nombre}» es el gateway: lo que mande ya está en internet. Elija una persona o un repetidor.` };
+      if (!desde) return { texto: tx("Ponga al menos una persona para enviar un mensaje al gateway.", "Place at least one person to send a message to the gateway.") };
+      if (desde.pasarela) return { texto: tx(`«${desde.nombre}» es el gateway: lo que mande ya está en internet. Elija una persona o un repetidor.`, `“${desde.nombre}” is the gateway: whatever it sends is already on the internet. Choose a person or a repeater.`) };
       api.cambiarModo("sembrar");
       const v = api.enviarMensaje(desde.id);
-      if (!v) return { texto: "Primero calculo la red; pídame el mensaje otra vez en un momento." };
+      if (!v) return { texto: tx("Primero calculo la red; pídame el mensaje otra vez en un momento.", "First I'll calculate the network; ask me for the message again in a moment.") };
       const nombres = new Map(antenas.map((a) => [a.id, a.nombre]));
       const ruta = v.ruta.map((id) => nombres.get(id) ?? id).join(" → ");
       const tiempoTxt = (ms: number) => (ms < 1000 ? `${Math.round(ms)} ms` : `${f1(ms / 1000)} s`);
+      const sinCobertura = r.porNodo.get(desde.id)?.estado === "sin-cobertura";
       if (!v.llega)
         return {
-          texto: `Envié un mensaje de prueba desde «${desde.nombre}» y no llega: ${v.motivo ?? "no tiene ruta"}${v.ruta.length > 1 ? ` (ruta: ${ruta})` : ""}.${r.porNodo.get(desde.id)?.estado === "sin-cobertura" ? " ¿Quiere que siembre un repetidor hacia esa persona?" : ""}`,
-          acciones: r.porNodo.get(desde.id)?.estado === "sin-cobertura" ? [{ texto: `Conectar a ${desde.nombre}`, accion: "orden", orden: { tipo: "sembrar", destino: { id: desde.id } } }] : undefined,
+          texto: tx(
+            `Envié un mensaje de prueba desde «${desde.nombre}» y no llega: ${v.motivo ?? "no tiene ruta"}${v.ruta.length > 1 ? ` (ruta: ${ruta})` : ""}.${sinCobertura ? " ¿Quiere que siembre un repetidor hacia esa persona?" : ""}`,
+            `I sent a test message from “${desde.nombre}” and it doesn't get through: ${v.motivo ?? "it has no route"}${v.ruta.length > 1 ? ` (route: ${ruta})` : ""}.${sinCobertura ? " Would you like me to seed a repeater toward that person?" : ""}`,
+          ),
+          acciones: sinCobertura ? [{ texto: tx(`Conectar a ${desde.nombre}`, `Connect ${desde.nombre}`), accion: "orden", orden: { tipo: "sembrar", destino: { id: desde.id } } }] : undefined,
         };
-      const pct = (p: number) => (p >= 0.999 ? "más de 99,9 %" : `${f1(p * 100, 0)} %`);
+      const pct = (p: number) => (p >= 0.999 ? tx("más de 99,9 %", "over 99.9%") : tx(`${f1(p * 100, 0)} %`, `${f1(p * 100, 0)}%`));
+      const meshtastic = presetPorId(api.parametros().preset).protocolo === "meshtastic";
+      const entre = v.totalMs.max - v.totalMs.min >= 1;
       return {
-        texto: `Envié un mensaje de prueba desde «${desde.nombre}» del tamaño de un pago (la orden firmada, ${v.bytes} bytes): llega al gateway en ${v.saltos} ${v.saltos === 1 ? "salto" : "saltos"} (${ruta}), en ≈ ${tiempoTxt(v.totalMs.tipica)}${v.totalMs.max - v.totalMs.min >= 1 ? ` (entre ${tiempoTxt(v.totalMs.min)} y ${tiempoTxt(v.totalMs.max)})` : ""}. Llega al primer intento ${pct(v.probabilidad)} de las veces y ${pct(v.probabilidadReintentos)} ${presetPorId(api.parametros().preset).protocolo === "meshtastic" ? "con los 3 envíos de Meshtastic (el último por inundación)" : `con los ${INTENTOS} intentos de MeshCore (3 por la ruta y el último por inundación)`}. Con ${v.preset} cada salto ocupa ${tiempoTxt(v.aireMs)} en el aire; va directo por la ruta aprendida${presetPorId(api.parametros().preset).protocolo === "meshtastic" ? " (el siguiente salto)" : " y solo los repetidores la pasan"}, cada uno después de un turno al azar. El gateway lo pasa por Starlink (el pago se verifica con el banco, el WhatsApp sale a internet y la consulta va a la IA) y la respuesta vuelve por la misma ruta —en un pago, el comprobante—: ≈ ${tiempoTxt(v.totalMs.tipica)} de radio más lo que tarde el banco o la IA. Lo puede ver en el mapa. Para ver muchos a la vez: «envía 15 pagos al tiempo» o «manda 15 mensajes de WhatsApp al tiempo».`,
-        acciones: [{ texto: "15 pagos al tiempo", accion: "orden", orden: { tipo: "carga", opciones: { mensajes: 15 }, curva: false } }],
+        texto: tx(
+          `Envié un mensaje de prueba desde «${desde.nombre}» del tamaño de un pago (la orden firmada, ${v.bytes} bytes): llega al gateway en ${v.saltos} ${v.saltos === 1 ? "salto" : "saltos"} (${ruta}), en ≈ ${tiempoTxt(v.totalMs.tipica)}${entre ? ` (entre ${tiempoTxt(v.totalMs.min)} y ${tiempoTxt(v.totalMs.max)})` : ""}. Llega al primer intento ${pct(v.probabilidad)} de las veces y ${pct(v.probabilidadReintentos)} ${meshtastic ? "con los 3 envíos de Meshtastic (el último por inundación)" : `con los ${INTENTOS} intentos de MeshCore (3 por la ruta y el último por inundación)`}. Con ${v.preset} cada salto ocupa ${tiempoTxt(v.aireMs)} en el aire; va directo por la ruta aprendida${meshtastic ? " (el siguiente salto)" : " y solo los repetidores la pasan"}, cada uno después de un turno al azar. El gateway lo pasa por Starlink (el pago se verifica con el banco, el WhatsApp sale a internet y la consulta va a la IA) y la respuesta vuelve por la misma ruta —en un pago, el comprobante—: ≈ ${tiempoTxt(v.totalMs.tipica)} de radio más lo que tarde el banco o la IA. Lo puede ver en el mapa. Para ver muchos a la vez: «envía 15 pagos al tiempo» o «manda 15 mensajes de WhatsApp al tiempo».`,
+          `I sent a test message the size of a payment (the signed order, ${v.bytes} bytes) from “${desde.nombre}”: it reaches the gateway in ${v.saltos} ${v.saltos === 1 ? "hop" : "hops"} (${ruta}), in ≈ ${tiempoTxt(v.totalMs.tipica)}${entre ? ` (between ${tiempoTxt(v.totalMs.min)} and ${tiempoTxt(v.totalMs.max)})` : ""}. It gets through on the first attempt ${pct(v.probabilidad)} of the time and ${pct(v.probabilidadReintentos)} ${meshtastic ? "with Meshtastic's 3 transmissions (the last one by flooding)" : `with MeshCore's ${INTENTOS} attempts (3 along the route and the last one by flooding)`}. With ${v.preset} each hop takes ${tiempoTxt(v.aireMs)} on air; it goes straight along the learned route${meshtastic ? " (the next hop)" : " and only the repeaters relay it"}, each one after a random wait. The gateway passes it through Starlink (the payment is verified with the bank, the WhatsApp message goes out to the internet and the query goes to the AI) and the reply comes back along the same route —for a payment, the receipt—: ≈ ${tiempoTxt(v.totalMs.tipica)} of radio time plus whatever the bank or the AI takes. You can watch it on the map. To see many at once: “send 15 payments at once” or “send 15 WhatsApp messages at once”.`,
+        ),
+        acciones: [{ texto: tx("15 pagos al tiempo", "15 payments at once"), accion: "orden", orden: { tipo: "carga", opciones: { mensajes: 15 }, curva: false } }],
       };
     }
     case "modo":
@@ -2617,14 +2943,23 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
       return {
         texto:
           o.modo === "sembrar"
-            ? "Listo, modo «Sembrar la malla»: primero el Gateway + Internet, luego los repetidores y al final la gente. Le voy guiando paso a paso en el panel de la izquierda."
-            : "Listo, modo avanzado: tiene la lista de nodos, todos los parámetros y las herramientas del simulador. Para volver, toque «Sembrar la malla» arriba del panel.",
+            ? tx(
+                "Listo, modo «Sembrar la malla»: primero el Gateway + Internet, luego los repetidores y al final la gente. Le voy guiando paso a paso en el panel de la izquierda.",
+                "Done, “Seed the mesh” mode: first the Gateway + Internet, then the repeaters and finally the people. I'll guide you step by step in the left panel.",
+              )
+            : tx(
+                "Listo, modo avanzado: tiene la lista de nodos, todos los parámetros y las herramientas del simulador. Para volver, toque «Sembrar la malla» arriba del panel.",
+                "Done, advanced mode: you have the node list, all the parameters and the simulator's tools. To go back, tap “Seed the mesh” at the top of the panel.",
+              ),
       };
     case "ejemplo-malla":
       api.ejemploMalla();
       return {
-        texto: "Cargué el ejemplo de malla: el gateway donde entra el internet, un repetidor en torre hacia el oriente y tres personas; la más lejana queda sin cobertura para que practique «Conectar a los que faltan». En un momento le cuento cómo quedó.",
-        acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }],
+        texto: tx(
+          "Cargué el ejemplo de malla: el gateway donde entra el internet, un repetidor en torre hacia el oriente y tres personas; la más lejana queda sin cobertura para que practique «Conectar a los que faltan». En un momento le cuento cómo quedó.",
+          "I loaded the mesh example: the gateway where the internet comes in, a repeater on a tower to the east and three people; the farthest one has no coverage so you can practice “Connect the missing ones”. I'll tell you how it turned out in a moment.",
+        ),
+        acciones: [deshacer()],
         deshacer: antes,
         esperar: "*",
       };
@@ -2632,19 +2967,22 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
       const r = api.red();
       const c = consejoRed(r, api.parametros().limiteSaltos);
       const acciones: Respuesta["acciones"] = [];
-      if (r.alDia && r.sinCobertura.length) acciones.push({ texto: "Conectar a los que faltan", accion: "orden", orden: { tipo: "sembrar", destino: "faltantes" } });
-      if (r.alDia && r.conectadas.length) acciones.push({ texto: "Enviar un mensaje de prueba", accion: "orden", orden: { tipo: "mensaje" } });
-      return { texto: `${c.paso ? `Paso ${c.paso}: ` : ""}${c.titulo}. ${c.texto}`, acciones: acciones.length ? acciones : undefined };
+      if (r.alDia && r.sinCobertura.length) acciones.push({ texto: tx("Conectar a los que faltan", "Connect the missing ones"), accion: "orden", orden: { tipo: "sembrar", destino: "faltantes" } });
+      if (r.alDia && r.conectadas.length) acciones.push({ texto: tx("Enviar un mensaje de prueba", "Send a test message"), accion: "orden", orden: { tipo: "mensaje" } });
+      return { texto: `${c.paso ? tx(`Paso ${c.paso}: `, `Step ${c.paso}: `) : ""}${c.titulo}. ${c.texto}`, acciones: acciones.length ? acciones : undefined };
     }
     case "coordenada-sola": {
       const lugar = api.ubicacion(o.coord.lat, o.coord.lon);
       return {
-        texto: `Entendí la coordenada ${textoCoord(o.coord)}${lugar ? `, en ${lugar}` : ""}${o.coord.corregido ? " (tomé la longitud como oeste)" : ""}. ¿Qué hago con ella?`,
+        texto: tx(
+          `Entendí la coordenada ${textoCoord(o.coord)}${lugar ? `, en ${lugar}` : ""}${o.coord.corregido ? " (tomé la longitud como oeste)" : ""}. ¿Qué hago con ella?`,
+          `I got the coordinate ${textoCoord(o.coord)}${lugar ? `, in ${lugar}` : ""}${o.coord.corregido ? " (I took the longitude as west)" : ""}. What shall I do with it?`,
+        ),
         acciones: [
-          { texto: "Inscribir un nodo antena", accion: "orden", orden: { tipo: "agregar", coord: o.coord, datos: { tipo: "antena" } } },
-          { texto: "Inscribir un nodo de campo", accion: "orden", orden: { tipo: "agregar", coord: o.coord, datos: { tipo: "nodo" } } },
-          { texto: "Ir a ese punto", accion: "orden", orden: { tipo: "ir", coord: o.coord } },
-          { texto: "Señal en ese punto", accion: "orden", orden: { tipo: "senal", coord: o.coord } },
+          { texto: tx("Inscribir un nodo antena", "Add an antenna node"), accion: "orden", orden: { tipo: "agregar", coord: o.coord, datos: { tipo: "antena" } } },
+          { texto: tx("Inscribir un nodo de campo", "Add a field node"), accion: "orden", orden: { tipo: "agregar", coord: o.coord, datos: { tipo: "nodo" } } },
+          { texto: tx("Ir a ese punto", "Go to that point"), accion: "orden", orden: { tipo: "ir", coord: o.coord } },
+          { texto: tx("Señal en ese punto", "Signal at that point"), accion: "orden", orden: { tipo: "senal", coord: o.coord } },
         ],
       };
     }
@@ -2653,22 +2991,27 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
         texto: o.pregunta,
         acciones: [
           ...o.opciones.map((x): AccionRespuesta => ({ texto: x.texto, accion: "orden", orden: x.orden })),
-          { texto: "Ninguno de esos", accion: "orden", orden: { tipo: "pedir-lugar", dicho: o.dicho, original: o.original, sugerencias: [], rechazo: true } },
+          { texto: tx("Ninguno de esos", "None of those"), accion: "orden", orden: { tipo: "pedir-lugar", dicho: o.dicho, original: o.original, sugerencias: [], rechazo: true } },
         ],
         pendiente: { tipo: "elegir", opciones: o.opciones, dicho: o.dicho, original: o.original },
       };
     case "pedir-lugar": {
       const opciones = o.sugerencias.length ? opcionesDeLugar(o.original, api, null, {}, o.dicho, o.sugerencias.slice(0, 3)) : [];
       const lista = opciones.map((x) => x.texto);
-      const ejemplo = "Por ejemplo: «Barranca de Upía, Meta».";
+      const ejemplo = tx("Por ejemplo: «Barranca de Upía, Meta».", "For example: “Barranca de Upía, Meta”.");
       if (opciones.length)
         return {
-          texto: `Discúlpeme, no reconocí «${o.dicho}». ¿Se refiere a ${lista.length > 1 ? `${lista.slice(0, -1).join(", ")} o ${lista[lista.length - 1]}` : lista[0]}? Si no, dígame el municipio y el departamento. ${ejemplo}`,
+          texto: tx(
+            `Discúlpeme, no reconocí «${o.dicho}». ¿Se refiere a ${lista.length > 1 ? `${lista.slice(0, -1).join(", ")} o ${lista[lista.length - 1]}` : lista[0]}? Si no, dígame el municipio y el departamento. ${ejemplo}`,
+            `I'm sorry, I didn't recognize “${o.dicho}”. Do you mean ${lista.length > 1 ? `${lista.slice(0, -1).join(", ")} or ${lista[lista.length - 1]}` : lista[0]}? If not, tell me the municipality and the department. ${ejemplo}`,
+          ),
           acciones: opciones.map((x): AccionRespuesta => ({ texto: x.texto, accion: "orden", orden: x.orden })),
           pendiente: { tipo: "elegir", opciones, dicho: o.dicho, original: o.original },
         };
       return {
-        texto: o.rechazo ? `Entendido. ¿Me dice entonces el municipio y el departamento, por favor? ${ejemplo}` : `Discúlpeme, no reconocí el lugar «${o.dicho}». ¿Me repite el municipio y el departamento, por favor? ${ejemplo}`,
+        texto: o.rechazo
+          ? tx(`Entendido. ¿Me dice entonces el municipio y el departamento, por favor? ${ejemplo}`, `Understood. Could you tell me the municipality and the department, then? ${ejemplo}`)
+          : tx(`Discúlpeme, no reconocí el lugar «${o.dicho}». ¿Me repite el municipio y el departamento, por favor? ${ejemplo}`, `I'm sorry, I didn't recognize the place “${o.dicho}”. Could you repeat the municipality and the department, please? ${ejemplo}`),
         pendiente: { tipo: "lugar", dicho: o.dicho, original: o.original },
       };
     }
@@ -2676,7 +3019,7 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
       return { texto: o.texto, acciones: o.acciones };
     case "red-municipio": {
       const z = zonaDeDiseno("todo el municipio", api, {});
-      if (!z) return { texto: "¿Qué municipio cubro? Dígame el nombre y el departamento, por ejemplo «todo el municipio de Barranca de Upía, Meta»." };
+      if (!z) return { texto: tx("¿Qué municipio cubro? Dígame el nombre y el departamento, por ejemplo «todo el municipio de Barranca de Upía, Meta».", "Which municipality should I cover? Tell me its name and department, for example “the whole municipality of Barranca de Upía, Meta”.") };
       if ("aviso" in z) return { texto: z.aviso };
       return { ...ejecutarOrdenBase(disenoDeZona(z, o.sostenible), api), ...(z.lugar ? { lugar: z.lugar } : {}) };
     }
@@ -2684,9 +3027,9 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
       const pendiente: Pendiente = { tipo: "disenar", lugar: o.lugar, sostenible: o.sostenible, despues: o.despues };
       const ejemplo: Orden = {
         tipo: "disenar",
-        area: { forma: "circulo", areaM2: 11226 * 10000, centro: { tipo: "coord", coord: { lat: 4.5149, lon: -73.0024 }, nombre: "en Barranca de Upía (Meta)" } },
+        area: { forma: "circulo", areaM2: 11226 * 10000, centro: { tipo: "coord", coord: { lat: 4.5149, lon: -73.0024 }, nombre: tx("en Barranca de Upía (Meta)", "in Barranca de Upía (Meta)") } },
         margenDb: 30,
-        clases: "señal media o mejor (buena, estable o media; ≥ 30 dB)",
+        clases: clasesMedia(),
         porcentaje: 95,
         respaldo: false,
         alturaM: ALTURA_REPETIDOR_DEFECTO,
@@ -2698,14 +3041,14 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
         // El municipio del lugar pedido (o donde caen sus coordenadas): se ofrece cubrirlo entero
         const l = o.lugar.lugar?.tipo === "municipio" ? o.lugar.lugar : lugarDePunto(api, o.lugar.lat, o.lugar.lon);
         const contorno = l ? api.contornoLugar?.(l) : null;
-        const zona = l && contorno && areaM2(contorno) <= 3e9 ? ({ puntos: contorno, nombre: `en todo el municipio de ${l.nombre} (${l.detalle})`, etiqueta: `${l.nombre} (${l.detalle})`, lugar: l } as const) : null;
+        const zona = l && contorno && areaM2(contorno) <= 3e9 ? ({ puntos: contorno, nombre: tx(`en todo el municipio de ${l.nombre} (${l.detalle})`, `in the whole municipality of ${l.nombre} (${l.detalle})`), etiqueta: `${l.nombre} (${l.detalle})`, lugar: l } as const) : null;
         const conDespues = (x: Orden): Orden => (o.despues && x.tipo === "disenar" ? { ...x, despues: o.despues } : x);
         const alrededor = (ha: number): Orden =>
           conDespues({
             tipo: "disenar",
             area: { forma: "circulo", areaM2: ha * 1e4, centro: { tipo: "coord", coord: { lat: o.lugar!.lat, lon: o.lugar!.lon }, nombre: o.lugar!.nombre } },
             margenDb: 30,
-            clases: "señal media o mejor (buena, estable o media; ≥ 30 dB)",
+            clases: clasesMedia(),
             porcentaje: 95,
             respaldo: false,
             alturaM: ALTURA_REPETIDOR_DEFECTO,
@@ -2714,18 +3057,24 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
             ...(o.sostenible ? { sostenible: true } : {}),
           });
         const acciones: AccionRespuesta[] = [];
-        if (zona) acciones.push({ texto: `Todo el municipio de ${l!.nombre}`, accion: "orden", orden: conDespues(disenoDeZona(zona, o.sostenible)) });
-        acciones.push({ texto: "1.000 ha alrededor", accion: "orden", orden: alrededor(1000) }, { texto: "5.000 ha alrededor", accion: "orden", orden: alrededor(5000) });
+        if (zona) acciones.push({ texto: tx(`Todo el municipio de ${l!.nombre}`, `The whole municipality of ${l!.nombre}`), accion: "orden", orden: conDespues(disenoDeZona(zona, o.sostenible)) });
+        acciones.push({ texto: tx("1.000 ha alrededor", "1,000 ha around it"), accion: "orden", orden: alrededor(1000) }, { texto: tx("5.000 ha alrededor", "5,000 ha around it"), accion: "orden", orden: alrededor(5000) });
         return {
-          texto: `Con gusto: armo la red ${o.lugar.nombre}${o.sostenible ? ", sostenible y viable" : ""}. ¿Qué área cubro? Dígame, por ejemplo, «11.226 hectáreas», «un radio de 6 km»${zona ? ` o «todo el municipio»` : ""}.`,
+          texto: tx(
+            `Con gusto: armo la red ${o.lugar.nombre}${o.sostenible ? ", sostenible y viable" : ""}. ¿Qué área cubro? Dígame, por ejemplo, «11.226 hectáreas», «un radio de 6 km»${zona ? ` o «todo el municipio»` : ""}.`,
+            `Gladly: I'll build the network ${o.lugar.nombre}${o.sostenible ? ", sustainable and viable" : ""}. What area should I cover? Tell me, for example, “11,226 hectares”, “a radius of 6 km”${zona ? ` or “the whole municipality”` : ""}.`,
+          ),
           acciones,
           pendiente,
         };
       }
-      const acciones: AccionRespuesta[] = [{ texto: "Barranca de Upía, 11.226 ha", accion: "orden", orden: ejemplo }];
-      if (antenas.some((a) => a.activa)) acciones.push({ texto: "Mejorar la red del mapa (costo y cobertura)", accion: "orden", orden: { tipo: "ajustar", aplicar: false, opcion: "recomendada", opciones: {}, avisos: [] } });
+      const acciones: AccionRespuesta[] = [{ texto: tx("Barranca de Upía, 11.226 ha", "Barranca de Upía, 11,226 ha"), accion: "orden", orden: ejemplo }];
+      if (antenas.some((a) => a.activa)) acciones.push({ texto: tx("Mejorar la red del mapa (costo y cobertura)", "Improve the network on the map (cost and coverage)"), accion: "orden", orden: { tipo: "ajustar", aplicar: false, opcion: "recomendada", opciones: {}, avisos: [] } });
       return {
-        texto: `Con gusto armo una red ${o.sostenible ? "sostenible, económica y técnicamente viable" : "MeshCore"}: busco con el relieve real dónde va el gateway y cada repetidor solar, con enlaces firmes, y le digo cuánto cuesta con los precios de Trama. ¿Dónde y de qué tamaño? Por ejemplo: «en Barranca de Upía, 11.226 hectáreas».`,
+        texto: tx(
+          `Con gusto armo una red ${o.sostenible ? "sostenible, económica y técnicamente viable" : "MeshCore"}: busco con el relieve real dónde va el gateway y cada repetidor solar, con enlaces firmes, y le digo cuánto cuesta con los precios de Trama. ¿Dónde y de qué tamaño? Por ejemplo: «en Barranca de Upía, 11.226 hectáreas».`,
+          `Gladly, I'll build a ${o.sostenible ? "sustainable, economically and technically viable" : "MeshCore"} network: using the real terrain I'll find where the gateway and each solar repeater go, with solid links, and tell you what it costs at Trama's prices. Where, and how large? For example: “in Barranca de Upía, 11,226 hectares”.`,
+        ),
         acciones,
         pendiente,
       };
@@ -2739,9 +3088,19 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
       const { logistica, departamento } = logisticaEn(api, centro.lat, centro.lon);
       const c = costoRedTrama(gateways, repetidores, personas, "xiao", logistica);
       const que = [gateways ? `${gateways} ${gateways === 1 ? "gateway" : "gateways"}` : "", repetidores ? `${repetidores} ${repetidores === 1 ? "repetidor" : "repetidores"}` : "", personas ? `${personas} ${personas === 1 ? "persona" : "personas"}` : ""].filter(Boolean);
+      const queEn = [gateways ? `${gateways} ${gateways === 1 ? "gateway" : "gateways"}` : "", repetidores ? `${repetidores} ${repetidores === 1 ? "repeater" : "repeaters"}` : "", personas ? `${personas} ${personas === 1 ? "person" : "people"}` : ""].filter(Boolean);
       return {
-        texto: [`La red del mapa (${que.join(", ").replace(/, ([^,]*)$/, " y $1") || "sin nodos activos"}) con los precios del documento de Trama:`, ...lineasCosto(c, departamento), gateways ? "" : "• Ojo: no hay gateway; sin él la red no sale a internet. Sume uno (el sitio con Starlink) antes de presupuestar."].filter(Boolean).join("\n"),
-        acciones: [{ texto: "Optimizar el costo (misma cobertura)", accion: "orden", orden: { tipo: "ajustar", aplicar: false, opcion: "recomendada", opciones: {}, avisos: [] } }],
+        texto: [
+          tx(
+            `La red del mapa (${que.join(", ").replace(/, ([^,]*)$/, " y $1") || "sin nodos activos"}) con los precios del documento de Trama:`,
+            `The network on the map (${queEn.join(", ").replace(/, ([^,]*)$/, " and $1") || "no active nodes"}) at the prices in Trama's document:`,
+          ),
+          ...lineasCosto(c, departamento),
+          gateways ? "" : tx("• Ojo: no hay gateway; sin él la red no sale a internet. Sume uno (el sitio con Starlink) antes de presupuestar.", "• Note: there's no gateway; without it the network can't reach the internet. Add one (the site with Starlink) before budgeting."),
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        acciones: [{ texto: tx("Optimizar el costo (misma cobertura)", "Optimize the cost (same coverage)"), accion: "orden", orden: { tipo: "ajustar", aplicar: false, opcion: "recomendada", opciones: {}, avisos: [] } }],
       };
     }
     case "disenar":
@@ -2763,34 +3122,43 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
       return ejecutarAjuste(o, api, antes);
     case "aplicar-ajuste": {
       const op = o.ajuste.opciones[o.indice];
-      if (!op) return { texto: "Esa opción ya no está disponible. Pídame el ajuste de nuevo." };
+      if (!op) return { texto: tx("Esa opción ya no está disponible. Pídame el ajuste de nuevo.", "That option is no longer available. Ask me for the adjustment again.") };
       api.aplicarAjuste(o.ajuste, o.indice, o.base);
       return {
-        texto: `Aplico la opción «${op.titulo}» y simulo…`,
+        texto: tx(`Aplico la opción «${op.titulo}» y simulo…`, `Applying the “${op.titulo}” option and simulating…`),
         deshacer: o.base,
         luego: api.esperarResultado().then((r) => textoAjusteAplicado(o.ajuste, o.indice, r, o.base)),
       };
     }
     case "descartar-ajuste":
       api.descartarAjuste();
-      return { texto: "Listo, descarté la propuesta de ajuste. La red quedó como estaba." };
+      return { texto: tx("Listo, descarté la propuesta de ajuste. La red quedó como estaba.", "Done, I discarded the adjustment proposal. The network is as it was.") };
     case "area-objetivo": {
       if (o.quitar) {
-        if (!api.areaObjetivo()) return { texto: "No hay área objetivo: la factibilidad ya se mide en el área de estudio (los círculos alrededor de los nodos antena)." };
+        if (!api.areaObjetivo()) return { texto: tx("No hay área objetivo: la factibilidad ya se mide en el área de estudio (los círculos alrededor de los nodos antena).", "There's no target area: feasibility is already measured in the study area (the circles around the antenna nodes).") };
         api.fijarAreaObjetivo(null);
-        return { texto: "Listo: quité el área objetivo. La factibilidad vuelve a medirse en el área de estudio (60 % con señal media o mejor).", esperar: antenas.some((a) => a.activa) ? "*" : undefined };
+        return {
+          texto: tx("Listo: quité el área objetivo. La factibilidad vuelve a medirse en el área de estudio (60 % con señal media o mejor).", "Done: I removed the target area. Feasibility is measured in the study area again (60% with fair or better signal)."),
+          esperar: antenas.some((a) => a.activa) ? "*" : undefined,
+        };
       }
       const m = o.id ? api.mediciones().find((x) => x.id === o.id) : undefined;
       if (!m)
         return {
-          texto: "No encuentro un área medida. Dibújela con la regla (Área) y pídamelo de nuevo: «usa el área que medí como área objetivo con el 95 %».",
-          acciones: [{ texto: "Activar la regla", accion: "orden", orden: { tipo: "herramienta", herramienta: "regla" } }],
+          texto: tx(
+            "No encuentro un área medida. Dibújela con la regla (Área) y pídamelo de nuevo: «usa el área que medí como área objetivo con el 95 %».",
+            "I can't find a measured area. Draw it with the ruler (Area) and ask me again: “use the area I measured as the target area with 95%”.",
+          ),
+          acciones: [{ texto: tx("Activar la regla", "Turn on the ruler"), accion: "orden", orden: { tipo: "herramienta", herramienta: "regla" } }],
         };
       const meta = o.metaPct ?? 90;
       const margen = o.margenDb ?? 30;
       api.fijarAreaObjetivo(m.id, { metaPct: meta, margenDb: margen });
       return {
-        texto: `Listo: «${m.nombre}» es el área objetivo. La factibilidad ahora pide el ${fp(meta)} % de esa área con ${margen >= 45 ? "señal buena" : margen >= 37 ? "señal estable o mejor" : "señal media o mejor"} (≥ ${margen} dB)${o.metaPct === undefined ? " (meta por defecto; dígame otra: «con el 99 %»)" : ""}.`,
+        texto: tx(
+          `Listo: «${m.nombre}» es el área objetivo. La factibilidad ahora pide el ${fp(meta)} % de esa área con ${margen >= 45 ? "señal buena" : margen >= 37 ? "señal estable o mejor" : "señal media o mejor"} (≥ ${margen} dB)${o.metaPct === undefined ? " (meta por defecto; dígame otra: «con el 99 %»)" : ""}.`,
+          `Done: “${m.nombre}” is the target area. Feasibility now requires ${fp(meta)}% of that area with ${margen >= 45 ? "good signal" : margen >= 37 ? "stable or better signal" : "fair or better signal"} (≥ ${margen} dB)${o.metaPct === undefined ? " (default target; tell me another one: “with 99%”)" : ""}.`,
+        ),
         esperar: antenas.some((a) => a.activa) ? "*" : undefined,
       };
     }
@@ -2799,69 +3167,88 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
       return {
         texto:
           o.valor === "plano"
-            ? "Listo: simulo sobre terreno plano (sin lomas ni valles). Sirve para comparar; para planear en serio vuelva al relieve real con «usa el relieve real»."
-            : "Listo: simulo con el relieve real (teselas de elevación abiertas, sin costo).",
+            ? tx(
+                "Listo: simulo sobre terreno plano (sin lomas ni valles). Sirve para comparar; para planear en serio vuelva al relieve real con «usa el relieve real».",
+                "Done: I'm simulating on flat terrain (no hills or valleys). It's useful for comparison; for serious planning, go back to the real terrain with “use the real terrain”.",
+              )
+            : tx("Listo: simulo con el relieve real (teselas de elevación abiertas, sin costo).", "Done: I'm simulating with the real terrain (open elevation tiles, free of charge)."),
         esperar: antenas.some((a) => a.activa) ? "*" : undefined,
       };
     case "nombre-escenario":
       api.renombrarEscenario(o.nombre.slice(0, 80));
-      return { texto: `Listo: el escenario se llama «${o.nombre.slice(0, 80)}». Así sale en los archivos que exporte.`, acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }], deshacer: antes };
+      return {
+        texto: tx(`Listo: el escenario se llama «${o.nombre.slice(0, 80)}». Así sale en los archivos que exporte.`, `Done: the scenario is called “${o.nombre.slice(0, 80)}”. That's how it will appear in the files you export.`),
+        acciones: [deshacer()],
+        deshacer: antes,
+      };
     case "duplicar": {
       const a = porId.get(o.id);
-      if (!a) return { texto: "No encontré ese nodo." };
+      if (!a) return { texto: noEncontreNodo() };
       api.duplicar(a.id);
-      return { texto: `Dupliqué «${a.nombre}»: la copia quedó al lado, con los mismos datos. Arrástrela o dígame a dónde la muevo.`, acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }], deshacer: antes, esperar: "*" };
+      return {
+        texto: tx(`Dupliqué «${a.nombre}»: la copia quedó al lado, con los mismos datos. Arrástrela o dígame a dónde la muevo.`, `I duplicated “${a.nombre}”: the copy is right beside it, with the same data. Drag it or tell me where to move it.`),
+        acciones: [deshacer()],
+        deshacer: antes,
+        esperar: "*",
+      };
     }
     case "seleccionar": {
       const a = porId.get(o.id);
-      if (!a) return { texto: "No encontré ese nodo." };
+      if (!a) return { texto: noEncontreNodo() };
       api.seleccionar(a.id);
       api.centrar(a.lat, a.lon, 13);
-      return { texto: `Aquí está «${a.nombre}»: lo dejé seleccionado para editarlo.`, nodo: a.id };
+      return { texto: tx(`Aquí está «${a.nombre}»: lo dejé seleccionado para editarlo.`, `Here is “${a.nombre}”: I've selected it so you can edit it.`), nodo: a.id };
     }
     case "usar-economica": {
       const quitar = antenas.filter((a) => o.ids.includes(a.id));
-      if (!quitar.length) return { texto: "Esos repetidores ya no están en el mapa: la opción económica era para el diseño anterior." };
+      if (!quitar.length) return { texto: tx("Esos repetidores ya no están en el mapa: la opción económica era para el diseño anterior.", "Those repeaters are no longer on the map: the economical option was for the previous design.") };
       api.eliminarVarias(quitar.map((a) => a.id));
       const nombres = quitar.map((a) => a.nombre).join(", ");
+      const cuantos = () => tx(quitar.length === 1 ? "1 repetidor" : `${quitar.length} repetidores`, quitar.length === 1 ? "1 repeater" : `${quitar.length} repeaters`);
       const luego = (async (): Promise<Respuesta> => {
         const r = await api.esperarResultado();
         const real = r ? coberturaEnArea(r, o.area, o.respaldo ? "segundo" : "mejor") : null;
         const pct = real ? porcentajeSobre(real, o.margenDb) : null;
-        const ahorro = o.ahorroCop > 0 ? ` y ahorra unos ${pesosTrama(o.ahorroCop)}` : "";
+        const ahorro = o.ahorroCop > 0 ? tx(` y ahorra unos ${pesosTrama(o.ahorroCop)}`, `, saving about ${pesosTrama(o.ahorroCop)}`) : "";
         return {
           texto:
             pct === null
-              ? `Quité ${quitar.length === 1 ? "1 repetidor" : `${quitar.length} repetidores`} (${nombres})${ahorro}. Simule para ver la cobertura del área.`
-              : `Opción económica lista: la malla cubre el ${fp(pct)} % del área con ${o.clases} (la meta era ${fp(o.metaPct)} %). Quité ${quitar.length === 1 ? "1 repetidor" : `${quitar.length} repetidores`} (${nombres})${ahorro}.${real ? ` Dentro del área: ${resumenClases(real)}.` : ""}`,
-          acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }],
+              ? tx(`Quité ${cuantos()} (${nombres})${ahorro}. Simule para ver la cobertura del área.`, `I removed ${cuantos()} (${nombres})${ahorro}. Simulate to see the area's coverage.`)
+              : tx(
+                  `Opción económica lista: la malla cubre el ${fp(pct)} % del área con ${o.clases} (la meta era ${fp(o.metaPct)} %). Quité ${cuantos()} (${nombres})${ahorro}.${real ? ` Dentro del área: ${resumenClases(real)}.` : ""}`,
+                  `Economical option ready: the mesh covers ${fp(pct)}% of the area with ${o.clases} (the target was ${fp(o.metaPct)}%). I removed ${cuantos()} (${nombres})${ahorro}.${real ? ` Inside the area: ${resumenClases(real)}.` : ""}`,
+                ),
+          acciones: [deshacer()],
         };
       })();
       return {
-        texto: `Quito ${quitar.length === 1 ? "1 repetidor" : `${quitar.length} repetidores`} (${nombres}) para la opción económica y mido de nuevo la cobertura del área.`,
-        acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }],
+        texto: tx(`Quito ${cuantos()} (${nombres}) para la opción económica y mido de nuevo la cobertura del área.`, `Removing ${cuantos()} (${nombres}) for the economical option and measuring the area's coverage again.`),
+        acciones: [deshacer()],
         deshacer: antes,
         luego,
       };
     }
     case "eliminar-varios": {
       const quitar = antenas.filter((a) => o.ids.includes(a.id));
-      if (!quitar.length) return { texto: `No hay ${o.descripcion.replace(/^tod[oa]s (l[oa]s )?/, "")} para borrar.` };
+      if (!quitar.length) return { texto: tx(`No hay ${o.descripcion.replace(/^tod[oa]s (l[oa]s )?/, "")} para borrar.`, `There are no ${o.descripcion.replace(/^(?:tod[oa]s (?:l[oa]s )?|all (?:the )?)/, "")} to delete.`) };
       api.eliminarVarias(quitar.map((a) => a.id));
       return {
-        texto: `Borré ${quitar.length === 1 ? "1 nodo" : `${quitar.length} nodos`} (${o.descripcion}): ${quitar.map((a) => a.nombre).join(", ")}.${antenas.length > quitar.length ? " Recalculo la red." : ""}`,
-        acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }],
+        texto: tx(
+          `Borré ${quitar.length === 1 ? "1 nodo" : `${quitar.length} nodos`} (${o.descripcion}): ${quitar.map((a) => a.nombre).join(", ")}.${antenas.length > quitar.length ? " Recalculo la red." : ""}`,
+          `I deleted ${quitar.length === 1 ? "1 node" : `${quitar.length} nodes`} (${o.descripcion}): ${quitar.map((a) => a.nombre).join(", ")}.${antenas.length > quitar.length ? " Recalculating the network." : ""}`,
+        ),
+        acciones: [deshacer()],
         deshacer: antes,
         esperar: antenas.length > quitar.length ? "*" : undefined,
       };
     }
     case "editar-varios": {
       const cambiar = antenas.filter((a) => o.ids.includes(a.id));
-      if (!cambiar.length) return { texto: "No encontré nodos de ese tipo." };
+      if (!cambiar.length) return { texto: tx("No encontré nodos de ese tipo.", "I couldn't find nodes of that type.") };
       for (const a of cambiar) api.editar(a.id, o.cambios);
       return {
-        texto: `Hecho: ${o.descripcion} (${cambiar.map((a) => a.nombre).join(", ")}). Recalculo la simulación.`,
-        acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: antes }],
+        texto: tx(`Hecho: ${o.descripcion} (${cambiar.map((a) => a.nombre).join(", ")}). Recalculo la simulación.`, `Done: ${o.descripcion} (${cambiar.map((a) => a.nombre).join(", ")}). Recalculating the simulation.`),
+        acciones: [deshacer()],
         deshacer: antes,
         esperar: "*",
       };
@@ -2871,8 +3258,8 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
       if (o.valor) api.simular();
       return {
         texto: o.valor
-          ? "Listo: «Simular al cambiar» quedó encendido. Cada vez que cambie algo, recalculo la cobertura solo."
-          : "Listo: «Simular al cambiar» quedó apagado. Cuando quiera ver el resultado, dígame «simula» o toque «Simular».",
+          ? tx("Listo: «Simular al cambiar» quedó encendido. Cada vez que cambie algo, recalculo la cobertura solo.", "Done: “Simulate on change” is on. Every time something changes, I'll recalculate the coverage on my own.")
+          : tx("Listo: «Simular al cambiar» quedó apagado. Cuando quiera ver el resultado, dígame «simula» o toque «Simular».", "Done: “Simulate on change” is off. When you want to see the result, tell me “simulate” or tap “Simulate”."),
       };
     case "paneles": {
       const donde = api.paneles({ izquierdo: o.izquierdo, derecho: o.derecho });
@@ -2880,27 +3267,40 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
       if (donde === "celular")
         return {
           texto: ocultos
-            ? "Listo, dejé solo el mapa. En el celular los paneles se abren con los botones de abajo («Sembrar», «Nodos», «Parámetros», «Resultado»)."
-            : "En el celular los paneles se abren con los botones de abajo: toque «Sembrar», «Nodos», «Parámetros» o «Resultado».",
+            ? tx(
+                "Listo, dejé solo el mapa. En el celular los paneles se abren con los botones de abajo («Sembrar», «Nodos», «Parámetros», «Resultado»).",
+                "Done, I left just the map. On the phone, the panels open with the buttons at the bottom (“Seed”, “Nodes”, “Parameters”, “Result”).",
+              )
+            : tx("En el celular los paneles se abren con los botones de abajo: toque «Sembrar», «Nodos», «Parámetros» o «Resultado».", "On the phone, the panels open with the buttons at the bottom: tap “Seed”, “Nodes”, “Parameters” or “Result”."),
         };
-      const cual = o.izquierdo !== undefined && o.derecho !== undefined ? "los paneles" : o.izquierdo !== undefined ? "el panel izquierdo" : "el panel de resultados";
+      const ambos = o.izquierdo !== undefined && o.derecho !== undefined;
+      const cual = ambos ? tx("los paneles", "the panels") : o.izquierdo !== undefined ? tx("el panel izquierdo", "the left panel") : tx("el panel de resultados", "the results panel");
       if (o.izquierdo === false && o.derecho === false)
-        return { texto: "Listo: pantalla limpia, solo el mapa. Sigo trabajando igual; cuando quiera verlos, diga «muestra los paneles» o use los botones de la barra de arriba." };
-      return { texto: ocultos ? `Listo, oculté ${cual}. Para volver a verlo, dígamelo o use el botón de la barra de arriba.` : `Listo, ${cual === "los paneles" ? "ya están los paneles" : `ya está ${cual}`} a la vista.` };
+        return {
+          texto: tx(
+            "Listo: pantalla limpia, solo el mapa. Sigo trabajando igual; cuando quiera verlos, diga «muestra los paneles» o use los botones de la barra de arriba.",
+            "Done: a clean screen, just the map. I keep working the same way; when you want to see them, say “show the panels” or use the buttons in the top bar.",
+          ),
+        };
+      return {
+        texto: ocultos
+          ? tx(`Listo, oculté ${cual}. Para volver a verlo, dígamelo o use el botón de la barra de arriba.`, `Done, I hid ${cual}. To see ${ambos ? "them" : "it"} again, tell me or use the button in the top bar.`)
+          : tx(`Listo, ${ambos ? "ya están los paneles" : `ya está ${cual}`} a la vista.`, `Done, ${ambos ? "the panels are" : `${cual} is`} in view.`),
+      };
     }
     case "encuadrar":
-      if (!antenas.length) return { texto: "Aún no hay nodos en el mapa." };
+      if (!antenas.length) return { texto: tx("Aún no hay nodos en el mapa.", "There are no nodes on the map yet.") };
       api.encuadrarTodo();
-      return { texto: `Le muestro toda la red: ${antenas.length} ${antenas.length === 1 ? "nodo" : "nodos"}.` };
+      return { texto: tx(`Le muestro toda la red: ${antenas.length} ${antenas.length === 1 ? "nodo" : "nodos"}.`, `Here is the whole network: ${antenas.length} ${antenas.length === 1 ? "node" : "nodes"}.`) };
     case "cobertura-area": {
       const m = api.mediciones().find((x) => x.id === o.id);
-      if (!m) return { texto: "No encuentro esa área medida." };
+      if (!m) return { texto: tx("No encuentro esa área medida.", "I can't find that measured area.") };
       const r = api.resultado();
       if (!r || !api.red().alDia) {
-        if (!antenas.some((a) => a.activa)) return { texto: "Todavía no hay nodos que den cobertura en esa área." };
+        if (!antenas.some((a) => a.activa)) return { texto: tx("Todavía no hay nodos que den cobertura en esa área.", "There are no nodes providing coverage in that area yet.") };
         return {
-          texto: `Calculo la cobertura dentro de «${m.nombre}»…`,
-          luego: api.esperarResultado().then((x) => (x ? textoCoberturaArea(x, m, o.margenDb) : { texto: "No pude terminar la simulación." })),
+          texto: tx(`Calculo la cobertura dentro de «${m.nombre}»…`, `Calculating the coverage inside “${m.nombre}”…`),
+          luego: api.esperarResultado().then((x) => (x ? textoCoberturaArea(x, m, o.margenDb) : { texto: tx("No pude terminar la simulación.", "I couldn't finish the simulation.") })),
         };
       }
       return textoCoberturaArea(r, m, o.margenDb);
@@ -2910,17 +3310,23 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
 
 /* ───────────── Diseño por área: ejecución y respuesta ───────────── */
 
-/** «99,9», «95», «100». */
-const fp = (v: number) => (v >= 99.95 && v < 100 ? "99,9" : Number.isInteger(Math.round(v * 10) / 10) ? String(Math.round(v)) : f1(Math.floor(v * 10) / 10));
+/** «99,9», «95», «100» (en inglés «99.9»). */
+const fp = (v: number) => (v >= 99.95 && v < 100 ? tx("99,9", "99.9") : Number.isInteger(Math.round(v * 10) / 10) ? String(Math.round(v)) : f1(Math.floor(v * 10) / 10));
 
 const resumenClases = (c: { porClase: Record<string, number> }) =>
-  `buena ${fp(c.porClase.buena)} %, estable ${fp(c.porClase.estable)} %, media ${fp(c.porClase.media)} %, baja ${fp(c.porClase.baja)} % y sin servicio ${fp(c.porClase.sin)} %`;
+  tx(
+    `buena ${fp(c.porClase.buena)} %, estable ${fp(c.porClase.estable)} %, media ${fp(c.porClase.media)} %, baja ${fp(c.porClase.baja)} % y sin servicio ${fp(c.porClase.sin)} %`,
+    `good ${fp(c.porClase.buena)}%, stable ${fp(c.porClase.estable)}%, fair ${fp(c.porClase.media)}%, weak ${fp(c.porClase.baja)}% and no service ${fp(c.porClase.sin)}%`,
+  );
 
 function textoCoberturaArea(r: ResultadoSimulacion, m: Medicion, margenDb: number): Respuesta {
   const c = coberturaEnArea(r, m.puntos);
   const pct = porcentajeSobre(c, margenDb);
   return {
-    texto: `En «${m.nombre}» (${textoArea(c.areaKm2 * 1e6)}) el ${fp(pct)} % tiene margen de al menos ${margenDb} dB${margenDb === 30 ? " (señal media o mejor)" : ""}. Por clase: ${resumenClases(c)}.${c.fueraKm2 > 0.01 ? ` Una parte (${f1(c.fueraKm2, 2)} km²) queda fuera del radio de estudio: súbalo para verla.` : ""}`,
+    texto: tx(
+      `En «${m.nombre}» (${textoArea(c.areaKm2 * 1e6)}) el ${fp(pct)} % tiene margen de al menos ${margenDb} dB${margenDb === 30 ? " (señal media o mejor)" : ""}. Por clase: ${resumenClases(c)}.${c.fueraKm2 > 0.01 ? ` Una parte (${f1(c.fueraKm2, 2)} km²) queda fuera del radio de estudio: súbalo para verla.` : ""}`,
+      `In “${m.nombre}” (${textoArea(c.areaKm2 * 1e6)}), ${fp(pct)}% has a margin of at least ${margenDb} dB${margenDb === 30 ? " (fair or better signal)" : ""}. By class: ${resumenClases(c)}.${c.fueraKm2 > 0.01 ? ` Part of it (${f1(c.fueraKm2, 2)} km²) lies outside the study radius: increase it to see that part.` : ""}`,
+    ),
   };
 }
 
@@ -2931,16 +3337,17 @@ export function textoCoberturaUtil(r: ResultadoSimulacion): string {
   const o = r.areaObjetivo;
   if (o) {
     const senal = o.margenDb >= 45 ? "señal buena" : o.margenDb >= 37 ? "señal estable o mejor" : "señal media o mejor";
-    return `${fp(o.utilPct)} % de «${o.nombre}» con ${senal} (meta ${fp(o.metaPct)} %)`;
+    const senalEn = o.margenDb >= 45 ? "good signal" : o.margenDb >= 37 ? "stable or better signal" : "fair or better signal";
+    return tx(`${fp(o.utilPct)} % de «${o.nombre}» con ${senal} (meta ${fp(o.metaPct)} %)`, `${fp(o.utilPct)}% of “${o.nombre}” with ${senalEn} (target ${fp(o.metaPct)}%)`);
   }
-  return `${fp(r.porcentajeUtil)} % del área de estudio con cobertura útil, señal media o mejor (meta ${META_UTIL_ESTUDIO_PCT} %)`;
+  return tx(`${fp(r.porcentajeUtil)} % del área de estudio con cobertura útil, señal media o mejor (meta ${META_UTIL_ESTUDIO_PCT} %)`, `${fp(r.porcentajeUtil)}% of the study area with useful coverage, fair or better signal (target ${META_UTIL_ESTUDIO_PCT}%)`);
 }
 
 /** El botón «Ajústamelo automáticamente» (u «Optimizar la red») para las respuestas de Melki. */
 export function accionAjuste(r: ResultadoSimulacion | null): AccionRespuesta | null {
   if (!r) return null;
   const orden: Orden = { tipo: "ajustar", aplicar: false, opcion: "recomendada", opciones: {}, avisos: [] };
-  return { texto: r.factibilidad.nivel === "factible" ? "Optimizar el costo" : "Ajústamelo automáticamente", accion: "orden", orden };
+  return { texto: r.factibilidad.nivel === "factible" ? tx("Optimizar el costo", "Optimize the cost") : tx("Ajústamelo automáticamente", "Adjust it for me"), accion: "orden", orden };
 }
 
 const indiceOpcion = (a: Ajuste, id: OpcionAjusteId) => {
@@ -2952,25 +3359,42 @@ function ejecutarAjuste(o: Extract<Orden, { tipo: "ajustar" }>, api: Api, antes:
   const activas = api.antenas().filter((a) => a.activa);
   if (!activas.length)
     return {
-      texto: "Todavía no hay red que ajustar. Ponga el gateway y los nodos, o pídame una red completa para un área: «ármame una malla que cubra 500 hectáreas alrededor de Cumaral con señal media en el 99 %».",
+      texto: tx(
+        "Todavía no hay red que ajustar. Ponga el gateway y los nodos, o pídame una red completa para un área: «ármame una malla que cubra 500 hectáreas alrededor de Cumaral con señal media en el 99 %».",
+        "There's no network to adjust yet. Place the gateway and the nodes, or ask me for a complete network for an area: “build me a mesh covering 500 hectares around Cumaral with fair signal in 99%”.",
+      ),
     };
   if (!activas.some((a) => a.pasarela))
     return {
-      texto: "Primero ponga el Gateway + Internet (la pasarela): el ajuste parte de él. Dígame dónde entra el internet: «pon el gateway en 4.2, -73.37».",
-      acciones: [{ texto: "Poner el gateway", accion: "orden", orden: { tipo: "pieza", pieza: "gateway", datos: {} } }],
+      texto: tx(
+        "Primero ponga el Gateway + Internet (la pasarela): el ajuste parte de él. Dígame dónde entra el internet: «pon el gateway en 4.2, -73.37».",
+        "First place the Gateway + Internet: the adjustment starts from it. Tell me where the internet comes in: “put the gateway at 4.2, -73.37”.",
+      ),
+      acciones: [{ texto: tx("Poner el gateway", "Place the gateway"), accion: "orden", orden: { tipo: "pieza", pieza: "gateway", datos: {} } }],
     };
   const area = api.areaObjetivo();
   const limites: string[] = [];
-  if (o.opciones.alturaMaxM !== undefined && o.opciones.alturaMaxM < 30) limites.push(`torres de hasta ${fn(o.opciones.alturaMaxM)} m`);
-  if (o.opciones.maxApoyos !== undefined) limites.push(o.opciones.maxApoyos === 0 ? "sin antenas de apoyo" : `máximo ${o.opciones.maxApoyos} ${o.opciones.maxApoyos === 1 ? "antena" : "antenas"} de apoyo`);
-  if (o.opciones.permisos?.mover === false) limites.push("sin mover nodos");
-  if (o.opciones.permisos?.apoyos === false && o.opciones.maxApoyos === undefined) limites.push("sin antenas de apoyo");
-  if (o.opciones.permisos?.antenas === false) limites.push("sin cambiar antenas");
-  if (o.opciones.permisos?.alturas === false) limites.push("sin cambiar alturas");
-  if (o.opciones.sitios?.length) limites.push(`apoyos solo en ${o.opciones.sitios.length === 1 ? "el sitio que me dio" : `los ${o.opciones.sitios.length} sitios que me dio`}`);
+  if (o.opciones.alturaMaxM !== undefined && o.opciones.alturaMaxM < 30) limites.push(tx(`torres de hasta ${fn(o.opciones.alturaMaxM)} m`, `towers up to ${fn(o.opciones.alturaMaxM)} m`));
+  if (o.opciones.maxApoyos !== undefined)
+    limites.push(
+      o.opciones.maxApoyos === 0
+        ? tx("sin antenas de apoyo", "no support antennas")
+        : tx(`máximo ${o.opciones.maxApoyos} ${o.opciones.maxApoyos === 1 ? "antena" : "antenas"} de apoyo`, `at most ${o.opciones.maxApoyos} support ${o.opciones.maxApoyos === 1 ? "antenna" : "antennas"}`),
+    );
+  if (o.opciones.permisos?.mover === false) limites.push(tx("sin mover nodos", "without moving nodes"));
+  if (o.opciones.permisos?.apoyos === false && o.opciones.maxApoyos === undefined) limites.push(tx("sin antenas de apoyo", "no support antennas"));
+  if (o.opciones.permisos?.antenas === false) limites.push(tx("sin cambiar antenas", "without changing antennas"));
+  if (o.opciones.permisos?.alturas === false) limites.push(tx("sin cambiar alturas", "without changing heights"));
+  if (o.opciones.sitios?.length)
+    limites.push(
+      tx(
+        `apoyos solo en ${o.opciones.sitios.length === 1 ? "el sitio que me dio" : `los ${o.opciones.sitios.length} sitios que me dio`}`,
+        `support antennas only at ${o.opciones.sitios.length === 1 ? "the site you gave me" : `the ${o.opciones.sitios.length} sites you gave me`}`,
+      ),
+    );
   const luego = (async (): Promise<Respuesta> => {
     const a = await api.ajustarRed(o.opciones);
-    if (!a) return { texto: "No pude calcular el ajuste (el relieve no cargó o el motor se detuvo). Intente de nuevo en un momento." };
+    if (!a) return { texto: tx("No pude calcular el ajuste (el relieve no cargó o el motor se detuvo). Intente de nuevo en un momento.", "I couldn't calculate the adjustment (the terrain didn't load or the engine stopped). Please try again in a moment.") };
     const i = indiceOpcion(a, o.opcion);
     const op = a.opciones[i];
     if (o.aplicar && op && op.cambios.length) {
@@ -2982,7 +3406,10 @@ function ejecutarAjuste(o: Extract<Orden, { tipo: "ajustar" }>, api: Api, antes:
     return textoAjustePropuesta(a, i, antes);
   })();
   return {
-    texto: `${o.avisos.length ? `${o.avisos.join(" ")} ` : ""}Analizo la red como lo haría un planeador, con el relieve real: pruebo subir o bajar cada torre (hasta ${fn(o.opciones.alturaMaxM ?? 30)} m), correr nodos a lomas cercanas, cambiar el tipo de antena y sugerir antenas de apoyo, y comparo cuánto cubre cada opción contra lo que cuesta${area ? ` en «${area.nombre}»` : ""}${limites.length ? ` (${limites.join(", ")})` : ""}. Tardo unos segundos.`,
+    texto: tx(
+      `${o.avisos.length ? `${o.avisos.join(" ")} ` : ""}Analizo la red como lo haría un planeador, con el relieve real: pruebo subir o bajar cada torre (hasta ${fn(o.opciones.alturaMaxM ?? 30)} m), correr nodos a lomas cercanas, cambiar el tipo de antena y sugerir antenas de apoyo, y comparo cuánto cubre cada opción contra lo que cuesta${area ? ` en «${area.nombre}»` : ""}${limites.length ? ` (${limites.join(", ")})` : ""}. Tardo unos segundos.`,
+      `${o.avisos.length ? `${o.avisos.join(" ")} ` : ""}I'm analyzing the network as a planner would, with the real terrain: I try raising or lowering each tower (up to ${fn(o.opciones.alturaMaxM ?? 30)} m), moving nodes to nearby hills, changing the antenna type and suggesting support antennas, and I compare how much each option covers against what it costs${area ? ` in “${area.nombre}”` : ""}${limites.length ? ` (${limites.join(", ")})` : ""}. This takes a few seconds.`,
+    ),
     luego,
   };
 }
@@ -2993,21 +3420,31 @@ function textoAjusteAplicado(a: Ajuste, i: number, r: ResultadoSimulacion | null
   const partes: string[] = [];
   const f = r?.factibilidad;
   const util = r ? (r.areaObjetivo ? r.areaObjetivo.utilPct : r.porcentajeUtil) : op.resumen.utilPct;
-  const zona = r?.areaObjetivo ? `de «${r.areaObjetivo.nombre}»` : "del área de estudio";
+  const zona = r?.areaObjetivo ? tx(`de «${r.areaObjetivo.nombre}»`, `of “${r.areaObjetivo.nombre}”`) : tx("del área de estudio", "of the study area");
   partes.push(
-    `Listo: apliqué la opción «${op.titulo}»${f ? ` y la red quedó ${f.nivel === "factible" ? "factible" : f.titulo.toLowerCase()} (${f.puntaje}/100)` : ""}: cobertura útil del ${fp(util)} % ${zona}, antes ${fp(a.inicial.utilPct)} %.`,
+    tx(
+      `Listo: apliqué la opción «${op.titulo}»${f ? ` y la red quedó ${f.nivel === "factible" ? "factible" : f.titulo.toLowerCase()} (${f.puntaje}/100)` : ""}: cobertura útil del ${fp(util)} % ${zona}, antes ${fp(a.inicial.utilPct)} %.`,
+      `Done: I applied the “${op.titulo}” option${f ? ` and the network is now ${f.nivel === "factible" ? "feasible" : f.titulo.toLowerCase()} (${f.puntaje}/100)` : ""}: useful coverage of ${fp(util)}% ${zona}, up from ${fp(a.inicial.utilPct)}%.`,
+    ),
   );
   const cambios = op.cambios.map(textoCambio);
-  partes.push(`Lo que cambié: ${cambios.slice(0, 6).join("; ")}${cambios.length > 6 ? `; y ${cambios.length - 6} cambios más (los ve en el mapa y en la lista de nodos)` : ""}.`);
-  if (a.area.tipo === "zona") partes.push("Como no había un área pedida, dejé la zona de la red como área objetivo: así la factibilidad se mide siempre en la misma zona.");
-  const otras = a.analisis.filter((t) => /^(La de máxima|Si quiere más|Si basta)/.test(t));
+  partes.push(
+    tx(
+      `Lo que cambié: ${cambios.slice(0, 6).join("; ")}${cambios.length > 6 ? `; y ${cambios.length - 6} cambios más (los ve en el mapa y en la lista de nodos)` : ""}.`,
+      `What I changed: ${cambios.slice(0, 6).join("; ")}${cambios.length > 6 ? `; and ${cambios.length - 6} more changes (you can see them on the map and in the node list)` : ""}.`,
+    ),
+  );
+  if (a.area.tipo === "zona") partes.push(tx("Como no había un área pedida, dejé la zona de la red como área objetivo: así la factibilidad se mide siempre en la misma zona.", "Since no area was requested, I set the network's zone as the target area: that way feasibility is always measured in the same zone."));
+  // El análisis llega del motor en el idioma de la pantalla: se reconoce por su texto en español (mismo orden)
+  const analisisEs = retraducir(a, "es").analisis;
+  const otras = a.analisis.filter((_t, k) => /^(La de máxima|Si quiere más|Si basta)/.test(analisisEs[k] ?? ""));
   if (otras.length) partes.push(otras.join(" "));
-  if (f && f.nivel !== "factible" && f.recomendaciones[0]) partes.push(`Todavía: ${f.recomendaciones[0]}`);
+  if (f && f.nivel !== "factible" && f.recomendaciones[0]) partes.push(tx(`Todavía: ${f.recomendaciones[0]}`, `Still pending: ${f.recomendaciones[0]}`));
   if (a.motivo) partes.push(a.motivo);
-  partes.push("Las antenas de apoyo son puntos sugeridos: antes de instalar, revise en campo el acceso, la energía y que nada tape las antenas.");
-  const acciones: Respuesta["acciones"] = [{ texto: "Deshacer", accion: "deshacer", escenario: base }];
+  partes.push(tx("Las antenas de apoyo son puntos sugeridos: antes de instalar, revise en campo el acceso, la energía y que nada tape las antenas.", "The support antennas are suggested points: before installing, check the access and the power in the field, and that nothing blocks the antennas."));
+  const acciones: Respuesta["acciones"] = [{ texto: tx("Deshacer", "Undo"), accion: "deshacer", escenario: base }];
   a.opciones.forEach((x, k) => {
-    if (k !== i && x.cambios.length) acciones.push({ texto: `Usar «${x.titulo}»`, accion: "orden", orden: { tipo: "aplicar-ajuste", ajuste: a, indice: k, base } });
+    if (k !== i && x.cambios.length) acciones.push({ texto: tx(`Usar «${x.titulo}»`, `Use “${x.titulo}”`), accion: "orden", orden: { tipo: "aplicar-ajuste", ajuste: a, indice: k, base } });
   });
   return { texto: partes.join("\n"), acciones };
 }
@@ -3017,17 +3454,22 @@ function textoAjustePropuesta(a: Ajuste, i: number, base: Escenario): Respuesta 
   const partes = [...a.analisis];
   const op = a.opciones[i];
   if (!a.opciones.length || !op?.cambios.length) {
-    partes.push(a.modo === "optimizar" ? "No hay nada que cambiar: la red ya está bien dimensionada para su meta." : "No encontré cambios que mejoren la red con esos límites.");
+    partes.push(a.modo === "optimizar" ? tx("No hay nada que cambiar: la red ya está bien dimensionada para su meta.", "There's nothing to change: the network is already well sized for its target.") : tx("No encontré cambios que mejoren la red con esos límites.", "I found no changes that improve the network within those limits."));
     return { texto: partes.join("\n") };
   }
   const cambios = op.cambios.map(textoCambio);
-  partes.push(`«${op.titulo}» necesita ${resumenCambios(op)}:\n${cambios.slice(0, 8).map((t) => `• ${t}`).join("\n")}${cambios.length > 8 ? `\n• y ${cambios.length - 8} cambios más (en el panel)` : ""}`);
-  partes.push("Le dejé la propuesta en el panel Resultado y en el mapa (las antenas de apoyo se ven como torres punteadas). ¿La aplico?");
+  partes.push(
+    tx(
+      `«${op.titulo}» necesita ${resumenCambios(op)}:\n${cambios.slice(0, 8).map((t) => `• ${t}`).join("\n")}${cambios.length > 8 ? `\n• y ${cambios.length - 8} cambios más (en el panel)` : ""}`,
+      `“${op.titulo}” needs ${resumenCambios(op)}:\n${cambios.slice(0, 8).map((t) => `• ${t}`).join("\n")}${cambios.length > 8 ? `\n• and ${cambios.length - 8} more changes (in the panel)` : ""}`,
+    ),
+  );
+  partes.push(tx("Le dejé la propuesta en el panel Resultado y en el mapa (las antenas de apoyo se ven como torres punteadas). ¿La aplico?", "I left the proposal in the Result panel and on the map (the support antennas appear as dotted towers). Shall I apply it?"));
   const acciones: Respuesta["acciones"] = a.opciones
     .map((x, k) => ({ x, k }))
     .filter(({ x }) => x.cambios.length)
-    .map(({ x, k }) => ({ texto: `Aplicar «${x.titulo}»${k === a.recomendada ? " (recomendada)" : ""}`, accion: "orden" as const, orden: { tipo: "aplicar-ajuste" as const, ajuste: a, indice: k, base } }));
-  acciones.push({ texto: "Descartar", accion: "orden", orden: { tipo: "descartar-ajuste" } });
+    .map(({ x, k }) => ({ texto: tx(`Aplicar «${x.titulo}»${k === a.recomendada ? " (recomendada)" : ""}`, `Apply “${x.titulo}”${k === a.recomendada ? " (recommended)" : ""}`), accion: "orden" as const, orden: { tipo: "aplicar-ajuste" as const, ajuste: a, indice: k, base } }));
+  acciones.push({ texto: tx("Descartar", "Discard"), accion: "orden", orden: { tipo: "descartar-ajuste" } });
   return { texto: partes.join("\n"), acciones };
 }
 
@@ -3045,14 +3487,17 @@ function ejecutarDiseno(o: Extract<Orden, { tipo: "disenar" }>, api: Api, antes:
     const m = api.mediciones().find((x) => x.id === id) ?? [...api.mediciones()].reverse().find((x) => x.tipo === "area");
     if (!m)
       return {
-        texto: "No encuentro un área medida. Dibújela con la regla (Área) y pídamelo de nuevo, o dígame el tamaño: «cubre 500 hectáreas alrededor del gateway con señal media en el 99 %».",
-        acciones: [{ texto: "Activar la regla", accion: "orden", orden: { tipo: "herramienta", herramienta: "regla" } }],
+        texto: tx(
+          "No encuentro un área medida. Dibújela con la regla (Área) y pídamelo de nuevo, o dígame el tamaño: «cubre 500 hectáreas alrededor del gateway con señal media en el 99 %».",
+          "I can't find a measured area. Draw it with the ruler (Area) and ask me again, or tell me the size: “cover 500 hectares around the gateway with fair signal in 99%”.",
+        ),
+        acciones: [{ texto: tx("Activar la regla", "Turn on the ruler"), accion: "orden", orden: { tipo: "herramienta", herramienta: "regla" } }],
       };
     poligono = m.puntos;
     dibujar = false;
     nombreArea = m.nombre;
     idArea = m.id;
-    donde = `en el área «${m.nombre}»`;
+    donde = tx(`en el área «${m.nombre}»`, `in the area “${m.nombre}”`);
   } else if (o.area.forma === "poligono") {
     const puntos = o.area.puntos;
     poligono = puntos;
@@ -3070,29 +3515,47 @@ function ejecutarDiseno(o: Extract<Orden, { tipo: "disenar" }>, api: Api, antes:
     if (a.centro.tipo === "coord") {
       centro = a.centro.coord;
       const lugar = api.ubicacion(centro.lat, centro.lon);
-      donde = a.centro.nombre ? `${a.centro.nombre.startsWith("a ") || a.centro.nombre.startsWith("en ") || a.centro.nombre.startsWith("alrededor") ? "" : "en "}${a.centro.nombre}` : `alrededor de ${aDecimal(centro.lat)}, ${aDecimal(centro.lon)}${lugar ? ` (${lugar})` : ""}`;
+      const nombre = a.centro.nombre;
+      // «a 10 km al norte de…», «en Cumaral (Meta)», «alrededor del gateway» ya traen su preposición (en inglés: «10 km
+      // north of…», «in…», «at…», «around…»)
+      const conPreposicion = nombre ? nombre.startsWith("a ") || nombre.startsWith("en ") || nombre.startsWith("alrededor") : false;
+      donde = nombre
+        ? tx(`${conPreposicion ? "" : "en "}${nombre}`, `${conPreposicion || /^(?:in|at|around|near)\b|^\d/.test(nombre) ? "" : "in "}${nombre}`)
+        : tx(`alrededor de ${aDecimal(centro.lat)}, ${aDecimal(centro.lon)}${lugar ? ` (${lugar})` : ""}`, `around ${aDecimal(centro.lat)}, ${aDecimal(centro.lon)}${lugar ? ` (${lugar})` : ""}`);
     } else if (a.centro.tipo === "gateway") {
       const g = antenas.find((x) => x.pasarela && x.activa);
       if (g) {
         centro = { lat: g.lat, lon: g.lon };
-        donde = `alrededor del gateway «${g.nombre}»`;
+        donde = tx(`alrededor del gateway «${g.nombre}»`, `around the gateway “${g.nombre}”`);
       }
     }
     if (!centro) {
       centro = api.centroMapa();
       const lugar = centro ? api.ubicacion(centro.lat, centro.lon) : null;
-      donde = `en el centro del mapa que está viendo${lugar ? `, en ${lugar}` : ""}`;
+      donde = tx(`en el centro del mapa que está viendo${lugar ? `, en ${lugar}` : ""}`, `at the center of the map you're viewing${lugar ? `, in ${lugar}` : ""}`);
     }
-    if (!centro) return { texto: "¿Dónde armo la malla? Dígame un municipio, una coordenada o dibuje el área con la regla." };
-    if (a.areaM2 < 5000) return { texto: "Esa área es muy pequeña (menos de media hectárea): con un solo nodo basta. Dígame un área más grande o ponga el gateway directamente." };
-    if (a.areaM2 > 3e9) return { texto: "Esa área es muy grande para diseñarla de una vez (más de 300.000 ha). Divídala en zonas y pídamelas por partes, por ejemplo por municipio." };
+    if (!centro) return { texto: tx("¿Dónde armo la malla? Dígame un municipio, una coordenada o dibuje el área con la regla.", "Where should I build the mesh? Tell me a municipality or a coordinate, or draw the area with the ruler.") };
+    if (a.areaM2 < 5000)
+      return {
+        texto: tx(
+          "Esa área es muy pequeña (menos de media hectárea): con un solo nodo basta. Dígame un área más grande o ponga el gateway directamente.",
+          "That area is very small (less than half a hectare): a single node is enough. Tell me a larger area or place the gateway directly.",
+        ),
+      };
+    if (a.areaM2 > 3e9)
+      return {
+        texto: tx(
+          "Esa área es muy grande para diseñarla de una vez (más de 300.000 ha). Divídala en zonas y pídamelas por partes, por ejemplo por municipio.",
+          "That area is too large to design at once (more than 300,000 ha). Split it into zones and ask me for them in parts, for example by municipality.",
+        ),
+      };
     poligono =
       a.forma === "circulo"
         ? conArea(poligonoCirculo(centro.lat, centro.lon, radioDeArea(a.areaM2)), a.areaM2)
         : conArea(poligonoRectangulo(centro.lat, centro.lon, a.anchoM ?? Math.sqrt(a.areaM2), a.altoM ?? Math.sqrt(a.areaM2)), a.areaM2);
   }
   const area = areaM2(poligono);
-  if (area > 3e9) return { texto: "Esa área es muy grande para diseñarla de una vez (más de 300.000 ha). Divídala en zonas y pídamelas por partes." };
+  if (area > 3e9) return { texto: tx("Esa área es muy grande para diseñarla de una vez (más de 300.000 ha). Divídala en zonas y pídamelas por partes.", "That area is too large to design at once (more than 300,000 ha). Split it into zones and ask me for them in parts.") };
   // El gateway que ya hay solo cuenta si alcanza el área; en otro municipio la malla lleva su propio gateway
   const gw = antenas.find((x) => x.pasarela && x.activa && sirveAlArea(poligono, x.lat, x.lon));
   // Presupuesto: cuántos repetidores caben (con el sitio del gateway si hay que ponerlo y las radios que pida la gente)
@@ -3105,33 +3568,45 @@ function ejecutarDiseno(o: Extract<Orden, { tipo: "disenar" }>, api: Api, antes:
     const sf = sfTrama(presetPorId(api.parametros().preset).sf);
     const radios = o.usuarios ? Math.min(4, capacidadPara(o.usuarios.n, sf).radios) - 1 : 0;
     const caben = repetidoresEnPresupuesto(o.presupuesto.cop, !gw, logistica, Math.max(0, radios));
-    const plata = o.presupuesto.dolares ? `USD ${Math.round(o.presupuesto.dolares).toLocaleString("es-CO")} (${pesosTrama(o.presupuesto.cop)})` : pesosTrama(o.presupuesto.cop);
+    const plata = o.presupuesto.dolares ? `USD ${numeroLocal(Math.round(o.presupuesto.dolares))} (${pesosTrama(o.presupuesto.cop)})` : pesosTrama(o.presupuesto.cop);
     if (caben === null)
       return {
-        texto: `Con ${plata} no alcanza ni para el sitio del gateway: con su torre de 12 m, la radio, el Starlink, la energía solar, la instalación y el transporte cuesta unos ${pesosTrama(costoGatewayInstalado(logistica))}. Dígame un presupuesto mayor o use un gateway que ya exista en la zona.`,
+        texto: tx(
+          `Con ${plata} no alcanza ni para el sitio del gateway: con su torre de 12 m, la radio, el Starlink, la energía solar, la instalación y el transporte cuesta unos ${pesosTrama(costoGatewayInstalado(logistica))}. Dígame un presupuesto mayor o use un gateway que ya exista en la zona.`,
+          `${plata} isn't enough even for the gateway site: with its 12 m tower, the radio, the Starlink, the solar power, the installation and the transport, it costs about ${pesosTrama(costoGatewayInstalado(logistica))}. Tell me a larger budget or use a gateway that already exists in the area.`,
+        ),
       };
     maxRepetidores = Math.min(maxRepetidores, caben);
-    conPresupuesto = ` Con ${plata} de presupuesto caben ${caben === 0 ? "solo el gateway (ningún repetidor)" : `hasta ${caben === 1 ? "1 repetidor" : `${caben} repetidores`}`}${gw ? "" : " además del gateway"}.`;
+    conPresupuesto = tx(
+      ` Con ${plata} de presupuesto caben ${caben === 0 ? "solo el gateway (ningún repetidor)" : `hasta ${caben === 1 ? "1 repetidor" : `${caben} repetidores`}`}${gw ? "" : " además del gateway"}.`,
+      ` A budget of ${plata} covers ${caben === 0 ? "only the gateway (no repeaters)" : `up to ${caben === 1 ? "1 repeater" : `${caben} repeaters`}`}${gw ? "" : " plus the gateway"}.`,
+    );
   }
   if (o.gateway && gw) api.editar(gw.id, { lat: Number(o.gateway.lat.toFixed(6)), lon: Number(o.gateway.lon.toFixed(6)), activa: true });
   const forma = o.area.forma === "cuadrado" ? "cuadrada" : o.area.forma === "rectangulo" ? "rectangular" : "";
+  const formaEn = o.area.forma === "cuadrado" ? "square" : o.area.forma === "rectangulo" ? "rectangular" : "";
   const medidaDicha = "medida" in o.area ? o.area.medida : undefined;
   if (dibujar) {
     // El nombre del área no repite su tamaño (la regla lo escribe al lado): el municipio, el radio pedido o el área dicha
-    nombreArea = `Área objetivo · ${("etiqueta" in o.area && o.area.etiqueta) || textoArea(area)}`;
+    const cual = ("etiqueta" in o.area && o.area.etiqueta) || textoArea(area);
+    nombreArea = tx(`Área objetivo · ${cual}`, `Target area · ${cual}`);
     idArea = `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
     api.medir({ id: idArea, nombre: nombreArea, tipo: "area", puntos: poligono, visible: true }, false);
   } else {
     const b = cajaPoligono(poligono);
     api.encuadrarCaja([b.oeste, b.sur, b.este, b.norte]);
   }
-  const meta = `${o.clases} en el ${fp(o.porcentaje)} % del área${o.respaldo ? ", con respaldo (cada punto con dos nodos)" : ""}`;
+  const meta = tx(`${o.clases} en el ${fp(o.porcentaje)} % del área${o.respaldo ? ", con respaldo (cada punto con dos nodos)" : ""}`, `${o.clases} in ${fp(o.porcentaje)}% of the area${o.respaldo ? ", with backup (each point covered by two nodes)" : ""}`);
   // Freno de rendimiento: un repetidor debe cubrir al menos ese % del área (menos exigente si se pidió una meta muy alta)
   const eficiencia = o.aCualquierCosto ? null : { minPct: o.porcentaje >= 99.5 ? 0.05 : o.porcentaje >= 98 ? 0.1 : 0.3 };
   const pedido = { area: poligono, margenDb: o.margenDb, porcentaje: o.porcentaje, respaldo: o.respaldo, alturaRepetidorM: o.alturaM, gateway: o.gateway, maxRepetidores, eficiencia };
   const luego = (async (): Promise<Respuesta> => {
     const d = await api.disenarArea(pedido);
-    if (!d) return { texto: "No pude calcular el diseño (el relieve no cargó o el motor se detuvo). Intente de nuevo en un momento.", acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: base }] };
+    if (!d)
+      return {
+        texto: tx("No pude calcular el diseño (el relieve no cargó o el motor se detuvo). Intente de nuevo en un momento.", "I couldn't calculate the design (the terrain didn't load or the engine stopped). Please try again in a moment."),
+        acciones: [{ texto: tx("Deshacer", "Undo"), accion: "deshacer", escenario: base }],
+      };
     const puestas = api.aplicarDiseno(d, o.alturaM);
     // El área del diseño queda como área objetivo: la factibilidad se mide ahí y con la meta pedida
     if (idArea) api.fijarAreaObjetivo(idArea, { metaPct: o.porcentaje, margenDb: o.margenDb, respaldo: o.respaldo || undefined });
@@ -3143,12 +3618,31 @@ function ejecutarDiseno(o: Extract<Orden, { tipo: "disenar" }>, api: Api, antes:
     return { texto: `${hecho.texto}\n\n${sigue.texto}`, acciones: [...(sigue.acciones ?? []), ...(hecho.acciones ?? [])].slice(0, 5) };
   })();
   return {
-    texto: `Diseño la malla para ${textoArea(area)}${medidaDicha ? `, ${medidaDicha},` : forma ? ` (área ${forma})` : ""} ${donde}: ${meta}.${o.usuarios ? ` Para ${o.usuarios.n.toLocaleString("es-CO")} ${o.usuarios.quienes}.` : ""}${conPresupuesto} ${dibujar ? "Dibujé el área en el mapa. " : ""}Busco con el relieve real dónde va ${gw || o.gateway ? "cada repetidor" : "el gateway y cada repetidor"} (torres de ${fn(o.alturaM)} m), siempre enlazados a la red.${o.despues ? ` Después pongo ${o.despues.zonas.n ?? 250} personas alrededor de cada gateway y repetidor (zonas de popularidad)${o.despues.estres ? (o.despues.estres.rampa ? " y hago la prueba de estrés de la hora pico, subiendo la carga hasta ver dónde se quiebra cada uno" : " y hago la prueba de estrés de la hora pico para ver si la red se revienta") : ""}.` : ""} ${area > 2e8 ? "Es un área grande: tardo un poco más." : "Tardo unos segundos."}`,
-    acciones: [{ texto: "Deshacer", accion: "deshacer", escenario: base }],
+    texto: tx(
+      `Diseño la malla para ${textoArea(area)}${medidaDicha ? `, ${medidaDicha},` : forma ? ` (área ${forma})` : ""} ${donde}: ${meta}.${o.usuarios ? ` Para ${numeroLocal(o.usuarios.n)} ${o.usuarios.quienes}.` : ""}${conPresupuesto} ${dibujar ? "Dibujé el área en el mapa. " : ""}Busco con el relieve real dónde va ${gw || o.gateway ? "cada repetidor" : "el gateway y cada repetidor"} (torres de ${fn(o.alturaM)} m), siempre enlazados a la red.${o.despues ? ` Después pongo ${o.despues.zonas.n ?? 250} personas alrededor de cada gateway y repetidor (zonas de popularidad)${o.despues.estres ? (o.despues.estres.rampa ? " y hago la prueba de estrés de la hora pico, subiendo la carga hasta ver dónde se quiebra cada uno" : " y hago la prueba de estrés de la hora pico para ver si la red se revienta") : ""}.` : ""} ${area > 2e8 ? "Es un área grande: tardo un poco más." : "Tardo unos segundos."}`,
+      `I'm designing the mesh for ${textoArea(area)}${medidaDicha ? `, ${medidaDicha},` : formaEn ? ` (${formaEn} area)` : ""} ${donde}: ${meta}.${o.usuarios ? ` For ${numeroLocal(o.usuarios.n)} ${GENTE_INGLES[o.usuarios.quienes] ?? o.usuarios.quienes}.` : ""}${conPresupuesto} ${dibujar ? "I drew the area on the map. " : ""}With the real terrain, I'm finding where ${gw || o.gateway ? "each repeater goes" : "the gateway and each repeater go"} (${fn(o.alturaM)} m towers), always linked to the network.${o.despues ? ` Then I'll place ${o.despues.zonas.n ?? 250} people around each gateway and repeater (popularity zones)${o.despues.estres ? (o.despues.estres.rampa ? " and run the peak-hour stress test, raising the load until I see where each one breaks" : " and run the peak-hour stress test to see whether the network gets overloaded") : ""}.` : ""} ${area > 2e8 ? "It's a large area: this will take a little longer." : "This takes a few seconds."}`,
+    ),
+    acciones: [{ texto: tx("Deshacer", "Undo"), accion: "deshacer", escenario: base }],
     deshacer: base,
     luego,
   };
 }
+
+/** La gente a atender («familias», «usuarios»…) en inglés, para mostrarla. */
+const GENTE_INGLES: Record<string, string> = {
+  usuario: "user",
+  usuarios: "users",
+  personas: "people",
+  familias: "families",
+  hogares: "households",
+  billeteras: "wallets",
+  clientes: "customers",
+  habitantes: "residents",
+  suscriptores: "subscribers",
+  dispositivos: "devices",
+  sensores: "sensors",
+  abonados: "subscribers",
+};
 
 const PRUEBA_HORA_PICO = "pon 250 personas alrededor de cada gateway y repetidor y haz la prueba de estrés";
 
@@ -3163,14 +3657,30 @@ function logisticaEn(api: Api, lat: number, lon: number): { logistica: number; d
 /** La inversión y la operación de una red, en viñetas. */
 function lineasCosto(c: CostoRed, departamento: string | null): string[] {
   const partes = [
-    c.gateways ? `${c.gateways === 1 ? "el sitio del gateway" : `${c.gateways} sitios de gateway`} (torre de 12 m, mini PC, radio, Starlink y energía solar) ${pesosTrama(c.inversion.sitios)}` : "",
-    c.repetidores ? `${c.repetidores === 1 ? "1 repetidor solar" : `${c.repetidores} repetidores solares`} (P1 con antena de 8 dBi en tubo de 6 m) ${pesosTrama(c.inversion.repetidores)}` : "",
-    c.personas ? `${c.personas === 1 ? "1 billetera" : `${c.personas} billeteras`} ${pesosTrama(c.inversion.personas)}` : "",
-    `instalación y transporte ${pesosTrama(c.inversion.instalacion + c.inversion.transporte)}${departamento && c.logistica !== 1 ? ` (con la logística de ${departamento})` : ""}`,
+    c.gateways
+      ? tx(
+          `${c.gateways === 1 ? "el sitio del gateway" : `${c.gateways} sitios de gateway`} (torre de 12 m, mini PC, radio, Starlink y energía solar) ${pesosTrama(c.inversion.sitios)}`,
+          `${c.gateways === 1 ? "the gateway site" : `${c.gateways} gateway sites`} (12 m tower, mini PC, radio, Starlink and solar power) ${pesosTrama(c.inversion.sitios)}`,
+        )
+      : "",
+    c.repetidores
+      ? tx(
+          `${c.repetidores === 1 ? "1 repetidor solar" : `${c.repetidores} repetidores solares`} (P1 con antena de 8 dBi en tubo de 6 m) ${pesosTrama(c.inversion.repetidores)}`,
+          `${c.repetidores === 1 ? "1 solar repeater" : `${c.repetidores} solar repeaters`} (P1 with an 8 dBi antenna on a 6 m pole) ${pesosTrama(c.inversion.repetidores)}`,
+        )
+      : "",
+    c.personas ? tx(`${c.personas === 1 ? "1 billetera" : `${c.personas} billeteras`} ${pesosTrama(c.inversion.personas)}`, `${c.personas === 1 ? "1 wallet" : `${c.personas} wallets`} ${pesosTrama(c.inversion.personas)}`) : "",
+    tx(
+      `instalación y transporte ${pesosTrama(c.inversion.instalacion + c.inversion.transporte)}${departamento && c.logistica !== 1 ? ` (con la logística de ${departamento})` : ""}`,
+      `installation and transport ${pesosTrama(c.inversion.instalacion + c.inversion.transporte)}${departamento && c.logistica !== 1 ? ` (with the logistics for ${departamento})` : ""}`,
+    ),
   ].filter(Boolean);
   return [
-    `• Inversión: unos ${pesosTrama(c.inversion.total)}: ${partes.join("; ")}.`,
-    `• Operación: unos ${pesosTrama(c.mensual.total)} al mes (internet${c.gateways ? " del Starlink" : ""}, mantenimiento${c.repetidores ? ", baterías y visitas a los repetidores" : ""}${c.personas ? " y soporte" : ""}). Con la inversión repartida en 5 años, la red cuesta unos ${pesosTrama(c.totalMes)} al mes.`,
+    tx(`• Inversión: unos ${pesosTrama(c.inversion.total)}: ${partes.join("; ")}.`, `• Investment: about ${pesosTrama(c.inversion.total)}: ${partes.join("; ")}.`),
+    tx(
+      `• Operación: unos ${pesosTrama(c.mensual.total)} al mes (internet${c.gateways ? " del Starlink" : ""}, mantenimiento${c.repetidores ? ", baterías y visitas a los repetidores" : ""}${c.personas ? " y soporte" : ""}). Con la inversión repartida en 5 años, la red cuesta unos ${pesosTrama(c.totalMes)} al mes.`,
+      `• Operation: about ${pesosTrama(c.mensual.total)} a month (${c.gateways ? "Starlink " : ""}internet, maintenance${c.repetidores ? ", batteries and visits to the repeaters" : ""}${c.personas ? " and support" : ""}). With the investment spread over 5 years, the network costs about ${pesosTrama(c.totalMes)} a month.`,
+    ),
   ];
 }
 
@@ -3187,16 +3697,19 @@ function viabilidadDiseno(o: Extract<Orden, { tipo: "disenar" }>, puestas: Anten
   const firme = enlaces.length ? Math.min(...enlaces) : null;
   const tecnica = [
     r ? `${r.factibilidad.titulo.toLowerCase()} (${r.factibilidad.puntaje}/100)` : "",
-    `${fp(pct)} % del área con ${o.clases.replace(/ \(.*\)$/, "")}`,
-    firme !== null ? `enlaces de al menos ${f1(firme, 0)} dB${firme >= 30 ? " (firmes)" : " (alguno débil: conviene un apoyo)"}` : "",
-    `máximo ${maxSaltos} ${maxSaltos === 1 ? "salto" : "saltos"} al gateway (límite ${limite})`,
+    tx(`${fp(pct)} % del área con ${o.clases.replace(/ \(.*\)$/, "")}`, `${fp(pct)}% of the area with ${o.clases.replace(/ \(.*\)$/, "")}`),
+    firme !== null ? tx(`enlaces de al menos ${f1(firme, 0)} dB${firme >= 30 ? " (firmes)" : " (alguno débil: conviene un apoyo)"}`, `links of at least ${f1(firme, 0)} dB${firme >= 30 ? " (solid)" : " (one is weak: a support antenna would help)"}`) : "",
+    tx(`máximo ${maxSaltos} ${maxSaltos === 1 ? "salto" : "saltos"} al gateway (límite ${limite})`, `at most ${maxSaltos} ${maxSaltos === 1 ? "hop" : "hops"} to the gateway (limit ${limite})`),
   ].filter(Boolean);
   return [
     "",
-    "Viabilidad de la red:",
-    `• Técnica: ${tecnica.join(", ")}.`,
+    tx("Viabilidad de la red:", "Network viability:"),
+    tx(`• Técnica: ${tecnica.join(", ")}.`, `• Technical: ${tecnica.join(", ")}.`),
     ...lineasCosto(c, departamento),
-    "• Sostenible: todo funciona con energía solar (los repetidores P1 traen su panel y el gateway su kit solar), sin depender de la red eléctrica, y con la menor cantidad de repetidores que cumple la meta.",
+    tx(
+      "• Sostenible: todo funciona con energía solar (los repetidores P1 traen su panel y el gateway su kit solar), sin depender de la red eléctrica, y con la menor cantidad de repetidores que cumple la meta.",
+      "• Sustainable: everything runs on solar power (the P1 repeaters come with their own panel and the gateway with its solar kit), without depending on the power grid, and with the fewest repeaters that meet the target.",
+    ),
   ];
 }
 
@@ -3210,8 +3723,11 @@ function textoDiseno(o: Extract<Orden, { tipo: "disenar" }>, d: Diseno, puestas:
   const partes: string[] = [];
   partes.push(
     ok
-      ? `Listo: la malla cubre el ${fp(pct)} % de las ${textoArea(area)} con ${o.clases}${o.respaldo ? " desde al menos dos nodos (respaldo)" : ""}. Meta cumplida (${fp(o.porcentaje)} %).`
-      : `Llegué al ${fp(pct)} % de las ${textoArea(area)} con ${o.clases}; la meta era ${fp(o.porcentaje)} %.`,
+      ? tx(
+          `Listo: la malla cubre el ${fp(pct)} % de las ${textoArea(area)} con ${o.clases}${o.respaldo ? " desde al menos dos nodos (respaldo)" : ""}. Meta cumplida (${fp(o.porcentaje)} %).`,
+          `Done: the mesh covers ${fp(pct)}% of the ${textoArea(area)} with ${o.clases}${o.respaldo ? " from at least two nodes (backup)" : ""}. Target met (${fp(o.porcentaje)}%).`,
+        )
+      : tx(`Llegué al ${fp(pct)} % de las ${textoArea(area)} con ${o.clases}; la meta era ${fp(o.porcentaje)} %.`, `I reached ${fp(pct)}% of the ${textoArea(area)} with ${o.clases}; the target was ${fp(o.porcentaje)}%.`),
   );
   const lugarGw = gw ? api.ubicacion(gw.lat, gw.lon) : null;
   const nodosR = r ? new Map(r.nodos.map((x) => [x.id, x])) : null;
@@ -3219,23 +3735,38 @@ function textoDiseno(o: Extract<Orden, { tipo: "disenar" }>, d: Diseno, puestas:
   const sinRuta = reps.filter((_, i) => saltos[i] === null).length;
   const maxSaltos = Math.max(0, ...saltos.filter((x): x is number => x !== null));
   const enlaces = d.nodos.filter((x) => x.pieza === "repetidor" && x.enlaceDb !== null).map((x) => x.enlaceDb!);
-  const gwTxt = gw ? `Puse el gateway «${gw.nombre}» en ${aDecimal(gw.lat)}, ${aDecimal(gw.lon)}${lugarGw ? `, en ${lugarGw},` : ""} donde más área cubre; si el internet entra en otro sitio, dígame dónde y lo rehago.` : "";
-  if (!reps.length) partes.push(`${gwTxt ? `${gwTxt} ` : ""}${gw ? "Con el gateway" : "Con la red que ya había"} basta: no hizo falta ningún repetidor.`);
+  const gwTxt = gw
+    ? tx(
+        `Puse el gateway «${gw.nombre}» en ${aDecimal(gw.lat)}, ${aDecimal(gw.lon)}${lugarGw ? `, en ${lugarGw},` : ""} donde más área cubre; si el internet entra en otro sitio, dígame dónde y lo rehago.`,
+        `I placed the gateway “${gw.nombre}” at ${aDecimal(gw.lat)}, ${aDecimal(gw.lon)}${lugarGw ? `, in ${lugarGw},` : ""} where it covers the most area; if the internet comes in at another site, tell me where and I'll redo it.`,
+      )
+    : "";
+  if (!reps.length) partes.push(tx(`${gwTxt ? `${gwTxt} ` : ""}${gw ? "Con el gateway" : "Con la red que ya había"} basta: no hizo falta ningún repetidor.`, `${gwTxt ? `${gwTxt} ` : ""}${gw ? "The gateway" : "The existing network"} is enough: no repeater was needed.`));
   else {
-    const lista = reps.length <= 4 ? reps.map((a) => a.nombre).join(", ") : `${reps[0].nombre} a ${reps[reps.length - 1].nombre}`;
+    const lista = reps.length <= 4 ? reps.map((a) => a.nombre).join(", ") : tx(`${reps[0].nombre} a ${reps[reps.length - 1].nombre}`, `${reps[0].nombre} to ${reps[reps.length - 1].nombre}`);
     const uno = reps.length === 1;
-    const saltosTxt = `${maxSaltos} ${maxSaltos === 1 ? "salto" : "saltos"}`;
+    const saltosTxt = tx(`${maxSaltos} ${maxSaltos === 1 ? "salto" : "saltos"}`, `${maxSaltos} ${maxSaltos === 1 ? "hop" : "hops"}`);
+    const limite = api.parametros().limiteSaltos;
     partes.push(
-      `${gwTxt ? `${gwTxt} ` : ""}Sembré ${uno ? "1 repetidor" : `${reps.length} repetidores`} de ${fn(o.alturaM)} m (${lista}), ${uno ? "en el sitio que más área nueva cubría, enlazado" : "cada uno en el sitio que más área nueva cubría y enlazado"} a la red${enlaces.length ? (uno ? ` con ${f1(enlaces[0], 0)} dB` : ` con al menos ${f1(Math.min(...enlaces), 0)} dB`) : ""}${nodosR ? (uno ? `; llega al gateway en ${saltosTxt}` : `; llegan al gateway en máximo ${saltosTxt}`) : ""}.${sinRuta ? ` Ojo: ${sinRuta} no ${sinRuta === 1 ? "quedó" : "quedaron"} con ruta al gateway en la simulación.` : ""}${maxSaltos > api.parametros().limiteSaltos ? ` ${uno ? "Pasa" : "Algunos pasan"} del límite de ${api.parametros().limiteSaltos} saltos: súbalo o use torres más altas.` : ""}`,
+      tx(
+        `${gwTxt ? `${gwTxt} ` : ""}Sembré ${uno ? "1 repetidor" : `${reps.length} repetidores`} de ${fn(o.alturaM)} m (${lista}), ${uno ? "en el sitio que más área nueva cubría, enlazado" : "cada uno en el sitio que más área nueva cubría y enlazado"} a la red${enlaces.length ? (uno ? ` con ${f1(enlaces[0], 0)} dB` : ` con al menos ${f1(Math.min(...enlaces), 0)} dB`) : ""}${nodosR ? (uno ? `; llega al gateway en ${saltosTxt}` : `; llegan al gateway en máximo ${saltosTxt}`) : ""}.${sinRuta ? ` Ojo: ${sinRuta} no ${sinRuta === 1 ? "quedó" : "quedaron"} con ruta al gateway en la simulación.` : ""}${maxSaltos > limite ? ` ${uno ? "Pasa" : "Algunos pasan"} del límite de ${limite} saltos: súbalo o use torres más altas.` : ""}`,
+        `${gwTxt ? `${gwTxt} ` : ""}I seeded ${uno ? "1 repeater" : `${reps.length} repeaters`} of ${fn(o.alturaM)} m (${lista}), ${uno ? "at the site that covered the most new area, linked" : "each at the site that covered the most new area and linked"} to the network${enlaces.length ? (uno ? ` with ${f1(enlaces[0], 0)} dB` : ` with at least ${f1(Math.min(...enlaces), 0)} dB`) : ""}${nodosR ? (uno ? `; it reaches the gateway in ${saltosTxt}` : `; they reach the gateway in at most ${saltosTxt}`) : ""}.${sinRuta ? ` Note: ${sinRuta} ${sinRuta === 1 ? "was" : "were"} left without a route to the gateway in the simulation.` : ""}${maxSaltos > limite ? ` ${uno ? "It goes" : "Some go"} over the limit of ${limite} hops: raise it or use taller towers.` : ""}`,
+      ),
     );
   }
-  if (real) partes.push(o.respaldo ? `Respaldo dentro del área (señal del segundo mejor nodo): ${resumenClases(real)}.` : `Dentro del área: ${resumenClases(real)}.`);
+  if (real) partes.push(o.respaldo ? tx(`Respaldo dentro del área (señal del segundo mejor nodo): ${resumenClases(real)}.`, `Backup inside the area (signal from the second-best node): ${resumenClases(real)}.`) : tx(`Dentro del área: ${resumenClases(real)}.`, `Inside the area: ${resumenClases(real)}.`));
   // Cuántos repetidores hicieron falta para cada nivel (el último tramo suele ser el más caro)
   const curva = d.nodos.filter((x) => x.pieza === "repetidor").map((x) => x.coberturaPct);
   if (curva.length >= 4 && o.porcentaje > 97) {
     const a95 = curva.findIndex((v) => v >= 95);
     const a99 = curva.findIndex((v) => v >= 99);
-    if (a95 >= 0 && a99 > a95 + 1) partes.push(`Con ${a95 + 1} ${a95 === 0 ? "repetidor" : "repetidores"} ya se llegaba al 95 % y con ${a99 + 1} al 99 %; los demás tapan huecos pequeños detrás de lomas y en hondonadas.`);
+    if (a95 >= 0 && a99 > a95 + 1)
+      partes.push(
+        tx(
+          `Con ${a95 + 1} ${a95 === 0 ? "repetidor" : "repetidores"} ya se llegaba al 95 % y con ${a99 + 1} al 99 %; los demás tapan huecos pequeños detrás de lomas y en hondonadas.`,
+          `${a95 + 1} ${a95 === 0 ? "repeater" : "repeaters"} already reached 95% and ${a99 + 1} reached 99%; the rest fill small gaps behind hills and in hollows.`,
+        ),
+      );
   }
   if (!ok && d.motivo) partes.push(d.motivo);
   if (o.sostenible) partes.push(...viabilidadDiseno(o, puestas, r, pct, enlaces, maxSaltos, poligono, api));
@@ -3243,32 +3774,51 @@ function textoDiseno(o: Extract<Orden, { tipo: "disenar" }>, d: Diseno, puestas:
   // Sin simulación, los saltos son los del diseño (nadie queda «sin ruta» por no haber simulado)
   const analisis = analisisDiseno(o, d, puestas, r, pct, enlaces, r ? maxSaltos : Math.max(0, ...d.nodos.map((x) => x.saltos)), r ? sinRuta : 0, poligono, api);
   partes.push("", ...textoAnalisis(analisis.a, !o.sostenible));
-  partes.push(ok ? "Antes de instalar, revise en campo el acceso, la energía y que nada tape las antenas." : "Puedo probar con torres más altas, o puede aceptar este resultado.");
-  // Al rehacer sobre la misma área se conserva su nombre («radio de 5 millas (8,05 km)», «Barranca de Upía (Meta)»)
-  const etiqueta = nombreArea.startsWith("Área objetivo · ") ? nombreArea.slice("Área objetivo · ".length) : undefined;
-  const conPoligono = (cambios: Partial<Extract<Orden, { tipo: "disenar" }>>): Orden => ({ ...o, area: { forma: "poligono", puntos: poligono, nombre: `en el área «${nombreArea}»`, dibujar: Boolean(cambios.reemplazar), ...(etiqueta ? { etiqueta } : {}) }, ...cambios });
-  const acciones: Respuesta["acciones"] = [{ texto: "Deshacer", accion: "deshacer", escenario: base }];
+  partes.push(
+    ok
+      ? tx("Antes de instalar, revise en campo el acceso, la energía y que nada tape las antenas.", "Before installing, check the access and the power in the field, and that nothing blocks the antennas.")
+      : tx("Puedo probar con torres más altas, o puede aceptar este resultado.", "I can try with taller towers, or you can accept this result."),
+  );
+  // Al rehacer sobre la misma área se conserva su nombre («radio de 5 millas (8,05 km)», «Barranca de Upía (Meta)»);
+  // el nombre pudo ponerse en cualquiera de los dos idiomas
+  const prefijo = ["Área objetivo · ", "Target area · "].find((p) => nombreArea.startsWith(p));
+  const etiqueta = prefijo ? nombreArea.slice(prefijo.length) : undefined;
+  const conPoligono = (cambios: Partial<Extract<Orden, { tipo: "disenar" }>>): Orden => ({
+    ...o,
+    area: { forma: "poligono", puntos: poligono, nombre: tx(`en el área «${nombreArea}»`, `in the area “${nombreArea}”`), dibujar: Boolean(cambios.reemplazar), ...(etiqueta ? { etiqueta } : {}) },
+    ...cambios,
+  });
+  const acciones: Respuesta["acciones"] = [{ texto: tx("Deshacer", "Undo"), accion: "deshacer", escenario: base }];
   // La opción económica (menos repetidores por unos puntos de cobertura) y, si frenó, seguir hasta la meta
-  if (analisis.economica) acciones.push({ texto: `Usar la opción económica (${analisis.economica.repetidores} ${analisis.economica.repetidores === 1 ? "repetidor" : "repetidores"}, ≈ ${fp(analisis.economica.coberturaPct)} %)`, accion: "orden", orden: analisis.economica.orden });
-  if (d.frenado && !ok) acciones.push({ texto: "Seguir hasta la meta aunque cueste más", accion: "orden", orden: conPoligono({ aCualquierCosto: true, reemplazar: base }) });
+  if (analisis.economica)
+    acciones.push({
+      texto: tx(
+        `Usar la opción económica (${analisis.economica.repetidores} ${analisis.economica.repetidores === 1 ? "repetidor" : "repetidores"}, ≈ ${fp(analisis.economica.coberturaPct)} %)`,
+        `Use the economical option (${analisis.economica.repetidores} ${analisis.economica.repetidores === 1 ? "repeater" : "repeaters"}, ≈ ${fp(analisis.economica.coberturaPct)}%)`,
+      ),
+      accion: "orden",
+      orden: analisis.economica.orden,
+    });
+  if (d.frenado && !ok) acciones.push({ texto: tx("Seguir hasta la meta aunque cueste más", "Keep going to the target even if it costs more"), accion: "orden", orden: conPoligono({ aCualquierCosto: true, reemplazar: base }) });
   if (!ok) {
-    if (d.motivo?.startsWith("Llegué al máximo") && o.maxRepetidores < 200) {
+    // El motivo llega del motor en el idioma de la pantalla: se reconoce por su texto en español
+    if (retraducir(d, "es").motivo?.startsWith("Llegué al máximo") && o.maxRepetidores < 200) {
       const mas = Math.min(200, Math.max(60, o.maxRepetidores * 3));
-      acciones.push({ texto: `Rehacer con hasta ${mas} repetidores`, accion: "orden", orden: conPoligono({ maxRepetidores: mas, reemplazar: base }) });
+      acciones.push({ texto: tx(`Rehacer con hasta ${mas} repetidores`, `Redo with up to ${mas} repeaters`), accion: "orden", orden: conPoligono({ maxRepetidores: mas, reemplazar: base }) });
     }
-    for (const h of [12, 20, 30].filter((x) => x > o.alturaM).slice(0, 2)) acciones.push({ texto: `Rehacer con torres de ${h} m`, accion: "orden", orden: conPoligono({ alturaM: h, reemplazar: base }) });
-    if (d.huecos[0]) acciones.push({ texto: "Ver un punto sin cobertura", accion: "orden", orden: { tipo: "ir", coord: { lat: d.huecos[0][1], lon: d.huecos[0][0] } } });
-    acciones.push({ texto: "Ajústamelo (alturas, lomas y apoyos)", accion: "orden", orden: { tipo: "ajustar", aplicar: false, opcion: "recomendada", opciones: {}, avisos: [] } });
+    for (const h of [12, 20, 30].filter((x) => x > o.alturaM).slice(0, 2)) acciones.push({ texto: tx(`Rehacer con torres de ${h} m`, `Redo with ${h} m towers`), accion: "orden", orden: conPoligono({ alturaM: h, reemplazar: base }) });
+    if (d.huecos[0]) acciones.push({ texto: tx("Ver un punto sin cobertura", "View a point without coverage"), accion: "orden", orden: { tipo: "ir", coord: { lat: d.huecos[0][1], lon: d.huecos[0][0] } } });
+    acciones.push({ texto: tx("Ajústamelo (alturas, lomas y apoyos)", "Adjust it for me (heights, hills and support antennas)"), accion: "orden", orden: { tipo: "ajustar", aplicar: false, opcion: "recomendada", opciones: {}, avisos: [] } });
   } else {
     // Una red sostenible también tiene que aguantar a la gente: la hora pico con 250 personas por punto
     const hora = o.sostenible ? interpretarCapacidad(PRUEBA_HORA_PICO, n(PRUEBA_HORA_PICO), api) : null;
-    if (hora) acciones.push({ texto: "Probar la hora pico (250 personas por punto)", accion: "orden", orden: hora });
-    acciones.push({ texto: "Optimizar el costo (misma cobertura)", accion: "orden", orden: { tipo: "ajustar", aplicar: false, opcion: "recomendada", opciones: {}, avisos: [] } });
-    if (!o.respaldo) acciones.push({ texto: "Agregar respaldo (dos nodos por punto)", accion: "orden", orden: conPoligono({ respaldo: true }) });
-    if (o.porcentaje < 99.9) acciones.push({ texto: "Subir la meta a 99,9 %", accion: "orden", orden: conPoligono({ porcentaje: 99.9 }) });
+    if (hora) acciones.push({ texto: tx("Probar la hora pico (250 personas por punto)", "Test the peak hour (250 people per point)"), accion: "orden", orden: hora });
+    acciones.push({ texto: tx("Optimizar el costo (misma cobertura)", "Optimize the cost (same coverage)"), accion: "orden", orden: { tipo: "ajustar", aplicar: false, opcion: "recomendada", opciones: {}, avisos: [] } });
+    if (!o.respaldo) acciones.push({ texto: tx("Agregar respaldo (dos nodos por punto)", "Add backup (two nodes per point)"), accion: "orden", orden: conPoligono({ respaldo: true }) });
+    if (o.porcentaje < 99.9) acciones.push({ texto: tx("Subir la meta a 99,9 %", "Raise the target to 99.9%"), accion: "orden", orden: conPoligono({ porcentaje: 99.9 }) });
   }
   // Recién desplegada: Melki la puede explicar punto por punto (por qué cada antena quedó ahí y qué refuerzos necesita)
-  acciones.push({ texto: "Explícame la red punto por punto", accion: "recorrido-red" });
+  acciones.push({ texto: tx("Explícame la red punto por punto", "Explain the network point by point"), accion: "recorrido-red" });
   return { texto: partes.join("\n"), acciones };
 }
 

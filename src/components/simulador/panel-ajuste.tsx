@@ -11,8 +11,10 @@
 import { Check, ChevronDown, Sparkles, Star, Undo2, X } from "lucide-react";
 import { useState } from "react";
 
+import { tx } from "@/lib/idioma";
 import { textoCambio, type Ajuste } from "@/lib/radio/ajuste";
 import type { Antena, Nivel } from "@/lib/radio/tipos";
+import { useIdioma } from "@/lib/use-idioma";
 
 import { Boton, fmt } from "./ui";
 
@@ -25,7 +27,7 @@ export type FaseAjuste =
   | { fase: "error"; texto: string };
 
 const fp = (v: number) => {
-  if (v >= 99.95 && v < 100) return "99,9";
+  if (v >= 99.95 && v < 100) return tx("99,9", "99.9");
   const t = Math.floor(v * 10) / 10;
   return Number.isInteger(t) ? String(t) : fmt(t, 1);
 };
@@ -41,25 +43,32 @@ type Props = {
 };
 
 export function AjusteAutomatico({ nivel, ajuste, onAjustar, onElegir, onAplicar, onDescartar, onDeshacer }: Props) {
+  useIdioma();
   const factible = nivel === "factible";
   return (
     <div className="mt-3" data-tour="ajuste">
       {(ajuste.fase === "nada" || ajuste.fase === "error" || ajuste.fase === "aplicada") && (
         <div>
           <Boton variante={factible ? "secundario" : "principal"} onClick={onAjustar} tour="boton-ajustar">
-            <Sparkles size={16} /> {factible ? "Optimizar la red" : "Ajústamelo automáticamente"}
+            <Sparkles size={16} /> {factible ? tx("Optimizar la red", "Optimize the network") : tx("Ajústamelo automáticamente", "Adjust it for me")}
           </Boton>
           <p className="mt-1.5 text-[12px] leading-snug text-tenue">
             {factible
-              ? "Busca la misma cobertura con menos infraestructura: torres más bajas, nodos que sobran."
-              : "Busca la red factible con la mejor relación cobertura–costo: alturas hasta 30 m, lomas cercanas, tipo de antena y antenas de apoyo."}
+              ? tx("Busca la misma cobertura con menos infraestructura: torres más bajas, nodos que sobran.", "Looks for the same coverage with less infrastructure: lower towers, nodes that aren't needed.")
+              : tx(
+                  "Busca la red factible con la mejor relación cobertura–costo: alturas hasta 30 m, lomas cercanas, tipo de antena y antenas de apoyo.",
+                  "Looks for the feasible network with the best coverage–cost ratio: heights up to 30 m, nearby hills, antenna type and support antennas.",
+                )}
           </p>
         </div>
       )}
       {ajuste.fase === "buscando" && (
         <p className="flex items-center gap-2 text-[13px] text-carbon-2" role="status">
           <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-salvia border-t-transparent" aria-hidden="true" />
-          Analizando alturas, lomas cercanas, tipo de antena y antenas de apoyo con el relieve real… (unos segundos)
+          {tx(
+            "Analizando alturas, lomas cercanas, tipo de antena y antenas de apoyo con el relieve real… (unos segundos)",
+            "Analyzing heights, nearby hills, antenna type and support antennas with the real terrain… (a few seconds)",
+          )}
         </p>
       )}
       {ajuste.fase === "error" && (
@@ -70,9 +79,11 @@ export function AjusteAutomatico({ nivel, ajuste, onAjustar, onElegir, onAplicar
       {ajuste.fase === "aplicada" && (
         <p className="mt-2 flex items-center gap-2 rounded-lg bg-[#E3F1E1] px-2.5 py-2 text-[13px] text-carbon-2" role="status">
           <Check size={16} className="shrink-0 text-buena" />
-          <span className="min-w-0 flex-1">Se aplicó «{ajuste.titulo}». El resultado de arriba ya es el de la red ajustada.</span>
+          <span className="min-w-0 flex-1">
+            {tx(`Se aplicó «${ajuste.titulo}». El resultado de arriba ya es el de la red ajustada.`, `Applied “${ajuste.titulo}”. The result above now reflects the adjusted network.`)}
+          </span>
           <button type="button" onClick={onDeshacer} className="flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[12.5px] font-medium ring-1 ring-linea hover:bg-white">
-            <Undo2 size={13} /> Deshacer
+            <Undo2 size={13} /> {tx("Deshacer", "Undo")}
           </button>
         </p>
       )}
@@ -82,21 +93,25 @@ export function AjusteAutomatico({ nivel, ajuste, onAjustar, onElegir, onAplicar
 }
 
 function Propuesta({ ajuste: a, elegida, onElegir, onAplicar, onDescartar }: { ajuste: Ajuste; elegida: number; onElegir: (i: number) => void; onAplicar: () => void; onDescartar: () => void }) {
+  useIdioma();
   const [verAnalisis, setVerAnalisis] = useState(false);
   const o = a.opciones[elegida] ?? a.opciones[a.recomendada];
-  const senal = a.margenDb >= 45 ? "señal buena" : a.margenDb >= 37 ? "señal estable o mejor" : "señal media o mejor";
-  const zona = a.area.tipo === "objetivo" ? `«${a.area.nombre}»` : "la zona de la red";
+  const senal = a.margenDb >= 45 ? tx("señal buena", "good signal") : a.margenDb >= 37 ? tx("señal estable o mejor", "stable signal or better") : tx("señal media o mejor", "fair signal or better");
+  const zona = a.area.tipo === "objetivo" ? tx(`«${a.area.nombre}»`, `“${a.area.nombre}”`) : tx("la zona de la red", "the network area");
   return (
-    <div className="space-y-2.5 rounded-lg bg-white p-2.5 ring-1 ring-melki/60" data-tour="propuesta-ajuste" aria-label="Propuesta de ajuste">
+    <div className="space-y-2.5 rounded-lg bg-white p-2.5 ring-1 ring-melki/60" data-tour="propuesta-ajuste" aria-label={tx("Propuesta de ajuste", "Adjustment proposal")}>
       <div>
-        <p className="font-cond text-[16px] leading-tight font-semibold">{a.modo === "optimizar" ? "Optimización de la red" : "Propuesta de ajuste"}</p>
+        <p className="font-cond text-[16px] leading-tight font-semibold">{a.modo === "optimizar" ? tx("Optimización de la red", "Network optimization") : tx("Propuesta de ajuste", "Adjustment proposal")}</p>
         <p className="text-[12px] leading-snug text-tenue">
-          Meta: {fp(a.metaPct)} % de {zona} con {senal} (≥ {a.margenDb} dB), todos los nodos llegando al gateway por enlaces de 30 dB o más. Torres de hasta {fmt(a.alturaMaxM, 0)} m.
+          {tx(
+            `Meta: ${fp(a.metaPct)} % de ${zona} con ${senal} (≥ ${a.margenDb} dB), todos los nodos llegando al gateway por enlaces de 30 dB o más. Torres de hasta ${fmt(a.alturaMaxM, 0)} m.`,
+            `Target: ${fp(a.metaPct)}% of ${zona} with ${senal} (≥ ${a.margenDb} dB), every node reaching the gateway over links of 30 dB or more. Towers up to ${fmt(a.alturaMaxM, 0)} m.`,
+          )}
         </p>
       </div>
 
       {a.opciones.length > 1 && (
-        <div className="flex flex-wrap gap-1" role="tablist" aria-label="Opciones">
+        <div className="flex flex-wrap gap-1" role="tablist" aria-label={tx("Opciones", "Options")}>
           {a.opciones.map((x, i) => (
             <button
               key={x.id}
@@ -106,7 +121,7 @@ function Propuesta({ ajuste: a, elegida, onElegir, onAplicar, onDescartar }: { a
               onClick={() => onElegir(i)}
               className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[12.5px] font-medium ring-1 transition-colors ${i === elegida ? "bg-carbon text-white ring-carbon" : "bg-white text-carbon ring-linea hover:bg-papel-2"}`}
             >
-              {i === a.recomendada && <Star size={12} className={i === elegida ? "fill-white" : "fill-melki text-melki"} aria-label="Recomendada" />}
+              {i === a.recomendada && <Star size={12} className={i === elegida ? "fill-white" : "fill-melki text-melki"} aria-label={tx("Recomendada", "Recommended")} />}
               {x.titulo}
             </button>
           ))}
@@ -114,34 +129,34 @@ function Propuesta({ ajuste: a, elegida, onElegir, onAplicar, onDescartar }: { a
       )}
 
       {!o ? (
-        <p className="text-[13px] leading-snug text-sin">{a.motivo ?? "No encontré cambios que mejoren la red."}</p>
+        <p className="text-[13px] leading-snug text-sin">{a.motivo ?? tx("No encontré cambios que mejoren la red.", "I found no changes that improve the network.")}</p>
       ) : (
         <>
           <p className="font-cond text-[15px] leading-tight font-semibold">
             {a.opciones.length === 1 && elegida === a.recomendada && <Star size={13} className="mr-1 inline fill-melki text-melki align-[-1px]" aria-hidden="true" />}
             {o.titulo}
-            <span className={`ml-2 rounded px-1.5 py-0.5 align-[1px] font-sans text-[11px] font-semibold ${o.resumen.factible ? "bg-buena/15 text-buena" : "bg-sin/10 text-sin"}`}>{o.resumen.factible ? "Factible" : "No alcanza la meta"}</span>
+            <span className={`ml-2 rounded px-1.5 py-0.5 align-[1px] font-sans text-[11px] font-semibold ${o.resumen.factible ? "bg-buena/15 text-buena" : "bg-sin/10 text-sin"}`}>{o.resumen.factible ? tx("Factible", "Feasible") : tx("No alcanza la meta", "Doesn't reach the target")}</span>
           </p>
           <dl className="grid grid-cols-3 gap-1.5 text-[12px]">
             <div className="rounded-md bg-papel-2 px-2 py-1.5">
-              <dt className="text-tenue">Cobertura útil</dt>
-              <dd className="font-cond text-[17px] leading-tight font-semibold tabular-nums">{fp(o.resumen.utilPct)} %</dd>
-              <dd className="text-[11px] text-tenue">antes {fp(a.inicial.utilPct)} %</dd>
+              <dt className="text-tenue">{tx("Cobertura útil", "Useful coverage")}</dt>
+              <dd className="font-cond text-[17px] leading-tight font-semibold tabular-nums">{tx(`${fp(o.resumen.utilPct)} %`, `${fp(o.resumen.utilPct)}%`)}</dd>
+              <dd className="text-[11px] text-tenue">{tx(`antes ${fp(a.inicial.utilPct)} %`, `before ${fp(a.inicial.utilPct)}%`)}</dd>
             </div>
             <div className="rounded-md bg-papel-2 px-2 py-1.5">
-              <dt className="text-tenue">Nodos antena</dt>
+              <dt className="text-tenue">{tx("Nodos antena", "Antenna nodes")}</dt>
               <dd className="font-cond text-[17px] leading-tight font-semibold tabular-nums">{o.resumen.nodosAntena}</dd>
-              <dd className="text-[11px] text-tenue">antes {a.inicial.nodosAntena}</dd>
+              <dd className="text-[11px] text-tenue">{tx(`antes ${a.inicial.nodosAntena}`, `before ${a.inicial.nodosAntena}`)}</dd>
             </div>
             <div className="rounded-md bg-papel-2 px-2 py-1.5">
-              <dt className="text-tenue">Torre más alta</dt>
+              <dt className="text-tenue">{tx("Torre más alta", "Tallest tower")}</dt>
               <dd className="font-cond text-[17px] leading-tight font-semibold tabular-nums">{fmt(o.resumen.alturaMaxM, 0)} m</dd>
-              <dd className="text-[11px] text-tenue">{fp(o.resumen.confiablePct)} % confiable</dd>
+              <dd className="text-[11px] text-tenue">{tx(`${fp(o.resumen.confiablePct)} % confiable`, `${fp(o.resumen.confiablePct)}% reliable`)}</dd>
             </div>
           </dl>
           {o.cambios.length > 0 && (
             <div>
-              <p className="mb-0.5 text-[12px] font-semibold text-carbon-2">Lo que necesita</p>
+              <p className="mb-0.5 text-[12px] font-semibold text-carbon-2">{tx("Lo que necesita", "What it needs")}</p>
               <ul className="max-h-48 space-y-0.5 overflow-y-auto pr-1 text-[12.5px] leading-snug text-carbon-2">
                 {o.cambios.map((c, k) => (
                   <li key={k} className="flex gap-1.5">
@@ -158,7 +173,7 @@ function Propuesta({ ajuste: a, elegida, onElegir, onAplicar, onDescartar }: { a
 
       <div>
         <button type="button" onClick={() => setVerAnalisis((v) => !v)} className="flex items-center gap-1 text-[12.5px] font-medium text-carbon-2 hover:text-carbon" aria-expanded={verAnalisis}>
-          <ChevronDown size={14} className={`transition-transform ${verAnalisis ? "rotate-180" : ""}`} /> {verAnalisis ? "Ocultar el análisis" : "Ver el análisis"}
+          <ChevronDown size={14} className={`transition-transform ${verAnalisis ? "rotate-180" : ""}`} /> {verAnalisis ? tx("Ocultar el análisis", "Hide the analysis") : tx("Ver el análisis", "Show the analysis")}
         </button>
         {verAnalisis && (
           <ul className="mt-1 space-y-1 text-[12px] leading-snug text-carbon-2">
@@ -169,16 +184,21 @@ function Propuesta({ ajuste: a, elegida, onElegir, onAplicar, onDescartar }: { a
         )}
       </div>
       {o && o.cambios.some((c) => c.tipo === "apoyo") && (
-        <p className="text-[11.5px] leading-snug text-tenue">Las antenas de apoyo son sugerencias: puntos (con coordenadas) donde conviene poner un nodo. Se ven en el mapa como torres punteadas. Revise en campo el acceso, la energía y la línea de vista.</p>
+        <p className="text-[11.5px] leading-snug text-tenue">
+          {tx(
+            "Las antenas de apoyo son sugerencias: puntos (con coordenadas) donde conviene poner un nodo. Se ven en el mapa como torres punteadas. Revise en campo el acceso, la energía y la línea de vista.",
+            "Support antennas are suggestions: points (with coordinates) where it's worth placing a node. They appear on the map as dotted towers. Check access, power and line of sight in the field.",
+          )}
+        </p>
       )}
       <div className="flex flex-wrap gap-2">
         {o && o.cambios.length > 0 && (
           <Boton variante="principal" onClick={onAplicar} tour="aplicar-ajuste">
-            <Check size={16} /> Aplicar y simular
+            <Check size={16} /> {tx("Aplicar y simular", "Apply and simulate")}
           </Boton>
         )}
         <Boton onClick={onDescartar}>
-          <X size={16} /> {o && o.cambios.length ? "Descartar" : "Cerrar"}
+          <X size={16} /> {o && o.cambios.length ? tx("Descartar", "Discard") : tx("Cerrar", "Close")}
         </Boton>
       </div>
     </div>

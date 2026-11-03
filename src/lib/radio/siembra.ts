@@ -6,6 +6,7 @@
 // Sembrado automático de la malla: desde la red ya conectada al gateway, propone una cadena de repetidores
 // hacia uno o varios destinos. Cada repetidor se busca en un abanico hacia el destino y se elige, entre los
 // que avanzan casi lo máximo con un enlace sólido (≥ 30 dB) con el relieve real, el de suelo más alto (la loma).
+import { tx } from "../idioma";
 import { distanciaM, desplazar, metrosPorGrado, rumbo } from "./geo";
 import { enlaceEntre } from "./malla";
 import { longitudOnda } from "./modelo";
@@ -90,7 +91,7 @@ export function sembrar(pedido: PedidoSiembra, relieve: Relieve, caja: Caja): Si
   const saltos = new Map(origenes.map((a) => [a.id, pedido.saltosOrigen?.[a.id] ?? (a.pasarela ? 0 : 1)]));
   const hops = (a: Antena) => saltos.get(a.id) ?? 0;
   const agotados = new Set<string>();
-  const nuevo = (lat: number, lon: number): Antena => ({ ...pedido.repetidor, id: `propuesto-${puntos.length + 1}`, nombre: `Propuesto ${puntos.length + 1}`, lat, lon });
+  const nuevo = (lat: number, lon: number): Antena => ({ ...pedido.repetidor, id: `propuesto-${puntos.length + 1}`, nombre: tx(`Propuesto ${puntos.length + 1}`, `Proposed ${puntos.length + 1}`), lat, lon });
 
   /** Mejor origen para dar servicio a una persona en el destino. */
   const servicio = (d: DestinoSiembra): { margen: number; desde: Antena } | null => {
@@ -121,7 +122,7 @@ export function sembrar(pedido: PedidoSiembra, relieve: Relieve, caja: Caja): Si
 
   for (const { d, i } of orden) {
     if (!origenes.length) {
-      resultados[i] = { llega: false, margenDb: -Infinity, desde: null, desdeId: null, motivo: "Primero ponga el Gateway + Internet." };
+      resultados[i] = { llega: false, margenDb: -Infinity, desde: null, desdeId: null, motivo: tx("Primero ponga el Gateway + Internet.", "First place the Gateway + Internet.") };
       continue;
     }
     for (;;) {
@@ -132,7 +133,7 @@ export function sembrar(pedido: PedidoSiembra, relieve: Relieve, caja: Caja): Si
         break;
       }
       if (puntos.length >= maximo) {
-        resultados[i] = { llega: false, margenDb: s?.margen ?? -Infinity, desde: s?.desde.nombre ?? null, desdeId: s?.desde.id ?? null, motivo: `Se alcanzó el máximo de ${maximo} repetidores propuestos.` };
+        resultados[i] = { llega: false, margenDb: s?.margen ?? -Infinity, desde: s?.desde.nombre ?? null, desdeId: s?.desde.id ?? null, motivo: tx(`Se alcanzó el máximo de ${maximo} repetidores propuestos.`, `The maximum of ${maximo} proposed ${maximo === 1 ? "repeater" : "repeaters"} was reached.`) };
         break;
       }
       // Avanzar desde el nodo de la red más cercano al destino (con lugar para un repetidor más y la persona dentro del límite)
@@ -181,7 +182,10 @@ export function sembrar(pedido: PedidoSiembra, relieve: Relieve, caja: Caja): Si
           margenDb: s?.margen ?? -Infinity,
           desde: s?.desde.nombre ?? null,
           desdeId: s?.desde.id ?? null,
-          motivo: `Desde ${actual.nombre} el terreno no deja avanzar hacia el destino con un enlace útil. Suba ese nodo o ponga un repetidor más alto a mano.`,
+          motivo: tx(
+            `Desde ${actual.nombre} el terreno no deja avanzar hacia el destino con un enlace útil. Suba ese nodo o ponga un repetidor más alto a mano.`,
+            `From ${actual.nombre} the terrain doesn't allow advancing toward the destination with a usable link. Raise that node or place a taller repeater by hand.`,
+          ),
         };
         break;
       }

@@ -15,8 +15,10 @@
 import { ChevronLeft, ChevronRight, Pause, Play, Repeat, Volume2, VolumeX, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { tx } from "@/lib/idioma";
 import type { MapaPitch } from "@/lib/negocio/pitch";
 import { buscarParada, type ParadaRecorrido, type PedidoRecorrido } from "@/lib/negocio/recorrido-red";
+import { useIdioma } from "@/lib/use-idioma";
 
 import { anchoNube, ESCRITURA_LECTURA, NubeMapa, pausaLectura } from "./nube-mapa";
 import { BotonCtl, type Narrador } from "./presentacion";
@@ -56,7 +58,9 @@ export function RecorridoRed({
   /** Por dónde empezar («el Repetidor 2», «por qué quedó así»). */
   desde?: string;
 }) {
-  const paradas = useMemo(() => armar(), [armar]);
+  const lengua = useIdioma();
+  // Al cambiar de idioma se rehacen las paradas (salen escritas en el idioma de la pantalla; las claves no cambian)
+  const paradas = useMemo(() => armar(), [armar, lengua]); // eslint-disable-line react-hooks/exhaustive-deps
   const [i, setI] = useState(() => {
     const k = desde ? buscarParada(paradas, desde) : 0;
     return k > 0 ? k : 0;
@@ -190,7 +194,8 @@ export function RecorridoRed({
       window.cancelAnimationFrame(empezar);
       parar();
     };
-  }, [parada?.clave, volando, reproduciendo, repeticion]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Con otro idioma, vuelve a decir lo breve de la parada en ese idioma
+  }, [parada?.clave, volando, reproduciendo, repeticion, lengua]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Escrita (al ritmo de lectura) y dicha: unos segundos más para mirar las cifras (la barra los cuenta) y sigue con la
   // próxima (avanza solo); con el puntero encima o en pausa, espera y conserva lo que faltaba. En la última, deja el
@@ -255,33 +260,34 @@ export function RecorridoRed({
           case "empezar": {
             const j = p.parada ? buscarParada(paradas, p.parada) : 0;
             ir(j > 0 ? j : 0);
-            return j > 0 ? `Voy a «${paradas[j].titulo}».` : "Empiezo el recorrido de la red.";
+            return j > 0 ? tx(`Voy a «${paradas[j].titulo}».`, `Going to “${paradas[j].titulo}”.`) : tx("Empiezo el recorrido de la red.", "Starting the network walkthrough.");
           }
           case "siguiente":
-            if (k >= paradas.length - 1) return "Ya es el último punto del recorrido.";
+            if (k >= paradas.length - 1) return tx("Ya es el último punto del recorrido.", "This is already the last stop of the walkthrough.");
             ir(k + 1);
-            return `Punto ${k + 2} de ${paradas.length}: ${paradas[k + 1].titulo}.`;
+            return tx(`Punto ${k + 2} de ${paradas.length}: ${paradas[k + 1].titulo}.`, `Stop ${k + 2} of ${paradas.length}: ${paradas[k + 1].titulo}.`);
           case "anterior":
             ir(k - 1);
-            return `Punto ${Math.max(1, k)} de ${paradas.length}: ${paradas[Math.max(0, k - 1)].titulo}.`;
+            return tx(`Punto ${Math.max(1, k)} de ${paradas.length}: ${paradas[Math.max(0, k - 1)].titulo}.`, `Stop ${Math.max(1, k)} of ${paradas.length}: ${paradas[Math.max(0, k - 1)].titulo}.`);
           case "pausar":
             cortar.current?.();
             setReproduciendo(false);
-            return "Pausé el recorrido.";
+            return tx("Pausé el recorrido.", "I've paused the walkthrough.");
           case "seguir":
             setReproduciendo(true);
-            return "Sigo con el recorrido.";
+            return tx("Sigo con el recorrido.", "Resuming the walkthrough.");
           case "repetir":
             ir(k);
-            return "Repito este punto.";
+            return tx("Repito este punto.", "Repeating this stop.");
           case "terminar":
             salir();
-            return "Terminé el recorrido de la red.";
+            return tx("Terminé el recorrido de la red.", "The network walkthrough is over.");
           case "ir": {
             const j = buscarParada(paradas, p.parada ?? "");
-            if (j < 0) return `No encontré ese punto. Las paradas son: ${paradas.map((x) => x.titulo).join(", ")}.`;
+            if (j < 0)
+              return tx(`No encontré ese punto. Las paradas son: ${paradas.map((x) => x.titulo).join(", ")}.`, `I couldn't find that stop. The stops are: ${paradas.map((x) => x.titulo).join(", ")}.`);
             ir(j);
-            return `Voy a «${paradas[j].titulo}».`;
+            return tx(`Voy a «${paradas[j].titulo}».`, `Going to “${paradas[j].titulo}”.`);
           }
         }
       },
@@ -318,14 +324,20 @@ export function RecorridoRed({
   const anclaNube = punto ?? (pos ? (celular ? { x: pos.x + 51, y: pos.y + 118 } : { x: pos.x + 116, y: pos.y + 58 }) : null);
 
   return (
-    <div ref={zona} className="pointer-events-none absolute inset-0 z-[35]" role="region" aria-label="Recorrido de la red" data-tour="recorrido-red" data-parada={parada.clave}>
+    <div ref={zona} className="pointer-events-none absolute inset-0 z-[35]" role="region" aria-label={tx("Recorrido de la red", "Network walkthrough")} data-tour="recorrido-red" data-parada={parada.clave}>
       {/* El punto del que se habla late en el mapa */}
       {punto && !volando && <span className="pitch-anillo absolute h-16 w-16 rounded-full border-4 border-melki" style={{ left: punto.x, top: punto.y }} aria-hidden="true" />}
       {pos && (
         <div className="pitch-robot absolute top-0 left-0" style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }} data-robot={gesto}>
           {/* Se posa sobre un halo de luz junto al punto que explica */}
           {!volando && <span className="llegada-halo" aria-hidden="true" />}
-          <RobotMelki gesto={gesto} hablando={narrando && (voz || narradorIA)} mirando={pos.mirando} className="relative h-32 w-[6.4rem] sm:h-44 sm:w-36" titulo={`Melki ${narrando ? "explicando la red" : "en el recorrido de la red"}`} />
+          <RobotMelki
+            gesto={gesto}
+            hablando={narrando && (voz || narradorIA)}
+            mirando={pos.mirando}
+            className="relative h-32 w-[6.4rem] sm:h-44 sm:w-36"
+            titulo={tx(`Melki ${narrando ? "explicando la red" : "en el recorrido de la red"}`, `Melki ${narrando ? "explaining the network" : "on the network walkthrough"}`)}
+          />
         </div>
       )}
       {!volando && zonaTam && anclaNube && (
@@ -334,7 +346,7 @@ export function RecorridoRed({
           ancla={anclaNube}
           zona={zonaTam}
           reservaAbajo={celular ? 122 : 96}
-          paso={`Recorrido · ${k + 1} de ${paradas.length}`}
+          paso={tx(`Recorrido · ${k + 1} de ${paradas.length}`, `Walkthrough · ${k + 1} of ${paradas.length}`)}
           etiqueta={parada.nube.etiqueta}
           titulo={parada.nube.titulo}
           subtitulo={parada.nube.subtitulo}
@@ -353,41 +365,49 @@ export function RecorridoRed({
       )}
       {/* Controles */}
       <div className="pointer-events-auto absolute inset-x-0 bottom-3 flex justify-center px-3">
-        <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-full bg-carbon/92 px-2 py-1.5 text-white shadow-xl ring-1 ring-white/10" role="toolbar" aria-label="Controles del recorrido">
-          <BotonCtl titulo="Anterior (←)" onClick={() => ir(k - 1)} deshabilitado={k === 0}>
+        <div
+          className="flex max-w-full items-center gap-1 overflow-x-auto rounded-full bg-carbon/92 px-2 py-1.5 text-white shadow-xl ring-1 ring-white/10"
+          role="toolbar"
+          aria-label={tx("Controles del recorrido", "Walkthrough controls")}
+        >
+          <BotonCtl titulo={tx("Anterior (←)", "Previous (←)")} onClick={() => ir(k - 1)} deshabilitado={k === 0}>
             <ChevronLeft size={19} />
           </BotonCtl>
-          <BotonCtl titulo={reproduciendo ? "Pausar (espacio)" : "Seguir (espacio)"} onClick={alternar}>
+          <BotonCtl titulo={reproduciendo ? tx("Pausar (espacio)", "Pause (space)") : tx("Seguir (espacio)", "Resume (space)")} onClick={alternar}>
             {reproduciendo ? <Pause size={18} /> : <Play size={18} />}
           </BotonCtl>
-          <BotonCtl titulo="Siguiente (→)" onClick={() => ir(k + 1)} deshabilitado={k >= paradas.length - 1}>
+          <BotonCtl titulo={tx("Siguiente (→)", "Next (→)")} onClick={() => ir(k + 1)} deshabilitado={k >= paradas.length - 1}>
             <ChevronRight size={19} />
           </BotonCtl>
-          <span className="mx-1 hidden items-center gap-1 sm:flex" aria-label="Puntos del recorrido">
+          <span className="mx-1 hidden items-center gap-1 sm:flex" aria-label={tx("Puntos del recorrido", "Walkthrough stops")}>
             {paradas.map((p, j) => (
               <button
                 key={p.clave}
                 type="button"
                 onClick={() => ir(j)}
                 title={p.titulo}
-                aria-label={`Punto ${j + 1}: ${p.titulo}`}
+                aria-label={tx(`Punto ${j + 1}: ${p.titulo}`, `Stop ${j + 1}: ${p.titulo}`)}
                 aria-current={j === k ? "step" : undefined}
                 className={`h-2 rounded-full transition-all ${j === k ? "w-6 bg-melki" : j < k ? "w-2 bg-white/70" : "w-2 bg-white/30 hover:bg-white/60"}`}
               />
             ))}
           </span>
           <span className="hidden max-w-[230px] truncate px-1.5 text-[12.5px] text-white/85 lg:inline">
-            {k + 1} de {paradas.length} · {parada.titulo}
+            {tx(`${k + 1} de ${paradas.length} · ${parada.titulo}`, `${k + 1} of ${paradas.length} · ${parada.titulo}`)}
           </span>
-          <BotonCtl titulo={auto ? "Avanza solo (toque para avanzar a mano)" : "Avanzar a mano (toque para que avance solo)"} onClick={() => setAuto((v) => !v)} activo={auto}>
+          <BotonCtl
+            titulo={auto ? tx("Avanza solo (toque para avanzar a mano)", "Advances on its own (tap to advance manually)") : tx("Avanzar a mano (toque para que avance solo)", "Advance manually (tap to let it advance on its own)")}
+            onClick={() => setAuto((v) => !v)}
+            activo={auto}
+          >
             <Repeat size={16} />
           </BotonCtl>
           {!narradorIA && (
-            <BotonCtl titulo={voz ? "Silenciar la voz" : "Oír la voz"} onClick={() => onVoz(!voz)} activo={voz}>
+            <BotonCtl titulo={voz ? tx("Silenciar la voz", "Mute the voice") : tx("Oír la voz", "Hear the voice")} onClick={() => onVoz(!voz)} activo={voz}>
               {voz ? <Volume2 size={17} /> : <VolumeX size={17} />}
             </BotonCtl>
           )}
-          <BotonCtl titulo="Salir del recorrido (Esc)" onClick={salir}>
+          <BotonCtl titulo={tx("Salir del recorrido (Esc)", "Exit the walkthrough (Esc)")} onClick={salir}>
             <X size={18} />
           </BotonCtl>
         </div>

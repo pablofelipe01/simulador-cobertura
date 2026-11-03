@@ -8,6 +8,7 @@
 // la compara con el dimensionamiento del documento; da un veredicto (óptima, viable con reservas o insuficiente) y
 // recomendaciones acotadas: cada una con su costo, sin pasarse de la meta, del presupuesto ni de torres de 30 m, y
 // sin gateways de más (solo los que pida la capacidad). Todas las cifras salen del cálculo; nada se inventa.
+import { numeroLocal, porTexto, tx } from "../idioma";
 import { ENLACES } from "./constantes";
 import { CAPACIDAD_TRAMA, costoRedTrama, PRECIOS, SF_TRAMA, TERRENOS_TRAMA, pesosTrama, type CostoRed, type SfTrama, type TerrenoTrama } from "./trama";
 
@@ -71,11 +72,16 @@ export type AnalisisRed = {
   referencia: { repetidores: number; radioKm: number; terreno: string } | null;
 };
 
-const pct = (x: number) => `${(Math.floor(x * 10) / 10).toLocaleString("es-CO", { maximumFractionDigits: 1 })} %`;
-const km2 = (x: number) => `${x.toLocaleString("es-CO", { maximumFractionDigits: x >= 100 ? 0 : 1 })} km²`;
+const pct = (x: number) => {
+  const v = Math.floor(x * 10) / 10;
+  return tx(`${v.toLocaleString("es-CO", { maximumFractionDigits: 1 })} %`, `${v.toLocaleString("en-US", { maximumFractionDigits: 1 })}%`);
+};
+const km2 = (x: number) => `${numeroLocal(x, { maximumFractionDigits: x >= 100 ? 0 : 1 })} km²`;
 const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`;
 /** «familias» → «familia», «hogares» → «hogar», «sensores» → «sensor». */
-const singular = (q: string) => (/[oa]res$/.test(q) ? q.slice(0, -2) : q.replace(/s$/, ""));
+const singular = (q: string) => porTexto(q, (s) => (/[oa]res$/.test(s) ? s.slice(0, -2) : s.replace(/s$/, "")));
+/** En inglés: «families» → «family», «households» → «household», «people» → «person». */
+const singularEn = (q: string) => porTexto(q, (s) => (s === "people" ? "person" : /ies$/.test(s) ? `${s.slice(0, -3)}y` : s.replace(/s$/, "")));
 
 /** Cuánto cuesta un repetidor puesto (equipo, instalación y transporte, con la logística de la región). */
 export function costoRepetidorInstalado(logistica = 1): number {
@@ -137,11 +143,28 @@ export function analizarRed(e: EntradaAnalisis): AnalisisRed {
   const costoUsuario = e.usuarios ? inversion / e.usuarios.n : null;
 
   // 1) Cobertura y optimización
-  if (e.podados > 0) hallazgos.push(`Optimización: quité ${plural(e.podados, "repetidor que sobraba", "repetidores que sobraban")} (su área ya la cubrían otros), sin bajar de la meta ni debilitar ningún enlace.`);
-  else if (e.aporteMin && e.repetidores > 1) hallazgos.push(`Optimización: no sobra ningún repetidor; el que menos aporta (${e.aporteMin.nombre}) cubre él solo el ${pct(e.aporteMin.pct)} del área.`);
+  if (e.podados > 0)
+    hallazgos.push(
+      tx(
+        `Optimización: quité ${plural(e.podados, "repetidor que sobraba", "repetidores que sobraban")} (su área ya la cubrían otros), sin bajar de la meta ni debilitar ningún enlace.`,
+        `Optimization: I removed ${plural(e.podados, "spare repeater", "spare repeaters")} (others already covered their area), without dropping below the target or weakening any link.`,
+      ),
+    );
+  else if (e.aporteMin && e.repetidores > 1)
+    hallazgos.push(
+      tx(
+        `Optimización: no sobra ningún repetidor; el que menos aporta (${e.aporteMin.nombre}) cubre él solo el ${pct(e.aporteMin.pct)} del área.`,
+        `Optimization: no repeater is redundant; the one that contributes least (${e.aporteMin.nombre}) covers ${pct(e.aporteMin.pct)} of the area on its own.`,
+      ),
+    );
   if (e.frenado) {
     bajar("insuficiente");
-    hallazgos.push(`Freno de rendimiento: me detuve en el ${pct(e.coberturaPct)} porque lo que faltaba eran huecos pequeños; el mejor repetidor siguiente cubría apenas el ${pct(e.frenado.mejorPct)} del área (el mínimo que acepto es ${pct(e.frenado.minPct)}).`);
+    hallazgos.push(
+      tx(
+        `Freno de rendimiento: me detuve en el ${pct(e.coberturaPct)} porque lo que faltaba eran huecos pequeños; el mejor repetidor siguiente cubría apenas el ${pct(e.frenado.mejorPct)} del área (el mínimo que acepto es ${pct(e.frenado.minPct)}).`,
+        `Efficiency brake: I stopped at ${pct(e.coberturaPct)} because what was missing were small gaps; the next best repeater covered only ${pct(e.frenado.mejorPct)} of the area (the minimum I accept is ${pct(e.frenado.minPct)}).`,
+      ),
+    );
   } else if (!cumplida) bajar("insuficiente");
 
   // 2) Enlaces y saltos
@@ -154,17 +177,31 @@ export function analizarRed(e: EntradaAnalisis): AnalisisRed {
     firme === null
       ? ""
       : debiles
-        ? `${plural(debiles, "enlace queda débil", "enlaces quedan débiles")} (menos de ${ENLACES.solido.minimoDb} dB; el peor, ${Math.round(firme)} dB)`
-        : `enlaces de al menos ${Math.round(firme)} dB (firmes)`;
-  if (enlaceTxt || e.repetidores)
-    hallazgos.push(
-      `Enlaces: ${[enlaceTxt, `máximo ${plural(e.maxSaltos, "salto", "saltos")} al gateway (límite ${e.limiteSaltos}${e.maxSaltos >= e.limiteSaltos && e.repetidores ? ", al tope" : ""})`, e.sinRuta ? `${plural(e.sinRuta, "repetidor sin ruta", "repetidores sin ruta")} al gateway` : "", e.criticos ? `${plural(e.criticos, "repetidor es paso obligado", "repetidores son paso obligado")} de otros` : ""].filter(Boolean).join("; ")}.`,
-    );
+        ? tx(
+            `${plural(debiles, "enlace queda débil", "enlaces quedan débiles")} (menos de ${ENLACES.solido.minimoDb} dB; el peor, ${Math.round(firme)} dB)`,
+            `${plural(debiles, "link remains weak", "links remain weak")} (under ${ENLACES.solido.minimoDb} dB; the worst, ${Math.round(firme)} dB)`,
+          )
+        : tx(`enlaces de al menos ${Math.round(firme)} dB (firmes)`, `all links of at least ${Math.round(firme)} dB (firm)`);
+  if (enlaceTxt || e.repetidores) {
+    const alTope = e.maxSaltos >= e.limiteSaltos && e.repetidores;
+    const partes = [
+      enlaceTxt,
+      tx(`máximo ${plural(e.maxSaltos, "salto", "saltos")} al gateway (límite ${e.limiteSaltos}${alTope ? ", al tope" : ""})`, `at most ${plural(e.maxSaltos, "hop", "hops")} to the gateway (limit ${e.limiteSaltos}${alTope ? ", at the limit" : ""})`),
+      e.sinRuta ? tx(`${plural(e.sinRuta, "repetidor sin ruta", "repetidores sin ruta")} al gateway`, `${plural(e.sinRuta, "repeater without a route", "repeaters without a route")} to the gateway`) : "",
+      e.criticos ? tx(`${plural(e.criticos, "repetidor es paso obligado", "repetidores son paso obligado")} de otros`, `${plural(e.criticos, "repeater is a mandatory pass-through", "repeaters are mandatory pass-throughs")} for others`) : "",
+    ]
+      .filter(Boolean)
+      .join("; ");
+    hallazgos.push(tx(`Enlaces: ${partes}.`, `Links: ${partes}.`));
+  }
 
   // 3) Costo
-  const conRadios = radiosExtra ? `, con ${plural(radiosExtra, "radio de más", "radios de más")} en el gateway` : "";
+  const conRadios = radiosExtra ? tx(`, con ${plural(radiosExtra, "radio de más", "radios de más")} en el gateway`, `, with ${plural(radiosExtra, "extra radio", "extra radios")} at the gateway`) : "";
   hallazgos.push(
-    `Costo: inversión de unos ${pesosTrama(inversion)}${conRadios} (${pesosTrama(costoKm2)} por km² cubierto${costoUsuario !== null ? `, ${pesosTrama(costoUsuario)} por ${singular(e.usuarios!.quienes)}` : ""}) y unos ${pesosTrama(costo.mensual.total)} al mes de operación.`,
+    tx(
+      `Costo: inversión de unos ${pesosTrama(inversion)}${conRadios} (${pesosTrama(costoKm2)} por km² cubierto${costoUsuario !== null ? `, ${pesosTrama(costoUsuario)} por ${singular(e.usuarios!.quienes)}` : ""}) y unos ${pesosTrama(costo.mensual.total)} al mes de operación.`,
+      `Cost: an investment of about ${pesosTrama(inversion)}${conRadios} (${pesosTrama(costoKm2)} per km² covered${costoUsuario !== null ? `, ${pesosTrama(costoUsuario)} per ${singularEn(e.usuarios!.quienes)}` : ""}) and about ${pesosTrama(costo.mensual.total)} per month to operate.`,
+    ),
   );
 
   // 4) Capacidad
@@ -173,20 +210,50 @@ export function analizarRed(e: EntradaAnalisis): AnalisisRed {
     const porRadio = SF_TRAMA[e.sf].usuariosFrecuencia;
     if (capacidad.sitios > Math.max(1, e.gateways)) {
       bajar("insuficiente");
-      hallazgos.push(`Capacidad: ${e.usuarios.n.toLocaleString("es-CO")} ${q} piden ${capacidad.radios} radios (una por cada ${porRadio} con SF${e.sf}); un sitio admite ${CAPACIDAD_TRAMA.radiosPorSitio}, así que hacen falta ${capacidad.sitios} sitios de gateway.`);
+      hallazgos.push(
+        tx(
+          `Capacidad: ${numeroLocal(e.usuarios.n)} ${q} piden ${capacidad.radios} radios (una por cada ${porRadio} con SF${e.sf}); un sitio admite ${CAPACIDAD_TRAMA.radiosPorSitio}, así que hacen falta ${capacidad.sitios} sitios de gateway.`,
+          `Capacity: ${numeroLocal(e.usuarios.n)} ${q} need ${capacidad.radios} radios (one per ${porRadio} with SF${e.sf}); a site takes ${CAPACIDAD_TRAMA.radiosPorSitio}, so ${capacidad.sitios} gateway sites are needed.`,
+        ),
+      );
       const faltan = capacidad.sitios - Math.max(1, e.gateways);
       const c = costoGatewayInstalado(e.logistica) + (CAPACIDAD_TRAMA.radiosPorSitio - 1) * PRECIOS.radio;
-      recomendaciones.push({ id: "sitio", texto: `${faltan === 1 ? "Un sitio de gateway más" : `${faltan} sitios de gateway más`} con ${CAPACIDAD_TRAMA.radiosPorSitio} radios (unos ${pesosTrama(c * faltan)}): es lo único que justifica otro gateway; la cobertura ya está.`, costoCop: c * faltan });
+      recomendaciones.push({
+        id: "sitio",
+        texto: tx(
+          `${faltan === 1 ? "Un sitio de gateway más" : `${faltan} sitios de gateway más`} con ${CAPACIDAD_TRAMA.radiosPorSitio} radios (unos ${pesosTrama(c * faltan)}): es lo único que justifica otro gateway; la cobertura ya está.`,
+          `${faltan === 1 ? "One more gateway site" : `${faltan} more gateway sites`} with ${CAPACIDAD_TRAMA.radiosPorSitio} radios (about ${pesosTrama(c * faltan)}): it is the only thing that justifies another gateway; the coverage is already there.`,
+        ),
+        costoCop: c * faltan,
+      });
     } else {
       if (capacidad.usoPct > 85) bajar("reservas");
-      hallazgos.push(`Capacidad: ${e.usuarios.n.toLocaleString("es-CO")} ${q} caben con ${plural(capacidad.radios, "radio", "radios")} en el gateway (una por cada ${porRadio} con SF${e.sf}; el sitio admite ${CAPACIDAD_TRAMA.radiosPorSitio}, ${capacidad.capacidadSitio.toLocaleString("es-CO")} en total): queda usado el ${pct(capacidad.usoPct)}.`);
-      if (radiosExtra) recomendaciones.push({ id: "radios", texto: `Ponga ${plural(radiosExtra, "radio más", "radios más")} en el gateway (Heltec T114 con antena, unos ${pesosTrama(costoRadiosExtra)}): ya está sumado en la inversión.`, costoCop: costoRadiosExtra });
+      hallazgos.push(
+        tx(
+          `Capacidad: ${numeroLocal(e.usuarios.n)} ${q} caben con ${plural(capacidad.radios, "radio", "radios")} en el gateway (una por cada ${porRadio} con SF${e.sf}; el sitio admite ${CAPACIDAD_TRAMA.radiosPorSitio}, ${numeroLocal(capacidad.capacidadSitio)} en total): queda usado el ${pct(capacidad.usoPct)}.`,
+          `Capacity: ${numeroLocal(e.usuarios.n)} ${q} fit with ${plural(capacidad.radios, "radio", "radios")} at the gateway (one per ${porRadio} with SF${e.sf}; the site takes ${CAPACIDAD_TRAMA.radiosPorSitio}, ${numeroLocal(capacidad.capacidadSitio)} in total): ${pct(capacidad.usoPct)} of it is in use.`,
+        ),
+      );
+      if (radiosExtra)
+        recomendaciones.push({
+          id: "radios",
+          texto: tx(
+            `Ponga ${plural(radiosExtra, "radio más", "radios más")} en el gateway (Heltec T114 con antena, unos ${pesosTrama(costoRadiosExtra)}): ya está sumado en la inversión.`,
+            `Add ${plural(radiosExtra, "more radio", "more radios")} at the gateway (Heltec T114 with antenna, about ${pesosTrama(costoRadiosExtra)}): it's already included in the investment.`,
+          ),
+          costoCop: costoRadiosExtra,
+        });
     }
   }
   // Muchos repetidores colgados de un solo sitio: el diseño de Trama reparte hasta 19 celdas por sitio
   if (e.repetidores > CAPACIDAD_TRAMA.celdasPorSitio * Math.max(1, e.gateways)) {
     bajar("reservas");
-    hallazgos.push(`Escala: ${e.repetidores} repetidores para ${plural(Math.max(1, e.gateways), "gateway", "gateways")}; el documento de Trama planea hasta ${CAPACIDAD_TRAMA.celdasPorSitio} por sitio (dos anillos), porque todo el tráfico sale por el gateway.`);
+    hallazgos.push(
+      tx(
+        `Escala: ${e.repetidores} repetidores para ${plural(Math.max(1, e.gateways), "gateway", "gateways")}; el documento de Trama planea hasta ${CAPACIDAD_TRAMA.celdasPorSitio} por sitio (dos anillos), porque todo el tráfico sale por el gateway.`,
+        `Scale: ${e.repetidores} repeaters for ${plural(Math.max(1, e.gateways), "gateway", "gateways")}; the Trama document plans up to ${CAPACIDAD_TRAMA.celdasPorSitio} per site (two rings), because all the traffic goes out through the gateway.`,
+      ),
+    );
   }
 
   // 5) Presupuesto (lo nuevo: lo que ya estaba en el área no se vuelve a comprar)
@@ -196,8 +263,13 @@ export function analizarRed(e: EntradaAnalisis): AnalisisRed {
     const uso = (100 * nueva) / e.presupuestoCop;
     if (pasado) {
       bajar("insuficiente");
-      hallazgos.push(`Presupuesto: lo nuevo cuesta ${pesosTrama(nueva)} y el presupuesto es ${pesosTrama(e.presupuestoCop)} (se pasa en ${pesosTrama(nueva - e.presupuestoCop)}).`);
-    } else hallazgos.push(`Presupuesto: lo nuevo usa ${pesosTrama(nueva)} de ${pesosTrama(e.presupuestoCop)} (el ${pct(uso)}).`);
+      hallazgos.push(
+        tx(
+          `Presupuesto: lo nuevo cuesta ${pesosTrama(nueva)} y el presupuesto es ${pesosTrama(e.presupuestoCop)} (se pasa en ${pesosTrama(nueva - e.presupuestoCop)}).`,
+          `Budget: the new equipment costs ${pesosTrama(nueva)} and the budget is ${pesosTrama(e.presupuestoCop)} (over by ${pesosTrama(nueva - e.presupuestoCop)}).`,
+        ),
+      );
+    } else hallazgos.push(tx(`Presupuesto: lo nuevo usa ${pesosTrama(nueva)} de ${pesosTrama(e.presupuestoCop)} (el ${pct(uso)}).`, `Budget: the new equipment uses ${pesosTrama(nueva)} of ${pesosTrama(e.presupuestoCop)} (${pct(uso)}).`));
   }
 
   // 6) La referencia del documento de Trama (celdas hexagonales con el alcance supuesto por terreno)
@@ -206,37 +278,99 @@ export function analizarRed(e: EntradaAnalisis): AnalisisRed {
     const t = TERRENOS_TRAMA[e.terreno];
     const radioKm = t.radioKm * SF_TRAMA[e.sf].factorRadio;
     const ref = Math.max(1, Math.ceil(e.areaKm2 / (2.598 * radioKm * radioKm)));
-    referencia = { repetidores: ref, radioKm, terreno: t.nombre.toLowerCase() };
+    const terreno = porTexto(t.nombre, (x) => x.toLowerCase());
+    referencia = { repetidores: ref, radioKm, terreno };
     const comparacion =
       e.repetidores <= ref
-        ? "la red usa lo mismo o menos"
-        : `aquí, con el relieve real y torres de ${e.alturaM} m, hicieron falta ${e.repetidores}${e.alturaM < 12 ? "; con torres más altas se acercaría" : ""}`;
-    hallazgos.push(`Referencia de Trama: para ${km2(e.areaKm2)} de ${t.nombre.toLowerCase()} el documento estima ${plural(ref, "repetidor", "repetidores")} (supone ${radioKm.toLocaleString("es-CO", { maximumFractionDigits: 1 })} km de alcance en sitio alto); ${comparacion}.`);
+        ? tx("la red usa lo mismo o menos", "the network uses the same or fewer")
+        : tx(
+            `aquí, con el relieve real y torres de ${e.alturaM} m, hicieron falta ${e.repetidores}${e.alturaM < 12 ? "; con torres más altas se acercaría" : ""}`,
+            `here, with the real terrain and ${e.alturaM} m towers, ${e.repetidores} were needed${e.alturaM < 12 ? "; with taller towers it would get closer" : ""}`,
+          );
+    hallazgos.push(
+      tx(
+        `Referencia de Trama: para ${km2(e.areaKm2)} de ${terreno} el documento estima ${plural(ref, "repetidor", "repetidores")} (supone ${numeroLocal(radioKm, { maximumFractionDigits: 1 })} km de alcance en sitio alto); ${comparacion}.`,
+        `Trama reference: for ${km2(e.areaKm2)} of ${terreno} the document estimates ${plural(ref, "repeater", "repeaters")} (it assumes ${numeroLocal(radioKm, { maximumFractionDigits: 1 })} km of range from a high site); ${comparacion}.`,
+      ),
+    );
   }
 
   // Recomendaciones acotadas
   if (e.economica && e.economica.repetidores < e.nuevos.repetidores) {
     const ahorro = (e.nuevos.repetidores - e.economica.repetidores) * costoRepetidorInstalado(e.logistica);
-    recomendaciones.unshift({ id: "economica", texto: `Si quiere ahorrar: con ${plural(e.economica.repetidores, "repetidor", "repetidores")} (en vez de ${e.nuevos.repetidores}) queda en ≈ ${pct(e.economica.coberturaPct)} y ahorra unos ${pesosTrama(ahorro)}.`, costoCop: -ahorro });
+    recomendaciones.unshift({
+      id: "economica",
+      texto: tx(
+        `Si quiere ahorrar: con ${plural(e.economica.repetidores, "repetidor", "repetidores")} (en vez de ${e.nuevos.repetidores}) queda en ≈ ${pct(e.economica.coberturaPct)} y ahorra unos ${pesosTrama(ahorro)}.`,
+        `If you want to save: with ${plural(e.economica.repetidores, "repeater", "repeaters")} (instead of ${e.nuevos.repetidores}) it stays at ≈ ${pct(e.economica.coberturaPct)} and saves about ${pesosTrama(ahorro)}.`,
+      ),
+      costoCop: -ahorro,
+    });
   }
-  if (e.frenado) recomendaciones.push({ id: "meta", texto: `Si de verdad necesita el ${pct(e.metaPct)}, lo sigo sin el freno, pero cada repetidor más cubrirá menos del ${pct(e.frenado.minPct)} del área (unos ${pesosTrama(costoRepetidorInstalado(e.logistica))} cada uno).` });
-  else if (!cumplida) recomendaciones.push({ id: "torres", texto: `Para acercarse a la meta sin sembrar más: torres más altas (hasta 30 m, no más) o el ajuste de alturas y apoyos.` });
-  if (debiles) recomendaciones.push({ id: "enlaces", texto: `Afirmar ${debiles === 1 ? "el enlace débil" : "los enlaces débiles"} con el ajuste (alturas y apoyos), antes que poner más repetidores.` });
-  if (e.presupuestoCop && pasado)
-    recomendaciones.push({ id: "presupuesto", texto: `Con ${pesosTrama(e.presupuestoCop)} alcanza para ${(() => {
-      const n = repetidoresEnPresupuesto(e.presupuestoCop!, e.nuevos.gateways > 0, e.logistica, radiosExtra);
-      return n === null ? "ni el sitio del gateway" : plural(n, "repetidor", "repetidores");
-    })()} con el gateway: rehágala con ese tope o use la opción económica.` });
+  if (e.frenado)
+    recomendaciones.push({
+      id: "meta",
+      texto: tx(
+        `Si de verdad necesita el ${pct(e.metaPct)}, lo sigo sin el freno, pero cada repetidor más cubrirá menos del ${pct(e.frenado.minPct)} del área (unos ${pesosTrama(costoRepetidorInstalado(e.logistica))} cada uno).`,
+        `If you really need ${pct(e.metaPct)}, I'll keep going without the brake, but each additional repeater will cover less than ${pct(e.frenado.minPct)} of the area (about ${pesosTrama(costoRepetidorInstalado(e.logistica))} each).`,
+      ),
+    });
+  else if (!cumplida)
+    recomendaciones.push({
+      id: "torres",
+      texto: tx(
+        `Para acercarse a la meta sin sembrar más: torres más altas (hasta 30 m, no más) o el ajuste de alturas y apoyos.`,
+        `To get closer to the target without seeding more: taller towers (up to 30 m, no more) or the height and support adjustment.`,
+      ),
+    });
+  if (debiles)
+    recomendaciones.push({
+      id: "enlaces",
+      texto: tx(
+        `Afirmar ${debiles === 1 ? "el enlace débil" : "los enlaces débiles"} con el ajuste (alturas y apoyos), antes que poner más repetidores.`,
+        `Strengthen ${debiles === 1 ? "the weak link" : "the weak links"} with the adjustment (heights and supports) before adding more repeaters.`,
+      ),
+    });
+  if (e.presupuestoCop && pasado) {
+    const n = repetidoresEnPresupuesto(e.presupuestoCop, e.nuevos.gateways > 0, e.logistica, radiosExtra);
+    recomendaciones.push({
+      id: "presupuesto",
+      texto: tx(
+        `Con ${pesosTrama(e.presupuestoCop)} alcanza para ${n === null ? "ni el sitio del gateway" : plural(n, "repetidor", "repetidores")} con el gateway: rehágala con ese tope o use la opción económica.`,
+        n === null
+          ? `${pesosTrama(e.presupuestoCop)} doesn't cover even the gateway site: redo it with that cap or use the economical option.`
+          : `${pesosTrama(e.presupuestoCop)} covers ${plural(n, "repeater", "repeaters")} with the gateway: redo it with that cap or use the economical option.`,
+      ),
+    });
+  }
   if (e.criticos >= 2 && !e.respaldo && cumplida && recomendaciones.length < 3)
-    recomendaciones.push({ id: "respaldo", texto: `Si la red no puede caerse, el respaldo (dos nodos por punto) quita los pasos obligados; cuesta más repetidores, así que solo si el servicio lo exige.` });
+    recomendaciones.push({
+      id: "respaldo",
+      texto: tx(
+        `Si la red no puede caerse, el respaldo (dos nodos por punto) quita los pasos obligados; cuesta más repetidores, así que solo si el servicio lo exige.`,
+        `If the network can't go down, backup (two nodes per point) removes the mandatory pass-throughs; it takes more repeaters, so only if the service demands it.`,
+      ),
+    });
 
-  const titulo = veredicto === "optima" ? "red óptima" : veredicto === "reservas" ? "red viable con reservas" : "red insuficiente para lo pedido";
+  const titulo =
+    veredicto === "optima"
+      ? tx("red óptima", "optimal network")
+      : veredicto === "reservas"
+        ? tx("red viable con reservas", "viable network with caveats")
+        : tx("red insuficiente para lo pedido", "network insufficient for what was requested");
   return { veredicto, titulo, hallazgos, recomendaciones: recomendaciones.slice(0, 3), costo, radiosExtra, costoRadiosExtra, inversion, costoKm2, costoUsuario, capacidad, referencia };
 }
 
+/** ¿Es el hallazgo del costo? («Costo: …» o «Cost: …», también con los textos marcados del motor). */
+const esCosto = (h: string) => /^\u0001?(Costo|Cost):/.test(h);
+
 /** El análisis en texto, para la respuesta de Melki. */
 export function textoAnalisis(a: AnalisisRed, conCosto = true): string[] {
-  const lineas = [`Análisis de Melki: ${a.titulo}.`, ...a.hallazgos.filter((h) => conCosto || !h.startsWith("Costo:")).map((h) => `• ${h}`)];
-  if (a.recomendaciones.length) lineas.push("Recomendaciones (sin salirse de la meta, del presupuesto ni de lo que pide la capacidad):", ...a.recomendaciones.map((r) => `• ${r.texto}`));
+  const lineas = [tx(`Análisis de Melki: ${a.titulo}.`, `Melki's analysis: ${a.titulo}.`), ...a.hallazgos.filter((h) => conCosto || !esCosto(h)).map((h) => `• ${h}`)];
+  if (a.recomendaciones.length)
+    lineas.push(
+      tx("Recomendaciones (sin salirse de la meta, del presupuesto ni de lo que pide la capacidad):", "Recommendations (within the target, the budget and what capacity requires):"),
+      ...a.recomendaciones.map((r) => `• ${r.texto}`),
+    );
   return lineas;
 }

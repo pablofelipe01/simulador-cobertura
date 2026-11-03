@@ -7,6 +7,9 @@
 // solo van los nombres, con los que el simulador y Melki los muestran. En esta copia van genéricos: sin el nombre del
 // sitio, sin los IDs de los nodos y sin las distancias.
 
+/** Los mismos nombres en inglés (el simulador los muestra según el idioma de la pantalla). */
+export type IdentidadEnIngles = { nombre: string; medidoEn: string; enFrase: string; equipo: string; servicio: string; antenas: string[] };
+
 export type IdentidadAntena = {
   nombre: string;
   /** ID del nodo en la malla, si se puede mostrar. */
@@ -34,4 +37,13 @@ export const IDENTIDAD_GATEWAY = {
     { nombre: "Antena D", nodo: null, distanciaKm: null },
     { nombre: "Antena E", nodo: null, distanciaKm: null },
   ] as IdentidadAntena[],
+  /** En inglés, en el mismo orden. */
+  en: {
+    nombre: "Measured gateway",
+    medidoEn: "Measured at the gateway",
+    enFrase: "a real gateway",
+    equipo: "Raspberry Pi 5 with a Heltec V3 radio over USB serial (CP2102)",
+    servicio: "Gateway service (systemd, automatic restart); validates and records in a database over HTTPS",
+    antenas: ["Antenna A (solar router)", "Antenna B", "Antenna C", "Antenna D", "Antenna E"],
+  } as IdentidadEnIngles,
 };

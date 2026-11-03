@@ -5,6 +5,7 @@
 
 // Fuentes de mapas y relieve. Todas son abiertas y sin costo; se pueden reemplazar con variables
 // de entorno (ver «Variables de entorno» en la documentación del proyecto) para usar un servidor propio.
+import { tx } from "./idioma";
 
 export const CONFIG = {
   mapas: {
@@ -53,12 +54,23 @@ export const CONFIG = {
     /** Modelo por defecto (uno de MODELOS_LOCALES); vacío = el recomendado. */
     modelo: process.env.NEXT_PUBLIC_IA_LOCAL_MODELO || "",
   },
+  /** Créditos de cada fuente, en el idioma de la pantalla (el mapa los cambia al cambiar de idioma). */
   atribucion: {
-    esri: "Imágenes y referencias © Esri, Maxar, Earthstar Geographics y la comunidad de usuarios SIG",
-    osm: "© colaboradores de OpenStreetMap",
-    opentopomap: "© OpenStreetMap, SRTM · estilo © OpenTopoMap (CC BY-SA)",
-    relieve: "Relieve: Mapzen Terrain Tiles (SRTM, NASA)",
-    division: "Límites: DANE, Marco Geoestadístico Nacional (CC BY 4.0) · Ríos y países: Natural Earth",
+    get esri() {
+      return tx("Imágenes y referencias © Esri, Maxar, Earthstar Geographics y la comunidad de usuarios SIG", "Imagery and references © Esri, Maxar, Earthstar Geographics and the GIS User Community");
+    },
+    get osm() {
+      return tx("© colaboradores de OpenStreetMap", "© OpenStreetMap contributors");
+    },
+    get opentopomap() {
+      return tx("© OpenStreetMap, SRTM · estilo © OpenTopoMap (CC BY-SA)", "© OpenStreetMap, SRTM · style © OpenTopoMap (CC BY-SA)");
+    },
+    get relieve() {
+      return tx("Relieve: Mapzen Terrain Tiles (SRTM, NASA)", "Terrain: Mapzen Terrain Tiles (SRTM, NASA)");
+    },
+    get division() {
+      return tx("Límites: DANE, Marco Geoestadístico Nacional (CC BY 4.0) · Ríos y países: Natural Earth", "Boundaries: DANE, Marco Geoestadístico Nacional (CC BY 4.0) · Rivers and countries: Natural Earth");
+    },
   },
 } as const;
 

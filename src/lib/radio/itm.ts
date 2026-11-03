@@ -8,16 +8,26 @@
 // (G. A. Hufford, «The ITS Irregular Terrain Model, version 1.2.2: The Algorithm», 1995; código de dominio público).
 // Se usa para el informe de radioenlace y para ajustar el modelo calibrado cuando cambian los parámetros de red.
 
+import { tx } from "../idioma";
+
 /** Clima de radio del ITM (mismo orden que Radio Mobile). */
 export type ClimaItm = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+/** Clima con su nombre en los dos idiomas (getter: sale en el idioma de la pantalla). */
+const nuevoClima = (id: ClimaItm, es: string, en: string, refractividad: number) => ({
+  id,
+  get nombre() {
+    return tx(es, en);
+  },
+  refractividad,
+});
 export const CLIMAS: readonly { id: ClimaItm; nombre: string; refractividad: number }[] = [
-  { id: 1, nombre: "Ecuatorial", refractividad: 360 },
-  { id: 2, nombre: "Continental subtropical", refractividad: 320 },
-  { id: 3, nombre: "Marítimo subtropical", refractividad: 370 },
-  { id: 4, nombre: "Desierto", refractividad: 280 },
-  { id: 5, nombre: "Continental templado", refractividad: 301 },
-  { id: 6, nombre: "Marítimo templado sobre tierra", refractividad: 320 },
-  { id: 7, nombre: "Marítimo templado sobre mar", refractividad: 350 },
+  nuevoClima(1, "Ecuatorial", "Equatorial", 360),
+  nuevoClima(2, "Continental subtropical", "Continental subtropical", 320),
+  nuevoClima(3, "Marítimo subtropical", "Maritime subtropical", 370),
+  nuevoClima(4, "Desierto", "Desert", 280),
+  nuevoClima(5, "Continental templado", "Continental temperate", 301),
+  nuevoClima(6, "Marítimo templado sobre tierra", "Maritime temperate over land", 320),
+  nuevoClima(7, "Marítimo templado sobre mar", "Maritime temperate over sea", 350),
 ];
 
 /** Modo de variabilidad (Radio Mobile: Spot, Accidental, Móvil, Difusión). */

@@ -8,6 +8,7 @@
 // («2 × 1 millas») y el cuadrado («de 3 km de lado»); el presupuesto («con 80 millones», «USD 25.000») y la gente a
 // atender («para 400 familias»). Los números dichos en palabras pegados a una unidad se pasan a cifras («cinco
 // millas», «un kilómetro y medio», «media milla»).
+import { numeroLocal, tx } from "@/lib/idioma";
 import { COTIZADOR } from "@/lib/radio/trama";
 
 import { numeroDePalabras } from "./numeros";
@@ -48,6 +49,24 @@ export const LONGITUDES: Record<UnidadLongitud, { metros: number; singular: stri
   cuadra: { metros: 100, singular: "cuadra", plural: "cuadras", simbolo: "cuadras" },
 };
 
+/** Los nombres de las unidades en inglés (para mostrar; los de `LONGITUDES` arman frases de órdenes en español). */
+const NOMBRES_INGLES: Record<UnidadLongitud, { singular: string; plural: string }> = {
+  km: { singular: "kilometer", plural: "kilometers" },
+  m: { singular: "meter", plural: "meters" },
+  mi: { singular: "mile", plural: "miles" },
+  nmi: { singular: "nautical mile", plural: "nautical miles" },
+  yd: { singular: "yard", plural: "yards" },
+  ft: { singular: "foot", plural: "feet" },
+  cuadra: { singular: "block", plural: "blocks" },
+};
+
+/** El nombre de la unidad en el idioma de la pantalla: «milla» o «mile», «millas» o «miles». */
+function nombreUnidad(u: UnidadLongitud, uno: boolean): string {
+  const es = LONGITUDES[u];
+  const en = NOMBRES_INGLES[u];
+  return uno ? tx(es.singular, en.singular) : tx(es.plural, en.plural);
+}
+
 /** Cómo se escriben o se dicen (en minúsculas y sin tildes); lo más largo primero. Grupo 1: la unidad. */
 export const UNIDAD_LONGITUD = String.raw`(millas?\s+nauticas?|nmi|kilometros?|kms?|millas?|mi|metros?|mts?|m|yardas?|yds?|pies|pie|ft|cuadras?)(?![a-z0-9²])`;
 
@@ -69,31 +88,53 @@ export function distancia(valor: number, unidad: UnidadLongitud): Distancia {
   return { valor, unidad, metros: valor * LONGITUDES[unidad].metros };
 }
 
-/** «1,5», «8,05», «20»: con coma decimal y sin ceros de más. */
+/**
+ * «1,5», «8,05», «20»: con coma decimal y sin ceros de más. Siempre en español: arma las frases de órdenes que lee el
+ * intérprete (`textoDicho`); para mostrar, `cifraLocal`.
+ */
 export function cifra(x: number, d = 2): string {
   const r = Number(x.toFixed(d));
   return Number.isInteger(r) ? r.toLocaleString("es-CO") : r.toLocaleString("es-CO", { maximumFractionDigits: d });
 }
 
-/** «850 m», «8,05 km», «12,9 km», «160 km». */
+/** Como `cifra`, con el formato del idioma de la pantalla (para mostrar): «1,5» o «1.5», «11.226» o «11,226». */
+export function cifraLocal(x: number, d = 2): string {
+  const r = Number(x.toFixed(d));
+  return Number.isInteger(r) ? numeroLocal(r) : numeroLocal(r, { maximumFractionDigits: d });
+}
+
+/** «850 m», «8,05 km», «12,9 km», «160 km» (en el idioma de la pantalla: solo para mostrar). */
 export function textoMetros(m: number): string {
   if (m < 1000) return `${Math.round(m)} m`;
   const km = m / 1000;
-  return `${cifra(km, km < 10 ? 2 : km < 100 ? 1 : 0)} km`;
+  return `${cifraLocal(km, km < 10 ? 2 : km < 100 ? 1 : 0)} km`;
 }
 
-/** «8 km», «800 m», «5 millas (8,05 km)», «300 yardas (274 m)», «2 cuadras (200 m)». */
+/**
+ * «8 km», «800 m», «5 millas (8,05 km)», «300 yardas (274 m)», «2 cuadras (200 m)» (en el idioma de la pantalla: solo
+ * para mostrar).
+ */
 export function textoDistancia(d: Distancia): string {
   const u = LONGITUDES[d.unidad];
-  if (d.unidad === "km" || d.unidad === "m") return `${cifra(d.valor)} ${u.simbolo}`;
-  return `${cifra(d.valor)} ${d.valor === 1 ? u.singular : u.plural} (${textoMetros(d.metros)})`;
+  if (d.unidad === "km" || d.unidad === "m") return `${cifraLocal(d.valor)} ${u.simbolo}`;
+  return `${cifraLocal(d.valor)} ${nombreUnidad(d.unidad, d.valor === 1)} (${textoMetros(d.metros)})`;
 }
 
-/** Lo dicho en la unidad dicha, sin la conversión: «5 millas», «8 km». */
+/**
+ * Lo dicho en la unidad dicha, sin la conversión: «5 millas», «8 km». Siempre en español: el Modelo Melki arma con esto
+ * las órdenes que lee el intérprete; para mostrar, `textoDichoLocal`.
+ */
 export function textoDicho(d: Distancia): string {
   const u = LONGITUDES[d.unidad];
   if (d.unidad === "km" || d.unidad === "m") return `${cifra(d.valor)} ${u.simbolo}`;
   return `${cifra(d.valor)} ${d.valor === 1 ? u.singular : u.plural}`;
+}
+
+/** Como `textoDicho`, en el idioma de la pantalla (para mostrar): «5 millas» o «5 miles». */
+export function textoDichoLocal(d: Distancia): string {
+  const u = LONGITUDES[d.unidad];
+  if (d.unidad === "km" || d.unidad === "m") return `${cifraLocal(d.valor)} ${u.simbolo}`;
+  return `${cifraLocal(d.valor)} ${nombreUnidad(d.unidad, d.valor === 1)}`;
 }
 
 const MEDIDA = String.raw`${NUMERO}\s*${UNIDAD_LONGITUD}`;
@@ -176,13 +217,16 @@ export function factorArea(unidad: string): number {
   return 1;
 }
 
-/** «2 millas cuadradas», «5.000 yardas cuadradas»: la unidad imperial como se dice (null si es métrica o hectáreas). */
+/**
+ * «2 millas cuadradas», «5.000 yardas cuadradas»: la unidad imperial como se dice, en el idioma de la pantalla (solo
+ * para mostrar; null si es métrica o hectáreas).
+ */
 export function unidadAreaImperial(unidad: string, valor: number): string | null {
   const u = unidad.replace(/\s+/g, " ");
   const uno = valor === 1;
-  if (/^(milla|mi)/.test(u)) return uno ? "milla cuadrada" : "millas cuadradas";
-  if (/^(yarda|yd)/.test(u)) return uno ? "yarda cuadrada" : "yardas cuadradas";
-  if (/^(pie|ft)/.test(u)) return uno ? "pie cuadrado" : "pies cuadrados";
+  if (/^(milla|mi)/.test(u)) return uno ? tx("milla cuadrada", "square mile") : tx("millas cuadradas", "square miles");
+  if (/^(yarda|yd)/.test(u)) return uno ? tx("yarda cuadrada", "square yard") : tx("yardas cuadradas", "square yards");
+  if (/^(pie|ft)/.test(u)) return uno ? tx("pie cuadrado", "square foot") : tx("pies cuadrados", "square feet");
   if (/^acre/.test(u)) return uno ? "acre" : "acres";
   if (/^fanegada/.test(u)) return uno ? "fanegada" : "fanegadas";
   return null;

@@ -7,6 +7,8 @@
 // decide si lo hace (seguro), lo ofrece con un botón (si borra o reemplaza algo), contesta el tema, pregunta
 // «¿quiso decir…?», dice que está fuera del simulador o no hace nada (y Melki sigue como antes). Nada aquí toca el mapa:
 // la orden se arma en palabras que el intérprete verifica y hace.
+import { idioma } from "@/lib/idioma";
+
 import type { Api, Orden } from "../ordenes";
 import { INTENCION, type Intencion } from "./intenciones";
 import { analizar, parecido, vectorFrase, type Candidato, type Modelo } from "./modelo";
@@ -64,6 +66,16 @@ export function conMemoria(m: Modelo, texto: string, candidatos: Candidato[], me
 
 const mayuscula = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 
+/**
+ * Lo que se muestra de una orden: en español, la frase que el intérprete hace; en inglés, la misma orden dicha en
+ * inglés (si la intención la trae) o su nombre. La frase en español es la que se ejecuta.
+ */
+function textoVisible(it: Intencion, r: Ranuras, frase: string): string {
+  if (idioma() !== "en") return frase;
+  const enIngles = (it as Intencion & { fraseEn?: (r: Ranuras) => string | null }).fraseEn?.(r);
+  return enIngles || it.nombre;
+}
+
 /** La opción que da una intención con los datos del pedido (null si no se puede: faltan datos o no se entiende). */
 export function opcionDe(c: Candidato, r: Ranuras, verificar?: (frase: string) => boolean): Opcion | null {
   const it = INTENCION.get(c.id);
@@ -72,7 +84,7 @@ export function opcionDe(c: Candidato, r: Ranuras, verificar?: (frase: string) =
   if (it.frase) {
     const frase = it.frase(r);
     if (!frase || (verificar && !verificar(frase))) return null;
-    return { ...base, texto: mayuscula(frase), frase };
+    return { ...base, texto: mayuscula(textoVisible(it, r, frase)), frase };
   }
   if (it.directa) {
     const orden = it.directa(r);
@@ -89,6 +101,11 @@ export type OpcionesEntender = {
   memoria?: Recuerdo[];
   /** ¿Melki entiende esta frase? (el intérprete u otra parte de Melki la toma). */
   verificar?: (frase: string) => boolean;
+  /**
+   * De dónde salen los datos del pedido (si no, del mismo texto). En inglés, el modelo en inglés clasifica lo dicho y
+   * los datos salen de lo mismo dicho en español (los números, medidas, lugares y nodos ya en la forma del intérprete).
+   */
+  textoRanuras?: string;
 };
 
 /** Lo que Melki hace con una frase que ni el intérprete ni el cerebro entendieron. */
@@ -104,7 +121,7 @@ export function entender(m: Modelo, texto: string, o: OpcionesEntender = {}): De
   const [top, segundo] = candidatos;
   if (!top) return { tipo: "nada", motivo: "dudoso" };
   if (top.id === "ruido" && !aprendida) return { tipo: "nada", motivo: "ruido" };
-  const r = extraerRanuras(texto, o.api ?? null);
+  const r = extraerRanuras(o.textoRanuras ?? texto, o.api ?? null);
   // Las opciones se arman (y se verifican) solo cuando hacen falta, de la más probable a la menos
   const hechas = new Map<string, Opcion | null>();
   const opcion = (c: Candidato) => {

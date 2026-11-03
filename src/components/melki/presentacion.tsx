@@ -12,7 +12,9 @@
 import { ChevronLeft, ChevronRight, Pause, Play, Repeat, Volume2, VolumeX, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { tx } from "@/lib/idioma";
 import type { CapituloPitch, IdCapitulo, MapaPitch, PedidoPitch } from "@/lib/negocio/pitch";
+import { useIdioma } from "@/lib/use-idioma";
 
 import { anchoNube, NubeMapa } from "./nube-mapa";
 import { RobotMelki, type GestoRobot } from "./robot";
@@ -58,8 +60,10 @@ export function PresentacionPitch({
   /** La narra la IA (Gemini) con su voz. */
   narradorIA?: boolean;
 }) {
+  const lengua = useIdioma();
   const [comision, setComision] = useState<number | null>(null);
-  const capitulos = useMemo(() => armar(comision), [armar, comision]);
+  // Al cambiar de idioma se rehacen los capítulos (salen escritos en el idioma de la pantalla)
+  const capitulos = useMemo(() => armar(comision), [armar, comision, lengua]); // eslint-disable-line react-hooks/exhaustive-deps
   const [i, setI] = useState(0);
   const [reproduciendo, setReproduciendo] = useState(true);
   const [auto, setAuto] = useState(true);
@@ -213,7 +217,8 @@ export function PresentacionPitch({
       window.clearInterval(reloj);
       parar();
     };
-  }, [cap?.clave, volando, reproduciendo, repeticion]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Con otro idioma, vuelve a narrar el capítulo en ese idioma
+  }, [cap?.clave, volando, reproduciendo, repeticion, lengua]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ir = useCallback(
     (n: number) => {
@@ -243,33 +248,36 @@ export function PresentacionPitch({
         switch (p.accion) {
           case "empezar":
             ir(0);
-            return "Empiezo la presentación.";
+            return tx("Empiezo la presentación.", "Starting the presentation.");
           case "siguiente":
-            if (i >= capitulos.length - 1) return "Ya es el último capítulo.";
+            if (i >= capitulos.length - 1) return tx("Ya es el último capítulo.", "This is already the last chapter.");
             ir(i + 1);
-            return `Capítulo ${i + 2} de ${capitulos.length}: ${capitulos[i + 1].titulo}.`;
+            return tx(`Capítulo ${i + 2} de ${capitulos.length}: ${capitulos[i + 1].titulo}.`, `Chapter ${i + 2} of ${capitulos.length}: ${capitulos[i + 1].titulo}.`);
           case "anterior":
             ir(i - 1);
-            return `Capítulo ${Math.max(1, i)} de ${capitulos.length}: ${capitulos[Math.max(0, i - 1)].titulo}.`;
+            return tx(
+              `Capítulo ${Math.max(1, i)} de ${capitulos.length}: ${capitulos[Math.max(0, i - 1)].titulo}.`,
+              `Chapter ${Math.max(1, i)} of ${capitulos.length}: ${capitulos[Math.max(0, i - 1)].titulo}.`,
+            );
           case "pausar":
             cortar.current?.();
             setReproduciendo(false);
-            return "Pausé la presentación.";
+            return tx("Pausé la presentación.", "I've paused the presentation.");
           case "seguir":
             setReproduciendo(true);
             setRepeticion((x) => x + 1);
-            return "Sigo con la presentación.";
+            return tx("Sigo con la presentación.", "Resuming the presentation.");
           case "repetir":
             ir(i);
-            return "Repito este capítulo.";
+            return tx("Repito este capítulo.", "Repeating this chapter.");
           case "terminar":
             salir();
-            return "Terminé la presentación.";
+            return tx("Terminé la presentación.", "The presentation is over.");
           case "ir": {
             const k = p.capitulo ? buscar(p.capitulo) : -1;
-            if (k < 0) return "No encontré ese capítulo.";
+            if (k < 0) return tx("No encontré ese capítulo.", "I couldn't find that chapter.");
             ir(k);
-            return `Voy a «${capitulos[k].titulo}».`;
+            return tx(`Voy a «${capitulos[k].titulo}».`, `Going to “${capitulos[k].titulo}”.`);
           }
         }
       },
@@ -310,9 +318,12 @@ export function PresentacionPitch({
   const nube = conNube(cap, zonaTam?.ancho ?? 0);
   // El borde derecho de la tarjeta en el computador (left-4, ancho min(440 px, 42 %)): la nube no la tapa
   const bordeTarjeta = zonaTam ? 16 + Math.min(440, zonaTam.ancho * 0.42) : 12;
+  const paso = tx(`Pitch · ${i + 1} de ${capitulos.length}`, `Pitch · ${i + 1} of ${capitulos.length}`);
+  // La comisión de equilibrio, de ejemplo en la caja de la comisión
+  const deEquilibrio = cap.cifras.find((c) => /equilibrio|break-even/i.test(c.etiqueta))?.valor ?? "";
 
   return (
-    <div ref={zona} className="pointer-events-none absolute inset-0 z-[35]" role="region" aria-label="Presentación del modelo de negocio" data-tour="pitch">
+    <div ref={zona} className="pointer-events-none absolute inset-0 z-[35]" role="region" aria-label={tx("Presentación del modelo de negocio", "Business model presentation")} data-tour="pitch">
       {/* La antena de la que se habla late en el mapa */}
       {anillo && !volando && (
         <span className="pitch-anillo absolute h-16 w-16 rounded-full border-4 border-melki" style={{ left: anillo.x, top: anillo.y }} aria-hidden="true" />
@@ -320,7 +331,13 @@ export function PresentacionPitch({
       {/* El robot */}
       {pos && (
         <div className="pitch-robot absolute top-0 left-0" style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }} data-robot={gesto}>
-          <RobotMelki gesto={gesto} hablando={narrando && (voz || narradorIA)} mirando={pos.mirando} className="h-32 w-[6.4rem] sm:h-44 sm:w-36" titulo={`Melki ${narrando ? "presentando" : "en la presentación"}`} />
+          <RobotMelki
+            gesto={gesto}
+            hablando={narrando && (voz || narradorIA)}
+            mirando={pos.mirando}
+            className="h-32 w-[6.4rem] sm:h-44 sm:w-36"
+            titulo={tx(`Melki ${narrando ? "presentando" : "en la presentación"}`, `Melki ${narrando ? "presenting" : "in the presentation"}`)}
+          />
         </div>
       )}
       {/* Lo que cuenta de la antena, escrito en una nube que sale de ella */}
@@ -330,7 +347,7 @@ export function PresentacionPitch({
           ancla={anillo}
           zona={zonaTam}
           izquierdaMin={bordeTarjeta + 16}
-          paso={`Pitch · ${i + 1} de ${capitulos.length}`}
+          paso={paso}
           etiqueta={cap.subtitulo}
           titulo={cap.titulo}
           parrafos={parrafosDe(frases)}
@@ -344,9 +361,7 @@ export function PresentacionPitch({
         className="pitch-tarjeta pointer-events-auto absolute inset-x-3 bottom-[76px] max-h-[46%] overflow-y-auto rounded-2xl bg-papel/95 p-4 shadow-2xl ring-1 ring-black/10 backdrop-blur sm:inset-x-auto sm:top-4 sm:bottom-auto sm:left-4 sm:max-h-[calc(100%-110px)] sm:w-[min(440px,42%)]"
         aria-live="polite"
       >
-        <p className="text-[11.5px] font-semibold tracking-wide text-melki-oscura uppercase">
-          Pitch · {i + 1} de {capitulos.length}
-        </p>
+        <p className="text-[11.5px] font-semibold tracking-wide text-melki-oscura uppercase">{paso}</p>
         <h2 className="mt-0.5 font-cond text-[23px] leading-tight font-semibold text-carbon">{cap.titulo}</h2>
         <p className="mt-0.5 text-[13px] text-tenue">{cap.subtitulo}</p>
         {cap.cifras.length > 0 && (
@@ -361,7 +376,9 @@ export function PresentacionPitch({
           </dl>
         )}
         {nube ? (
-          <p className="mt-3 text-[12.5px] leading-snug text-tenue">Lo que cuento de esta antena sale escrito en la nube, junto a ella en el mapa.</p>
+          <p className="mt-3 text-[12.5px] leading-snug text-tenue">
+            {tx("Lo que cuento de esta antena sale escrito en la nube, junto a ella en el mapa.", "What I'm telling you about this antenna is written in the cloud next to it on the map.")}
+          </p>
         ) : (
           <p className="mt-3 text-[14px] leading-relaxed text-carbon-2">
             {frases.map((f, k) => (
@@ -382,30 +399,34 @@ export function PresentacionPitch({
             }}
           >
             <label className="flex-1 text-[12.5px] text-carbon-2">
-              Probar una comisión por pago (pesos)
+              {tx("Probar una comisión por pago (pesos)", "Try a commission per payment (pesos)")}
               <input
                 inputMode="numeric"
                 value={textoComision}
                 onChange={(e) => setTextoComision(e.target.value)}
-                placeholder={`De equilibrio: ${cap.cifras.find((c) => /equilibrio/i.test(c.etiqueta))?.valor ?? ""}`}
+                placeholder={tx(`De equilibrio: ${deEquilibrio}`, `Break-even: ${deEquilibrio}`)}
                 className="mt-1 w-full rounded-lg border border-linea bg-white px-3 py-1.5 text-[14px] text-carbon"
-                aria-label="Comisión por pago en pesos"
+                aria-label={tx("Comisión por pago en pesos", "Commission per payment in pesos")}
               />
             </label>
             <button type="submit" className="rounded-lg bg-carbon px-3 py-1.5 text-[13.5px] font-medium text-white hover:bg-carbon-2">
-              Calcular
+              {tx("Calcular", "Calculate")}
             </button>
           </form>
         )}
       </div>
       {/* Controles */}
       <div className="pointer-events-auto absolute inset-x-0 bottom-3 flex justify-center px-3">
-        <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-full bg-carbon/92 px-2 py-1.5 text-white shadow-xl ring-1 ring-white/10" role="toolbar" aria-label="Controles de la presentación">
-          <BotonCtl titulo="Anterior (←)" onClick={() => ir(i - 1)} deshabilitado={i === 0}>
+        <div
+          className="flex max-w-full items-center gap-1 overflow-x-auto rounded-full bg-carbon/92 px-2 py-1.5 text-white shadow-xl ring-1 ring-white/10"
+          role="toolbar"
+          aria-label={tx("Controles de la presentación", "Presentation controls")}
+        >
+          <BotonCtl titulo={tx("Anterior (←)", "Previous (←)")} onClick={() => ir(i - 1)} deshabilitado={i === 0}>
             <ChevronLeft size={19} />
           </BotonCtl>
           <BotonCtl
-            titulo={reproduciendo ? "Pausar (espacio)" : "Seguir (espacio)"}
+            titulo={reproduciendo ? tx("Pausar (espacio)", "Pause (space)") : tx("Seguir (espacio)", "Resume (space)")}
             onClick={() => {
               if (reproduciendo) {
                 cortar.current?.();
@@ -418,31 +439,35 @@ export function PresentacionPitch({
           >
             {reproduciendo ? <Pause size={18} /> : <Play size={18} />}
           </BotonCtl>
-          <BotonCtl titulo="Siguiente (→)" onClick={() => ir(i + 1)} deshabilitado={i >= capitulos.length - 1}>
+          <BotonCtl titulo={tx("Siguiente (→)", "Next (→)")} onClick={() => ir(i + 1)} deshabilitado={i >= capitulos.length - 1}>
             <ChevronRight size={19} />
           </BotonCtl>
-          <span className="mx-1 hidden items-center gap-1 sm:flex" aria-label="Capítulos">
+          <span className="mx-1 hidden items-center gap-1 sm:flex" aria-label={tx("Capítulos", "Chapters")}>
             {capitulos.map((c, k) => (
               <button
                 key={c.clave}
                 type="button"
                 onClick={() => ir(k)}
                 title={c.titulo}
-                aria-label={`Capítulo ${k + 1}: ${c.titulo}`}
+                aria-label={tx(`Capítulo ${k + 1}: ${c.titulo}`, `Chapter ${k + 1}: ${c.titulo}`)}
                 aria-current={k === i ? "step" : undefined}
                 className={`h-2 rounded-full transition-all ${k === i ? "w-6 bg-melki" : k < i ? "w-2 bg-white/70" : "w-2 bg-white/30 hover:bg-white/60"}`}
               />
             ))}
           </span>
-          <BotonCtl titulo={auto ? "Avanza solo (toque para avanzar a mano)" : "Avanzar a mano (toque para que avance solo)"} onClick={() => setAuto((v) => !v)} activo={auto}>
+          <BotonCtl
+            titulo={auto ? tx("Avanza solo (toque para avanzar a mano)", "Advances on its own (tap to advance manually)") : tx("Avanzar a mano (toque para que avance solo)", "Advance manually (tap to let it advance on its own)")}
+            onClick={() => setAuto((v) => !v)}
+            activo={auto}
+          >
             <Repeat size={16} />
           </BotonCtl>
           {!narradorIA && (
-            <BotonCtl titulo={voz ? "Silenciar la voz" : "Oír la voz"} onClick={() => onVoz(!voz)} activo={voz}>
+            <BotonCtl titulo={voz ? tx("Silenciar la voz", "Mute the voice") : tx("Oír la voz", "Hear the voice")} onClick={() => onVoz(!voz)} activo={voz}>
               {voz ? <Volume2 size={17} /> : <VolumeX size={17} />}
             </BotonCtl>
           )}
-          <BotonCtl titulo="Salir de la presentación (Esc)" onClick={salir}>
+          <BotonCtl titulo={tx("Salir de la presentación (Esc)", "Exit the presentation (Esc)")} onClick={salir}>
             <X size={18} />
           </BotonCtl>
         </div>

@@ -6,6 +6,7 @@
 // Pérdidas por el entorno (vegetación o construcciones) para los equipos que quedan por debajo de ellas.
 // Vegetación: UIT-R P.833 (terminal dentro del follaje). Construcciones y bosque: UIT-R P.2108 §3.1
 // (corrección por altura del terminal dentro del «clutter»). Se suma en cada extremo del trayecto.
+import { tx } from "../idioma";
 import { difraccion } from "./modelo";
 import type { EntornoId } from "./tipos";
 
@@ -21,14 +22,26 @@ type Entorno = {
   follajeM?: number;
 };
 
+/** Entorno con su nombre y su descripción en los dos idiomas (getters: salen en el idioma de la pantalla). */
+const nuevoEntorno = (id: EntornoId, nombre: [string, string], descripcion: [string, string], resto: Pick<Entorno, "metodo" | "alturaM" | "follajeM">): Entorno => ({
+  id,
+  get nombre() {
+    return tx(nombre[0], nombre[1]);
+  },
+  get descripcion() {
+    return tx(descripcion[0], descripcion[1]);
+  },
+  ...resto,
+});
+
 export const ENTORNOS: readonly Entorno[] = [
-  { id: "abierto", nombre: "Campo abierto o sabana", descripcion: "Sin pérdidas adicionales (como en las pruebas de Radio Mobile).", metodo: "ninguno", alturaM: 0 },
-  { id: "cultivos", nombre: "Cultivos y árboles dispersos", descripcion: "Unos 30 m de follaje hasta salir a terreno abierto; vegetación de unos 6 m.", metodo: "follaje", alturaM: 6, follajeM: 30 },
-  { id: "plantacion", nombre: "Plantación (palma, frutales)", descripcion: "Unos 60 m de follaje; copas de unos 12 m.", metodo: "follaje", alturaM: 12, follajeM: 60 },
-  { id: "bosque", nombre: "Bosque o selva", descripcion: "Árboles de unos 15 m alrededor del equipo (UIT-R P.2108).", metodo: "obstaculos", alturaM: 15 },
-  { id: "suburbano", nombre: "Pueblo o zona suburbana", descripcion: "Casas de uno o dos pisos, unos 10 m (UIT-R P.2108).", metodo: "obstaculos", alturaM: 10 },
-  { id: "urbano", nombre: "Ciudad", descripcion: "Edificios de unos 15 m (UIT-R P.2108).", metodo: "obstaculos", alturaM: 15 },
-  { id: "urbano-denso", nombre: "Centro urbano denso", descripcion: "Edificios de unos 20 m (UIT-R P.2108).", metodo: "obstaculos", alturaM: 20 },
+  nuevoEntorno("abierto", ["Campo abierto o sabana", "Open field or savanna"], ["Sin pérdidas adicionales (como en las pruebas de Radio Mobile).", "No additional losses (as in the Radio Mobile tests)."], { metodo: "ninguno", alturaM: 0 }),
+  nuevoEntorno("cultivos", ["Cultivos y árboles dispersos", "Crops and scattered trees"], ["Unos 30 m de follaje hasta salir a terreno abierto; vegetación de unos 6 m.", "About 30 m of foliage before reaching open ground; vegetation about 6 m tall."], { metodo: "follaje", alturaM: 6, follajeM: 30 }),
+  nuevoEntorno("plantacion", ["Plantación (palma, frutales)", "Plantation (palm, fruit trees)"], ["Unos 60 m de follaje; copas de unos 12 m.", "About 60 m of foliage; canopies about 12 m high."], { metodo: "follaje", alturaM: 12, follajeM: 60 }),
+  nuevoEntorno("bosque", ["Bosque o selva", "Forest or jungle"], ["Árboles de unos 15 m alrededor del equipo (UIT-R P.2108).", "Trees about 15 m tall around the device (ITU-R P.2108)."], { metodo: "obstaculos", alturaM: 15 }),
+  nuevoEntorno("suburbano", ["Pueblo o zona suburbana", "Town or suburban area"], ["Casas de uno o dos pisos, unos 10 m (UIT-R P.2108).", "One- or two-story houses, about 10 m (ITU-R P.2108)."], { metodo: "obstaculos", alturaM: 10 }),
+  nuevoEntorno("urbano", ["Ciudad", "City"], ["Edificios de unos 15 m (UIT-R P.2108).", "Buildings about 15 m tall (ITU-R P.2108)."], { metodo: "obstaculos", alturaM: 15 }),
+  nuevoEntorno("urbano-denso", ["Centro urbano denso", "Dense urban center"], ["Edificios de unos 20 m (UIT-R P.2108).", "Buildings about 20 m tall (ITU-R P.2108)."], { metodo: "obstaculos", alturaM: 20 }),
 ];
 
 export const entornoPorId = (id: EntornoId) => ENTORNOS.find((e) => e.id === id) ?? ENTORNOS[0];

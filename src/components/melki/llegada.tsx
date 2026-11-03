@@ -17,7 +17,9 @@
 // la conversación).
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { tx } from "@/lib/idioma";
 import type { MapaPitch } from "@/lib/negocio/pitch";
+import { useIdioma } from "@/lib/use-idioma";
 
 import { anchoNube, ESCRITURA_LECTURA, NubeMapa, pausaLectura, type TramoVoz } from "./nube-mapa";
 import type { LlegadaMelki } from "./ordenes";
@@ -79,6 +81,7 @@ export function LlegadaRobot({
   /** Ya volvió a su esquina. */
   onFin: () => void;
 }) {
+  useIdioma();
   const zona = useRef<HTMLDivElement>(null);
   const [fase, setFase] = useState<Fase>("espera");
   const [tam, setTam] = useState<{ ancho: number; alto: number } | null>(null);
@@ -305,7 +308,7 @@ export function LlegadaRobot({
       ref={zona}
       className="pointer-events-none absolute inset-0 z-[34]"
       role="region"
-      aria-label={`Melki en ${llegada.titulo}`}
+      aria-label={tx(`Melki en ${llegada.titulo}`, `Melki at ${llegada.titulo}`)}
       data-tour="llegada-melki"
       data-fase={fase}
       data-gesto={gesto}
@@ -328,7 +331,11 @@ export function LlegadaRobot({
             hablando={hablando}
             mirando={pos.mirando}
             className="relative h-32 w-[6.4rem] sm:h-44 sm:w-36"
-            titulo={fase === "llego" ? `Melki ${hablando ? "hablando" : saluda ? "saludando" : "señalando"} en ${llegada.titulo}` : "Melki volando"}
+            titulo={
+              fase === "llego"
+                ? tx(`Melki ${hablando ? "hablando" : saluda ? "saludando" : "señalando"} en ${llegada.titulo}`, `Melki ${hablando ? "speaking" : saluda ? "waving" : "pointing"} at ${llegada.titulo}`)
+                : tx("Melki volando", "Melki flying")
+            }
           />
         </div>
       )}
@@ -352,7 +359,7 @@ export function LlegadaRobot({
           cuenta={escrito && !narrando ? { ms: pausa, pausada: sobre } : null}
           onSobre={setSobre}
           onCerrar={() => setFase("vuelve")}
-          etiquetaCerrar="Cerrar (Melki vuelve a su lugar)"
+          etiquetaCerrar={tx("Cerrar (Melki vuelve a su lugar)", "Close (Melki goes back to his spot)")}
           estilo="holo"
           voz={onVoz ? { activa: voz, hablando, onCambiar: onVoz } : undefined}
           siguiendoVoz={aLaPar}

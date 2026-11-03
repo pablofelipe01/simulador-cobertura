@@ -14,18 +14,23 @@
 import { CircleHelp, Maximize2, Minimize2, PanelLeft, PanelRight, Sparkles, Square, Volume2, VolumeX, X } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties, type MouseEvent as EventoRaton, type PointerEvent as EventoPuntero, type ReactNode } from "react";
 
+import { porIdioma, tx } from "@/lib/idioma";
+import { useIdioma } from "@/lib/use-idioma";
+
 import type { EstadoManosLibres } from "./manos-libres";
 
-/** Lo que muestra la etiqueta de estado. */
-const ESTADO: Record<EstadoManosLibres, string> = {
-  apagado: "Apagado",
-  dormido: "En reposo",
-  preparando: "Preparando el micrófono",
-  esperando: "Diga «Hola Melki»",
-  atento: "Le escucho",
-  pensando: "Pensando",
-  hablando: "Hablando",
-};
+/** Lo que muestra la etiqueta de estado (en el idioma de la pantalla). */
+const ESTADO = porIdioma(
+  (): Record<EstadoManosLibres, string> => ({
+    apagado: tx("Apagado", "Off"),
+    dormido: tx("En reposo", "Standby"),
+    preparando: tx("Preparando el micrófono", "Preparing the microphone"),
+    esperando: tx("Diga «Hola Melki»", "Say “Hey Melki”"),
+    atento: tx("Le escucho", "I'm listening"),
+    pensando: tx("Pensando", "Thinking"),
+    hablando: tx("Hablando", "Speaking"),
+  }),
+);
 
 /** Colores del orbe por estado: tres tonos para el anillo y el del centro. */
 const COLORES: Record<EstadoManosLibres, [string, string, string]> = {
@@ -154,8 +159,8 @@ function Boton({ etiqueta, titulo, onClick, children, fondo, presionado }: { eti
 function BotonVoz({ voz, onVoz }: { voz: boolean; onVoz: (v: boolean) => void }) {
   return (
     <Boton
-      etiqueta="Voz de Melki"
-      titulo={voz ? "Melki habla en voz alta (toque para que solo responda por escrito)" : "Melki responde por escrito (toque para que hable en voz alta)"}
+      etiqueta={tx("Voz de Melki", "Melki's voice")}
+      titulo={voz ? tx("Melki habla en voz alta (toque para que solo responda por escrito)", "Melki speaks out loud (tap so he only replies in writing)") : tx("Melki responde por escrito (toque para que hable en voz alta)", "Melki replies in writing (tap so he speaks out loud)")}
       onClick={() => onVoz(!voz)}
       presionado={voz}
     >
@@ -215,6 +220,7 @@ export function HudVoz({
   /** Con él, la barra trae el botón para encender o apagar la voz de Melki a mano. */
   onVoz?: (v: boolean) => void;
 }) {
+  useIdioma();
   const [pos, setPos] = useState<Posicion>(() => leerHud().pos);
   const [mini, setMini] = useState(() => leerHud().mini);
   /** Esperando su nombre desde hace unos segundos: la barra se encoge sola. */
@@ -249,22 +255,35 @@ export function HudVoz({
   if (estado === "apagado" || estado === "dormido") return null;
 
   const pequena = mini || (reposo && quieto);
-  const tituloCallar = parlantes ? "Callar (con parlantes no le oigo mientras hablo: use este botón)" : "Callar (o diga «Melki, para»)";
+  const tituloCallar = parlantes
+    ? tx("Callar (con parlantes no le oigo mientras hablo: use este botón)", "Stop talking (with speakers I can't hear you while I speak: use this button)")
+    : tx("Callar (o diga «Melki, para»)", "Stop talking (or say “Melki, stop”)");
   /** Callar solo tiene sentido si suena su voz; sin voz la respuesta queda escrita y se va sola. */
   const callable = estado === "hablando" && voz;
-  const nombreEstado = estado === "hablando" && !voz ? "Le respondo por escrito" : ESTADO[estado];
+  const nombreEstado = estado === "hablando" && !voz ? tx("Le respondo por escrito", "I'll reply in writing") : ESTADO()[estado];
+  const oido = tx(`«${escuchado}»`, `“${escuchado}”`);
   const linea =
     aviso ??
     (estado === "hablando"
       ? subtitulo
       : estado === "atento" || estado === "pensando"
         ? escuchado
-          ? `«${escuchado}»`
-          : "Dígame, le escucho…"
+          ? oido
+          : tx("Dígame, le escucho…", "Go ahead, I'm listening…")
         : estado === "esperando"
-          ? subtitulo || "Por ejemplo: «Hola Melki, ¿qué hago ahora?»"
-          : "Un momento, por favor…");
-  const etiquetaPequena = aviso ?? (estado === "esperando" ? "Diga «Hola Melki»" : estado === "hablando" ? subtitulo || nombreEstado : estado === "atento" ? (escuchado ? `«${escuchado}»` : "Le escucho…") : nombreEstado);
+          ? subtitulo || tx("Por ejemplo: «Hola Melki, ¿qué hago ahora?»", "For example: “Hey Melki, what should I do next?”")
+          : tx("Un momento, por favor…", "One moment, please…"));
+  const etiquetaPequena =
+    aviso ??
+    (estado === "esperando"
+      ? tx("Diga «Hola Melki»", "Say “Hey Melki”")
+      : estado === "hablando"
+        ? subtitulo || nombreEstado
+        : estado === "atento"
+          ? escuchado
+            ? oido
+            : tx("Le escucho…", "I'm listening…")
+          : nombreEstado);
 
   const empezar = (e: EventoPuntero<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest("button") || e.button !== 0) return;
@@ -308,7 +327,7 @@ export function HudVoz({
     ref: caja,
     role: "status",
     "aria-live": "polite" as const,
-    "aria-label": "Asistente Melki",
+    "aria-label": tx("Asistente Melki", "Melki Assistant"),
     "data-tour": "hud-voz",
     "data-estado": estado,
     "data-forma": pequena ? "pequena" : "completa",
@@ -319,7 +338,7 @@ export function HudVoz({
     onPointerUp: soltar,
     onPointerCancel: soltar,
     onDoubleClick: volver,
-    title: "Arrastre para moverla; doble clic la devuelve a su sitio",
+    title: tx("Arrastre para moverla; doble clic la devuelve a su sitio", "Drag to move it; double-click to put it back in its place"),
   };
 
   if (pequena)
@@ -331,15 +350,19 @@ export function HudVoz({
         <Orbe estado={estado} pequeno nivel={nivel} />
         <span className="max-w-[240px] min-w-0 truncate pr-1 text-[12.5px] text-white/90">{etiquetaPequena}</span>
         {callable && (
-          <Boton etiqueta="Callar a Melki" titulo={tituloCallar} onClick={onCallar} fondo>
+          <Boton etiqueta={tx("Callar a Melki", "Stop Melki talking")} titulo={tituloCallar} onClick={onCallar} fondo>
             <Square size={12} fill="currentColor" />
           </Boton>
         )}
         {onVoz && <BotonVoz voz={voz} onVoz={onVoz} />}
-        <Boton etiqueta="Agrandar la barra del asistente" onClick={() => fijarMini(false)}>
+        <Boton etiqueta={tx("Agrandar la barra del asistente", "Expand the assistant bar")} onClick={() => fijarMini(false)}>
           <Maximize2 size={14} />
         </Boton>
-        <Boton etiqueta="Apagar el Asistente Melki" titulo="Apagar el asistente (o diga «Melki, deja de escuchar»)" onClick={onApagar}>
+        <Boton
+          etiqueta={tx("Apagar el Asistente Melki", "Turn off the Melki Assistant")}
+          titulo={tx("Apagar el asistente (o diga «Melki, deja de escuchar»)", "Turn off the assistant (or say “Melki, stop listening”)")}
+          onClick={onApagar}
+        >
           <X size={16} />
         </Boton>
       </div>
@@ -355,15 +378,18 @@ export function HudVoz({
         <Orbe estado={estado} nivel={nivel} />
         <div className="min-w-0 flex-1">
           <p className="flex min-w-0 items-center gap-2">
-            <span className="shrink-0 font-cond text-[14.5px] leading-none font-semibold tracking-wide">Asistente Melki</span>
+            <span className="shrink-0 font-cond text-[14.5px] leading-none font-semibold tracking-wide">{tx("Asistente Melki", "Melki Assistant")}</span>
             {ia && (
-              <span className="hud-ia inline-flex shrink-0 items-center gap-1 rounded-full bg-gradient-to-r from-[#e07a3f] to-[#8fb3ff] px-1.5 py-0.5 text-[10.5px] font-semibold tracking-wide text-white" title={`Conversando ${motor}`}>
-                <Sparkles size={11} aria-hidden="true" /> IA en vivo
+              <span
+                className="hud-ia inline-flex shrink-0 items-center gap-1 rounded-full bg-gradient-to-r from-[#e07a3f] to-[#8fb3ff] px-1.5 py-0.5 text-[10.5px] font-semibold tracking-wide text-white"
+                title={tx(`Conversando ${motor}`, `Talking ${motor}`)}
+              >
+                <Sparkles size={11} aria-hidden="true" /> {tx("IA en vivo", "Live AI")}
               </span>
             )}
             <span
               className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${estado === "atento" ? "bg-melki/25 text-[#ffd2b8]" : "bg-white/10 text-white/75"}`}
-              title={motor ? `Escucho ${motor}` : undefined}
+              title={motor ? tx(`Escucho ${motor}`, `Listening ${motor}`) : undefined}
             >
               <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${estado === "atento" ? "animate-pulse bg-melki" : estado === "hablando" ? "bg-[#4fd1b5]" : estado === "pensando" ? "animate-pulse bg-[#8fb3ff]" : "bg-salvia"}`} />
               <span>{nombreEstado}</span>
@@ -372,33 +398,46 @@ export function HudVoz({
           <p className={`mt-1 line-clamp-2 text-[13.5px] leading-snug ${aviso ? "text-[#ffd2b8]" : estado === "atento" || estado === "pensando" ? "text-white italic" : "text-white/95"}`}>{linea}</p>
         </div>
         {callable && (
-          <Boton etiqueta="Callar a Melki" titulo={tituloCallar} onClick={onCallar} fondo>
+          <Boton etiqueta={tx("Callar a Melki", "Stop Melki talking")} titulo={tituloCallar} onClick={onCallar} fondo>
             <Square size={12} fill="currentColor" />
           </Boton>
         )}
         {onVoz && <BotonVoz voz={voz} onVoz={onVoz} />}
-        <Boton etiqueta="¿Qué hago ahora?" onClick={() => onSugerencia("que-hago")}>
+        <Boton etiqueta={tx("¿Qué hago ahora?", "What should I do next?")} onClick={() => onSugerencia("que-hago")}>
           <Sparkles size={15} />
         </Boton>
-        <Boton etiqueta="¿Qué puedo decir?" onClick={() => onSugerencia("ayuda")}>
+        <Boton etiqueta={tx("¿Qué puedo decir?", "What can I say?")} onClick={() => onSugerencia("ayuda")}>
           <CircleHelp size={16} />
         </Boton>
-        <Boton etiqueta="Achicar la barra del asistente" titulo="Dejarla pequeña" onClick={() => fijarMini(true)}>
+        <Boton etiqueta={tx("Achicar la barra del asistente", "Shrink the assistant bar")} titulo={tx("Dejarla pequeña", "Keep it small")} onClick={() => fijarMini(true)}>
           <Minimize2 size={14} />
         </Boton>
-        <Boton etiqueta="Apagar el Asistente Melki" titulo="Apagar el asistente (o diga «Melki, deja de escuchar»)" onClick={onApagar}>
+        <Boton
+          etiqueta={tx("Apagar el Asistente Melki", "Turn off the Melki Assistant")}
+          titulo={tx("Apagar el asistente (o diga «Melki, deja de escuchar»)", "Turn off the assistant (or say “Melki, stop listening”)")}
+          onClick={onApagar}
+        >
           <X size={16} />
         </Boton>
       </div>
       {bloqueada && (
         <button type="button" onClick={onOirme} className="mx-3 mb-2 flex w-[calc(100%-24px)] items-center justify-center gap-2 rounded-xl bg-[#ffd68c] px-3 py-1.5 text-[13px] font-medium text-carbon hover:bg-[#ffe2a8]">
-          <Volume2 size={15} aria-hidden="true" /> Toque aquí para oír mi voz
+          <Volume2 size={15} aria-hidden="true" /> {tx("Toque aquí para oír mi voz", "Tap here to hear my voice")}
         </button>
       )}
       {hayPaneles && (
-        <div className="desplazable flex gap-1.5 overflow-x-auto px-3 pb-2.5 sm:flex-wrap sm:overflow-visible" role="group" aria-label="Sugerencias del asistente" data-tour="hud-sugerencias">
-          {!paneles.derecho && <Chip icono={<PanelRight size={13} aria-hidden="true" />} texto="Mostrar resultados" resaltado={resaltado === "derecho"} onClick={() => onSugerencia("resultados")} />}
-          {!paneles.izquierdo && <Chip icono={<PanelLeft size={13} aria-hidden="true" />} texto="Mostrar herramientas" resaltado={resaltado === "izquierdo"} onClick={() => onSugerencia("herramientas")} />}
+        <div
+          className="desplazable flex gap-1.5 overflow-x-auto px-3 pb-2.5 sm:flex-wrap sm:overflow-visible"
+          role="group"
+          aria-label={tx("Sugerencias del asistente", "Assistant suggestions")}
+          data-tour="hud-sugerencias"
+        >
+          {!paneles.derecho && (
+            <Chip icono={<PanelRight size={13} aria-hidden="true" />} texto={tx("Mostrar resultados", "Show results")} resaltado={resaltado === "derecho"} onClick={() => onSugerencia("resultados")} />
+          )}
+          {!paneles.izquierdo && (
+            <Chip icono={<PanelLeft size={13} aria-hidden="true" />} texto={tx("Mostrar herramientas", "Show tools")} resaltado={resaltado === "izquierdo"} onClick={() => onSugerencia("herramientas")} />
+          )}
         </div>
       )}
     </div>

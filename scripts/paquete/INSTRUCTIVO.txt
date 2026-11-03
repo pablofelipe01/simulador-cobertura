@@ -20,7 +20,17 @@ torre de 12 m con 4 radios Heltec T114, billeteras XIAO o T1000-E,
 Starlink) e incluye las funciones de Radio Mobile, una regla para medir
 distancias y áreas, un mapa con departamentos, municipios y ríos, y a
 Melki, el asistente que ejecuta pedidos escritos con sus palabras.
-Novedad: Melki tiene su propio modelo de inteligencia artificial, el
+Novedad: el simulador ahora también está en inglés, completo: la
+pantalla, los informes, los archivos que descarga y Melki, que entiende,
+responde y habla en inglés (si le pide que hable, con una voz británica
+serena, al estilo de JARVIS). Si le escribe o le habla en inglés, todo
+cambia a inglés al instante, y vuelve al español si le habla en
+español; también se elige en la tuerca de "Configuración", a la derecha
+de "Pitch". La primera vez abre en el idioma del navegador y después
+recuerda el último que usó. Y la página abre con los paneles ocultos,
+para ver el mapa completo: las herramientas y los resultados se abren
+cuando usted quiera.
+Melki tiene su propio modelo de inteligencia artificial, el
 "Modelo Melki": una red neuronal pequeña, hecha solo para este
 simulador, que entiende los pedidos dichos con sus palabras ("móntame
 una malla que abarque tres millas alrededor de la finca", "¿cuánto me
@@ -431,7 +441,7 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
  p) Pantalla limpia: el botón junto a "Modo avanzado" oculta el panel
     de la izquierda y el de la barra de arriba lo devuelve; el de la
     derecha oculta los Resultados. O dígale a Melki "pantalla limpia" y
-    "muestra los paneles".
+    "muestra los paneles". Al abrir la página, los dos empiezan ocultos.
  n) Funciones de Radio Mobile (modo avanzado): modelo Calibrado o
     Longley-Rice, confiabilidad, clima, polarización, suelo,
     refractividad, entorno (vegetación o edificios), antenas
@@ -585,6 +595,30 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
     voz) > "Modelo Melki" para apagarlo o para "Olvidar lo aprendido".
     Lo que no es del simulador lo dice con cortesía, y lo que no
     entiende lo pide de nuevo. Pregúntele "¿cómo me entiendes?".
+ y) En inglés: toque la tuerca de "Configuración" (arriba, a la
+    derecha de "Pitch") y elija "English": la pantalla, los informes,
+    los archivos que descarga (KMZ, CSV, informe de radioenlace) y
+    Melki pasan a inglés al instante, sin perder lo calculado. O
+    simplemente escríbale o háblele a Melki en inglés ("How much does
+    the network cost?", "add a repeater 5 km north of the gateway",
+    "take me to Villavicencio", "walk me through the network"): todo
+    cambia a inglés solo y, si le escribe en español, vuelve al
+    español, con un botón para devolverse. "Speak English" o "habla en
+    español" lo cambian siempre; en "Configuración" se apaga el cambio
+    automático. La primera vez abre en el idioma del navegador y
+    después recuerda el último que usó. En inglés Melki responde con la
+    cortesía de un mayordomo ("Done, sir.") y, si le pide que hable
+    ("talk to me"), lo hace con una voz británica serena, al estilo de
+    JARVIS (en Edge, Ryan; la femenina es Sonia, en Ajustes de voz). La
+    plata sigue en pesos colombianos (COP) y las medidas en metros y
+    kilómetros. Por voz, el navegador escucha un idioma a la vez: para
+    cambiar hablando diga "Hola Melki, habla en inglés" (y en inglés,
+    "Hey Melki, speak Spanish" para volver).
+    La página abre con los paneles ocultos, para ver el mapa completo:
+    las herramientas (izquierda) y los resultados (derecha) se abren
+    con sus botones de la barra de arriba o pidiéndoselo a Melki
+    ("muestra los resultados"). Cuando hay un resultado nuevo, el botón
+    de los resultados lo avisa con un punto.
 
 
 3. BUENO SABER
@@ -642,6 +676,12 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
   mismo. Si su voz no suena, toque la página una vez (el navegador lo
   pide) o revise el volumen; si una voz "en línea" falla por la red,
   Melki sigue con una voz del equipo.
+- Idioma: el que se elige queda guardado en este navegador. Lo que ya
+  estaba escrito en la conversación de Melki se queda en el idioma en
+  que se escribió y lo nuevo sale en el idioma de ahora. Los nombres de
+  los nodos que ya existían no se traducen (los nuevos salen en el
+  idioma de la pantalla: "Repeater 1" en inglés, "Repetidor 1" en
+  español) y Melki entiende los dos.
 - La demostración es genérica: no contiene datos de ningún cliente.
 
 

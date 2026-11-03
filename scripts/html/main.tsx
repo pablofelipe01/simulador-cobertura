@@ -7,6 +7,7 @@
 import { createRoot } from "react-dom/client";
 
 import { Simulador } from "@/components/simulador/simulador";
+import { leerPreferenciaIdioma } from "@/lib/idioma";
 
 const contenedor = document.getElementById("app");
 if (contenedor) {
@@ -14,6 +15,6 @@ if (contenedor) {
     createRoot(contenedor).render(<Simulador />);
   } catch (error) {
     console.error(error);
-    contenedor.textContent = "El simulador no pudo iniciar. Recargue la página.";
+    contenedor.textContent = leerPreferenciaIdioma().idioma === "en" ? "The simulator couldn't start. Please reload the page." : "El simulador no pudo iniciar. Recargue la página.";
   }
 }

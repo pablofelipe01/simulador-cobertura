@@ -185,6 +185,26 @@ ve la simulación detrás) y un botón para que hable en voz alta o no, a mano.
   solar de noche (pilas del repetidor y kit solar del gateway). Si las reglas solo encontraron una palabra suelta y el
   Modelo Melki está muy seguro de otra cosa («¿cuánto cuesta cada repetidor?», «¿cuántas personas quedaron sin
   señal?», «muévete el Repetidor 3…»), gana el modelo; los saludos y las gracias no se cambian
+- **En inglés también** (v17; tuerca ⚙ de la barra superior → «Configuración»): todo el simulador y Melki funcionan
+  en español o en inglés —botones, paneles, mapa (leyenda y capas), informes, archivos que se exportan (KMZ, CSV y
+  JSON), tours, recorrido de la red, pitch, «Acerca de» y lo que Melki escribe y dice—. La primera vez abre en el
+  idioma del navegador; después recuerda el último. Si le escriben o le hablan a Melki en el otro idioma, todo cambia
+  solo (lo avisa con un botón para volver), y «speak English» o «habla en español» lo cambian siempre; en
+  Configuración se escoge el idioma y se apaga el cambio automático. Al cambiar de idioma, lo que ya está en pantalla
+  cambia al instante, también lo que calculó el motor (veredictos, recomendaciones, pruebas de estrés y ajustes), sin
+  volver a calcular: el motor escribe sus textos en los dos idiomas y la pantalla muestra el suyo. En inglés, Melki
+  entiende las órdenes y las preguntas (un traductor del dominio pasa lo dicho a las palabras que su intérprete ya
+  entiende, el cerebro contesta las preguntas en inglés y un Modelo Melki en inglés, entrenado aparte, entiende lo
+  dicho con otras palabras) y habla con una voz británica serena al estilo de JARVIS (en Edge, Ryan o Thomas; la
+  femenina queda para escoger). Los nodos nuevos se llaman en el idioma de la pantalla («Repeater 1», «Person 1»);
+  los de antes conservan su nombre y Melki entiende los dos. Plata en pesos colombianos (COP) y medidas métricas en
+  los dos idiomas. La conversación con IA (Gemini Live) y la IA local también funcionan en inglés (las órdenes al
+  simulador siguen pasando por el intérprete de Melki). Con la voz, el navegador escucha en un idioma a la vez:
+  «Hola Melki, habla en inglés» (o «Hey Melki, speak Spanish») lo cambia, y si se le habla en el otro idioma y lo
+  reconoce por las palabras, también cambia
+- **Paneles ocultos al abrir** (v17): los dos paneles (herramientas y resultados) empiezan ocultos siempre, para
+  ver el mapa completo; se abren con sus botones de la barra superior, pidiéndoselo a Melki o en los tours. Si hay un
+  resultado nuevo con el panel cerrado, su botón lo avisa con un puntico
 - **IA local en este equipo** (v14; Ajustes de voz → «IA local en este equipo (Qwen3)»): un modelo de lenguaje
   abierto (Qwen3 de Alibaba; 4B recomendado, 1.7B liviano u 8B máximo) que corre en la tarjeta gráfica con WebGPU, sin
   instalar nada en el sistema y sin mandar nada a internet. Se descarga una sola vez (unos 2,3 GB el recomendado), solo
@@ -516,7 +536,8 @@ npm run dev          # http://localhost:3000
 ```
 src/
   app/                      layout, página y estilos globales
-  components/simulador/     pantalla principal, mapa, paneles, regla, buscador, capas de referencia, exportación
+  components/simulador/     pantalla principal, mapa, paneles, regla, buscador, capas de referencia, exportación,
+                            configuracion.tsx (v17: la tuerca con el idioma y el cambio automático)
   components/melki/         asistente: avatar, cerebro local, órdenes, tours guiados (tours.ts + recorrido.tsx), voz y dictado
                             (dictado.ts: escucha seguida que se vuelve a encender sola, frases sin duplicados y con su
                             hora, micrófono abierto y nivel de la voz);
@@ -542,11 +563,19 @@ src/
                             ranuras.ts, los datos del pedido con las reglas del intérprete; intenciones.ts, las 150
                             intenciones y la orden que arma cada una; entender.ts, hacer, confirmar, preguntar, el tema,
                             fuera y lo aprendido; memoria.ts, la carga perezosa, la preferencia y lo aprendido en el
-                            navegador)
+                            navegador; el modelo y lo aprendido van por idioma);
+                            Melki en inglés (v17: ingles.ts, lo pedido en inglés en las palabras que el intérprete ya
+                            entiende, con los nombres, lugares y coordenadas tal cual; idioma-melki.ts, cuándo cambiar
+                            de idioma y el aviso con su botón para volver; numeros.ts también lee los números en
+                            palabras del inglés)
   datos/geo/                límites, nombres y ríos de referencia (ver LEEME.md: fuentes y licencias)
   datos/modelo/melki.json   los pesos del Modelo Melki (enteros de 8 bits en base64), su vocabulario, sus umbrales y su
-                            evaluación; se carga aparte, cuando el navegador está desocupado
+                            evaluación; se carga aparte, cuando el navegador está desocupado (melki-en.json: el mismo
+                            modelo para el inglés, que se carga solo si se usa el inglés)
   lib/autoria.ts            autoría, titulares y licencia (los usan «Acerca del simulador», Melki y la versión HTML)
+  lib/idioma.ts             v17: el idioma (tx("español", "English")), los textos del motor en los dos idiomas y cómo
+                            se resuelven en la pantalla, los números y fechas del idioma, la preferencia y la detección
+                            del idioma de lo que se escribe o se dice (use-idioma.ts: el idioma en los componentes)
   lib/geo/                  consultas locales: municipio de un punto, búsqueda de lugares, contorno de un municipio
                             y reconocimiento de lugares dichos (fonetica.ts: cómo suena el español y cuánto se parecen)
   lib/radio/                motor: modelo, relieve, perfil, cobertura, malla, factibilidad, worker;

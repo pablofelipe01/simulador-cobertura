@@ -8,7 +8,14 @@
 // Piezas de interfaz compartidas por los paneles.
 import { useId, useState, type ReactNode } from "react";
 
-export const fmt = (n: number, d = 1) => (Number.isFinite(n) ? n.toFixed(d).replace(".", ",") : "—");
+import { decimalLocal, tx } from "@/lib/idioma";
+import { useIdioma } from "@/lib/use-idioma";
+
+/** Un número con `d` decimales y el separador del idioma («2,5» en español, «2.5» en inglés); «—» si no es un número. */
+export const fmt = (n: number, d = 1) => (Number.isFinite(n) ? decimalLocal(n, d) : "—");
+
+/** El valor de un campo numérico como se escribe en el idioma de la pantalla (coma decimal en español, punto en inglés). */
+const enCampo = (v: number) => tx(String(v).replace(".", ","), String(v));
 
 type CampoNumeroProps = {
   etiqueta: string;
@@ -22,12 +29,13 @@ type CampoNumeroProps = {
   tour?: string;
 };
 
-/** Campo numérico que acepta coma decimal y solo confirma valores válidos. */
+/** Campo numérico que acepta coma o punto decimal (en los dos idiomas) y solo confirma valores válidos. */
 export function CampoNumero({ etiqueta, valor, unidad, min, max, paso = 1, ayuda, onCambio, tour }: CampoNumeroProps) {
+  useIdioma();
   const id = useId();
   // Mientras se edita se conserva el texto escrito; fuera de la edición se muestra el valor del estado.
   const [borrador, setTexto] = useState<string | null>(null);
-  const texto = borrador ?? String(valor).replace(".", ",");
+  const texto = borrador ?? enCampo(valor);
   const n = Number(texto.replace(",", "."));
   const invalido = texto.trim() === "" || !Number.isFinite(n) || (min !== undefined && n < min) || (max !== undefined && n > max);
   return (
@@ -41,7 +49,7 @@ export function CampoNumero({ etiqueta, valor, unidad, min, max, paso = 1, ayuda
           value={texto}
           aria-invalid={invalido}
           title={ayuda}
-          onFocus={() => setTexto(String(valor).replace(".", ","))}
+          onFocus={() => setTexto(enCampo(valor))}
           onBlur={() => setTexto(null)}
           onChange={(e) => {
             setTexto(e.target.value);
@@ -53,7 +61,7 @@ export function CampoNumero({ etiqueta, valor, unidad, min, max, paso = 1, ayuda
               e.preventDefault();
               const v = Math.round(((Number.isFinite(n) ? n : valor) + (e.key === "ArrowUp" ? paso : -paso)) * 1000) / 1000;
               const lim = Math.min(max ?? Infinity, Math.max(min ?? -Infinity, v));
-              setTexto(String(lim).replace(".", ","));
+              setTexto(enCampo(lim));
               onCambio(lim);
             }
           }}

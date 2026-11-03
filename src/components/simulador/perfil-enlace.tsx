@@ -12,9 +12,11 @@ import { useState } from "react";
 
 import { CLASES, RADIO_EFECTIVO_M } from "@/lib/radio/constantes";
 import { rumboTexto } from "@/lib/radio/geo";
+import { tx } from "@/lib/idioma";
 import { campoInforme, MODOS_ITM, nombreModelo, textoInforme, textoUv } from "@/lib/radio/informe";
 import { longitudOnda } from "@/lib/radio/modelo";
 import type { InformeEnlace, Perfil } from "@/lib/radio/tipos";
+import { useIdioma } from "@/lib/use-idioma";
 
 import { fmt } from "./ui";
 
@@ -37,6 +39,7 @@ function Fila({ k, v, fuerte }: { k: string; v: string; fuerte?: boolean }) {
 }
 
 function Informe({ i }: { i: InformeEnlace }) {
+  useIdioma();
   const [copiado, setCopiado] = useState(false);
   const texto = () => textoInforme(i);
   const nombre = `radioenlace_${i.origen}_${i.destino}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9_-]+/g, "_") + ".txt";
@@ -57,53 +60,56 @@ function Informe({ i }: { i: InformeEnlace }) {
               });
             }}
           >
-            {copiado ? <Check size={14} /> : <Copy size={14} />} {copiado ? "Copiado" : "Copiar"}
+            {copiado ? <Check size={14} /> : <Copy size={14} />} {copiado ? tx("Copiado", "Copied") : tx("Copiar", "Copy")}
           </button>
           <button
             type="button"
             className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12px] font-medium text-carbon-2 ring-1 ring-linea hover:bg-papel-2"
             onClick={() => descargarTexto(nombre, texto())}
           >
-            <Download size={14} /> Descargar
+            <Download size={14} /> {tx("Descargar", "Download")}
           </button>
         </span>
       </div>
       <div className="@container">
       <div className="grid gap-x-5 gap-y-2 text-[12.5px] @lg:grid-cols-2 @4xl:grid-cols-3">
         <dl>
-          <p className="font-cond text-[13.5px] font-semibold">Geometría</p>
-          <Fila k="Distancia" v={`${fmt(i.distanciaKm, 3)} km`} />
-          <Fila k="Azimut ida" v={rumboTexto(i.rumboIdaDeg)} />
-          <Fila k="Azimut vuelta" v={rumboTexto(i.rumboVueltaDeg)} />
-          <Fila k="Elevación ida / vuelta" v={`${fmt(i.elevacionIdaDeg, 2)}° / ${fmt(i.elevacionVueltaDeg, 2)}°`} />
-          <Fila k="Suelo (origen / destino)" v={`${fmt(i.sueloOrigenM, 0)} / ${fmt(i.sueloDestinoM, 0)} m`} />
-          <Fila k="Antenas (origen / destino)" v={`${fmt(i.alturaOrigenM)} / ${fmt(i.alturaDestinoM)} m`} />
-          <Fila k="Peor Fresnel" v={`${fmt(i.peorFresnel, 1)} F1 a ${fmt(i.peorFresnelKm, 2)} km`} />
-          <Fila k="Línea de vista" v={i.lineaVista ? "despejada" : i.peorFresnel >= 0 ? "parcialmente obstruida" : "obstruida"} />
+          <p className="font-cond text-[13.5px] font-semibold">{tx("Geometría", "Geometry")}</p>
+          <Fila k={tx("Distancia", "Distance")} v={`${fmt(i.distanciaKm, 3)} km`} />
+          <Fila k={tx("Azimut ida", "Azimuth (forward)")} v={rumboTexto(i.rumboIdaDeg)} />
+          <Fila k={tx("Azimut vuelta", "Azimuth (reverse)")} v={rumboTexto(i.rumboVueltaDeg)} />
+          <Fila k={tx("Elevación ida / vuelta", "Elevation forward / reverse")} v={`${fmt(i.elevacionIdaDeg, 2)}° / ${fmt(i.elevacionVueltaDeg, 2)}°`} />
+          <Fila k={tx("Suelo (origen / destino)", "Ground (origin / destination)")} v={`${fmt(i.sueloOrigenM, 0)} / ${fmt(i.sueloDestinoM, 0)} m`} />
+          <Fila k={tx("Antenas (origen / destino)", "Antennas (origin / destination)")} v={`${fmt(i.alturaOrigenM)} / ${fmt(i.alturaDestinoM)} m`} />
+          <Fila k={tx("Peor Fresnel", "Worst Fresnel")} v={tx(`${fmt(i.peorFresnel, 1)} F1 a ${fmt(i.peorFresnelKm, 2)} km`, `${fmt(i.peorFresnel, 1)} F1 at ${fmt(i.peorFresnelKm, 2)} km`)} />
+          <Fila
+            k={tx("Línea de vista", "Line of sight")}
+            v={i.lineaVista ? tx("despejada", "clear") : i.peorFresnel >= 0 ? tx("parcialmente obstruida", "partially obstructed") : tx("obstruida", "obstructed")}
+          />
         </dl>
         <dl>
-          <p className="font-cond text-[13.5px] font-semibold">Potencias y antenas</p>
-          <Fila k="Potencia Tx" v={`${fmt(i.potenciaTxDbm)} dBm`} />
-          <Fila k="Cable Tx" v={`${fmt(i.perdidaCableTxDb)} dB`} />
-          <Fila k="Ganancia Tx" v={`${fmt(i.gananciaTxDbi)} dBi${i.patronTxDb > 0.05 ? ` − ${fmt(i.patronTxDb)}` : ""}`} />
-          <Fila k="PIRE" v={`${fmt(i.pireDbm)} dBm`} fuerte />
-          <Fila k="Ganancia Rx" v={`${fmt(i.gananciaRxDbi)} dBi${i.patronRxDb > 0.05 ? ` − ${fmt(i.patronRxDb)}` : ""}`} />
-          <Fila k="Cable Rx" v={`${fmt(i.perdidaCableRxDb)} dB`} />
-          {i.perdidaExtraRxDb > 0 && <Fila k="Pérdida extra Rx" v={`${fmt(i.perdidaExtraRxDb)} dB`} />}
+          <p className="font-cond text-[13.5px] font-semibold">{tx("Potencias y antenas", "Power and antennas")}</p>
+          <Fila k={tx("Potencia Tx", "Tx power")} v={`${fmt(i.potenciaTxDbm)} dBm`} />
+          <Fila k={tx("Cable Tx", "Tx cable")} v={`${fmt(i.perdidaCableTxDb)} dB`} />
+          <Fila k={tx("Ganancia Tx", "Tx gain")} v={`${fmt(i.gananciaTxDbi)} dBi${i.patronTxDb > 0.05 ? ` − ${fmt(i.patronTxDb)}` : ""}`} />
+          <Fila k={tx("PIRE", "EIRP")} v={`${fmt(i.pireDbm)} dBm`} fuerte />
+          <Fila k={tx("Ganancia Rx", "Rx gain")} v={`${fmt(i.gananciaRxDbi)} dBi${i.patronRxDb > 0.05 ? ` − ${fmt(i.patronRxDb)}` : ""}`} />
+          <Fila k={tx("Cable Rx", "Rx cable")} v={`${fmt(i.perdidaCableRxDb)} dB`} />
+          {i.perdidaExtraRxDb > 0 && <Fila k={tx("Pérdida extra Rx", "Rx extra loss")} v={`${fmt(i.perdidaExtraRxDb)} dB`} />}
         </dl>
         <dl>
-          <p className="font-cond text-[13.5px] font-semibold">Pérdidas y recepción</p>
-          <Fila k="Espacio libre" v={`${fmt(i.espacioLibreDb)} dB`} />
-          <Fila k={i.modelo === "itm" ? "Terreno (ITM)" : "Obstrucción"} v={`${fmt(i.obstruccionDb)} dB`} />
-          <Fila k={i.modelo === "itm" ? "Variabilidad" : "Estadística"} v={`${fmt(i.estadisticaDb)} dB`} />
-          {i.modelo !== "itm" && Math.abs(i.ajusteRedDb) > 0.005 && <Fila k="Ajuste de red" v={`${i.ajusteRedDb > 0 ? "+" : ""}${fmt(i.ajusteRedDb)} dB`} />}
-          {i.entornoDb > 0.005 && <Fila k="Entorno" v={`${fmt(i.entornoDb)} dB`} />}
-          <Fila k="Pérdida total" v={`${fmt(i.perdidaTotalDb)} dB`} fuerte />
+          <p className="font-cond text-[13.5px] font-semibold">{tx("Pérdidas y recepción", "Losses and reception")}</p>
+          <Fila k={tx("Espacio libre", "Free space")} v={`${fmt(i.espacioLibreDb)} dB`} />
+          <Fila k={i.modelo === "itm" ? tx("Terreno (ITM)", "Terrain (ITM)") : tx("Obstrucción", "Obstruction")} v={`${fmt(i.obstruccionDb)} dB`} />
+          <Fila k={i.modelo === "itm" ? tx("Variabilidad", "Variability") : tx("Estadística", "Statistics")} v={`${fmt(i.estadisticaDb)} dB`} />
+          {i.modelo !== "itm" && Math.abs(i.ajusteRedDb) > 0.005 && <Fila k={tx("Ajuste de red", "Network adjustment")} v={`${i.ajusteRedDb > 0 ? "+" : ""}${fmt(i.ajusteRedDb)} dB`} />}
+          {i.entornoDb > 0.005 && <Fila k={tx("Entorno", "Environment")} v={`${fmt(i.entornoDb)} dB`} />}
+          <Fila k={tx("Pérdida total", "Total loss")} v={`${fmt(i.perdidaTotalDb)} dB`} fuerte />
           <Fila k="Longley-Rice" v={`${fmt(i.itm.perdidaDb)} dB (${MODOS_ITM[i.itm.modo]})`} />
-          <Fila k="Nivel recibido" v={`${fmt(i.nivelDbm)} dBm`} fuerte />
-          <Fila k="Tensión" v={textoUv(i.nivelDbm)} />
-          <Fila k="Campo" v={`${fmt(campoInforme(i))} dBµV/m`} />
-          <Fila k="Sensibilidad / margen" v={`${fmt(i.sensibilidadDbm)} dBm / ${fmt(i.margenDb)} dB`} />
+          <Fila k={tx("Nivel recibido", "Received level")} v={`${fmt(i.nivelDbm)} dBm`} fuerte />
+          <Fila k={tx("Tensión", "Voltage")} v={textoUv(i.nivelDbm)} />
+          <Fila k={tx("Campo", "Field strength")} v={`${fmt(campoInforme(i))} dBµV/m`} />
+          <Fila k={tx("Sensibilidad / margen", "Sensitivity / margin")} v={`${fmt(i.sensibilidadDbm)} dBm / ${fmt(i.margenDb)} dB`} />
         </dl>
       </div>
       </div>
@@ -138,11 +144,12 @@ export function PerfilEnlace({
   informe?: boolean;
   onCerrar: () => void;
 }) {
+  useIdioma();
   const [verInforme, setVerInforme] = useState(informe);
   if (!p) {
     return (
       <div className="pointer-events-auto absolute right-3 bottom-10 left-3 z-20 rounded-xl bg-white p-4 shadow-lg sm:right-24 ring-1 ring-black/10">
-        <p className="text-[14px] text-tenue">Calculando el perfil…</p>
+        <p className="text-[14px] text-tenue">{tx("Calculando el perfil…", "Calculating the profile…")}</p>
       </div>
     );
   }
@@ -173,7 +180,7 @@ export function PerfilEnlace({
     <div
       className="desplazable pointer-events-auto absolute right-3 bottom-10 left-3 z-20 max-h-[calc(100%-9.5rem)] overflow-y-auto rounded-xl bg-white p-3 pb-16 text-carbon shadow-lg ring-1 ring-black/10 sm:right-24 sm:max-h-[calc(100%-6.5rem)] sm:pb-3"
       role="dialog"
-      aria-label={`Perfil ${titulo}`}
+      aria-label={tx(`Perfil ${titulo}`, `Profile ${titulo}`)}
       data-tour="perfil"
     >
       <div className="flex flex-wrap items-start gap-x-5 gap-y-1">
@@ -181,9 +188,18 @@ export function PerfilEnlace({
           <p className="truncate font-cond text-[16px] font-semibold">{titulo}</p>
           <p className="text-[12px] text-tenue">
             {fmt(d / 1000, 2)} km
-            {p.informe && ` · azimut ${rumboTexto(p.informe.rumboIdaDeg)}`}
-            {p.informe ? ` · nivel ${fmt(p.informe.nivelDbm)} dBm (${textoUv(p.informe.nivelDbm)}) · pérdida ${fmt(p.informe.perdidaTotalDb)} dB` : ` · espacio libre ${fmt(p.perdidaEspacioLibreDb, 1)} dB · difracción ${fmt(p.perdidaDifraccionDb, 1)} dB`} ·{" "}
-            {p.lineaVista ? "línea de vista despejada (60 % de Fresnel)" : p.obstaculoM !== null ? `obstáculo principal a ${fmt(p.obstaculoM / 1000, 2)} km` : "Fresnel parcialmente obstruida"}
+            {p.informe && tx(` · azimut ${rumboTexto(p.informe.rumboIdaDeg)}`, ` · azimuth ${rumboTexto(p.informe.rumboIdaDeg)}`)}
+            {p.informe
+              ? tx(
+                  ` · nivel ${fmt(p.informe.nivelDbm)} dBm (${textoUv(p.informe.nivelDbm)}) · pérdida ${fmt(p.informe.perdidaTotalDb)} dB`,
+                  ` · level ${fmt(p.informe.nivelDbm)} dBm (${textoUv(p.informe.nivelDbm)}) · loss ${fmt(p.informe.perdidaTotalDb)} dB`,
+                )
+              : tx(` · espacio libre ${fmt(p.perdidaEspacioLibreDb, 1)} dB · difracción ${fmt(p.perdidaDifraccionDb, 1)} dB`, ` · free space ${fmt(p.perdidaEspacioLibreDb, 1)} dB · diffraction ${fmt(p.perdidaDifraccionDb, 1)} dB`)} ·{" "}
+            {p.lineaVista
+              ? tx("línea de vista despejada (60 % de Fresnel)", "clear line of sight (60% of Fresnel)")
+              : p.obstaculoM !== null
+                ? tx(`obstáculo principal a ${fmt(p.obstaculoM / 1000, 2)} km`, `main obstacle at ${fmt(p.obstaculoM / 1000, 2)} km`)
+                : tx("Fresnel parcialmente obstruida", "Fresnel zone partially obstructed")}
           </p>
         </div>
         <span className="flex items-center gap-2">
@@ -199,14 +215,14 @@ export function PerfilEnlace({
             aria-expanded={verInforme}
             className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[13px] font-medium ring-1 ${verInforme ? "bg-carbon text-white ring-carbon" : "text-carbon ring-linea hover:bg-papel-2"}`}
           >
-            <FileText size={15} /> Informe
+            <FileText size={15} /> {tx("Informe", "Report")}
           </button>
         )}
-        <button type="button" onClick={onCerrar} className="rounded p-1 text-tenue hover:bg-black/5" aria-label="Cerrar perfil">
+        <button type="button" onClick={onCerrar} className="rounded p-1 text-tenue hover:bg-black/5" aria-label={tx("Cerrar perfil", "Close profile")}>
           <X size={18} />
         </button>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="mt-1 h-auto w-full" role="img" aria-label="Perfil del terreno con línea de vista y zona de Fresnel">
+      <svg viewBox={`0 0 ${W} ${H}`} className="mt-1 h-auto w-full" role="img" aria-label={tx("Perfil del terreno con línea de vista y zona de Fresnel", "Terrain profile with line of sight and Fresnel zone")}>
         {ys.map((v) => (
           <g key={`y${v}`}>
             <line x1={M.izq} x2={W - M.der} y1={sy(v)} y2={sy(v)} stroke="#E8E4DC" />
@@ -233,14 +249,16 @@ export function PerfilEnlace({
           <g>
             <line x1={sx(p.obstaculoM)} x2={sx(p.obstaculoM)} y1={M.arr} y2={base} stroke="#D93A2E" strokeWidth="1" strokeDasharray="2 3" />
             <text x={sx(p.obstaculoM) + 4} y={M.arr + 10} fontSize="11" fill="#D93A2E">
-              obstáculo principal
+              {tx("obstáculo principal", "main obstacle")}
             </text>
           </g>
         )}
       </svg>
       <p className="mt-0.5 text-[11px] text-tenue">
-        Relieve con curvatura terrestre (k = 4/3). Línea punteada: primera zona de Fresnel; trazo largo: 60 % de Fresnel, que debe quedar libre para una línea de vista
-        plena.
+        {tx(
+          "Relieve con curvatura terrestre (k = 4/3). Línea punteada: primera zona de Fresnel; trazo largo: 60 % de Fresnel, que debe quedar libre para una línea de vista plena.",
+          "Terrain with Earth curvature (k = 4/3). Dotted line: first Fresnel zone; long dashes: 60% of the Fresnel zone, which must stay clear for full line of sight.",
+        )}
       </p>
       {verInforme && p.informe && <Informe i={p.informe} />}
     </div>

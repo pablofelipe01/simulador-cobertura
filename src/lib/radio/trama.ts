@@ -7,6 +7,8 @@
 // dimensionamiento por departamento, tal como los trae el documento de trabajo del Inge «Territorios sin
 // conectividad» (octubre de 2026). Son estimaciones de cálculo para planear; se ajustan midiendo
 // el canal en una red piloto.
+// Los textos visibles (nombres, detalles y notas) son getters: salen en el idioma de la pantalla al leerlos.
+import { tx } from "../idioma";
 
 /** Parámetros de importación del cotizador (USD → COP). La TRM es la del día en el documento. */
 export const COTIZADOR = { trm: 3158, colchonPct: 3, envioPct: 12, arancelPct: 10, ivaImportPct: 19 } as const;
@@ -22,30 +24,43 @@ export type ItemCatalogo = {
   importado: boolean;
 };
 
+/** Un artículo del catálogo con su nombre y su detalle en los dos idiomas (getters). */
+const articulo = (id: string, grupo: ItemCatalogo["grupo"], nombre: [string, string], detalle: [string, string], resto: Pick<ItemCatalogo, "precio" | "moneda" | "periodo" | "importado">): ItemCatalogo => ({
+  id,
+  grupo,
+  get nombre() {
+    return tx(nombre[0], nombre[1]);
+  },
+  get detalle() {
+    return tx(detalle[0], detalle[1]);
+  },
+  ...resto,
+});
+
 /** Catálogo del cotizador (los equipos de la red). */
 export const CATALOGO: readonly ItemCatalogo[] = [
-  { id: "minipc", grupo: "caja", nombre: "Mini PC sin ventilador Intel N100, 16 GB / SSD 512 GB (Linux)", detalle: "Ej. Minisforum UN100L; uno por torre", precio: 249, moneda: "USD", periodo: "unico", importado: true },
-  { id: "hub_usb", grupo: "caja", nombre: "Hub USB alimentado 7 puertos (industrial, metálico)", detalle: "Para las radios de la torre; precio de referencia", precio: 220_000, moneda: "COP", periodo: "unico", importado: false },
-  { id: "ups", grupo: "caja", nombre: "Mini UPS / respaldo de energía", detalle: "Aguanta cortes cortos de luz", precio: 250_000, moneda: "COP", periodo: "unico", importado: false },
-  { id: "cajaip", grupo: "caja", nombre: "Caja hermética IP65 + prensaestopas", detalle: "Para el mini PC y las radios en exterior", precio: 120_000, moneda: "COP", periodo: "unico", importado: false },
-  { id: "solar_kit", grupo: "energia", nombre: "Kit solar para Starlink + caja (si no hay red eléctrica)", detalle: "Starlink gasta 75–100 W: ~400 W de panel + batería ~2 kWh + inversor", precio: 4_500_000, moneda: "COP", periodo: "unico", importado: false },
-  { id: "solar_torre", grupo: "energia", nombre: "Kit solar para torre sin red (mini PC + radios + enlace, ~30 W)", detalle: "~300 W de panel + batería LiFePO4 100 Ah + controlador; precio de referencia", precio: 2_600_000, moneda: "COP", periodo: "unico", importado: false },
-  { id: "tubo", grupo: "instalacion", nombre: "Tubo de hierro 6 m", detalle: "Mástil para antena o repetidor", precio: 230_000, moneda: "COP", periodo: "unico", importado: false },
-  { id: "herrajes", grupo: "instalacion", nombre: "Abrazaderas, templetes y tornillería (por mástil)", detalle: "", precio: 90_000, moneda: "COP", periodo: "unico", importado: false },
-  { id: "base", grupo: "instalacion", nombre: "Base en concreto / anclaje (por mástil)", detalle: "Cemento, arena, varilla", precio: 70_000, moneda: "COP", periodo: "unico", importado: false },
-  { id: "tierra", grupo: "instalacion", nombre: "Pararrayos + polo a tierra (por sitio con gateway)", detalle: "Varilla cobre-cobre, cable y conector", precio: 380_000, moneda: "COP", periodo: "unico", importado: false },
-  { id: "torre", grupo: "instalacion", nombre: "Torre arriostrada 12 m (secciones, templetes y base)", detalle: "Para separar en vertical las antenas de varias radios; precio de referencia", precio: 3_200_000, moneda: "COP", periodo: "unico", importado: false },
-  { id: "starlink_kit", grupo: "internet", nombre: "Starlink kit Estándar V4", detalle: "Precio Homecenter", precio: 1_599_000, moneda: "COP", periodo: "unico", importado: false },
-  { id: "starlink_mes", grupo: "internet", nombre: "Starlink Residencial Lite (mensual)", detalle: "Hasta 200 Mb/s; el plan comercial de la operación es $300.000 al mes", precio: 160_000, moneda: "COP", periodo: "mensual", importado: false },
-  { id: "ptp", grupo: "internet", nombre: "Enlace WiFi punto a punto 5 GHz (par Ubiquiti LiteBeam 5AC Gen2)", detalle: "Lleva el internet del Starlink a cada torre; 10–20 km con línea de vista", precio: 130, moneda: "USD", periodo: "unico", importado: true },
-  { id: "p1", grupo: "radio", nombre: "SenseCAP Solar Node P1 (repetidor solar)", detalle: "Panel 5 W, nRF52840 + SX1262, soporte incluido; MeshCore oficial. Lleva 4 pilas 18650 aparte", precio: 72.9, moneda: "USD", periodo: "unico", importado: true },
-  { id: "pilas18650", grupo: "radio", nombre: "Pilas 18650 para el P1 (juego de 4)", detalle: "~3.000 mAh; el P1-Pro ya las trae", precio: 60_000, moneda: "COP", periodo: "unico", importado: false },
-  { id: "antena8", grupo: "radio", nombre: "Antena RF Explorer 8 dBi fibra de vidrio 1,3 m", detalle: "902–928 MHz, trae 1 m de cable CFD200 y soporte", precio: 29.9, moneda: "USD", periodo: "unico", importado: true },
-  { id: "coax", grupo: "radio", nombre: "Cable N hembra → RP-SMA macho CFD400, 3 m", detalle: "Para bajar de la antena a la caja", precio: 19.9, moneda: "USD", periodo: "unico", importado: true },
-  { id: "t1000", grupo: "radio", nombre: "SenseCAP T1000-E (nodo de la persona)", detalle: "Tarjeta BLE + GPS, sellada, se empareja con el celular", precio: 39.9, moneda: "USD", periodo: "unico", importado: true },
-  { id: "t114", grupo: "radio", nombre: "Heltec Mesh Node T114 (radio del gateway)", detalle: "Una por frecuencia, companion USB en el mini PC", precio: 27.9, moneda: "USD", periodo: "unico", importado: true },
-  { id: "xiao", grupo: "radio", nombre: "Seeed XIAO ESP32S3 & Wio-SX1262 Kit (billetera económica)", detalle: "BLE + LoRa; sin batería, carcasa ni GPS", precio: 11, moneda: "USD", periodo: "unico", importado: true },
-  { id: "bat_xiao", grupo: "radio", nombre: "Batería LiPo ~1.000 mAh + carcasa para el XIAO", detalle: "Precio de referencia", precio: 40_000, moneda: "COP", periodo: "unico", importado: false },
+  articulo("minipc", "caja", ["Mini PC sin ventilador Intel N100, 16 GB / SSD 512 GB (Linux)", "Fanless mini PC Intel N100, 16 GB / 512 GB SSD (Linux)"], ["Ej. Minisforum UN100L; uno por torre", "E.g. Minisforum UN100L; one per tower"], { precio: 249, moneda: "USD", periodo: "unico", importado: true }),
+  articulo("hub_usb", "caja", ["Hub USB alimentado 7 puertos (industrial, metálico)", "Powered 7-port USB hub (industrial, metal)"], ["Para las radios de la torre; precio de referencia", "For the tower's radios; reference price"], { precio: 220_000, moneda: "COP", periodo: "unico", importado: false }),
+  articulo("ups", "caja", ["Mini UPS / respaldo de energía", "Mini UPS / power backup"], ["Aguanta cortes cortos de luz", "Rides through short power cuts"], { precio: 250_000, moneda: "COP", periodo: "unico", importado: false }),
+  articulo("cajaip", "caja", ["Caja hermética IP65 + prensaestopas", "IP65 sealed enclosure + cable glands"], ["Para el mini PC y las radios en exterior", "For the mini PC and the radios outdoors"], { precio: 120_000, moneda: "COP", periodo: "unico", importado: false }),
+  articulo("solar_kit", "energia", ["Kit solar para Starlink + caja (si no hay red eléctrica)", "Solar kit for Starlink + enclosure (if there is no grid power)"], ["Starlink gasta 75–100 W: ~400 W de panel + batería ~2 kWh + inversor", "Starlink draws 75–100 W: ~400 W of panels + ~2 kWh battery + inverter"], { precio: 4_500_000, moneda: "COP", periodo: "unico", importado: false }),
+  articulo("solar_torre", "energia", ["Kit solar para torre sin red (mini PC + radios + enlace, ~30 W)", "Solar kit for an off-grid tower (mini PC + radios + link, ~30 W)"], ["~300 W de panel + batería LiFePO4 100 Ah + controlador; precio de referencia", "~300 W of panels + 100 Ah LiFePO4 battery + controller; reference price"], { precio: 2_600_000, moneda: "COP", periodo: "unico", importado: false }),
+  articulo("tubo", "instalacion", ["Tubo de hierro 6 m", "6 m iron pipe"], ["Mástil para antena o repetidor", "Mast for an antenna or repeater"], { precio: 230_000, moneda: "COP", periodo: "unico", importado: false }),
+  articulo("herrajes", "instalacion", ["Abrazaderas, templetes y tornillería (por mástil)", "Clamps, guy wires and hardware (per mast)"], ["", ""], { precio: 90_000, moneda: "COP", periodo: "unico", importado: false }),
+  articulo("base", "instalacion", ["Base en concreto / anclaje (por mástil)", "Concrete base / anchoring (per mast)"], ["Cemento, arena, varilla", "Cement, sand, rebar"], { precio: 70_000, moneda: "COP", periodo: "unico", importado: false }),
+  articulo("tierra", "instalacion", ["Pararrayos + polo a tierra (por sitio con gateway)", "Lightning rod + grounding (per gateway site)"], ["Varilla cobre-cobre, cable y conector", "Copper-clad rod, cable and connector"], { precio: 380_000, moneda: "COP", periodo: "unico", importado: false }),
+  articulo("torre", "instalacion", ["Torre arriostrada 12 m (secciones, templetes y base)", "12 m guyed tower (sections, guy wires and base)"], ["Para separar en vertical las antenas de varias radios; precio de referencia", "To separate the antennas of several radios vertically; reference price"], { precio: 3_200_000, moneda: "COP", periodo: "unico", importado: false }),
+  articulo("starlink_kit", "internet", ["Starlink kit Estándar V4", "Starlink Standard Kit V4"], ["Precio Homecenter", "Homecenter price"], { precio: 1_599_000, moneda: "COP", periodo: "unico", importado: false }),
+  articulo("starlink_mes", "internet", ["Starlink Residencial Lite (mensual)", "Starlink Residential Lite (monthly)"], ["Hasta 200 Mb/s; el plan comercial de la operación es $300.000 al mes", "Up to 200 Mb/s; the operation's business plan is COP 300,000 per month"], { precio: 160_000, moneda: "COP", periodo: "mensual", importado: false }),
+  articulo("ptp", "internet", ["Enlace WiFi punto a punto 5 GHz (par Ubiquiti LiteBeam 5AC Gen2)", "5 GHz point-to-point WiFi link (Ubiquiti LiteBeam 5AC Gen2 pair)"], ["Lleva el internet del Starlink a cada torre; 10–20 km con línea de vista", "Carries the Starlink internet to each tower; 10–20 km with line of sight"], { precio: 130, moneda: "USD", periodo: "unico", importado: true }),
+  articulo("p1", "radio", ["SenseCAP Solar Node P1 (repetidor solar)", "SenseCAP Solar Node P1 (solar repeater)"], ["Panel 5 W, nRF52840 + SX1262, soporte incluido; MeshCore oficial. Lleva 4 pilas 18650 aparte", "5 W panel, nRF52840 + SX1262, mount included; official MeshCore. Takes 4 18650 cells, sold separately"], { precio: 72.9, moneda: "USD", periodo: "unico", importado: true }),
+  articulo("pilas18650", "radio", ["Pilas 18650 para el P1 (juego de 4)", "18650 cells for the P1 (set of 4)"], ["~3.000 mAh; el P1-Pro ya las trae", "~3,000 mAh; the P1-Pro already includes them"], { precio: 60_000, moneda: "COP", periodo: "unico", importado: false }),
+  articulo("antena8", "radio", ["Antena RF Explorer 8 dBi fibra de vidrio 1,3 m", "RF Explorer 8 dBi fiberglass antenna, 1.3 m"], ["902–928 MHz, trae 1 m de cable CFD200 y soporte", "902–928 MHz, comes with 1 m of CFD200 cable and a mount"], { precio: 29.9, moneda: "USD", periodo: "unico", importado: true }),
+  articulo("coax", "radio", ["Cable N hembra → RP-SMA macho CFD400, 3 m", "N female → RP-SMA male CFD400 cable, 3 m"], ["Para bajar de la antena a la caja", "To run from the antenna down to the enclosure"], { precio: 19.9, moneda: "USD", periodo: "unico", importado: true }),
+  articulo("t1000", "radio", ["SenseCAP T1000-E (nodo de la persona)", "SenseCAP T1000-E (the person's node)"], ["Tarjeta BLE + GPS, sellada, se empareja con el celular", "BLE + GPS card, sealed, pairs with the phone"], { precio: 39.9, moneda: "USD", periodo: "unico", importado: true }),
+  articulo("t114", "radio", ["Heltec Mesh Node T114 (radio del gateway)", "Heltec Mesh Node T114 (gateway radio)"], ["Una por frecuencia, companion USB en el mini PC", "One per frequency, USB companion on the mini PC"], { precio: 27.9, moneda: "USD", periodo: "unico", importado: true }),
+  articulo("xiao", "radio", ["Seeed XIAO ESP32S3 & Wio-SX1262 Kit (billetera económica)", "Seeed XIAO ESP32S3 & Wio-SX1262 Kit (budget wallet)"], ["BLE + LoRa; sin batería, carcasa ni GPS", "BLE + LoRa; no battery, case or GPS"], { precio: 11, moneda: "USD", periodo: "unico", importado: true }),
+  articulo("bat_xiao", "radio", ["Batería LiPo ~1.000 mAh + carcasa para el XIAO", "~1,000 mAh LiPo battery + case for the XIAO"], ["Precio de referencia", "Reference price"], { precio: 40_000, moneda: "COP", periodo: "unico", importado: false }),
 ];
 
 /** Precio puesto en Colombia (COP): dólares a la TRM con colchón y, si es importado, envío, arancel e IVA. */
@@ -80,12 +95,24 @@ export const PRECIOS = {
 export type TerrenoTrama = "plano" | "sabana" | "montana" | "rios" | "selva";
 
 /** Alcance supuesto de un repetidor por terreno (km) y cuántos sitios alimenta un Starlink. */
+/** Terreno con su nombre y su nota en los dos idiomas (getters). */
+const nuevoTerreno = (nombre: [string, string], radioKm: number, sitiosPorStarlink: number, nota: [string, string]) => ({
+  get nombre() {
+    return tx(nombre[0], nombre[1]);
+  },
+  radioKm,
+  sitiosPorStarlink,
+  get nota() {
+    return tx(nota[0], nota[1]);
+  },
+});
+
 export const TERRENOS_TRAMA: Record<TerrenoTrama, { nombre: string; radioKm: number; sitiosPorStarlink: number; nota: string }> = {
-  plano: { nombre: "Plano / semidesierto", radioKm: 10, sitiosPorStarlink: 4, nota: "Línea de vista larga: el mejor caso para la radio y el sol." },
-  sabana: { nombre: "Sabana", radioKm: 8, sitiosPorStarlink: 4, nota: "Abierta, con bosques de galería en los ríos." },
-  montana: { nombre: "Montaña", radioKm: 5, sitiosPorStarlink: 2, nota: "De loma a loma llega lejos; los valles cerrados se tapan." },
-  rios: { nombre: "Ríos en selva", radioKm: 5, sitiosPorStarlink: 1, nota: "La radio corre sobre el agua; el bosque la frena a los lados." },
-  selva: { nombre: "Selva cerrada", radioKm: 3, sitiosPorStarlink: 1, nota: "El follaje mojado se come la señal: celdas pequeñas." },
+  plano: nuevoTerreno(["Plano / semidesierto", "Flat / semi-desert"], 10, 4, ["Línea de vista larga: el mejor caso para la radio y el sol.", "Long line of sight: the best case for radio and sun."]),
+  sabana: nuevoTerreno(["Sabana", "Savanna"], 8, 4, ["Abierta, con bosques de galería en los ríos.", "Open, with gallery forests along the rivers."]),
+  montana: nuevoTerreno(["Montaña", "Mountains"], 5, 2, ["De loma a loma llega lejos; los valles cerrados se tapan.", "From hilltop to hilltop it reaches far; closed valleys get blocked."]),
+  rios: nuevoTerreno(["Ríos en selva", "Jungle rivers"], 5, 1, ["La radio corre sobre el agua; el bosque la frena a los lados.", "Radio travels over the water; the forest stops it on the sides."]),
+  selva: nuevoTerreno(["Selva cerrada", "Dense jungle"], 3, 1, ["El follaje mojado se come la señal: celdas pequeñas.", "Wet foliage eats the signal: small cells."]),
 };
 
 export type SfTrama = 9 | 10 | 11;
@@ -113,9 +140,24 @@ export const CAPACIDAD_TRAMA = {
   frecuenciasMhz: [920, 921.5, 924, 925.5],
   /** Densidad de usuarios por km² en la zona habitada. */
   densidades: [
-    { valor: 0.2, nombre: "disperso" },
-    { valor: 1, nombre: "medio" },
-    { valor: 5, nombre: "denso" },
+    {
+      valor: 0.2,
+      get nombre() {
+        return tx("disperso", "sparse");
+      },
+    },
+    {
+      valor: 1,
+      get nombre() {
+        return tx("medio", "medium");
+      },
+    },
+    {
+      valor: 5,
+      get nombre() {
+        return tx("denso", "dense");
+      },
+    },
   ],
 } as const;
 
@@ -137,16 +179,46 @@ export const OPERACION_TRAMA = {
 
 export type RegionTrama = "Caribe" | "Andina" | "Pacífico" | "Pacífico/Andina" | "Orinoquía" | "Amazonía";
 
+/** Región con su nota en los dos idiomas (getter). */
+const nuevaRegion = (terreno: TerrenoTrama, fraccion: number, logistica: number, solar: number, nota: [string, string]) => ({
+  terreno,
+  fraccion,
+  logistica,
+  solar,
+  get nota() {
+    return tx(nota[0], nota[1]);
+  },
+});
+
 export const REGIONES_TRAMA: Record<RegionTrama, { terreno: TerrenoTrama; fraccion: number; logistica: number; solar: number; nota: string }> = {
-  Caribe: { terreno: "sabana", fraccion: 0.6, logistica: 1.1, solar: 1, nota: "Llanuras y sabanas con mucho sol." },
-  Andina: { terreno: "montana", fraccion: 0.5, logistica: 1.15, solar: 1.1, nota: "Montaña con veredas dispersas en las laderas." },
-  Pacífico: { terreno: "rios", fraccion: 0.3, logistica: 1.6, solar: 1.4, nota: "Selva húmeda: la gente vive sobre los ríos." },
-  "Pacífico/Andina": { terreno: "montana", fraccion: 0.5, logistica: 1.25, solar: 1.2, nota: "Cordillera y costa pacífica." },
-  Orinoquía: { terreno: "sabana", fraccion: 0.3, logistica: 1.3, solar: 1, nota: "Llanos muy extensos y poco poblados." },
-  Amazonía: { terreno: "rios", fraccion: 0.15, logistica: 1.6, solar: 1.2, nota: "Selva: comunidades sobre los ríos, acceso fluvial o aéreo." },
+  Caribe: nuevaRegion("sabana", 0.6, 1.1, 1, ["Llanuras y sabanas con mucho sol.", "Plains and savannas with plenty of sun."]),
+  Andina: nuevaRegion("montana", 0.5, 1.15, 1.1, ["Montaña con veredas dispersas en las laderas.", "Mountains with scattered rural settlements on the slopes."]),
+  Pacífico: nuevaRegion("rios", 0.3, 1.6, 1.4, ["Selva húmeda: la gente vive sobre los ríos.", "Rainforest: people live along the rivers."]),
+  "Pacífico/Andina": nuevaRegion("montana", 0.5, 1.25, 1.2, ["Cordillera y costa pacífica.", "Mountain range and Pacific coast."]),
+  Orinoquía: nuevaRegion("sabana", 0.3, 1.3, 1, ["Llanos muy extensos y poco poblados.", "Very extensive, sparsely populated plains."]),
+  Amazonía: nuevaRegion("rios", 0.15, 1.6, 1.2, ["Selva: comunidades sobre los ríos, acceso fluvial o aéreo.", "Jungle: communities along the rivers, access by river or air."]),
 };
 
+/** Nombre de una región natural de Colombia en el idioma de la pantalla (la clave sigue en español). */
+export function nombreRegion(r: RegionTrama): string {
+  const en: Record<RegionTrama, string> = { Caribe: "Caribbean", Andina: "Andean", Pacífico: "Pacific", "Pacífico/Andina": "Pacific/Andean", Orinoquía: "Orinoquía", Amazonía: "Amazon" };
+  return tx(r, en[r]);
+}
+
 type FilaDepto = [string, string, RegionTrama, number, number, number, number, number, number, [number, number], number, Partial<{ terreno: TerrenoTrama; fraccion: number; logistica: number; nota: string }>?];
+
+/** Las notas de los departamentos en inglés (por id; las de español están en cada fila). */
+const NOTAS_EN: Record<string, string> = {
+  guajira:
+    "Flat and semi-desert: the best case for radio and sun. Upper and Middle La Guajira (Uribia and Manaure, ~245,000 rural residents) concentrate the Wayuu population in rancherías; 2,553 are georeferenced.",
+  sanandres: "The ECV survey doesn't measure rural San Andrés: the department-wide figure was used.",
+  bogota: "Minimal rural population, mostly in Sumapaz.",
+  quindio: "Rural share from the DANE 2025 breakdown (70,571 of 557,884).",
+  choco: "Rainforest; the rural population lives along the Atrato, San Juan and Baudó rivers: the corridors are covered (~30% of the area). Magnitude 7.4 earthquake on August 10, 2026. 4G population coverage of 74%, the lowest in the country.",
+  vichada: "The worst connectivity and financial inclusion indicators in the country. Cumaribo (65,674 km²) concentrates the rural population in 392 Indigenous communities. Three quarters is savanna.",
+  guainia: "Population concentrated in Inírida; the rest in riverside communities reachable only by river or air. Large differences between the DANE projection and other sources.",
+  vaupes: "Mitú concentrates 72.6% of the population; the rest live in communities along the Vaupés River and its tributaries.",
+};
 
 /** Departamentos: área (km²), personas rurales, proporción rural, adultos rurales, % hogares con internet, % rural que usa internet, adultos sin canal digital [mín, máx] y puesto. */
 const FILAS: FilaDepto[] = [
@@ -208,7 +280,11 @@ export type DepartamentoTrama = {
 
 export const DEPARTAMENTOS_TRAMA: readonly DepartamentoTrama[] = FILAS.map(([id, nombre, region, areaKm2, rurales, propRural, adultos, hogaresInternetPct, ruralUsaInternetPct, sinCanal, puesto, extra]) => {
   const r = REGIONES_TRAMA[region];
-  return { id, nombre, region, areaKm2, rurales, propRural, adultos, hogaresInternetPct, ruralUsaInternetPct, sinCanal, puesto, terreno: r.terreno, fraccion: r.fraccion, logistica: r.logistica, solar: r.solar, ...extra };
+  const { nota, ...resto }: NonNullable<FilaDepto[11]> = extra ?? {};
+  const d: DepartamentoTrama = { id, nombre, region, areaKm2, rurales, propRural, adultos, hogaresInternetPct, ruralUsaInternetPct, sinCanal, puesto, terreno: r.terreno, fraccion: r.fraccion, logistica: r.logistica, solar: r.solar, ...resto };
+  // La nota (si la hay) sale en el idioma de la pantalla al leerla
+  if (nota !== undefined) Object.defineProperty(d, "nota", { get: () => tx(nota, NOTAS_EN[id] ?? nota), enumerable: true, configurable: true });
+  return d;
 }).sort((a, b) => a.puesto - b.puesto);
 
 export type NodoUsuario = "xiao" | "t1000";
@@ -367,10 +443,11 @@ export function costoRedTrama(gateways: number, repetidores: number, personas = 
   };
 }
 
-/** Formato de pesos como en el documento: «$6,4 mil M», «$248 M», «$178.065». */
+/** Formato de pesos como en el documento: «$6,4 mil M», «$248 M», «$178.065» (en inglés: «COP 6.4 B», «COP 248 M», «COP 178,065»). */
 export function pesosTrama(v: number): string {
   const n = (x: number, d: number) => x.toLocaleString("es-CO", { maximumFractionDigits: d });
-  if (v >= 1e9) return `$${n(v / 1e9, 1)} mil M`;
-  if (v >= 1e6) return `$${n(v / 1e6, v >= 1e8 ? 0 : 1)} M`;
-  return `$${Math.round(v).toLocaleString("es-CO")}`;
+  const nEn = (x: number, d: number) => x.toLocaleString("en-US", { maximumFractionDigits: d });
+  if (v >= 1e9) return tx(`$${n(v / 1e9, 1)} mil M`, `COP ${nEn(v / 1e9, 1)} B`);
+  if (v >= 1e6) return tx(`$${n(v / 1e6, v >= 1e8 ? 0 : 1)} M`, `COP ${nEn(v / 1e6, v >= 1e8 ? 0 : 1)} M`);
+  return tx(`$${Math.round(v).toLocaleString("es-CO")}`, `COP ${Math.round(v).toLocaleString("en-US")}`);
 }

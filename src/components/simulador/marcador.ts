@@ -3,7 +3,9 @@
 // artificial. Prohibido su uso, copia, modificación o distribución sin licencia escrita de los titulares (Ley 23 de
 // 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
 
-// Marcador de antena (torre en celosía) para el mapa. Se arma como HTML porque MapLibre usa elementos del DOM.
+// Marcador de antena (torre en celosía) para el mapa. Se arma como HTML porque MapLibre usa elementos del DOM; los
+// textos van en el idioma de la pantalla (el mapa vuelve a armar los marcadores al cambiar de idioma).
+import { tx } from "@/lib/idioma";
 import type { EstadoNodo as EstadoRedNodo, Pieza } from "@/lib/radio/estado-red";
 import type { Antena, NodoMalla } from "@/lib/radio/tipos";
 
@@ -40,12 +42,29 @@ export type MarcaRed = { pieza: Pieza; estado: EstadoRedNodo; saltos: number | n
 
 const TEXTO_RED: Record<EstadoRedNodo, string> = {
   gateway: "Gateway + Internet",
-  conectado: "Conectado al gateway",
-  lejos: "Llega con más saltos que el límite",
-  "sin-cobertura": "Sin cobertura",
-  aislado: "No alcanza la red",
-  pendiente: "Calculando…",
+  get conectado() {
+    return tx("Conectado al gateway", "Connected to the gateway");
+  },
+  get lejos() {
+    return tx("Llega con más saltos que el límite", "Reaches the gateway in more hops than the limit");
+  },
+  get "sin-cobertura"() {
+    return tx("Sin cobertura", "No coverage");
+  },
+  get aislado() {
+    return tx("No alcanza la red", "Cannot reach the network");
+  },
+  get pendiente() {
+    return tx("Calculando…", "Calculating…");
+  },
 };
+
+/** «2 saltos hasta el gateway» (título del numerito de saltos). */
+const tituloSaltos = (n: number) => tx(`${n} ${n === 1 ? "salto" : "saltos"} hasta el gateway`, `${n} ${n === 1 ? "hop" : "hops"} to the gateway`);
+
+/** «Repetidor 3: propuesto, 28 dB con el nodo anterior» (título de un repetidor propuesto). */
+const tituloPropuesto = (nombre: string, margenDb: number) =>
+  tx(`${escapar(nombre)}: propuesto, ${Math.round(margenDb)} dB con el nodo anterior`, `${escapar(nombre)}: proposed, ${Math.round(margenDb)} dB with the previous node`);
 
 export function htmlMarcador(antena: Antena, seleccionada: boolean, estado: EstadoNodo, color?: string, red?: MarcaRed): string {
   const campo = (antena.tipo ?? "antena") === "nodo";
@@ -61,10 +80,10 @@ export function htmlMarcador(antena: Antena, seleccionada: boolean, estado: Esta
   ]
     .filter(Boolean)
     .join(" ");
-  const insignia = antena.pasarela ? `<span class="insignia" title="${red ? "Gateway + Internet" : "Pasarela"}">${GLOBO}</span>` : "";
+  const insignia = antena.pasarela ? `<span class="insignia" title="${red ? "Gateway + Internet" : tx("Pasarela", "Gateway")}">${GLOBO}</span>` : "";
   const muestra = color ? `<i class="muestra" style="background:${color}"></i>` : "";
   // Saltos hasta el gateway (personas y repetidores conectados)
-  const saltos = red && !antena.pasarela && red.saltos !== null ? `<span class="saltos" title="${red.saltos} ${red.saltos === 1 ? "salto" : "saltos"} hasta el gateway">${red.saltos}</span>` : "";
+  const saltos = red && !antena.pasarela && red.saltos !== null ? `<span class="saltos" title="${tituloSaltos(red.saltos)}">${red.saltos}</span>` : "";
   // Repetidor que no alcanza la red: aro naranja punteado, como en Trama
   const aura = red?.estado === "aislado" ? `<span class="aura" aria-hidden="true"></span>` : "";
   const figura = persona
@@ -80,7 +99,7 @@ ${insignia}${saltos}<span class="nombre">${muestra}${escapar(antena.nombre)}</sp
 
 /** Repetidor propuesto por el sembrado automático (aún no puesto): torre fantasma con su enlace. */
 export function htmlPropuesto(nombre: string, margenDb: number): string {
-  return `<div class="torre-marcador propuesto" title="${escapar(nombre)}: propuesto, ${Math.round(margenDb)} dB con el nodo anterior">
+  return `<div class="torre-marcador propuesto" title="${tituloPropuesto(nombre, margenDb)}">
 <svg class="torre" viewBox="-1 -1 34 41" aria-hidden="true"><g class="halo">${TORRE}</g><g class="trazo">${TORRE}</g><circle class="baliza" cx="16" cy="8.4" r="3"/></svg>
 <span class="nombre">${escapar(nombre)}</span></div>`;
 }
@@ -97,8 +116,8 @@ const GLIFO: Record<Pieza, string> = {
   persona: `<circle cx="12" cy="8.2" r="3.4"/><path d="M5.6 20.2 a6.4 6.4 0 0 1 12.8 0"/>`,
 };
 
-/** Nube con «IA»: el gateway lleva el cerebro de inteligencia artificial. */
-const NUBE_IA = `<svg viewBox="0 0 30 20" aria-hidden="true"><path d="M8.6 18.5 H22.4 a5.4 5.4 0 0 0 .8-10.7 A7.4 7.4 0 0 0 9.2 6.2 a6.2 6.2 0 0 0-.6 12.3 Z"/></svg><b>IA</b>`;
+/** Nube con «IA» («AI» en inglés): el gateway lleva el cerebro de inteligencia artificial. */
+const nubeIa = () => `<svg viewBox="0 0 30 20" aria-hidden="true"><path d="M8.6 18.5 H22.4 a5.4 5.4 0 0 0 .8-10.7 A7.4 7.4 0 0 0 9.2 6.2 a6.2 6.2 0 0 0-.6 12.3 Z"/></svg><b>${tx("IA", "AI")}</b>`;
 
 /**
  * Pieza del modo «Sembrar la malla»: disco oscuro con la figura blanca y un aro del color del estado
@@ -108,16 +127,17 @@ const NUBE_IA = `<svg viewBox="0 0 30 20" aria-hidden="true"><path d="M8.6 18.5 
 export function htmlPieza(antena: Antena, seleccionada: boolean, marca: MarcaRed, conIa: boolean): string {
   const clases = ["pieza", `pieza-${marca.pieza}`, `red-${marca.estado}`, antena.poblada ? "poblada" : "", seleccionada ? "sel" : "", antena.activa ? "" : "inactiva"].filter(Boolean).join(" ");
   const nombre = escapar(antena.nombre);
-  const saltos = !antena.pasarela && marca.saltos !== null ? `<span class="saltos" title="${marca.saltos} ${marca.saltos === 1 ? "salto" : "saltos"} hasta el gateway">${marca.saltos}</span>` : "";
+  const saltos = !antena.pasarela && marca.saltos !== null ? `<span class="saltos" title="${tituloSaltos(marca.saltos)}">${marca.saltos}</span>` : "";
   const aura = marca.estado === "aislado" ? `<span class="aura" aria-hidden="true"></span>` : "";
-  const ia = conIa && antena.pasarela ? `<span class="pieza-ia" title="El gateway tiene la inteligencia artificial">${NUBE_IA}</span>` : "";
-  const quitar = seleccionada ? `<button type="button" class="pieza-quitar" data-quitar title="Quitar ${nombre}" aria-label="Quitar ${nombre}">×</button>` : "";
+  const ia = conIa && antena.pasarela ? `<span class="pieza-ia" title="${tx("El gateway tiene la inteligencia artificial", "The gateway has the artificial intelligence")}">${nubeIa()}</span>` : "";
+  const quitarTexto = tx(`Quitar ${nombre}`, `Remove ${nombre}`);
+  const quitar = seleccionada ? `<button type="button" class="pieza-quitar" data-quitar title="${quitarTexto}" aria-label="${quitarTexto}">×</button>` : "";
   return `<div class="${clases}" title="${nombre}: ${TEXTO_RED[marca.estado]}">${aura}<span class="pieza-onda" aria-hidden="true"></span><span class="pieza-disco"><svg viewBox="0 0 24 24" aria-hidden="true">${GLIFO[marca.pieza]}</svg></span>${ia}${saltos}${quitar}<span class="nombre">${nombre}</span></div>`;
 }
 
 /** Repetidor propuesto por el sembrado automático, como pieza fantasma. */
 export function htmlPiezaPropuesta(nombre: string, margenDb: number): string {
-  return `<div class="pieza pieza-repetidor propuesto" title="${escapar(nombre)}: propuesto, ${Math.round(margenDb)} dB con el nodo anterior"><span class="pieza-disco"><svg viewBox="0 0 24 24" aria-hidden="true">${GLIFO.repetidor}</svg></span><span class="nombre">${escapar(nombre)}</span></div>`;
+  return `<div class="pieza pieza-repetidor propuesto" title="${tituloPropuesto(nombre, margenDb)}"><span class="pieza-disco"><svg viewBox="0 0 24 24" aria-hidden="true">${GLIFO.repetidor}</svg></span><span class="nombre">${escapar(nombre)}</span></div>`;
 }
 
 /** Radio del disco de las piezas (px): el marcador se corre para que el centro quede en el punto. */

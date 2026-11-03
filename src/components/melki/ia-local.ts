@@ -8,8 +8,10 @@
 // y queda guardado en el navegador para usarlo sin internet. Melki la usa para entender lo que se le pide con palabras
 // libres (lo pasa a órdenes que su intérprete verifica) y para responder con los datos del simulador; las cifras del
 // diseño siempre salen del cálculo, nunca del modelo. Si la tarjeta gráfica deja de responder, la IA local se apaga
-// sola, lo dice y no lo vuelve a intentar hasta que la persona la active de nuevo.
+// sola, lo dice y no lo vuelve a intentar hasta que la persona la active de nuevo. Lo que se muestra sale en el idioma
+// de la pantalla (también lo que avisa el trabajador: manda una clave y aquí se dice en el idioma de ese momento).
 import { CONFIG } from "@/lib/config";
+import { numeroLocal, tx } from "@/lib/idioma";
 
 import { CODIGO_IA_LOCAL } from "./ia-local-trabajador";
 
@@ -18,20 +20,54 @@ export type ModeloLocal = { id: string; id32: string; nombre: string; detalle: s
 /**
  * Los modelos que se pueden usar (q4f16; si la tarjeta no tiene shader-f16, la variante q4f32). Qwen3 y no Qwen3.5: los
  * modelos Qwen3.5 solo están desde WebLLM 0.2.83, y esas versiones bloquean la tarjeta gráfica en equipos con Windows y
- * gráficos AMD integrados (ver config.ts). Descarga: lo que pesan los archivos del modelo en Hugging Face.
+ * gráficos AMD integrados (ver config.ts). Descarga: lo que pesan los archivos del modelo en Hugging Face. El nombre y
+ * el detalle, en el idioma de la pantalla.
  */
 export const MODELOS_LOCALES: readonly ModeloLocal[] = [
-  { id: "Qwen3-4B-q4f16_1-MLC", id32: "Qwen3-4B-q4f32_1-MLC", nombre: "Qwen3 4B (recomendado)", detalle: "Entiende muy bien el español y es estable en una tarjeta gráfica integrada", descargaGb: 2.3, memoriaGb: 3.4 },
-  { id: "Qwen3-1.7B-q4f16_1-MLC", id32: "Qwen3-1.7B-q4f32_1-MLC", nombre: "Qwen3 1.7B (liviano)", detalle: "Para equipos modestos: más rápido, entiende un poco menos", descargaGb: 1, memoriaGb: 2 },
-  { id: "Qwen3-8B-q4f16_1-MLC", id32: "Qwen3-8B-q4f32_1-MLC", nombre: "Qwen3 8B (máximo)", detalle: "El más capaz; pide una tarjeta gráfica con 8 GB o más", descargaGb: 4.6, memoriaGb: 5.7 },
+  {
+    id: "Qwen3-4B-q4f16_1-MLC",
+    id32: "Qwen3-4B-q4f32_1-MLC",
+    get nombre() {
+      return tx("Qwen3 4B (recomendado)", "Qwen3 4B (recommended)");
+    },
+    get detalle() {
+      return tx("Entiende muy bien el español y es estable en una tarjeta gráfica integrada", "Understands English and Spanish very well and is stable on an integrated graphics card");
+    },
+    descargaGb: 2.3,
+    memoriaGb: 3.4,
+  },
+  {
+    id: "Qwen3-1.7B-q4f16_1-MLC",
+    id32: "Qwen3-1.7B-q4f32_1-MLC",
+    get nombre() {
+      return tx("Qwen3 1.7B (liviano)", "Qwen3 1.7B (light)");
+    },
+    get detalle() {
+      return tx("Para equipos modestos: más rápido, entiende un poco menos", "For modest computers: faster, understands a little less");
+    },
+    descargaGb: 1,
+    memoriaGb: 2,
+  },
+  {
+    id: "Qwen3-8B-q4f16_1-MLC",
+    id32: "Qwen3-8B-q4f32_1-MLC",
+    get nombre() {
+      return tx("Qwen3 8B (máximo)", "Qwen3 8B (maximum)");
+    },
+    get detalle() {
+      return tx("El más capaz; pide una tarjeta gráfica con 8 GB o más", "The most capable; needs a graphics card with 8 GB or more");
+    },
+    descargaGb: 4.6,
+    memoriaGb: 5.7,
+  },
 ];
 
 export const MODELO_LOCAL_DEFECTO = MODELOS_LOCALES.some((m) => m.id === CONFIG.iaLocal.modelo) ? CONFIG.iaLocal.modelo : MODELOS_LOCALES[0].id;
 
 export const modeloLocal = (id: string) => MODELOS_LOCALES.find((m) => m.id === id) ?? MODELOS_LOCALES[0];
 
-/** «2,4 GB». */
-export const gb = (x: number) => `${x.toLocaleString("es-CO", { maximumFractionDigits: 1 })} GB`;
+/** «2,4 GB» (en inglés, «2.4 GB»). */
+export const gb = (x: number) => `${numeroLocal(x, { maximumFractionDigits: 1 })} GB`;
 
 /* ───────────── Preferencias (en este navegador) ───────────── */
 
@@ -69,8 +105,19 @@ export type FaseIALocal = "apagada" | "sin-webgpu" | "descargando" | "cargando" 
  */
 export type EstadoIALocal = { fase: FaseIALocal; modelo: string; avance: number; texto: string; tarjeta?: boolean; fallas?: number };
 
-let estado: EstadoIALocal = { fase: "apagada", modelo: MODELO_LOCAL_DEFECTO, avance: 0, texto: "" };
+/** El texto del estado: fijo, o armado cada vez que se lee (así sale en el idioma que tenga la pantalla al mostrarlo). */
+type TextoEstado = string | (() => string);
+
+let datos: Omit<EstadoIALocal, "texto"> = { fase: "apagada", modelo: MODELO_LOCAL_DEFECTO, avance: 0 };
+let textoEstado: TextoEstado = "";
+let estado: EstadoIALocal = armarEstado();
 const oyentes = new Set<() => void>();
+
+/** El estado con su texto como getter: si la pantalla cambia de idioma, el mismo estado se lee en el idioma nuevo. */
+function armarEstado(): EstadoIALocal {
+  const t = textoEstado;
+  return Object.defineProperty({ ...datos }, "texto", { enumerable: true, get: () => (typeof t === "function" ? t() : t) }) as EstadoIALocal;
+}
 
 export const estadoIALocal = () => estado;
 
@@ -81,8 +128,11 @@ export function suscribirIALocal(f: () => void): () => void {
   };
 }
 
-function fijar(c: Partial<EstadoIALocal>) {
-  estado = { ...estado, ...c };
+function fijar(c: Partial<Omit<EstadoIALocal, "texto">> & { texto?: TextoEstado }) {
+  const { texto, ...resto } = c;
+  datos = { ...datos, ...resto };
+  if (texto !== undefined) textoEstado = texto;
+  estado = armarEstado();
   for (const f of oyentes) f();
 }
 
@@ -108,6 +158,24 @@ export const TEXTO_TARJETA_CHAT =
 export const TEXTO_TARJETA_BLOQUEADA =
   "La tarjeta gráfica de este navegador quedó bloqueada desde un fallo anterior. Cierre el navegador por completo y vuelva a abrirlo antes de usar la IA local; sus diseños no se pierden.";
 
+/** TEXTO_TARJETA en el idioma de la pantalla. */
+export const textoTarjeta = (): string =>
+  tx(
+    TEXTO_TARJETA,
+    "This computer's graphics card stopped responding while the local AI was running (it ran out of memory or froze). I turned the local AI off so it doesn't happen again. For the browser to recover the graphics card, close it completely and open it again; your designs won't be lost. If you turn it on again, do so with a freshly opened browser and, if it happens again, with the light model.",
+  );
+
+/** TEXTO_TARJETA_CHAT en el idioma de la pantalla. */
+export const textoTarjetaChat = (): string =>
+  tx(
+    TEXTO_TARJETA_CHAT,
+    "I tried to think it through with the local AI, but this computer's graphics card stopped responding (it ran out of memory or froze). I turned the local AI off so it doesn't happen again. For the browser to recover the graphics card, close it completely and open it again; your designs won't be lost.",
+  );
+
+/** TEXTO_TARJETA_BLOQUEADA en el idioma de la pantalla. */
+export const textoTarjetaBloqueada = (): string =>
+  tx(TEXTO_TARJETA_BLOQUEADA, "This browser's graphics card has been locked since an earlier failure. Close the browser completely and open it again before using the local AI; your designs won't be lost.");
+
 /**
  * La tarjeta gráfica dejó de responder: la IA local se apaga y queda anotado (en este navegador) para avisarlo en los
  * ajustes; no se vuelve a intentar sola. Lo usa también el modelo de mentira de las pruebas.
@@ -115,12 +183,46 @@ export const TEXTO_TARJETA_BLOQUEADA =
 function perderTarjeta() {
   cargado = null;
   if (estado.tarjeta) {
-    fijar({ fase: "error", avance: 0, texto: TEXTO_TARJETA });
+    fijar({ fase: "error", avance: 0, texto: textoTarjeta });
     return;
   }
   const p = leerPreferenciaIALocal();
   guardarPreferenciaIALocal({ ...p, activa: false, falla: new Date().toISOString() });
-  fijar({ fase: "error", avance: 0, tarjeta: true, fallas: (estado.fallas ?? 0) + 1, texto: TEXTO_TARJETA });
+  fijar({ fase: "error", avance: 0, tarjeta: true, fallas: (estado.fallas ?? 0) + 1, texto: textoTarjeta });
+}
+
+/* ───────────── Errores propios (también los que avisa el trabajador) ───────────── */
+
+/** Un error propio: el mensaje en español (como siempre) y una clave para decirlo en el idioma de la pantalla. */
+type ErrorIALocal = Error & { clave?: string; dato?: string | number };
+
+function errorConClave(mensaje: string, clave?: string, dato?: string | number): ErrorIALocal {
+  const e: ErrorIALocal = new Error(mensaje);
+  if (clave) e.clave = clave;
+  if (dato !== undefined) e.dato = dato;
+  return e;
+}
+
+/** Lo que dice en inglés un error propio (los de la biblioteca y los del navegador ya vienen en inglés). */
+function errorEnIngles(e: unknown, t: string): string {
+  const x = e instanceof Error ? (e as ErrorIALocal) : null;
+  switch (x?.clave) {
+    case "descarga-motor":
+      return `I couldn't download the local AI engine (${x?.dato ?? "?"}). Check your internet connection.`;
+    case "huella":
+      return "The local AI engine that arrived isn't the expected one (its SHA-256 fingerprint doesn't match): I won't use it.";
+    case "sin-webgpu":
+      return "This browser doesn't have WebGPU: use an up-to-date Chrome or Edge on a computer with a graphics card.";
+    case "no-lista":
+      return "The local AI isn't ready.";
+    case "trabajador":
+      return "The local AI worker stopped.";
+  }
+  // Sin clave, los avisos propios se reconocen por su texto
+  const motor = t.match(/^No pude descargar el motor de la IA local \((\d+)\)/);
+  if (motor) return errorEnIngles(errorConClave(t, "descarga-motor", Number(motor[1])), t);
+  const clave = /huella SHA-256/.test(t) ? "huella" : /no tiene WebGPU/.test(t) ? "sin-webgpu" : /^La IA local no está lista/.test(t) ? "no-lista" : /^El trabajador de la IA local se detuvo/.test(t) ? "trabajador" : null;
+  return clave ? errorEnIngles(errorConClave(t, clave), t) : t;
 }
 
 /* ───────────── WebGPU ───────────── */
@@ -130,19 +232,30 @@ type Gpu = { requestAdapter(o?: { powerPreference?: string }): Promise<Adaptador
 
 let soporte: Promise<{ ok: boolean; f16: boolean; motivo?: string }> | null = null;
 
+const sinWebGPU = () => tx("Este navegador no tiene WebGPU. Use Chrome o Edge actualizados.", "This browser doesn't have WebGPU. Use an up-to-date Chrome or Edge.");
+
+/** Un «no se puede» con su motivo como getter: el resultado queda guardado, pero se lee en el idioma de la pantalla. */
+const noSoporta = (motivo: () => string): { ok: boolean; f16: boolean; motivo?: string } => ({
+  ok: false,
+  f16: false,
+  get motivo() {
+    return motivo();
+  },
+});
+
 /** ¿Este navegador y esta tarjeta gráfica pueden correr el modelo? (WebGPU y, si hay, números de 16 bits en la tarjeta) */
 export function soporteWebGPU(): Promise<{ ok: boolean; f16: boolean; motivo?: string }> {
   // Con el modelo de mentira de las pruebas no hace falta tarjeta gráfica
   if (dePrueba()) return Promise.resolve({ ok: true, f16: true });
   soporte ??= (async () => {
     const gpu = typeof navigator === "undefined" ? undefined : (navigator as Navigator & { gpu?: Gpu }).gpu;
-    if (!gpu) return { ok: false, f16: false, motivo: "Este navegador no tiene WebGPU. Use Chrome o Edge actualizados." };
+    if (!gpu) return noSoporta(sinWebGPU);
     try {
       const a = await gpu.requestAdapter({ powerPreference: "high-performance" });
-      if (!a) return { ok: false, f16: false, motivo: "No encontré una tarjeta gráfica compatible con WebGPU en este equipo." };
+      if (!a) return noSoporta(() => tx("No encontré una tarjeta gráfica compatible con WebGPU en este equipo.", "I couldn't find a WebGPU-compatible graphics card on this computer."));
       return { ok: true, f16: a.features.has("shader-f16") };
     } catch {
-      return { ok: false, f16: false, motivo: "La tarjeta gráfica no respondió a WebGPU." };
+      return noSoporta(() => tx("La tarjeta gráfica no respondió a WebGPU.", "The graphics card didn't respond to WebGPU."));
     }
   })();
   return soporte;
@@ -151,18 +264,21 @@ export function soporteWebGPU(): Promise<{ ok: boolean; f16: boolean; motivo?: s
 /**
  * ¿La tarjeta gráfica entrega un dispositivo ahora? (se pide uno y se suelta enseguida). Tras un bloqueo, Chrome deja
  * WebGPU sin dispositivos hasta reiniciarlo: así se avisa antes de cargar el modelo en vez de fallar a medias.
+ * `bloqueada`: quedó bloqueada desde antes; `motivo`, en el idioma de la pantalla cuando se lea.
  */
-async function tarjetaSana(): Promise<{ ok: boolean; motivo?: string }> {
+async function tarjetaSana(): Promise<{ ok: boolean; bloqueada?: boolean; motivo?: () => string }> {
   const gpu = typeof navigator === "undefined" ? undefined : (navigator as Navigator & { gpu?: Gpu }).gpu;
-  if (!gpu) return { ok: false, motivo: "Este navegador no tiene WebGPU. Use Chrome o Edge actualizados." };
+  if (!gpu) return { ok: false, motivo: sinWebGPU };
   try {
     const a = await gpu.requestAdapter({ powerPreference: "high-performance" });
-    if (!a) return { ok: false, motivo: TEXTO_TARJETA_BLOQUEADA };
+    if (!a) return { ok: false, bloqueada: true, motivo: textoTarjetaBloqueada };
     (await a.requestDevice()).destroy();
     return { ok: true };
   } catch (e) {
     const t = e instanceof Error ? e.message : String(e);
-    return { ok: false, motivo: esFallaTarjeta(t) ? TEXTO_TARJETA_BLOQUEADA : `La tarjeta gráfica no respondió a WebGPU: ${t.slice(0, 160)}` };
+    return esFallaTarjeta(t)
+      ? { ok: false, bloqueada: true, motivo: textoTarjetaBloqueada }
+      : { ok: false, motivo: () => tx(`La tarjeta gráfica no respondió a WebGPU: ${t.slice(0, 160)}`, `The graphics card didn't respond to WebGPU: ${t.slice(0, 160)}`) };
   }
 }
 
@@ -174,8 +290,9 @@ async function idReal(modelo: string): Promise<string> {
 
 /* ───────────── El trabajador ───────────── */
 
+/** `clave` (en el avance y en los errores propios del trabajador): para decirlos aquí en el idioma de la pantalla. */
 type Mensaje =
-  | { tipo: "progreso"; fase: "biblioteca" | "modelo"; avance: number; texto: string }
+  | { tipo: "progreso"; fase: "biblioteca" | "modelo"; avance: number; texto: string; clave?: string }
   | { tipo: "listo"; modelo: string }
   | { tipo: "respuesta"; id: number; texto: string }
   | { tipo: "descargado"; id: number; si: boolean }
@@ -183,7 +300,7 @@ type Mensaje =
   | { tipo: "descargada"; id: number }
   /** La tarjeta gráfica dejó de responder (lo avisa WebLLM en cualquier momento, no solo al pedir algo). */
   | { tipo: "perdida"; mensaje: string }
-  | { tipo: "error"; id?: number; mensaje: string; gpu?: boolean };
+  | { tipo: "error"; id?: number; mensaje: string; gpu?: boolean; clave?: string; dato?: string | number };
 
 let trabajador: Worker | null = null;
 let siguienteId = 1;
@@ -211,7 +328,7 @@ function obtenerTrabajador(): Worker {
     }
     if (m.tipo === "progreso") {
       const descarga = /fetch|download|descarg/i.test(m.texto) || m.fase === "biblioteca";
-      fijar({ fase: descarga ? "descargando" : "cargando", avance: Math.max(0, Math.min(1, m.avance)), texto: textoAvance(m) });
+      fijar({ fase: descarga ? "descargando" : "cargando", avance: Math.max(0, Math.min(1, m.avance)), texto: () => textoAvance(m) });
       return;
     }
     if (m.tipo === "listo") {
@@ -220,7 +337,7 @@ function obtenerTrabajador(): Worker {
       return;
     }
     if (m.tipo === "error" && m.id === undefined) {
-      alCargar?.mal(new Error(m.mensaje));
+      alCargar?.mal(errorConClave(m.mensaje, m.clave, m.dato));
       alCargar = null;
       return;
     }
@@ -229,11 +346,11 @@ function obtenerTrabajador(): Worker {
     const espera = esperas.get(id);
     if (!espera) return;
     esperas.delete(id);
-    if (m.tipo === "error") espera.mal(new Error(m.mensaje));
+    if (m.tipo === "error") espera.mal(errorConClave(m.mensaje, m.clave, m.dato));
     else espera.ok(m);
   };
   trabajador.onerror = () => {
-    alCargar?.mal(new Error("El trabajador de la IA local se detuvo."));
+    alCargar?.mal(errorConClave("El trabajador de la IA local se detuvo.", "trabajador"));
     alCargar = null;
   };
   return trabajador;
@@ -241,11 +358,11 @@ function obtenerTrabajador(): Worker {
 
 /** El avance en palabras («Descargando el modelo: 38 %…», «Cargando el modelo en la tarjeta gráfica…»). */
 function textoAvance(m: Extract<Mensaje, { tipo: "progreso" }>): string {
-  if (m.fase === "biblioteca") return m.texto;
+  if (m.fase === "biblioteca") return m.clave === "motor" ? tx(m.texto, "Downloading the local AI engine (about 6.5 MB)…") : m.texto;
   const pct = Math.round(Math.max(0, Math.min(1, m.avance)) * 100);
-  if (/fetch|download/i.test(m.texto)) return `Descargando el modelo (solo la primera vez): ${pct} %…`;
-  if (/cache|load|loading|shader|gpu|init/i.test(m.texto)) return `Cargando el modelo en la tarjeta gráfica: ${pct} %…`;
-  return `Preparando la IA local: ${pct} %…`;
+  if (/fetch|download/i.test(m.texto)) return tx(`Descargando el modelo (solo la primera vez): ${pct} %…`, `Downloading the model (first time only): ${pct}%…`);
+  if (/cache|load|loading|shader|gpu|init/i.test(m.texto)) return tx(`Cargando el modelo en la tarjeta gráfica: ${pct} %…`, `Loading the model onto the graphics card: ${pct}%…`);
+  return tx(`Preparando la IA local: ${pct} %…`, `Preparing the local AI: ${pct}%…`);
 }
 
 function pedir(m: Record<string, unknown>): Promise<Mensaje> {
@@ -279,7 +396,7 @@ export const iaLocalLista = () => (dePrueba() ? true : cargado !== null && (esta
  */
 export function prepararIALocal(modelo = leerPreferenciaIALocal().modelo): Promise<boolean> {
   if (dePrueba()) {
-    fijar({ fase: "lista", modelo, avance: 1, tarjeta: false, texto: "IA local de prueba lista." });
+    fijar({ fase: "lista", modelo, avance: 1, tarjeta: false, texto: () => tx("IA local de prueba lista.", "Test local AI ready.") });
     return Promise.resolve(true);
   }
   if (cargado === modelo && iaLocalLista()) return Promise.resolve(true);
@@ -287,21 +404,21 @@ export function prepararIALocal(modelo = leerPreferenciaIALocal().modelo): Promi
   preparando = (async () => {
     const s = await soporteWebGPU();
     if (!s.ok) {
-      fijar({ fase: "sin-webgpu", modelo, avance: 0, texto: s.motivo ?? "Sin WebGPU." });
+      fijar({ fase: "sin-webgpu", modelo, avance: 0, texto: () => s.motivo ?? tx("Sin WebGPU.", "No WebGPU.") });
       preparando = null;
       return false;
     }
-    fijar({ fase: "cargando", modelo, avance: 0, texto: "Preparando la IA local…" });
+    fijar({ fase: "cargando", modelo, avance: 0, texto: () => tx("Preparando la IA local…", "Preparing the local AI…") });
     // Una tarjeta que quedó bloqueada no entrega dispositivos: se avisa antes de cargar nada, y la IA local se apaga
     // (no tiene caso intentarlo a cada pedido hasta que se reinicie el navegador)
     const sana = await tarjetaSana();
     if (!sana.ok) {
       cargado = null;
       preparando = null;
-      if (sana.motivo === TEXTO_TARJETA_BLOQUEADA) {
+      if (sana.bloqueada) {
         guardarPreferenciaIALocal({ ...leerPreferenciaIALocal(), activa: false });
-        fijar({ fase: "error", modelo, avance: 0, tarjeta: true, fallas: (estado.fallas ?? 0) + 1, texto: TEXTO_TARJETA_BLOQUEADA });
-      } else fijar({ fase: "error", modelo, avance: 0, texto: sana.motivo ?? TEXTO_TARJETA_BLOQUEADA });
+        fijar({ fase: "error", modelo, avance: 0, tarjeta: true, fallas: (estado.fallas ?? 0) + 1, texto: textoTarjetaBloqueada });
+      } else fijar({ fase: "error", modelo, avance: 0, texto: sana.motivo ?? textoTarjetaBloqueada });
       return false;
     }
     try {
@@ -311,11 +428,20 @@ export function prepararIALocal(modelo = leerPreferenciaIALocal().modelo): Promi
         obtenerTrabajador().postMessage({ tipo: "cargar", modelo: real, libreria: CONFIG.iaLocal.libreria, huella: CONFIG.iaLocal.huella });
       });
       cargado = modelo;
-      fijar({ fase: "lista", modelo, avance: 1, tarjeta: false, texto: `${modeloLocal(modelo).nombre.replace(/ \(.*\)$/, "")} lista en este equipo.` });
+      fijar({
+        fase: "lista",
+        modelo,
+        avance: 1,
+        tarjeta: false,
+        texto: () => {
+          const nombre = modeloLocal(modelo).nombre.replace(/ \(.*\)$/, "");
+          return tx(`${nombre} lista en este equipo.`, `${nombre} ready on this computer.`);
+        },
+      });
       return true;
     } catch (e) {
       cargado = null;
-      fijar({ fase: "error", modelo, avance: 0, texto: textoError(e) });
+      fijar({ fase: "error", modelo, avance: 0, texto: () => textoError(e) });
       return false;
     } finally {
       preparando = null;
@@ -324,16 +450,25 @@ export function prepararIALocal(modelo = leerPreferenciaIALocal().modelo): Promi
   return preparando;
 }
 
-/** Lo que falló, en palabras (la biblioteca y el navegador avisan en inglés). */
+/** Lo que falló, en palabras y en el idioma de la pantalla (la biblioteca y el navegador avisan en inglés). */
 export function textoError(e: unknown): string {
   const t = e instanceof Error ? e.message : String(e);
-  if (/huella|WebGPU: use/.test(t)) return t;
-  if (/quota|QuotaExceeded|storage is full|no space/i.test(t)) return "No hay espacio suficiente en el navegador para guardar el modelo: libere espacio o elija el modelo liviano (1.7B).";
-  if (/Failed to fetch|NetworkError|network|ERR_|Failed to store|Load failed/i.test(t)) return "No pude descargar el modelo (se baja de Hugging Face y jsDelivr): revise la conexión a internet e intente de nuevo; lo que ya bajó queda guardado.";
+  if (/huella|WebGPU: use/.test(t)) return tx(t, errorEnIngles(e, t));
+  if (/quota|QuotaExceeded|storage is full|no space/i.test(t))
+    return tx("No hay espacio suficiente en el navegador para guardar el modelo: libere espacio o elija el modelo liviano (1.7B).", "There isn't enough space in the browser to save the model: free up some space or choose the light model (1.7B).");
+  if (/Failed to fetch|NetworkError|network|ERR_|Failed to store|Load failed/i.test(t))
+    return tx(
+      "No pude descargar el modelo (se baja de Hugging Face y jsDelivr): revise la conexión a internet e intente de nuevo; lo que ya bajó queda guardado.",
+      "I couldn't download the model (it comes from Hugging Face and jsDelivr): check your internet connection and try again; whatever has already downloaded stays saved.",
+    );
   // La tarjeta se bloqueó o se reinició (DXGI_ERROR_DEVICE_HUNG, «Device was lost», el motor quedó sin el modelo)
-  if (esFallaTarjeta(t)) return TEXTO_TARJETA;
-  if (/adapter|gpu|out of memory|OOM|maxStorageBuffer|maxBufferSize/i.test(t)) return "La tarjeta gráfica no pudo cargar el modelo (memoria insuficiente o WebGPU ocupada): pruebe con el modelo liviano (1.7B) o cierre otras pestañas pesadas.";
-  return `No pude preparar la IA local: ${t}`;
+  if (esFallaTarjeta(t)) return textoTarjeta();
+  if (/adapter|gpu|out of memory|OOM|maxStorageBuffer|maxBufferSize/i.test(t))
+    return tx(
+      "La tarjeta gráfica no pudo cargar el modelo (memoria insuficiente o WebGPU ocupada): pruebe con el modelo liviano (1.7B) o cierre otras pestañas pesadas.",
+      "The graphics card couldn't load the model (not enough memory, or WebGPU is busy): try the light model (1.7B) or close other heavy tabs.",
+    );
+  return tx(`No pude preparar la IA local: ${t}`, `I couldn't prepare the local AI: ${errorEnIngles(e, t)}`);
 }
 
 /** ¿El modelo ya está guardado en este navegador? (sin descargar nada) */
@@ -353,7 +488,7 @@ export async function borrarModeloLocal(modelo: string): Promise<void> {
   if (dePrueba()) return;
   await pedir({ tipo: "borrar", modelo: await idReal(modelo) });
   if (cargado === modelo) cargado = null;
-  fijar({ fase: "apagada", modelo, avance: 0, texto: "Borré el modelo de este equipo." });
+  fijar({ fase: "apagada", modelo, avance: 0, texto: () => tx("Borré el modelo de este equipo.", "I deleted the model from this computer.") });
 }
 
 /** Saca el modelo de la tarjeta gráfica (al apagar la IA local); queda guardado para la próxima vez. */
@@ -378,7 +513,7 @@ export async function completarLocal(mensajes: MensajeChat[], opciones: Opciones
       throw e;
     }
   }
-  if (!iaLocalLista()) throw new Error("La IA local no está lista.");
+  if (!iaLocalLista()) throw errorConClave(tx("La IA local no está lista.", "The local AI isn't ready."), "no-lista");
   fijar({ fase: "pensando" });
   let reloj: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -386,7 +521,7 @@ export async function completarLocal(mensajes: MensajeChat[], opciones: Opciones
     const r = await Promise.race([
       pedir({ tipo: "completar", mensajes, esquema: opciones.esquema, maxTokens: opciones.maxTokens, temperatura: opciones.temperatura }),
       new Promise<never>((_, mal) => {
-        reloj = setTimeout(() => mal(new Error("La IA local tardó demasiado en responder.")), LIMITE_RESPUESTA_MS);
+        reloj = setTimeout(() => mal(new Error(tx("La IA local tardó demasiado en responder.", "The local AI took too long to answer."))), LIMITE_RESPUESTA_MS);
       }),
     ]);
     return r.tipo === "respuesta" ? r.texto : "";

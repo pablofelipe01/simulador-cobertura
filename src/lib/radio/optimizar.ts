@@ -15,6 +15,7 @@
 //    radio, y atender en paralelo en el gateway.
 // Cada propuesta trae el antes y el después (a cuántas personas les funciona, mensajes completos, espera y canal) y
 // al final se combinan las que suman. Son estimaciones para planear; se validan en campo.
+import { numeroLocal, porTexto, tx } from "../idioma";
 import { EQUIPOS, presetPorId, presetsDe, type PresetId } from "./constantes";
 import { estresMalla, type EstadoZona, type PedidoEstres, type ResultadoEstres, type UsuarioEstres, type ZonaEstres } from "./estres";
 import { distanciaM, metrosPorGrado } from "./geo";
@@ -95,8 +96,10 @@ export type PedidoOptimizar = {
 
 const ALTURA_APOYO_M = 12;
 const RADIO_GRUPO_KM = 1.5;
-const fmt = (x: number, d = 0) => (Math.round(x * 10 ** d) / 10 ** d).toLocaleString("es-CO");
-const entero = (x: number) => Math.round(x).toLocaleString("es-CO");
+const fmt = (x: number, d = 0) => numeroLocal(Math.round(x * 10 ** d) / 10 ** d);
+const entero = (x: number) => numeroLocal(Math.round(x));
+/** «a, b y c» en inglés («a, b and c»). */
+const listaEn = (xs: string[]) => (xs.length <= 1 ? (xs[0] ?? "") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 
 /** Cuánto vale una respuesta según lo que tarda el 95 % (s). */
 export function valorEspera(p95S: number): number {
@@ -172,7 +175,7 @@ export function optimizar(pedido: PedidoOptimizar, relieve: Relieve, progreso?: 
   const antes = medidaDe(r0);
   const vacio: ResultadoOptimizar = { antes, diagnostico: [], propuestas: [], combinada: null, descartadas: [], motivo: null };
   if (r0.motivo) return { ...vacio, motivo: r0.motivo };
-  if (!r0.porUsuario.length) return { ...vacio, motivo: "No hay personas en la prueba: ponga una zona de popularidad y pruebe la hora pico." };
+  if (!r0.porUsuario.length) return { ...vacio, motivo: tx("No hay personas en la prueba: ponga una zona de popularidad y pruebe la hora pico.", "There are no people in the test: add a popularity zone and test the peak hour.") };
   const p = base.parametros;
   const preset = presetPorId(p.preset);
   const mt = preset.protocolo === "meshtastic";
@@ -186,12 +189,30 @@ export function optimizar(pedido: PedidoOptimizar, relieve: Relieve, progreso?: 
   // Diagnóstico
   const diagnostico: string[] = [];
   const u = r0.resumenUsuarios;
-  diagnostico.push(`Con esta carga le funciona a ${entero(u.funcionan)} de ${entero(u.total)} personas (${fmt(u.funcionanPct)} %); canal del gateway ${fmt(r0.canalGatewayPct)} %.`);
+  diagnostico.push(
+    tx(
+      `Con esta carga le funciona a ${entero(u.funcionan)} de ${entero(u.total)} personas (${fmt(u.funcionanPct)} %); canal del gateway ${fmt(r0.canalGatewayPct)} %.`,
+      `With this load it works for ${entero(u.funcionan)} of ${entero(u.total)} people (${fmt(u.funcionanPct)}%); gateway channel ${fmt(r0.canalGatewayPct)}%.`,
+    ),
+  );
   const zonasMal = r0.zonas.filter((z) => z.usuarios > 0 && (z.estado === "revienta" || z.estado === "lento")).sort((a, b) => a.completosPct - b.completosPct || b.usuarios - a.usuarios);
-  for (const z of zonasMal.slice(0, 3)) diagnostico.push(`${z.nombre}: ${z.estado === "revienta" ? "se revienta" : "va lenta"} con ${entero(z.usuarios)} personas (${fmt(z.completosPct)} % completos, canal ${fmt(z.canalPct)} %).`);
+  for (const z of zonasMal.slice(0, 3))
+    diagnostico.push(
+      tx(
+        `${z.nombre}: ${z.estado === "revienta" ? "se revienta" : "va lenta"} con ${entero(z.usuarios)} personas (${fmt(z.completosPct)} % completos, canal ${fmt(z.canalPct)} %).`,
+        `${z.nombre}: ${z.estado === "revienta" ? "gets overloaded" : "runs slow"} with ${entero(z.usuarios)} people (${fmt(z.completosPct)}% complete, channel ${fmt(z.canalPct)}%).`,
+      ),
+    );
   const sinRed = r0.porUsuario.filter((x) => x.causa === "cobertura" || x.causa === "saltos" || x.causa === "senal");
-  if (sinRed.length) diagnostico.push(`${entero(sinRed.length)} ${sinRed.length === 1 ? "persona falla" : "personas fallan"} por cobertura, saltos o señal débil: ${sinRed.length === 1 ? "necesita" : "necesitan"} una antena de apoyo, no más capacidad.`);
-  if (r0.gateway.modo === "secuencial" && r0.gateway.esperaP95S > 5) diagnostico.push(`La fila del gateway llega a ${fmt(r0.gateway.esperaP95S)} s (atiende de a uno).`);
+  if (sinRed.length)
+    diagnostico.push(
+      tx(
+        `${entero(sinRed.length)} ${sinRed.length === 1 ? "persona falla" : "personas fallan"} por cobertura, saltos o señal débil: ${sinRed.length === 1 ? "necesita" : "necesitan"} una antena de apoyo, no más capacidad.`,
+        `${entero(sinRed.length)} ${sinRed.length === 1 ? "person fails" : "people fail"} because of coverage, hops or weak signal: they need a support antenna, not more capacity.`,
+      ),
+    );
+  if (r0.gateway.modo === "secuencial" && r0.gateway.esperaP95S > 5)
+    diagnostico.push(tx(`La fila del gateway llega a ${fmt(r0.gateway.esperaP95S)} s (atiende de a uno).`, `The gateway queue reaches ${fmt(r0.gateway.esperaP95S)} s (it serves one at a time).`));
 
   // Medir una variante de la red con la misma carga (y la misma semilla, para comparar)
   const medir = (q: PedidoEstres): { r: ResultadoEstres; m: MedidaRed } => {
@@ -250,9 +271,15 @@ export function optimizar(pedido: PedidoOptimizar, relieve: Relieve, progreso?: 
       candidatas.push({
         id: `gateway-zona-${z.id}`,
         tipo: "gateway-zona",
-        titulo: `Gateway de apoyo en ${z.nombre}`,
-        que: `Convierta ${z.nombre} en gateway de apoyo: póngale internet (Starlink o fibra) y el servicio del gateway; sigue repitiendo para los demás.`,
-        porque: `${z.nombre} ${z.estado === "revienta" ? "se revienta" : "va lento"} con ${entero(z.usuarios)} personas: sus mensajes salen ahí mismo a internet, con un salto menos y sin cruzar el canal hasta el gateway principal.`,
+        titulo: tx(`Gateway de apoyo en ${z.nombre}`, `Support gateway at ${z.nombre}`),
+        que: tx(
+          `Convierta ${z.nombre} en gateway de apoyo: póngale internet (Starlink o fibra) y el servicio del gateway; sigue repitiendo para los demás.`,
+          `Turn ${z.nombre} into a support gateway: give it internet (Starlink or fiber) and the gateway service; it keeps repeating for the others.`,
+        ),
+        porque: tx(
+          `${z.nombre} ${z.estado === "revienta" ? "se revienta" : "va lento"} con ${entero(z.usuarios)} personas: sus mensajes salen ahí mismo a internet, con un salto menos y sin cruzar el canal hasta el gateway principal.`,
+          `${z.nombre} ${z.estado === "revienta" ? "gets overloaded" : "runs slow"} with ${entero(z.usuarios)} people: their messages go out to the internet right there, with one hop fewer and without crossing the channel to the main gateway.`,
+        ),
         agregar: [],
         editar: [{ id: a.id, cambios: { pasarela: true } }],
         parametros: null,
@@ -269,10 +296,16 @@ export function optimizar(pedido: PedidoOptimizar, relieve: Relieve, progreso?: 
         candidatas.push({
           id: `gateway-nuevo-${z.id}`,
           tipo: "gateway-nuevo",
-          titulo: `Segundo gateway cerca de la gente de ${z.nombre}`,
-          que: `Ponga un segundo gateway (con internet) donde está la mitad más lejana de la gente de ${z.nombre}, a ${fmt(distanciaM(c.lat, c.lon, a.lat, a.lon) / 1000, 1)} km.`,
-          porque: `${z.nombre} atiende a ${entero(z.usuarios)} personas y ${z.estado === "revienta" ? "se revienta" : "va lento"}; un segundo gateway reparte la gente y la fila.`,
-          agregar: [nodoNuevo(`opt-gw-${z.id}`, `Gateway de apoyo (${z.nombre})`, c.lat, c.lon, true, 12)],
+          titulo: tx(`Segundo gateway cerca de la gente de ${z.nombre}`, `Second gateway near the people of ${z.nombre}`),
+          que: tx(
+            `Ponga un segundo gateway (con internet) donde está la mitad más lejana de la gente de ${z.nombre}, a ${fmt(distanciaM(c.lat, c.lon, a.lat, a.lon) / 1000, 1)} km.`,
+            `Place a second gateway (with internet) where the farther half of ${z.nombre}'s people are, ${fmt(distanciaM(c.lat, c.lon, a.lat, a.lon) / 1000, 1)} km away.`,
+          ),
+          porque: tx(
+            `${z.nombre} atiende a ${entero(z.usuarios)} personas y ${z.estado === "revienta" ? "se revienta" : "va lento"}; un segundo gateway reparte la gente y la fila.`,
+            `${z.nombre} serves ${entero(z.usuarios)} people and ${z.estado === "revienta" ? "gets overloaded" : "runs slow"}; a second gateway splits the people and the queue.`,
+          ),
+          agregar: [nodoNuevo(`opt-gw-${z.id}`, tx(`Gateway de apoyo (${z.nombre})`, `Support gateway (${z.nombre})`), c.lat, c.lon, true, 12)],
           editar: [],
           parametros: null,
           opciones: null,
@@ -288,9 +321,15 @@ export function optimizar(pedido: PedidoOptimizar, relieve: Relieve, progreso?: 
       candidatas.push({
         id: `otra-frecuencia-${z.id}`,
         tipo: "otra-frecuencia",
-        titulo: `Gateway de apoyo en ${fmt(otraFrecuencia, 1)} MHz en ${z.nombre}`,
-        que: `En el sitio de ${z.nombre} ponga un gateway de apoyo con su propia radio en ${fmt(otraFrecuencia, 3)} MHz (con internet) y configure en esa frecuencia a ${entero(pasan.length)} personas de la zona: quedan dos canales que no se estorban.`,
-        porque: `El canal de ${z.nombre} está ocupado el ${fmt(z.canalPct)} %: en una sola frecuencia los mensajes de todos se pisan; con dos, cada una lleva la mitad del aire.`,
+        titulo: tx(`Gateway de apoyo en ${fmt(otraFrecuencia, 1)} MHz en ${z.nombre}`, `Support gateway on ${fmt(otraFrecuencia, 1)} MHz at ${z.nombre}`),
+        que: tx(
+          `En el sitio de ${z.nombre} ponga un gateway de apoyo con su propia radio en ${fmt(otraFrecuencia, 3)} MHz (con internet) y configure en esa frecuencia a ${entero(pasan.length)} personas de la zona: quedan dos canales que no se estorban.`,
+          `At the ${z.nombre} site, place a support gateway with its own radio on ${fmt(otraFrecuencia, 3)} MHz (with internet) and set ${entero(pasan.length)} people in the zone to that frequency: that leaves two channels that don't interfere with each other.`,
+        ),
+        porque: tx(
+          `El canal de ${z.nombre} está ocupado el ${fmt(z.canalPct)} %: en una sola frecuencia los mensajes de todos se pisan; con dos, cada una lleva la mitad del aire.`,
+          `The channel at ${z.nombre} is busy ${fmt(z.canalPct)}% of the time: on a single frequency everyone's messages collide; with two, each one carries half the airtime.`,
+        ),
         agregar: [],
         editar: [],
         parametros: null,
@@ -369,17 +408,32 @@ export function optimizar(pedido: PedidoOptimizar, relieve: Relieve, progreso?: 
       sitios = [sitio];
       desde = cercano;
     }
-    const nombre = (i: number) => (sitios.length === 1 ? `Antena de apoyo ${k + 1}` : `Antena de apoyo ${k + 1}.${i + 1}`);
+    const nombre = (i: number) => (sitios.length === 1 ? tx(`Antena de apoyo ${k + 1}`, `Support antenna ${k + 1}`) : tx(`Antena de apoyo ${k + 1}.${i + 1}`, `Support antenna ${k + 1}.${i + 1}`));
     const ultimo = sitios[sitios.length - 1];
+    const causas = [...new Set(grupo.map((x) => x.causa))];
+    const cadena = sitios.map((q) => `${q.lat.toFixed(5)}, ${q.lon.toFixed(5)}`).join(" → ");
+    const distancia = desde ? fmt(distanciaM(ultimo.lat, ultimo.lon, desde.lat, desde.lon) / 1000, 1) : "";
     candidatas.push({
       id: `antena-apoyo-${k}`,
       tipo: "antena-apoyo",
-      titulo: `${sitios.length === 1 ? "Antena de apoyo" : `${sitios.length} antenas de apoyo`} para ${entero(grupo.length)} ${grupo.length === 1 ? "persona" : "personas"} sin buena señal`,
+      titulo: tx(
+        `${sitios.length === 1 ? "Antena de apoyo" : `${sitios.length} antenas de apoyo`} para ${entero(grupo.length)} ${grupo.length === 1 ? "persona" : "personas"} sin buena señal`,
+        `${sitios.length === 1 ? "Support antenna" : `${sitios.length} support antennas`} for ${entero(grupo.length)} ${grupo.length === 1 ? "person" : "people"} without good signal`,
+      ),
       que:
         sitios.length === 1
-          ? `Ponga un repetidor de ${alturaApoyo} m en ${ultimo.lat.toFixed(5)}, ${ultimo.lon.toFixed(5)}${desde ? `, a ${fmt(distanciaM(ultimo.lat, ultimo.lon, desde.lat, desde.lon) / 1000, 1)} km de ${desde.nombre}` : ""}.`
-          : `Ponga ${sitios.length} repetidores de ${alturaApoyo} m en cadena desde ${desde?.nombre ?? "la red"} hasta el grupo: ${sitios.map((q) => `${q.lat.toFixed(5)}, ${q.lon.toFixed(5)}`).join(" → ")}.`,
-      porque: `${entero(grupo.length)} personas fallan por ${[...new Set(grupo.map((x) => x.causa))].map((x) => (x === "cobertura" ? "falta de cobertura" : x === "saltos" ? "demasiados saltos" : "señal débil")).join(" y ")}: les falta una antena cerca, no capacidad.`,
+          ? tx(
+              `Ponga un repetidor de ${alturaApoyo} m en ${ultimo.lat.toFixed(5)}, ${ultimo.lon.toFixed(5)}${desde ? `, a ${distancia} km de ${desde.nombre}` : ""}.`,
+              `Place a ${alturaApoyo} m repeater at ${ultimo.lat.toFixed(5)}, ${ultimo.lon.toFixed(5)}${desde ? `, ${distancia} km from ${desde.nombre}` : ""}.`,
+            )
+          : tx(
+              `Ponga ${sitios.length} repetidores de ${alturaApoyo} m en cadena desde ${desde?.nombre ?? "la red"} hasta el grupo: ${cadena}.`,
+              `Place ${sitios.length} ${alturaApoyo} m repeaters in a chain from ${desde?.nombre ?? "the network"} to the group: ${cadena}.`,
+            ),
+      porque: tx(
+        `${entero(grupo.length)} personas fallan por ${causas.map((x) => (x === "cobertura" ? "falta de cobertura" : x === "saltos" ? "demasiados saltos" : "señal débil")).join(" y ")}: les falta una antena cerca, no capacidad.`,
+        `${entero(grupo.length)} ${grupo.length === 1 ? "person fails" : "people fail"} because of ${listaEn(causas.map((x) => (x === "cobertura" ? "lack of coverage" : x === "saltos" ? "too many hops" : "weak signal")))}: they need an antenna nearby, not capacity.`,
+      ),
       agregar: sitios.map((q, i) => nodoNuevo(`opt-apoyo-${k}-${i}`, nombre(i), q.lat, q.lon, false, alturaApoyo)),
       editar: [],
       parametros: null,
@@ -395,9 +449,15 @@ export function optimizar(pedido: PedidoOptimizar, relieve: Relieve, progreso?: 
     candidatas.push({
       id: "clientes-mudos",
       tipo: "clientes-mudos",
-      titulo: "Equipos de las personas en CLIENT_MUTE",
-      que: "Configure los equipos de las personas con el rol CLIENT_MUTE (no repiten) y deje que repitan solo los ROUTER de la red.",
-      porque: `Con todos repitiendo, cada inundación la repiten muchos equipos (se cancelaron ~${entero(r0.cancelados)} retransmisiones y aun así el canal está al ${fmt(r0.canalGatewayPct)} %).`,
+      titulo: tx("Equipos de las personas en CLIENT_MUTE", "People's devices in CLIENT_MUTE"),
+      que: tx(
+        "Configure los equipos de las personas con el rol CLIENT_MUTE (no repiten) y deje que repitan solo los ROUTER de la red.",
+        "Set people's devices to the CLIENT_MUTE role (they don't repeat) and let only the network's ROUTERs repeat.",
+      ),
+      porque: tx(
+        `Con todos repitiendo, cada inundación la repiten muchos equipos (se cancelaron ~${entero(r0.cancelados)} retransmisiones y aun así el canal está al ${fmt(r0.canalGatewayPct)} %).`,
+        `With everyone repeating, each flood is repeated by many devices (~${entero(r0.cancelados)} retransmissions were canceled and the channel is still at ${fmt(r0.canalGatewayPct)}%).`,
+      ),
       agregar: [],
       editar: [],
       parametros: { usuariosRepiten: false },
@@ -410,9 +470,15 @@ export function optimizar(pedido: PedidoOptimizar, relieve: Relieve, progreso?: 
     candidatas.push({
       id: "sin-telemetria",
       tipo: "sin-telemetria",
-      titulo: "Telemetría solo al teléfono y NodeInfo cada 12 h",
-      que: "En los equipos apague el envío de la telemetría a la malla (que quede solo en el teléfono) y suba el intervalo del NodeInfo.",
-      porque: "Cada equipo inunda su telemetría cada 30 minutos: con mucha gente eso solo ya ocupa buena parte del canal.",
+      titulo: tx("Telemetría solo al teléfono y NodeInfo cada 12 h", "Telemetry to the phone only and NodeInfo every 12 h"),
+      que: tx(
+        "En los equipos apague el envío de la telemetría a la malla (que quede solo en el teléfono) y suba el intervalo del NodeInfo.",
+        "On the devices, turn off sending telemetry to the mesh (keep it on the phone only) and raise the NodeInfo interval.",
+      ),
+      porque: tx(
+        "Cada equipo inunda su telemetría cada 30 minutos: con mucha gente eso solo ya ocupa buena parte del canal.",
+        "Each device floods its telemetry every 30 minutes: with many people that alone takes up a good part of the channel.",
+      ),
       agregar: [],
       editar: [],
       parametros: null,
@@ -427,9 +493,15 @@ export function optimizar(pedido: PedidoOptimizar, relieve: Relieve, progreso?: 
     candidatas.push({
       id: "gateway-paralelo",
       tipo: "gateway-paralelo",
-      titulo: "Atender en paralelo en el gateway",
-      que: "En el servicio del gateway procese los mensajes en paralelo (una cola con varios trabajadores para la base de datos) en vez de uno por uno.",
-      porque: `La fila del gateway llega a ${fmt(r0.gateway.esperaP95S)} s: mientras la base de datos responde, los demás mensajes esperan.`,
+      titulo: tx("Atender en paralelo en el gateway", "Serve in parallel at the gateway"),
+      que: tx(
+        "En el servicio del gateway procese los mensajes en paralelo (una cola con varios trabajadores para la base de datos) en vez de uno por uno.",
+        "In the gateway service, process messages in parallel (a queue with several workers for the database) instead of one by one.",
+      ),
+      porque: tx(
+        `La fila del gateway llega a ${fmt(r0.gateway.esperaP95S)} s: mientras la base de datos responde, los demás mensajes esperan.`,
+        `The gateway queue reaches ${fmt(r0.gateway.esperaP95S)} s: while the database responds, the other messages wait.`,
+      ),
       agregar: [],
       editar: [],
       parametros: null,
@@ -445,13 +517,22 @@ export function optimizar(pedido: PedidoOptimizar, relieve: Relieve, progreso?: 
     .filter((x) => x.velocidadKbps > preset.velocidadKbps * 1.3)
     .sort((a, b) => a.velocidadKbps - b.velocidadKbps)
     .slice(0, 2);
-  for (const x of masRapidos)
+  for (const x of masRapidos) {
+    // El nombre del ajuste y, si no dice el SF, el SF y el ancho de banda (en cada idioma por separado)
+    const nombreSf = porTexto(x.nombre, (n, i) => (/SF\d/.test(n) ? n : `${n} (SF${x.sf} · ${(Math.round(x.anchoBandaKhz * 10) / 10).toLocaleString(i === "en" ? "en-US" : "es-CO")} kHz)`));
+    const veces = fmt(preset.velocidadKbps ? x.velocidadKbps / preset.velocidadKbps : 1, 1);
     candidatas.push({
       id: `ajuste-${x.id}`,
       tipo: "ajuste-radio",
-      titulo: `Ajuste de radio ${x.nombre}`,
-      que: `Pase toda la red (repetidores, gateway y equipos de las personas) a ${x.nombre}${/SF\d/.test(x.nombre) ? "" : ` (SF${x.sf} · ${fmt(x.anchoBandaKhz, 1)} kHz)`}: cada mensaje dura ${fmt(preset.velocidadKbps ? x.velocidadKbps / preset.velocidadKbps : 1, 1)} veces menos en el aire.`,
-      porque: `Más rápido cabe más gente en el canal, a cambio de alcance (${fmt(x.sensibilidadDbm - preset.sensibilidadDbm, 1)} dB menos de margen en cada enlace).`,
+      titulo: tx(`Ajuste de radio ${x.nombre}`, `Radio setting ${x.nombre}`),
+      que: tx(
+        `Pase toda la red (repetidores, gateway y equipos de las personas) a ${nombreSf}: cada mensaje dura ${veces} veces menos en el aire.`,
+        `Switch the whole network (repeaters, gateway and people's devices) to ${nombreSf}: each message spends ${veces} times less time on the air.`,
+      ),
+      porque: tx(
+        `Más rápido cabe más gente en el canal, a cambio de alcance (${fmt(x.sensibilidadDbm - preset.sensibilidadDbm, 1)} dB menos de margen en cada enlace).`,
+        `Faster means more people fit in the channel, at the cost of range (${fmt(x.sensibilidadDbm - preset.sensibilidadDbm, 1)} dB less margin on each link).`,
+      ),
       agregar: [],
       editar: [],
       parametros: { preset: x.id as PresetId },
@@ -460,6 +541,7 @@ export function optimizar(pedido: PedidoOptimizar, relieve: Relieve, progreso?: 
       lon: null,
       aplicable: true,
     });
+  }
 
   // Probar cada una
   const propuestas: PropuestaOptimizar[] = [];
@@ -501,9 +583,12 @@ export function optimizar(pedido: PedidoOptimizar, relieve: Relieve, progreso?: 
       combinada = {
         id: "combinada",
         tipo: usadas[0].tipo,
-        titulo: `Todo junto: ${usadas.map((x) => x.titulo.charAt(0).toLowerCase() + x.titulo.slice(1)).join(" + ")}`,
+        titulo: (() => {
+          const juntas = usadas.map((x) => porTexto(x.titulo, (t) => t.charAt(0).toLowerCase() + t.slice(1))).join(" + ");
+          return tx(`Todo junto: ${juntas}`, `All together: ${juntas}`);
+        })(),
         que: usadas.map((x) => x.que).join(" "),
-        porque: "Las propuestas que más suman, probadas juntas con la misma carga.",
+        porque: tx("Las propuestas que más suman, probadas juntas con la misma carga.", "The proposals that add the most, tested together with the same load."),
         agregar: usadas.flatMap((x) => x.agregar),
         editar: usadas.flatMap((x) => x.editar),
         parametros: usadas.reduce<Partial<Parametros> | null>((acc, x) => (x.parametros ? { ...(acc ?? {}), ...x.parametros } : acc), null),
@@ -518,8 +603,14 @@ export function optimizar(pedido: PedidoOptimizar, relieve: Relieve, progreso?: 
       };
   }
   progreso?.(1);
-  if (!candidatas.length) diagnostico.push(antes.funcionanPct >= 90 ? "La red aguanta esta carga: no hace falta optimizarla. Súbale la carga (×2, ×5) para ver hasta dónde llega." : "No encontré un arreglo claro para esta carga.");
-  else if (!propuestas.length) diagnostico.push("Probé los arreglos de siempre y ninguno mejora con esta carga: baje la carga o divida la red en más frecuencias.");
+  if (!candidatas.length)
+    diagnostico.push(
+      antes.funcionanPct >= 90
+        ? tx("La red aguanta esta carga: no hace falta optimizarla. Súbale la carga (×2, ×5) para ver hasta dónde llega.", "The network handles this load: it doesn't need optimizing. Raise the load (×2, ×5) to see how far it goes.")
+        : tx("No encontré un arreglo claro para esta carga.", "I didn't find a clear fix for this load."),
+    );
+  else if (!propuestas.length)
+    diagnostico.push(tx("Probé los arreglos de siempre y ninguno mejora con esta carga: baje la carga o divida la red en más frecuencias.", "I tried the usual fixes and none improves things with this load: lower the load or split the network into more frequencies."));
   return { antes, diagnostico, propuestas, combinada, descartadas, motivo: null };
 }
 

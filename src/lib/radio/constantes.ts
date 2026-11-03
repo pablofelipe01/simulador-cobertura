@@ -5,6 +5,8 @@
 
 // Constantes del modelo de propagación y de la red MeshCore de Trama (LoRa 915–928 MHz).
 // El modelo fue calibrado contra simulaciones de Radio Mobile (error típico ≈ 5 dB).
+// Los textos visibles (nombres y descripciones) son getters: salen en el idioma de la pantalla al leerlos.
+import { tx } from "../idioma";
 
 /** Radio terrestre medio (m). */
 export const RADIO_TIERRA_M = 6371008.8;
@@ -73,11 +75,29 @@ export type Preset = {
 
 const velocidad = (sf: number, bw: number, cr: number) => Math.round(((sf * bw) / 2 ** sf) * (4 / cr) * 1000) / 1000;
 const sensibilidad = (sf: number, bw: number) => Math.round((-174 + 10 * Math.log10(bw * 1000) + 6 - 2.5 * (sf - 4)) * 10) / 10;
-const preset = (id: PresetId, nombre: string, sf: number, bw: number, uso: string, s = sensibilidad(sf, bw)): Preset => ({ id, nombre, protocolo: "meshcore", sf, anchoBandaKhz: bw, sensibilidadDbm: s, velocidadKbps: velocidad(sf, bw, 5), cr: 5, uso });
-/** Preset de Meshtastic (firmware: módem por nombre, preámbulo de 16 símbolos). */
-const presetMt = (id: PresetId, nombre: string, sf: number, bw: number, cr: number, uso: string, s = sensibilidad(sf, bw)): Preset => ({
+/** Un texto en español y en inglés. */
+type Texto = readonly [es: string, en: string];
+const preset = (id: PresetId, nombre: Texto, sf: number, bw: number, uso: Texto, s = sensibilidad(sf, bw)): Preset => ({
   id,
-  nombre,
+  get nombre() {
+    return tx(nombre[0], nombre[1]);
+  },
+  protocolo: "meshcore",
+  sf,
+  anchoBandaKhz: bw,
+  sensibilidadDbm: s,
+  velocidadKbps: velocidad(sf, bw, 5),
+  cr: 5,
+  get uso() {
+    return tx(uso[0], uso[1]);
+  },
+});
+/** Preset de Meshtastic (firmware: módem por nombre, preámbulo de 16 símbolos). */
+const presetMt = (id: PresetId, nombre: Texto, sf: number, bw: number, cr: number, uso: Texto, s = sensibilidad(sf, bw)): Preset => ({
+  id,
+  get nombre() {
+    return tx(nombre[0], nombre[1]);
+  },
   protocolo: "meshtastic",
   sf,
   anchoBandaKhz: bw,
@@ -85,26 +105,28 @@ const presetMt = (id: PresetId, nombre: string, sf: number, bw: number, cr: numb
   velocidadKbps: velocidad(sf, bw, cr),
   cr,
   preambulo: 16,
-  uso,
+  get uso() {
+    return tx(uso[0], uso[1]);
+  },
 });
 
 export const PRESETS: readonly Preset[] = [
   // SF11 / 250 kHz da −131,5 dBm por fórmula; se usa −131 dBm, el mismo valor de las simulaciones de Radio Mobile
   // que calibraron el modelo (mismos ajustes de radio).
-  preset("SF11_250", "Trama SF11 · 250 kHz (alcance)", 11, 250, "El de Trama: 150 usuarios por frecuencia y unos 10 km por repetidor en plano.", -131),
-  preset("SF10_250", "Trama SF10 · 250 kHz", 10, 250, "280 usuarios por frecuencia; el alcance baja a ~80 %.") ,
-  preset("SF9_250", "Trama SF9 · 250 kHz (capacidad)", 9, 250, "500 usuarios por frecuencia; el alcance baja a ~65 %."),
-  preset("SF7_62", "MeshCore SF7 · 62,5 kHz", 7, 62.5, "El recomendado en EE. UU. (allá en 910,525 MHz): rápido, menos alcance."),
-  preset("SF8_62", "MeshCore SF8 · 62,5 kHz", 8, 62.5, "Rápido y un poco más de alcance."),
-  preset("SF9_62", "MeshCore SF9 · 62,5 kHz", 9, 62.5, "El equilibrado de la comunidad MeshCore: buen alcance, canal angosto."),
-  preset("SF10_62", "MeshCore SF10 · 62,5 kHz", 10, 62.5, "Más alcance; cada paquete ocupa el aire mucho más tiempo."),
+  preset("SF11_250", ["Trama SF11 · 250 kHz (alcance)", "Trama SF11 · 250 kHz (range)"], 11, 250, ["El de Trama: 150 usuarios por frecuencia y unos 10 km por repetidor en plano.", "Trama's setting: 150 users per frequency and about 10 km per repeater on flat terrain."], -131),
+  preset("SF10_250", ["Trama SF10 · 250 kHz", "Trama SF10 · 250 kHz"], 10, 250, ["280 usuarios por frecuencia; el alcance baja a ~80 %.", "280 users per frequency; range drops to ~80%."]) ,
+  preset("SF9_250", ["Trama SF9 · 250 kHz (capacidad)", "Trama SF9 · 250 kHz (capacity)"], 9, 250, ["500 usuarios por frecuencia; el alcance baja a ~65 %.", "500 users per frequency; range drops to ~65%."]),
+  preset("SF7_62", ["MeshCore SF7 · 62,5 kHz", "MeshCore SF7 · 62.5 kHz"], 7, 62.5, ["El recomendado en EE. UU. (allá en 910,525 MHz): rápido, menos alcance.", "The one recommended in the US (on 910.525 MHz there): fast, less range."]),
+  preset("SF8_62", ["MeshCore SF8 · 62,5 kHz", "MeshCore SF8 · 62.5 kHz"], 8, 62.5, ["Rápido y un poco más de alcance.", "Fast, with a little more range."]),
+  preset("SF9_62", ["MeshCore SF9 · 62,5 kHz", "MeshCore SF9 · 62.5 kHz"], 9, 62.5, ["El equilibrado de la comunidad MeshCore: buen alcance, canal angosto.", "The MeshCore community's balanced setting: good range, narrow channel."]),
+  preset("SF10_62", ["MeshCore SF10 · 62,5 kHz", "MeshCore SF10 · 62.5 kHz"], 10, 62.5, ["Más alcance; cada paquete ocupa el aire mucho más tiempo.", "More range; each packet stays on the air much longer."]),
   // Meshtastic: LongFast es el de fábrica (SF11 · 250 kHz, el mismo aire que el SF11 de Trama)
-  presetMt("MT_LONG_FAST", "Meshtastic LongFast", 11, 250, 5, "El de fábrica de Meshtastic: buen alcance, ~1,07 kbps.", -131),
-  presetMt("MT_LONG_MODERATE", "Meshtastic LongModerate", 11, 125, 8, "Más alcance que LongFast; cada mensaje dura casi tres veces más en el aire."),
-  presetMt("MT_LONG_SLOW", "Meshtastic LongSlow", 12, 125, 8, "El de más alcance y el más lento: pocas personas por canal."),
-  presetMt("MT_MEDIUM_SLOW", "Meshtastic MediumSlow", 10, 250, 5, "Un paso más rápido que LongFast, con algo menos de alcance."),
-  presetMt("MT_MEDIUM_FAST", "Meshtastic MediumFast", 9, 250, 5, "Más capacidad: ~3,5 kbps; el alcance baja a ~65 %."),
-  presetMt("MT_SHORT_FAST", "Meshtastic ShortFast", 7, 250, 5, "Para redes densas y cortas: ~11 kbps, poco alcance."),
+  presetMt("MT_LONG_FAST", ["Meshtastic LongFast", "Meshtastic LongFast"], 11, 250, 5, ["El de fábrica de Meshtastic: buen alcance, ~1,07 kbps.", "Meshtastic's default: good range, ~1.07 kbps."], -131),
+  presetMt("MT_LONG_MODERATE", ["Meshtastic LongModerate", "Meshtastic LongModerate"], 11, 125, 8, ["Más alcance que LongFast; cada mensaje dura casi tres veces más en el aire.", "More range than LongFast; each message lasts almost three times longer on the air."]),
+  presetMt("MT_LONG_SLOW", ["Meshtastic LongSlow", "Meshtastic LongSlow"], 12, 125, 8, ["El de más alcance y el más lento: pocas personas por canal.", "The longest range and the slowest: few people per channel."]),
+  presetMt("MT_MEDIUM_SLOW", ["Meshtastic MediumSlow", "Meshtastic MediumSlow"], 10, 250, 5, ["Un paso más rápido que LongFast, con algo menos de alcance.", "One step faster than LongFast, with somewhat less range."]),
+  presetMt("MT_MEDIUM_FAST", ["Meshtastic MediumFast", "Meshtastic MediumFast"], 9, 250, 5, ["Más capacidad: ~3,5 kbps; el alcance baja a ~65 %.", "More capacity: ~3.5 kbps; range drops to ~65%."]),
+  presetMt("MT_SHORT_FAST", ["Meshtastic ShortFast", "Meshtastic ShortFast"], 7, 250, 5, ["Para redes densas y cortas: ~11 kbps, poco alcance.", "For dense, short-range networks: ~11 kbps, little range."]),
 ];
 
 export function presetPorId(id: PresetId): Preset {
@@ -139,11 +161,61 @@ export type Clase = {
 
 /** Clases de señal por margen sobre la sensibilidad, con la paleta de las simulaciones de Radio Mobile. */
 export const CLASES: readonly Clase[] = [
-  { id: "buena", nombre: "Buena", minimoDb: 45, color: "#1E7B34", descripcion: "Enlace muy holgado, tolera lluvia, follaje y movimiento." },
-  { id: "estable", nombre: "Estable", minimoDb: 37, color: "#8BD17C", descripcion: "Servicio confiable para mensajes y telemetría." },
-  { id: "media", nombre: "Media", minimoDb: 30, color: "#F5D33B", descripcion: "Funciona, con pérdidas ocasionales de paquetes." },
-  { id: "baja", nombre: "Baja", minimoDb: 20, color: "#F08A2C", descripcion: "Intermitente; depende de la posición del equipo." },
-  { id: "sin", nombre: "Sin servicio", minimoDb: -Infinity, color: "#D93A2E", descripcion: "Por debajo del margen mínimo de servicio." },
+  {
+    id: "buena",
+    get nombre() {
+      return tx("Buena", "Good");
+    },
+    minimoDb: 45,
+    color: "#1E7B34",
+    get descripcion() {
+      return tx("Enlace muy holgado, tolera lluvia, follaje y movimiento.", "Very comfortable link; tolerates rain, foliage and movement.");
+    },
+  },
+  {
+    id: "estable",
+    get nombre() {
+      return tx("Estable", "Stable");
+    },
+    minimoDb: 37,
+    color: "#8BD17C",
+    get descripcion() {
+      return tx("Servicio confiable para mensajes y telemetría.", "Reliable service for messages and telemetry.");
+    },
+  },
+  {
+    id: "media",
+    get nombre() {
+      return tx("Media", "Fair");
+    },
+    minimoDb: 30,
+    color: "#F5D33B",
+    get descripcion() {
+      return tx("Funciona, con pérdidas ocasionales de paquetes.", "Works, with occasional packet loss.");
+    },
+  },
+  {
+    id: "baja",
+    get nombre() {
+      return tx("Baja", "Weak");
+    },
+    minimoDb: 20,
+    color: "#F08A2C",
+    get descripcion() {
+      return tx("Intermitente; depende de la posición del equipo.", "Intermittent; depends on where the device is.");
+    },
+  },
+  {
+    id: "sin",
+    get nombre() {
+      return tx("Sin servicio", "No service");
+    },
+    minimoDb: -Infinity,
+    color: "#D93A2E",
+    get descripcion() {
+      return tx("Por debajo del margen mínimo de servicio.", "Below the minimum service margin.");
+    },
+  },
 ];
 
 /** Margen mínimo para considerar que hay servicio (clase Baja o mejor). */
@@ -157,9 +229,27 @@ export const META_UTIL_ESTUDIO_PCT = 60;
 
 /** Clasificación de enlaces entre antenas (margen mínimo de ambos sentidos). */
 export const ENLACES = {
-  solido: { minimoDb: 30, nombre: "Enlace sólido", color: "#1E7B34" },
-  inestable: { minimoDb: 20, nombre: "Enlace inestable", color: "#F08A2C" },
-  sin: { minimoDb: -Infinity, nombre: "Sin enlace", color: "#D93A2E" },
+  solido: {
+    minimoDb: 30,
+    get nombre() {
+      return tx("Enlace sólido", "Solid link");
+    },
+    color: "#1E7B34",
+  },
+  inestable: {
+    minimoDb: 20,
+    get nombre() {
+      return tx("Enlace inestable", "Unstable link");
+    },
+    color: "#F08A2C",
+  },
+  sin: {
+    minimoDb: -Infinity,
+    get nombre() {
+      return tx("Sin enlace", "No link");
+    },
+    color: "#D93A2E",
+  },
 } as const;
 
 /**
@@ -176,18 +266,73 @@ export type EquipoId = "p1-8dbi" | "t114-8dbi" | "xiao" | "t1000" | "personaliza
  * los conectores. La ganancia de los nodos de las personas es una estimación (antena pequeña o interna).
  */
 export const EQUIPOS: readonly { id: EquipoId; nombre: string; potenciaDbm: number; gananciaDbi: number; perdidaCableDb: number }[] = [
-  { id: "p1-8dbi", nombre: "Repetidor SenseCAP Solar P1 + antena 8 dBi", potenciaDbm: 22, gananciaDbi: 8, perdidaCableDb: 1.2 },
-  { id: "t114-8dbi", nombre: "Radio del gateway Heltec T114 + antena 8 dBi", potenciaDbm: 22, gananciaDbi: 8, perdidaCableDb: 1.2 },
-  { id: "xiao", nombre: "Billetera XIAO ESP32S3 + Wio-SX1262", potenciaDbm: 22, gananciaDbi: 2, perdidaCableDb: 0 },
-  { id: "t1000", nombre: "Tarjeta SenseCAP T1000-E", potenciaDbm: 22, gananciaDbi: 0, perdidaCableDb: 0 },
-  { id: "personalizado", nombre: "Personalizado", potenciaDbm: 22, gananciaDbi: 5.8, perdidaCableDb: 1 },
+  {
+    id: "p1-8dbi",
+    get nombre() {
+      return tx("Repetidor SenseCAP Solar P1 + antena 8 dBi", "SenseCAP Solar P1 repeater + 8 dBi antenna");
+    },
+    potenciaDbm: 22,
+    gananciaDbi: 8,
+    perdidaCableDb: 1.2,
+  },
+  {
+    id: "t114-8dbi",
+    get nombre() {
+      return tx("Radio del gateway Heltec T114 + antena 8 dBi", "Heltec T114 gateway radio + 8 dBi antenna");
+    },
+    potenciaDbm: 22,
+    gananciaDbi: 8,
+    perdidaCableDb: 1.2,
+  },
+  {
+    id: "xiao",
+    get nombre() {
+      return tx("Billetera XIAO ESP32S3 + Wio-SX1262", "XIAO ESP32S3 + Wio-SX1262 wallet");
+    },
+    potenciaDbm: 22,
+    gananciaDbi: 2,
+    perdidaCableDb: 0,
+  },
+  {
+    id: "t1000",
+    get nombre() {
+      return tx("Tarjeta SenseCAP T1000-E", "SenseCAP T1000-E card");
+    },
+    potenciaDbm: 22,
+    gananciaDbi: 0,
+    perdidaCableDb: 0,
+  },
+  {
+    id: "personalizado",
+    get nombre() {
+      return tx("Personalizado", "Custom");
+    },
+    potenciaDbm: 22,
+    gananciaDbi: 5.8,
+    perdidaCableDb: 1,
+  },
 ];
 
 /** Resolución de la malla de cálculo (m por celda) según el radio de estudio. */
 export const RESOLUCIONES = {
-  rapida: { nombre: "Rápida", celdasPorRadio: 90 },
-  normal: { nombre: "Normal", celdasPorRadio: 160 },
-  fina: { nombre: "Fina", celdasPorRadio: 260 },
+  rapida: {
+    get nombre() {
+      return tx("Rápida", "Fast");
+    },
+    celdasPorRadio: 90,
+  },
+  normal: {
+    get nombre() {
+      return tx("Normal", "Normal");
+    },
+    celdasPorRadio: 160,
+  },
+  fina: {
+    get nombre() {
+      return tx("Fina", "Fine");
+    },
+    celdasPorRadio: 260,
+  },
 } as const;
 export type ResolucionId = keyof typeof RESOLUCIONES;
 

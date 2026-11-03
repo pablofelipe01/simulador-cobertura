@@ -11,6 +11,7 @@
 // Al final se podan los repetidores que sobran (su área ya la cubren otros), sin bajar de la meta ni debilitar ningún
 // enlace, y se calcula la opción económica (menos repetidores por unos puntos menos de cobertura). Con el freno de
 // rendimiento no se pone un repetidor que cubra casi nada: la red no crece sin medida para tapar huecos diminutos.
+import { tx } from "../idioma";
 import { cajaPoligono, celdasEnPoligono, centroPoligono, dentroPoligono, muestrasEnPoligono, type Poligono } from "./area";
 import { crearMalla, evaluadorMargen } from "./cobertura";
 import { UMBRAL_SERVICIO_DB } from "./constantes";
@@ -306,8 +307,8 @@ export function disenar(pedido: PedidoDiseno, relieve: Relieve, caja: Caja): Dis
     /** % del área que cubren `g` puntos nuevos. */
     const rinde = (g: number) => (100 * g) / Math.max(1, total);
     while (c.lats.length && pct() < metaPct) {
-      if (!redNodos.length) return "No hay gateway: ponga el Gateway + Internet o déjeme elegir dónde va.";
-      if (repetidores >= maximo) return `Llegué al máximo de ${maximo} repetidores.`;
+      if (!redNodos.length) return tx("No hay gateway: ponga el Gateway + Internet o déjeme elegir dónde va.", "There is no gateway: place the Gateway + Internet or let me choose where it goes.");
+      if (repetidores >= maximo) return tx(`Llegué al máximo de ${maximo} repetidores.`, `I reached the maximum of ${maximo} ${maximo === 1 ? "repeater" : "repeaters"}.`);
       const lista = descubiertos(c);
       let elegido = -1;
       let mejorG = 0;
@@ -390,7 +391,7 @@ export function disenar(pedido: PedidoDiseno, relieve: Relieve, caja: Caja): Dis
         }
         continue;
       }
-      return "En los puntos que faltan el relieve no deja llegar con esa señal desde ningún sitio cercano enlazado a la red (hondonadas o detrás de lomas).";
+      return SIN_SITIO();
     }
     return null;
   };
@@ -664,7 +665,7 @@ export function disenar(pedido: PedidoDiseno, relieve: Relieve, caja: Caja): Dis
       margenObjetivoDb: objetivoDb,
       respaldo,
       alcanzado,
-      motivo: alcanzado ? null : (motivo ?? "En los puntos que faltan el relieve no deja llegar con esa señal desde ningún sitio cercano enlazado a la red (hondonadas o detrás de lomas)."),
+      motivo: alcanzado ? null : (motivo ?? SIN_SITIO()),
       huecos: repartir(idx, la, lo, 12).map((k) => faltantes[k]),
       podados,
       frenado: alcanzado ? null : frenado,
@@ -674,8 +675,20 @@ export function disenar(pedido: PedidoDiseno, relieve: Relieve, caja: Caja): Dis
 }
 
 /** El motivo de parar por el freno de rendimiento. */
-const FRENO = (minPct: number) =>
-  `Me detuve para no sobredimensionar la red: lo que falta son huecos pequeños (detrás de lomas o en hondonadas) y cada repetidor más cubriría menos del ${String(Math.round(minPct * 100) / 100).replace(".", ",")} % del área.`;
+const FRENO = (minPct: number) => {
+  const pct = String(Math.round(minPct * 100) / 100);
+  return tx(
+    `Me detuve para no sobredimensionar la red: lo que falta son huecos pequeños (detrás de lomas o en hondonadas) y cada repetidor más cubriría menos del ${pct.replace(".", ",")} % del área.`,
+    `I stopped so as not to oversize the network: what is missing are small gaps (behind hills or in hollows) and each additional repeater would cover less than ${pct}% of the area.`,
+  );
+};
+
+/** El motivo cuando el relieve no deja cubrir lo que falta. */
+const SIN_SITIO = () =>
+  tx(
+    "En los puntos que faltan el relieve no deja llegar con esa señal desde ningún sitio cercano enlazado a la red (hondonadas o detrás de lomas).",
+    "At the missing points the terrain doesn't let that signal arrive from any nearby site linked to the network (hollows or behind hills).",
+  );
 
 /** Hasta `n` puntos de la lista bien repartidos (el más lejano de los ya elegidos, cada vez). */
 function repartir(lista: number[], lats: Float64Array, lons: Float64Array, n: number): number[] {

@@ -4,7 +4,9 @@
 // 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
 
 // Autoría, titularidad y licencia del simulador. Lo muestran «Acerca del simulador», Melki, los metadatos de la
-// página y la versión HTML. El texto completo está en LICENSE, en la raíz del repositorio.
+// página y la versión HTML. El texto completo está en LICENSE, en la raíz del repositorio. Las constantes van en
+// español (metadatos y versión HTML); las funciones del final dan el mismo texto en el idioma de la pantalla.
+import { tx } from "./idioma";
 
 export const PROGRAMA = "Simulador de cobertura · Red MeshCore de Trama";
 export const AUTOR = "Giancarlo González Guerrero";
@@ -52,3 +54,52 @@ export const NORMAS: { norma: string; que: string }[] = [
 
 /** Comentario de cabecera para los archivos que se generan (la versión HTML). */
 export const AVISO_CODIGO = `${DERECHOS} Autor: ${AUTOR}, para el Ingeniero ${INGENIERO} y ${EMPRESA}, con ayuda de inteligencia artificial. Prohibido su uso, copia, modificación o distribución sin licencia escrita de los titulares (Ley 23 de 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272).`;
+
+/* ───────────── En el idioma de la pantalla ───────────── */
+
+export const programa = () => tx(PROGRAMA, "Coverage Simulator · Trama MeshCore network");
+export const derechos = () => tx(DERECHOS, `© ${ANIO} ${INGENIERO}, ${EMPRESA} and ${AUTOR}. All rights reserved.`);
+export const credito = () =>
+  tx(CREDITO, `Created by ${AUTOR} for Engineer ${INGENIERO} and the company ${EMPRESA}, with the help of artificial intelligence under his direction and review.`);
+export const titularidad = () =>
+  tx(
+    TITULARIDAD,
+    `Author: ${AUTOR}. Holders of the economic rights: Engineer ${INGENIERO}, ${EMPRESA} and ${AUTOR}, under the contract between the parties. The author keeps his moral rights.`,
+  );
+export const prohibicion = () =>
+  tx(
+    PROHIBICION,
+    "Using, copying, reproducing, modifying, adapting, translating, distributing, communicating to the public, selling, leasing, sublicensing or decompiling this program, in whole or in part, without the prior, express and written license or authorization of its rights holders is prohibited. Being able to see the code in a repository does not grant any license.",
+  );
+export const terceros = () =>
+  tx(TERCEROS, "The open-source libraries, fonts, base maps and geographic data used by the program keep their own licenses and are not part of this reservation.");
+
+const NORMAS_EN: { norma: string; que: string }[] = [
+  { norma: "Political Constitution of Colombia, article 61", que: "The State protects intellectual property." },
+  {
+    norma: "Andean Decision 351 of 1993, articles 3, 11, 13 and 23 to 27",
+    que: "Computer programs are protected as literary works, in source code and in object code; the author has moral and economic rights, and reproducing the program, even for personal use, requires the rights holder’s authorization, except for the backup copy.",
+  },
+  {
+    norma: "Law 23 of 1982, articles 12, 20 and 30, as amended (Law 1450 of 2011, art. 28; Law 1915 of 2018)",
+    que: "Economic and moral rights of the author, and works created under a contract for the provision of services.",
+  },
+  {
+    norma: "Decree 1360 of 1989, compiled in Decree 1066 of 2015 (arts. 2.6.1.3.1 to 2.6.1.3.7)",
+    que: "Software (program, description and auxiliary material) is a creation of the literary domain and can be registered in the National Copyright Registry.",
+  },
+  { norma: "Law 44 of 1993", que: "Amends and supplements Law 23 of 1982 (copyright registration and protection)." },
+  {
+    norma: "Criminal Code (Law 599 of 2000), articles 270, 271 and 272, as amended by Law 1032 of 2006",
+    que: "Punishes the violation of the author’s moral and economic rights, including software, and of their protection measures; articles 271 and 272 provide for 4 to 8 years in prison and a fine of 26.66 to 1,000 minimum monthly wages.",
+  },
+];
+
+/** Las normas en el idioma de la pantalla. */
+export const normas = (): { norma: string; que: string }[] => NORMAS.map((n, i) => ({ norma: tx(n.norma, NORMAS_EN[i].norma), que: tx(n.que, NORMAS_EN[i].que) }));
+
+export const avisoCodigo = () =>
+  tx(
+    AVISO_CODIGO,
+    `${derechos()} Author: ${AUTOR}, for Engineer ${INGENIERO} and ${EMPRESA}, with the help of artificial intelligence. Use, copying, modification or distribution without the written license of the rights holders is prohibited (Law 23 of 1982, Andean Decision 351 of 1993, Criminal Code arts. 270 to 272).`,
+  );
