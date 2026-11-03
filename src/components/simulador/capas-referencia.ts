@@ -208,6 +208,20 @@ const MARCADORES = ".maplibregl-marker:not(.etiqueta-ref)";
 
 const cruza = (a: Caja, b: Caja) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
 
+/**
+ * El nombre para comparar si dos se repiten: sin tildes, sin mayúsculas y sin el «D. C.» del distrito capital
+ * («BOGOTÁ, D. C.» y «Bogotá» son el mismo nombre; también «ARAUCA», el departamento, y «Arauca», su capital).
+ */
+function nombreBase(n: string): string {
+  return n
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLocaleLowerCase("es")
+    .replace(/,?\s*d\.?\s*c\.?$/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /** Gestor de nombres: pinta solo los que caben en pantalla y corresponden al zoom actual, sin repetir ni encimar. */
 export class EtiquetasReferencia {
   private datos: DatosReferencia | null = null;
@@ -324,6 +338,8 @@ export class EtiquetasReferencia {
     const colocadas: Colocada[] = [];
     const porNombre = new Map<string, { x: number; y: number }[]>();
     const municipiosVistos = new Set<string>();
+    // Un mismo nombre no sale dos veces a la vez, aunque sea de otra clase (la ciudad y su departamento o su municipio)
+    const nombresVistos = new Set<string>();
     const dentro = (c: Caja) => c.x0 >= 2 && c.y0 >= 2 && c.x1 <= W - 2 && c.y1 <= H - 2;
     const libre = (c: Caja) => dentro(c) && !ocupadas.some((o) => cruza(o, c));
     const lejosDeSuNombre = (grupo: string, x: number, y: number, minimo: number) => !(porNombre.get(grupo) ?? []).some((p) => Math.hypot(p.x - x, p.y - y) < minimo);
@@ -360,6 +376,8 @@ export class EtiquetasReferencia {
         if (p.municipio && p.clase === "municipio" && municipiosVistos.has(p.municipio)) continue;
         const e = estiloDe(p.clase, z, p.rango);
         const texto = ingles ? p.en : p.es;
+        const base = nombreBase(texto);
+        if (!p.grupo && nombresVistos.has(base)) continue;
         const visible = e.mayus ? texto.toLocaleUpperCase(ingles ? "en" : "es") : texto;
         const w = this.ancho(visible, e);
         const h = e.tam * 1.2;
@@ -380,6 +398,7 @@ export class EtiquetasReferencia {
         if (!lugar) continue;
         ocupadas.push(lugar.caja);
         if (p.grupo) anotar(p.grupo, s.x, s.y);
+        else nombresVistos.add(base);
         if (p.municipio && p.clase === "ciudad") municipiosVistos.add(p.municipio);
         const maxZ = esri ? p.maxZ[0] : p.maxZ[1];
         colocadas.push({
@@ -570,10 +589,14 @@ function puntosDe(d: DatosReferencia): Punto[] {
       rango: c.rango,
     });
   }
-  // Departamentos: los grandes primero; con los nombres de Esri, hasta donde Esri los escribe sobre sus límites
+  // Departamentos: los grandes primero; con los nombres de Esri, hasta donde Esri los escribe sobre sus límites. El que
+  // se llama como su capital (Arauca, Bogotá) va después de las ciudades: si la capital está a la vista, sale solo ella
+  const ciudades = new Set(CIUDADES.map((c) => nombreBase(c.es)));
   [...d.lugares.departamentos]
     .sort((a, b) => area(b[3], b[4], b[5], b[6]) - area(a[3], a[4], a[5], a[6]))
-    .forEach(([n, lon, lat], i) => p.push({ clave: `d:${n}`, clase: "departamento", es: n, en: n, lon, lat, minZ: 5.3, maxZ: [ZOOM_NOMBRES_ESRI, 9.3], prioridad: 76 - i * 0.01, capa: "division" }));
+    .forEach(([n, lon, lat], i) =>
+      p.push({ clave: `d:${n}`, clase: "departamento", es: n, en: n, lon, lat, minZ: 5.3, maxZ: [ZOOM_NOMBRES_ESRI, 9.3], prioridad: (ciudades.has(nombreBase(n)) ? 63 : 76) - i * 0.01, capa: "division" }),
+    );
   // Municipios: solo sin los nombres de Esri (Esri ya escribe sus cabeceras); los grandes primero
   d.lugares.municipios
     .map((x, i) => ({ x, i }))
