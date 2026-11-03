@@ -4,6 +4,7 @@
 // 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
 
 // Orquesta una simulación completa: relieve → cobertura → enlaces → malla → factibilidad.
+import { tx } from "../idioma";
 import { presetPorId, RADIO_EFECTIVO_M, UMBRAL_CONFIABLE_DB, UMBRAL_SERVICIO_DB, ZOOM_RELIEVE } from "./constantes";
 import { calcularCobertura, cajaDeEstudio, crearMalla } from "./cobertura";
 import { perdidaEntorno } from "./entorno";
@@ -55,7 +56,7 @@ export async function simular(id: number, todas: Antena[], parametros: Parametro
   const inicio = performance.now();
   const p = completarParametros(parametros);
   const activas = todas.filter((a) => a.activa);
-  if (activas.length === 0) throw new Error("No hay nodos activos para simular.");
+  if (activas.length === 0) throw new Error(tx("No hay nodos activos para simular.", "There are no active nodes to simulate."));
   // Los nodos antena generan la cobertura; los nodos de campo solo participan en la malla.
   const conCobertura = activas.filter((a) => (a.tipo ?? "antena") === "antena");
   const antenas = conCobertura.length ? conCobertura : activas;
@@ -182,6 +183,9 @@ export async function perfil(
   return { ...base, margenDb: informe.margenDb, clase: informe.clase, informe };
 }
 
+/** Nombre del receptor genérico en un punto (sin nodo), en los dos idiomas. Va aparte porque en el informe `tx` es el transmisor. */
+const receptorEnPunto = () => tx("Receptor en el punto", "Receiver at the point");
+
 /** Informe de radioenlace de `tx` hacia otro nodo (`rx`) o hacia un receptor genérico en `b`. */
 function informeEnlace(relieve: Relieve, tx: Antena, rx: Antena | null, b: ExtremoPerfil, p: Parametros, perfilBase: Perfil): InformeEnlace {
   const red = calculoRed(p);
@@ -211,7 +215,7 @@ function informeEnlace(relieve: Relieve, tx: Antena, rx: Antena | null, b: Extre
   const margenDb = nivel - sensibilidad;
   return {
     origen: tx.nombre,
-    destino: rx ? rx.nombre : "Receptor en el punto",
+    destino: rx ? rx.nombre : receptorEnPunto(),
     entreNodos: Boolean(rx),
     modelo: p.modelo,
     frecuenciaMhz: p.frecuenciaMhz,
@@ -317,7 +321,7 @@ export async function disenarMallaArea(pedido: PedidoDiseno, fuente: FuenteRelie
 
 /** Perfil del terreno a lo largo de una ruta de puntos [lon, lat] (para la regla de medición). */
 export async function perfilTerreno(puntos: [number, number][], fuente: FuenteRelieve, ctx: Contexto, maxMuestras = 700): Promise<PerfilTerreno> {
-  if (puntos.length < 2) throw new Error("La medición necesita al menos dos puntos.");
+  if (puntos.length < 2) throw new Error(tx("La medición necesita al menos dos puntos.", "The measurement needs at least two points."));
   let caja = { oeste: Infinity, sur: Infinity, este: -Infinity, norte: -Infinity };
   for (const [lon, lat] of puntos) caja = { oeste: Math.min(caja.oeste, lon), este: Math.max(caja.este, lon), sur: Math.min(caja.sur, lat), norte: Math.max(caja.norte, lat) };
   const m = metrosPorGrado((caja.norte + caja.sur) / 2);

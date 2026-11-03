@@ -7,31 +7,85 @@
 // El modelo calibrado se ajustó con los valores de referencia de las pruebas de Radio Mobile; cuando el usuario
 // cambia alguno, la diferencia que predice Longley-Rice (ITM) entre sus valores y los de referencia se suma
 // al modelo calibrado, trayecto por trayecto. Con los valores de referencia el resultado no cambia.
+import { porTexto, tx } from "../idioma";
 import { CLIMAS, itmDosEstadisticas, itmPuntoAPunto, type ClimaItm, type ModoVariabilidad, type SalidaItm } from "./itm";
 import type { ModeloId, Parametros, PolarizacionId, SueloId, VariabilidadId } from "./tipos";
 
 export { CLIMAS };
 
+/** Suelo con su nombre en los dos idiomas (getter: sale en el idioma de la pantalla). */
+const nuevoSuelo = (id: Exclude<SueloId, "personalizado">, es: string, en: string, permitividad: number, conductividad: number) => ({
+  id,
+  get nombre() {
+    return tx(es, en);
+  },
+  permitividad,
+  conductividad,
+});
 export const SUELOS: readonly { id: Exclude<SueloId, "personalizado">; nombre: string; permitividad: number; conductividad: number }[] = [
-  { id: "promedio", nombre: "Promedio", permitividad: 15, conductividad: 0.005 },
-  { id: "pobre", nombre: "Seco o arenoso", permitividad: 4, conductividad: 0.001 },
-  { id: "bueno", nombre: "Húmedo o fértil", permitividad: 25, conductividad: 0.02 },
-  { id: "agua-dulce", nombre: "Agua dulce", permitividad: 80, conductividad: 0.01 },
-  { id: "mar", nombre: "Agua de mar", permitividad: 80, conductividad: 5 },
+  nuevoSuelo("promedio", "Promedio", "Average", 15, 0.005),
+  nuevoSuelo("pobre", "Seco o arenoso", "Dry or sandy", 4, 0.001),
+  nuevoSuelo("bueno", "Húmedo o fértil", "Wet or fertile", 25, 0.02),
+  nuevoSuelo("agua-dulce", "Agua dulce", "Fresh water", 80, 0.01),
+  nuevoSuelo("mar", "Agua de mar", "Sea water", 80, 5),
 ];
 
+/** Modo estadístico con su nombre y su descripción en los dos idiomas. */
+const nuevaVariabilidad = (id: VariabilidadId, nombre: [string, string], codigo: ModoVariabilidad, descripcion: [string, string]) => ({
+  id,
+  get nombre() {
+    return tx(nombre[0], nombre[1]);
+  },
+  codigo,
+  get descripcion() {
+    return tx(descripcion[0], descripcion[1]);
+  },
+});
 export const VARIABILIDADES: readonly { id: VariabilidadId; nombre: string; codigo: ModoVariabilidad; descripcion: string }[] = [
-  { id: "puntual", nombre: "Puntual (spot)", codigo: 0, descripcion: "Un mensaje de prueba: tiempo, ubicación y situación se combinan en un solo porcentaje." },
-  { id: "accidental", nombre: "Accidental", codigo: 1, descripcion: "Señales que interesan solo a ratos (interferencias)." },
-  { id: "movil", nombre: "Móvil", codigo: 2, descripcion: "Equipos que se desplazan: tiempo y ubicación van juntos. Es el modo de las pruebas de Radio Mobile." },
-  { id: "difusion", nombre: "Difusión (broadcast)", codigo: 3, descripcion: "Receptores fijos en muchos lugares: tiempo, ubicación y situación por separado." },
+  nuevaVariabilidad("puntual", ["Puntual (spot)", "Spot"], 0, ["Un mensaje de prueba: tiempo, ubicación y situación se combinan en un solo porcentaje.", "A test message: time, location and situation are combined into a single percentage."]),
+  nuevaVariabilidad("accidental", ["Accidental", "Accidental"], 1, ["Señales que interesan solo a ratos (interferencias).", "Signals that matter only now and then (interference)."]),
+  nuevaVariabilidad("movil", ["Móvil", "Mobile"], 2, ["Equipos que se desplazan: tiempo y ubicación van juntos. Es el modo de las pruebas de Radio Mobile.", "Devices on the move: time and location go together. This is the mode used in the Radio Mobile tests."]),
+  nuevaVariabilidad("difusion", ["Difusión (broadcast)", "Broadcast"], 3, ["Receptores fijos en muchos lugares: tiempo, ubicación y situación por separado.", "Fixed receivers in many places: time, location and situation taken separately."]),
 ];
 
 /** Niveles de confiabilidad sencillos (los porcentajes se pueden ajustar uno por uno). */
 export const CONFIABILIDADES = [
-  { id: "normal", nombre: "Normal", tiempoPct: 50, ubicacionesPct: 50, situacionesPct: 70, descripcion: "La de las pruebas de Radio Mobile (50 % del tiempo, 70 % de las situaciones)." },
-  { id: "alta", nombre: "Alta", tiempoPct: 90, ubicacionesPct: 90, situacionesPct: 90, descripcion: "La señal se cumple el 90 % del tiempo y de las situaciones." },
-  { id: "muy-alta", nombre: "Muy alta", tiempoPct: 99, ubicacionesPct: 99, situacionesPct: 99, descripcion: "Para alarmas o telemetría crítica: 99 %." },
+  {
+    id: "normal",
+    get nombre() {
+      return tx("Normal", "Normal");
+    },
+    tiempoPct: 50,
+    ubicacionesPct: 50,
+    situacionesPct: 70,
+    get descripcion() {
+      return tx("La de las pruebas de Radio Mobile (50 % del tiempo, 70 % de las situaciones).", "The one used in the Radio Mobile tests (50% of the time, 70% of situations).");
+    },
+  },
+  {
+    id: "alta",
+    get nombre() {
+      return tx("Alta", "High");
+    },
+    tiempoPct: 90,
+    ubicacionesPct: 90,
+    situacionesPct: 90,
+    get descripcion() {
+      return tx("La señal se cumple el 90 % del tiempo y de las situaciones.", "The signal holds 90% of the time and in 90% of situations.");
+    },
+  },
+  {
+    id: "muy-alta",
+    get nombre() {
+      return tx("Muy alta", "Very high");
+    },
+    tiempoPct: 99,
+    ubicacionesPct: 99,
+    situacionesPct: 99,
+    get descripcion() {
+      return tx("Para alarmas o telemetría crítica: 99 %.", "For alarms or critical telemetry: 99%.");
+    },
+  },
 ] as const;
 export type ConfiabilidadId = (typeof CONFIABILIDADES)[number]["id"] | "personalizada";
 
@@ -97,22 +151,34 @@ export const codigoVariabilidad = (id: VariabilidadId): ModoVariabilidad => VARI
 
 /** Texto corto con los parámetros de red (para informes y para Melki). */
 export function resumenRed(p: Parametros): string {
+  const minuscula = (t: string) => porTexto(t, (x) => x.toLowerCase());
   const clima = CLIMAS.find((c) => c.id === p.clima)?.nombre ?? "—";
-  const suelo = p.suelo === "personalizado" ? `suelo εr ${fmt(p.permitividad)} / σ ${fmt(p.conductividad, 3)} S/m` : `suelo ${SUELOS.find((s) => s.id === p.suelo)?.nombre.toLowerCase()}`;
-  const v = VARIABILIDADES.find((x) => x.id === p.variabilidad)?.nombre.toLowerCase() ?? "";
+  const nombreSuelo = SUELOS.find((s) => s.id === p.suelo)?.nombre;
+  const sueloMin = nombreSuelo === undefined ? undefined : minuscula(nombreSuelo);
+  const suelo =
+    p.suelo === "personalizado"
+      ? tx(`suelo εr ${fmt(p.permitividad)} / σ ${fmt(p.conductividad, 3)} S/m`, `ground: εr ${fmt(p.permitividad)} / σ ${fmt(p.conductividad, 3)} S/m`)
+      : tx(`suelo ${sueloMin}`, `ground: ${sueloMin}`);
+  const nombreV = VARIABILIDADES.find((x) => x.id === p.variabilidad)?.nombre;
+  const v = nombreV === undefined ? "" : minuscula(nombreV);
   const usa = camposVariabilidad(p.variabilidad);
   const pct = [
-    usa.tiempo ? `${fmt(p.tiempoPct)} % del tiempo` : "",
-    usa.ubicaciones ? `${fmt(p.ubicacionesPct)} % de las ubicaciones` : "",
-    `${fmt(p.situacionesPct)} % de las situaciones`,
+    usa.tiempo ? tx(`${fmt(p.tiempoPct)} % del tiempo`, `${fmt(p.tiempoPct)}% of the time`) : "",
+    usa.ubicaciones ? tx(`${fmt(p.ubicacionesPct)} % de las ubicaciones`, `${fmt(p.ubicacionesPct)}% of locations`) : "",
+    tx(`${fmt(p.situacionesPct)} % de las situaciones`, `${fmt(p.situacionesPct)}% of situations`),
   ]
     .filter(Boolean)
     .join(", ");
-  return `Clima ${clima.toLowerCase()}, polarización ${p.polarizacion}, ${suelo}, N = ${fmt(p.refractividad)}, modo ${v} (${pct})`;
+  return tx(
+    `Clima ${minuscula(clima)}, polarización ${p.polarizacion}, ${suelo}, N = ${fmt(p.refractividad)}, modo ${v} (${pct})`,
+    `Climate: ${minuscula(clima)}, ${p.polarizacion} polarization, ${suelo}, N = ${fmt(p.refractividad)}, ${v} mode (${pct})`,
+  );
 }
 
+/** Número con hasta `d` decimales y el separador decimal del idioma. */
 function fmt(n: number, d = 1) {
-  return Number(n.toFixed(d)).toString().replace(".", ",");
+  const s = Number(n.toFixed(d)).toString();
+  return tx(s.replace(".", ","), s);
 }
 
 /** Recorta un porcentaje al rango que admite el ITM. */

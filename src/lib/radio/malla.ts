@@ -4,6 +4,7 @@
 // 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
 
 // Enlaces entre nodos, comportamiento de la red mesh (saltos, puntos críticos) y factibilidad.
+import { tx } from "../idioma";
 import { BANDA_LIBRE_MHZ, DISTANCIA_MINIMA_M, ENLACES, META_UTIL_ESTUDIO_PCT, presetPorId, presetsDe, UMBRAL_CONFIABLE_DB, UMBRAL_UTIL_DB } from "./constantes";
 import { perdidaEntorno } from "./entorno";
 import { distanciaM, rumbo } from "./geo";
@@ -15,8 +16,12 @@ import type { Relieve } from "./relieve";
 import { geometriaTrayecto, perdidasTrayecto } from "./trayecto";
 import type { Antena, Enlace, Factibilidad, NodoMalla, Parametros } from "./tipos";
 
-const fmt = (n: number, d = 1) => n.toFixed(d).replace(".", ",");
-const fmtMeta = (n: number) => (Number.isInteger(n) ? String(n) : n >= 99.95 && n < 100 ? "99,9" : n.toFixed(1).replace(".", ","));
+/** Número con `d` decimales y el separador decimal del idioma. */
+const fmt = (n: number, d = 1) => {
+  const s = n.toFixed(d);
+  return tx(s.replace(".", ","), s);
+};
+const fmtMeta = (n: number) => (Number.isInteger(n) ? String(n) : n >= 99.95 && n < 100 ? tx("99,9", "99.9") : fmt(n, 1));
 
 /** Enlace entre dos nodos con el relieve real: margen de cada sentido y el mínimo de ambos (dB). */
 export function enlaceEntre(a: Antena, b: Antena, p: Parametros, relieve: Relieve, red = calculoRed(p), lambda = longitudOnda(p.frecuenciaMhz)): Enlace {
@@ -223,7 +228,14 @@ type DatosFactibilidad = {
   objetivo?: CoberturaObjetivo | null;
 };
 
-const nombreSenal = (margenDb: number) => (margenDb >= 45 ? "señal buena" : margenDb >= UMBRAL_CONFIABLE_DB ? "señal estable o mejor" : margenDb >= UMBRAL_UTIL_DB ? "señal media o mejor" : "servicio");
+const nombreSenal = (margenDb: number) =>
+  margenDb >= 45
+    ? tx("señal buena", "good signal")
+    : margenDb >= UMBRAL_CONFIABLE_DB
+      ? tx("señal estable o mejor", "stable signal or better")
+      : margenDb >= UMBRAL_UTIL_DB
+        ? tx("señal media o mejor", "fair signal or better")
+        : tx("servicio", "service");
 
 export function evaluarFactibilidad(d: DatosFactibilidad): Factibilidad {
   const { parametros: p, enlaces, analisis } = d;
@@ -251,54 +263,60 @@ export function evaluarFactibilidad(d: DatosFactibilidad): Factibilidad {
   const varias = antenas.length > 1;
 
   const conectada = pasarelas.length > 0 && desconectadas.length === 0;
+  const seEvalua = () => tx("Se evalúa cuando todos los nodos llegan a la pasarela.", "Evaluated once every node reaches the gateway.");
   const criterios: Factibilidad["criterios"] = [
     {
-      nombre: "Pasarela definida",
+      nombre: tx("Pasarela definida", "Gateway defined"),
       ok: pasarelas.length > 0,
-      detalle: pasarelas.length ? pasarelas.map((a) => a.nombre).join(", ") : "Marque al menos un nodo como pasarela (conexión a internet o al servidor).",
+      detalle: pasarelas.length ? pasarelas.map((a) => a.nombre).join(", ") : tx("Marque al menos un nodo como pasarela (conexión a internet o al servidor).", "Mark at least one node as the gateway (connection to the internet or to the server)."),
     },
     {
-      nombre: "Todos los nodos llegan a la pasarela",
+      nombre: tx("Todos los nodos llegan a la pasarela", "Every node reaches the gateway"),
       ok: conectada,
       detalle: desconectadas.length
-        ? `Sin ruta: ${desconectadas.map((a) => a.nombre).join(", ")}`
+        ? tx(`Sin ruta: ${desconectadas.map((a) => a.nombre).join(", ")}`, `No route: ${desconectadas.map((a) => a.nombre).join(", ")}`)
         : varias
-          ? "Todas tienen ruta hacia una pasarela."
-          : "Red de un solo nodo.",
+          ? tx("Todas tienen ruta hacia una pasarela.", "All of them have a route to a gateway.")
+          : tx("Red de un solo nodo.", "Single-node network."),
     },
     {
-      nombre: `Saltos dentro del límite (${p.limiteSaltos})`,
+      nombre: tx(`Saltos dentro del límite (${p.limiteSaltos})`, `Hops within the limit (${p.limiteSaltos})`),
       ok: conectada && lejanas.length === 0,
       detalle: !conectada
-        ? "Se evalúa cuando todos los nodos llegan a la pasarela."
+        ? seEvalua()
         : lejanas.length
-          ? `Fuera del límite: ${lejanas.map((a) => a.nombre).join(", ")}`
-          : `Máximo ${maxSaltos} ${maxSaltos === 1 ? "salto" : "saltos"} hasta la pasarela.`,
+          ? tx(`Fuera del límite: ${lejanas.map((a) => a.nombre).join(", ")}`, `Beyond the limit: ${lejanas.map((a) => a.nombre).join(", ")}`)
+          : tx(`Máximo ${maxSaltos} ${maxSaltos === 1 ? "salto" : "saltos"} hasta la pasarela.`, `At most ${maxSaltos} ${maxSaltos === 1 ? "hop" : "hops"} to the gateway.`),
     },
     {
-      nombre: "Rutas sólidas hacia la pasarela (≥ 30 dB)",
+      nombre: tx("Rutas sólidas hacia la pasarela (≥ 30 dB)", "Solid routes to the gateway (≥ 30 dB)"),
       ok: conectada && debiles.length === 0,
       detalle: !conectada
-        ? "Se evalúa cuando todos los nodos llegan a la pasarela."
+        ? seEvalua()
         : debiles.length
-          ? `Ruta débil: ${debiles.map((a) => `${a.nombre} (${fmt(nodo.get(a.id)!.cuelloDb!)} dB)`).join(", ")}`
+          ? tx(`Ruta débil: ${debiles.map((a) => `${a.nombre} (${fmt(nodo.get(a.id)!.cuelloDb!)} dB)`).join(", ")}`, `Weak route: ${debiles.map((a) => `${a.nombre} (${fmt(nodo.get(a.id)!.cuelloDb!)} dB)`).join(", ")}`)
           : varias
-            ? "Cada nodo tiene una ruta con todos sus enlaces ≥ 30 dB."
-            : "No aplica (un solo nodo).",
+            ? tx("Cada nodo tiene una ruta con todos sus enlaces ≥ 30 dB.", "Every node has a route whose links are all ≥ 30 dB.")
+            : tx("No aplica (un solo nodo).", "Not applicable (a single node)."),
     },
     {
-      nombre: obj ? `Cobertura útil ≥ ${fmtMeta(meta)} % del área objetivo` : `Cobertura útil ≥ ${META_UTIL_ESTUDIO_PCT} % del área de estudio`,
+      nombre: obj
+        ? tx(`Cobertura útil ≥ ${fmtMeta(meta)} % del área objetivo`, `Useful coverage ≥ ${fmtMeta(meta)}% of the target area`)
+        : tx(`Cobertura útil ≥ ${META_UTIL_ESTUDIO_PCT} % del área de estudio`, `Useful coverage ≥ ${META_UTIL_ESTUDIO_PCT}% of the study area`),
       ok: util >= meta - 1e-9,
-      detalle: `${fmt(util)} %${obj ? ` de «${obj.nombre}»` : ""} con ${nombreSenal(margenUtil)} (≥ ${margenUtil} dB) · ${fmt(confiable)} % confiable (≥ ${UMBRAL_CONFIABLE_DB} dB) · ${fmt(servicio)} % con servicio.`,
+      detalle: tx(
+        `${fmt(util)} %${obj ? ` de «${obj.nombre}»` : ""} con ${nombreSenal(margenUtil)} (≥ ${margenUtil} dB) · ${fmt(confiable)} % confiable (≥ ${UMBRAL_CONFIABLE_DB} dB) · ${fmt(servicio)} % con servicio.`,
+        `${fmt(util)}%${obj ? ` of “${obj.nombre}”` : ""} with ${nombreSenal(margenUtil)} (≥ ${margenUtil} dB) · ${fmt(confiable)}% reliable (≥ ${UMBRAL_CONFIABLE_DB} dB) · ${fmt(servicio)}% with service.`,
+      ),
     },
     {
-      nombre: "Sin puntos únicos de falla",
+      nombre: tx("Sin puntos únicos de falla", "No single points of failure"),
       ok: conectada && criticos.length === 0,
       detalle: !conectada
-        ? "Se evalúa cuando todos los nodos llegan a la pasarela."
+        ? seEvalua()
         : criticos.length
-          ? `Críticas: ${criticos.map((a) => a.nombre).join(", ")}`
-          : "Ningún nodo intermedio aísla a otros si falla.",
+          ? tx(`Críticas: ${criticos.map((a) => a.nombre).join(", ")}`, `Critical: ${criticos.map((a) => a.nombre).join(", ")}`)
+          : tx("Ningún nodo intermedio aísla a otros si falla.", "No intermediate node isolates others if it fails."),
     },
   ];
 
@@ -316,13 +334,19 @@ export function evaluarFactibilidad(d: DatosFactibilidad): Factibilidad {
       const puente = enlaces
         .filter((e) => (ids.has(e.a) && conectadas.has(e.b)) || (ids.has(e.b) && conectadas.has(e.a)))
         .sort((x, y) => y.margen - x.margen)[0];
-      const quien = grupo.length === 1 ? `${grupo[0].nombre} no llega a la pasarela.` : `${grupo.map((a) => a.nombre).join(", ")} forman un grupo aislado de la pasarela.`;
+      const quien =
+        grupo.length === 1
+          ? tx(`${grupo[0].nombre} no llega a la pasarela.`, `${grupo[0].nombre} doesn't reach the gateway.`)
+          : tx(`${grupo.map((a) => a.nombre).join(", ")} forman un grupo aislado de la pasarela.`, `${grupo.map((a) => a.nombre).join(", ")} form a group isolated from the gateway.`);
       if (puente) {
-        const obstruido = puente.vMax > -0.78 ? " El terreno obstruye la línea de vista." : "";
+        const obstruido = puente.vMax > -0.78 ? tx(" El terreno obstruye la línea de vista.", " The terrain blocks the line of sight.") : "";
         recomendaciones.push(
-          `${quien} El mejor puente posible es ${nombre.get(puente.a)}–${nombre.get(puente.b)} (${fmt(puente.margen)} dB a ${fmt(puente.distanciaKm, 2)} km; se necesitan 20 dB).${obstruido} Eleve uno de esos nodos, use antenas de mayor ganancia o agregue un nodo antena repetidor entre ellos.`,
+          tx(
+            `${quien} El mejor puente posible es ${nombre.get(puente.a)}–${nombre.get(puente.b)} (${fmt(puente.margen)} dB a ${fmt(puente.distanciaKm, 2)} km; se necesitan 20 dB).${obstruido} Eleve uno de esos nodos, use antenas de mayor ganancia o agregue un nodo antena repetidor entre ellos.`,
+            `${quien} The best possible bridge is ${nombre.get(puente.a)}–${nombre.get(puente.b)} (${fmt(puente.margen)} dB at ${fmt(puente.distanciaKm, 2)} km; 20 dB are needed).${obstruido} Raise one of those nodes, use higher-gain antennas or add a repeater antenna node between them.`,
+          ),
         );
-      } else recomendaciones.push(`${quien} Agregue un repetidor entre ese sector y la red.`);
+      } else recomendaciones.push(tx(`${quien} Agregue un repetidor entre ese sector y la red.`, `${quien} Add a repeater between that area and the network.`));
     }
   }
   // Enlaces débiles en las rutas (cada enlace se menciona una vez)
@@ -336,32 +360,60 @@ export function evaluarFactibilidad(d: DatosFactibilidad): Factibilidad {
       if (!e || e.margen >= 30 || mencionados.has(clave(e.a, e.b))) continue;
       mencionados.add(clave(e.a, e.b));
       recomendaciones.push(
-        `El enlace ${nombre.get(e.a)}–${nombre.get(e.b)} es inestable (${fmt(e.margen)} dB a ${fmt(e.distanciaKm, 2)} km). ${
-          e.lineaVista
-            ? "Tiene línea de vista: use antenas de mayor ganancia o reduzca la pérdida del cable."
-            : "El terreno invade la zona de Fresnel: ganar altura en alguno de los extremos lo mejora."
-        }`,
+        tx(
+          `El enlace ${nombre.get(e.a)}–${nombre.get(e.b)} es inestable (${fmt(e.margen)} dB a ${fmt(e.distanciaKm, 2)} km). ${
+            e.lineaVista
+              ? "Tiene línea de vista: use antenas de mayor ganancia o reduzca la pérdida del cable."
+              : "El terreno invade la zona de Fresnel: ganar altura en alguno de los extremos lo mejora."
+          }`,
+          `The ${nombre.get(e.a)}–${nombre.get(e.b)} link is unstable (${fmt(e.margen)} dB at ${fmt(e.distanciaKm, 2)} km). ${
+            e.lineaVista
+              ? "It has line of sight: use higher-gain antennas or reduce the cable loss."
+              : "The terrain intrudes into the Fresnel zone: gaining height at either end improves it."
+          }`,
+        ),
       );
     }
   }
   for (const a of lejanas) {
     recomendaciones.push(
-      `${a.nombre} está a ${nodo.get(a.id)?.saltos} saltos del gateway y el diseño pide ${p.limiteSaltos} como máximo. ${preset.protocolo === "meshtastic" ? "Meshtastic admite hasta 7 (el límite viaja en cada paquete y por encima no llega)" : "MeshCore admite hasta 64"}, pero cada salto suma tiempo en el aire a cada mensaje y le quita capacidad a la frecuencia: acerque un repetidor o ponga otro sitio gateway.`,
+      tx(
+        `${a.nombre} está a ${nodo.get(a.id)?.saltos} saltos del gateway y el diseño pide ${p.limiteSaltos} como máximo. ${preset.protocolo === "meshtastic" ? "Meshtastic admite hasta 7 (el límite viaja en cada paquete y por encima no llega)" : "MeshCore admite hasta 64"}, pero cada salto suma tiempo en el aire a cada mensaje y le quita capacidad a la frecuencia: acerque un repetidor o ponga otro sitio gateway.`,
+        `${a.nombre} is ${nodo.get(a.id)?.saltos} hops from the gateway and the design allows at most ${p.limiteSaltos}. ${preset.protocolo === "meshtastic" ? "Meshtastic allows up to 7 (the limit travels in every packet and beyond it the packet doesn't arrive)" : "MeshCore allows up to 64"}, but every hop adds airtime to each message and eats into the frequency's capacity: bring a repeater closer or add another gateway site.`,
+      ),
     );
   }
   for (const a of criticos) {
-    recomendaciones.push(`${a.nombre} es un punto único de falla: si se apaga, otros nodos pierden la pasarela. Agregue un enlace alterno que la rodee.`);
+    recomendaciones.push(
+      tx(
+        `${a.nombre} es un punto único de falla: si se apaga, otros nodos pierden la pasarela. Agregue un enlace alterno que la rodee.`,
+        `${a.nombre} is a single point of failure: if it goes down, other nodes lose the gateway. Add an alternative link that goes around it.`,
+      ),
+    );
   }
   if (util < meta - 1e-9) {
     const masLento = presetsDe(preset.protocolo).filter((x) => x.sensibilidadDbm < preset.sensibilidadDbm - 0.5).sort((x, y) => y.sensibilidadDbm - x.sensibilidadDbm)[0];
     const sugerencia = masLento
-      ? `Agregue repetidores en las zonas naranja y roja o eleve los existentes; ${masLento.nombre} da ${fmt(preset.sensibilidadDbm - masLento.sensibilidadDbm)} dB más de margen que ${preset.nombre}, a cambio de capacidad`
-      : "Agregue repetidores en las zonas naranja y roja o eleve los existentes";
-    recomendaciones.push(`La cobertura útil (${nombreSenal(margenUtil)}) es ${fmt(util)} % ${obj ? `de «${obj.nombre}»` : "del área de estudio"} y la meta es ${fmtMeta(meta)} %. ${sugerencia}, o use «Ajústamelo automáticamente».`);
+      ? tx(
+          `Agregue repetidores en las zonas naranja y roja o eleve los existentes; ${masLento.nombre} da ${fmt(preset.sensibilidadDbm - masLento.sensibilidadDbm)} dB más de margen que ${preset.nombre}, a cambio de capacidad`,
+          `Add repeaters in the orange and red areas or raise the existing ones; ${masLento.nombre} gives ${fmt(preset.sensibilidadDbm - masLento.sensibilidadDbm)} dB more margin than ${preset.nombre}, at the cost of capacity`,
+        )
+      : tx("Agregue repetidores en las zonas naranja y roja o eleve los existentes", "Add repeaters in the orange and red areas or raise the existing ones");
+    recomendaciones.push(
+      tx(
+        `La cobertura útil (${nombreSenal(margenUtil)}) es ${fmt(util)} % ${obj ? `de «${obj.nombre}»` : "del área de estudio"} y la meta es ${fmtMeta(meta)} %. ${sugerencia}, o use «Ajústamelo automáticamente».`,
+        `Useful coverage (${nombreSenal(margenUtil)}) is ${fmt(util)}% ${obj ? `of “${obj.nombre}”` : "of the study area"} and the target is ${fmtMeta(meta)}%. ${sugerencia}, or use “Adjust it for me”.`,
+      ),
+    );
   }
-  if (pasarelas.length === 1 && antenas.length > 3) recomendaciones.push("Hay una sola pasarela: una segunda pasarela da respaldo si la primera falla.");
+  if (pasarelas.length === 1 && antenas.length > 3) recomendaciones.push(tx("Hay una sola pasarela: una segunda pasarela da respaldo si la primera falla.", "There is only one gateway: a second gateway provides backup if the first one fails."));
   if (p.frecuenciaMhz < BANDA_LIBRE_MHZ.min || p.frecuenciaMhz > BANDA_LIBRE_MHZ.max) {
-    recomendaciones.push(`La frecuencia ${fmt(p.frecuenciaMhz, 3)} MHz está fuera de la banda de uso libre 915–928 MHz (ANE, Resolución 000028 de 2026). Configure el canal dentro de esa banda.`);
+    recomendaciones.push(
+      tx(
+        `La frecuencia ${fmt(p.frecuenciaMhz, 3)} MHz está fuera de la banda de uso libre 915–928 MHz (ANE, Resolución 000028 de 2026). Configure el canal dentro de esa banda.`,
+        `The ${fmt(p.frecuenciaMhz, 3)} MHz frequency is outside the 915–928 MHz license-free band (ANE, Resolution 000028 of 2026). Set the channel within that band.`,
+      ),
+    );
   }
 
   const puntaje = Math.round(
@@ -375,8 +427,14 @@ export function evaluarFactibilidad(d: DatosFactibilidad): Factibilidad {
   if (!conectada || servicio < 30) nivel = "no-factible";
   else if (criterios.slice(0, 5).every((c) => c.ok)) nivel = "factible";
   else nivel = "ajustes";
-  const titulo = { factible: "Factible", ajustes: "Factible con ajustes", "no-factible": "No factible todavía" }[nivel];
-  if (nivel === "factible" && recomendaciones.length === 0) recomendaciones.push("La red cumple los criterios. Valide en campo: un mensaje de prueba desde cada zona y un recorrido con la billetera mirando la SNR de los repetidores.");
+  const titulo = { factible: tx("Factible", "Feasible"), ajustes: tx("Factible con ajustes", "Feasible with adjustments"), "no-factible": tx("No factible todavía", "Not feasible yet") }[nivel];
+  if (nivel === "factible" && recomendaciones.length === 0)
+    recomendaciones.push(
+      tx(
+        "La red cumple los criterios. Valide en campo: un mensaje de prueba desde cada zona y un recorrido con la billetera mirando la SNR de los repetidores.",
+        "The network meets the criteria. Validate it in the field: a test message from each area and a walk with the wallet watching the repeaters' SNR.",
+      ),
+    );
   return { nivel, titulo, puntaje: Math.min(100, Math.max(0, puntaje)), criterios, recomendaciones };
 }
 

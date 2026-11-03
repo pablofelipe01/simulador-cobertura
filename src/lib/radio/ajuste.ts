@@ -15,6 +15,7 @@
 // La cobertura se mide en una zona fija: el área objetivo (la del diseño por área o un área medida) o, si no hay,
 // la zona de la red (los círculos de estudio alrededor de los nodos antena actuales). Así una antena de apoyo no
 // agranda la zona que hay que cubrir.
+import { listaLocal, porTexto, tx } from "../idioma";
 import { celdasEnPoligono, conArea, muestrasEnPoligono, poligonoCirculo, type Poligono } from "./area";
 import { crearMalla, evaluadorMargen } from "./cobertura";
 import { UMBRAL_CONFIABLE_DB, UMBRAL_SERVICIO_DB, UMBRAL_UTIL_DB } from "./constantes";
@@ -182,7 +183,7 @@ export function ajustar(pedido: PedidoAjuste, relieve: Relieve): Ajuste {
   const limite = p.limiteSaltos;
   const activas = pedido.antenas.filter((a) => a.activa);
   const zonaPol = pedido.area?.puntos ?? zonaDeRed(activas, p.radioKm);
-  const area: AreaAjuste | null = pedido.area ?? (zonaPol ? { puntos: zonaPol, nombre: "la zona de la red", metaPct: pedido.metaPct, margenDb: UMBRAL_UTIL_DB } : null);
+  const area: AreaAjuste | null = pedido.area ?? (zonaPol ? { puntos: zonaPol, nombre: ZONA_DE_LA_RED(), metaPct: pedido.metaPct, margenDb: UMBRAL_UTIL_DB } : null);
   const tipoZona: Ajuste["area"]["tipo"] = pedido.area ? "objetivo" : "zona";
   const margenDb = area?.margenDb ?? UMBRAL_UTIL_DB;
   const meta = Math.min(100, Math.max(1, area?.metaPct ?? pedido.metaPct));
@@ -482,7 +483,7 @@ export function ajustar(pedido: PedidoAjuste, relieve: Relieve): Ajuste {
   camino.push(actual);
   const inicial = actual;
   let motivo: string | null = null;
-  if (sinGateway) motivo = "No hay gateway: ponga el Gateway + Internet (la pasarela) y vuelva a pedir el ajuste.";
+  if (sinGateway) motivo = tx("No hay gateway: ponga el Gateway + Internet (la pasarela) y vuelva a pedir el ajuste.", "There is no gateway: place the Gateway + Internet and request the adjustment again.");
   // Lo decide la red: si ya es factible se optimiza (la misma cobertura con menos infraestructura); si no, se ajusta
   const modo: Ajuste["modo"] = !sinGateway && inicial.an.D === 0 && inicial.med.utilPct >= meta ? "optimizar" : "ajustar";
 
@@ -663,8 +664,11 @@ export function ajustar(pedido: PedidoAjuste, relieve: Relieve): Ajuste {
           motivo =
             mejor.an.D > 0
               ? textoNoRepara(mejor)
-              : `Con torres de hasta ${fm(alturaMax)} m${permisos.apoyos ? ` y ${pedido.maxApoyos} antenas de apoyo como máximo` : ""} la cobertura útil llega a ${fp(camino[ultimo].med.utilPct)} % y la meta es ${fp(meta)} % (${falta < 0.1 ? "falta menos de 0,1 punto" : `faltan ${fp(falta)} puntos`}): el relieve tapa esas zonas o quedan lejos de la red.`;
-          if (pedido.sitios?.length) motivo += " Solo usé los sitios que me dio: si me deja buscar otros, puede mejorar.";
+              : tx(
+                  `Con torres de hasta ${fm(alturaMax)} m${permisos.apoyos ? ` y ${pedido.maxApoyos} antenas de apoyo como máximo` : ""} la cobertura útil llega a ${fp(camino[ultimo].med.utilPct)} % y la meta es ${fp(meta)} % (${falta < 0.1 ? "falta menos de 0,1 punto" : `faltan ${fp(falta)} puntos`}): el relieve tapa esas zonas o quedan lejos de la red.`,
+                  `With towers of up to ${fm(alturaMax)} m${permisos.apoyos ? ` and at most ${pedido.maxApoyos} ${pedido.maxApoyos === 1 ? "support antenna" : "support antennas"}` : ""} useful coverage reaches ${fp(camino[ultimo].med.utilPct)}% and the target is ${fp(meta)}% (${falta < 0.1 ? "less than 0.1 point short" : `${fp(falta)} points short`}): the terrain blocks those areas or they are far from the network.`,
+                );
+          if (pedido.sitios?.length) motivo += tx(" Solo usé los sitios que me dio: si me deja buscar otros, puede mejorar.", " I only used the sites you gave me: if you let me look for others, it may improve.");
         }
       }
     }
@@ -821,7 +825,7 @@ export function ajustar(pedido: PedidoAjuste, relieve: Relieve): Ajuste {
   const poligono = area?.puntos ?? [];
   const ajuste: Ajuste = {
     modo,
-    area: { nombre: area?.nombre ?? "la zona de la red", tipo: tipoZona, poligono, areaKm2: poligono.length ? areaPoligonoM2(poligono) / 1e6 : 0 },
+    area: { nombre: area?.nombre ?? ZONA_DE_LA_RED(), tipo: tipoZona, poligono, areaKm2: poligono.length ? areaPoligonoM2(poligono) / 1e6 : 0 },
     metaPct: meta,
     margenDb,
     alturaMaxM: alturaMax,
@@ -829,7 +833,7 @@ export function ajustar(pedido: PedidoAjuste, relieve: Relieve): Ajuste {
     opciones,
     recomendada,
     analisis: [],
-    motivo: opciones.some((o) => o.resumen.factible) ? null : (motivo ?? (sinGateway ? "No hay gateway." : null)),
+    motivo: opciones.some((o) => o.resumen.factible) ? null : (motivo ?? (sinGateway ? tx("No hay gateway.", "There is no gateway.") : null)),
   };
   ajuste.analisis = analisisAjuste(ajuste, p.radioKm);
   return ajuste;
@@ -844,25 +848,34 @@ export function ajustar(pedido: PedidoAjuste, relieve: Relieve): Ajuste {
       return !n.a.pasarela && c !== null && c !== undefined && c < ENLACE_SOLIDO_DB;
     });
     const partes: string[] = [];
-    if (sin.length) partes.push(`${lista(sin)} no ${sin.length === 1 ? "logra" : "logran"} llegar al gateway`);
-    if (lejos.length) partes.push(`${lista(lejos)} ${lejos.length === 1 ? "queda" : "quedan"} a más de ${limite} saltos`);
-    if (debiles.length) partes.push(`${lista(debiles.map((n) => n.a.nombre))} ${debiles.length === 1 ? "sigue" : "siguen"} con enlace débil (menos de 30 dB)`);
-    return `${partes.join("; ")} ni con torres de ${fm(alturaMax)} m${permisos.apoyos ? ` ni con ${pedido.sitios?.length ? "los sitios de apoyo que me dio" : `${pedido.maxApoyos} antenas de apoyo`}` : ""}${permisos.mover ? " ni moviendo nodos a lomas cercanas" : ""}. Revise si está demasiado lejos o detrás de una serranía, o suba el límite de saltos (hoy ${limite}).`;
+    if (sin.length) partes.push(tx(`${lista(sin)} no ${sin.length === 1 ? "logra" : "logran"} llegar al gateway`, `${lista(sin)} can't reach the gateway`));
+    if (lejos.length) partes.push(tx(`${lista(lejos)} ${lejos.length === 1 ? "queda" : "quedan"} a más de ${limite} saltos`, `${lista(lejos)} ${lejos.length === 1 ? "is" : "are"} more than ${limite} hops away`));
+    if (debiles.length)
+      partes.push(
+        tx(
+          `${lista(debiles.map((n) => n.a.nombre))} ${debiles.length === 1 ? "sigue" : "siguen"} con enlace débil (menos de 30 dB)`,
+          `${lista(debiles.map((n) => n.a.nombre))} still ${debiles.length === 1 ? "has a weak link" : "have weak links"} (under 30 dB)`,
+        ),
+      );
+    return tx(
+      `${partes.join("; ")} ni con torres de ${fm(alturaMax)} m${permisos.apoyos ? ` ni con ${pedido.sitios?.length ? "los sitios de apoyo que me dio" : `${pedido.maxApoyos} antenas de apoyo`}` : ""}${permisos.mover ? " ni moviendo nodos a lomas cercanas" : ""}. Revise si está demasiado lejos o detrás de una serranía, o suba el límite de saltos (hoy ${limite}).`,
+      `${partes.join("; ")} even with ${fm(alturaMax)} m towers${permisos.apoyos ? `, ${pedido.sitios?.length ? "the support sites you gave me" : `${pedido.maxApoyos} ${pedido.maxApoyos === 1 ? "support antenna" : "support antennas"}`}` : ""}${permisos.mover ? " or by moving nodes to nearby hills" : ""}. Check whether it is too far away or behind a ridge, or raise the hop limit (currently ${limite}).`,
+    );
   }
 
   function problemasDe(e: Estado, r: ResumenRed): string[] {
     const porId = new Map(e.an.nodos.map((x) => [x.id, x]));
     const salida: string[] = [];
-    if (sinGateway) salida.push("no hay gateway (pasarela)");
+    if (sinGateway) salida.push(tx("no hay gateway (pasarela)", "there is no gateway"));
     for (const n of e.cfg) {
       if (n.a.pasarela) continue;
       const nm = porId.get(n.a.id);
       if (!nm) continue;
-      if (nm.saltos === null) salida.push(`${n.a.nombre} no llega al gateway`);
-      else if (nm.saltos > limite) salida.push(`${n.a.nombre} está a ${nm.saltos} saltos (límite ${limite})`);
-      else if (nm.cuelloDb !== null && nm.cuelloDb < ENLACE_SOLIDO_DB) salida.push(`${n.a.nombre} llega con un enlace de ${Math.round(nm.cuelloDb)} dB (se piden 30)`);
+      if (nm.saltos === null) salida.push(tx(`${n.a.nombre} no llega al gateway`, `${n.a.nombre} doesn't reach the gateway`));
+      else if (nm.saltos > limite) salida.push(tx(`${n.a.nombre} está a ${nm.saltos} saltos (límite ${limite})`, `${n.a.nombre} is ${nm.saltos} hops away (limit ${limite})`));
+      else if (nm.cuelloDb !== null && nm.cuelloDb < ENLACE_SOLIDO_DB) salida.push(tx(`${n.a.nombre} llega con un enlace de ${Math.round(nm.cuelloDb)} dB (se piden 30)`, `${n.a.nombre} arrives with a ${Math.round(nm.cuelloDb)} dB link (30 required)`));
     }
-    if (!r.coberturaOk) salida.push(`la cobertura útil es ${fp(r.utilPct)} % (meta ${fp(meta)} %)`);
+    if (!r.coberturaOk) salida.push(tx(`la cobertura útil es ${fp(r.utilPct)} % (meta ${fp(meta)} %)`, `useful coverage is ${fp(r.utilPct)}% (target ${fp(meta)}%)`));
     return salida;
   }
 
@@ -870,15 +883,22 @@ export function ajustar(pedido: PedidoAjuste, relieve: Relieve): Ajuste {
   function cambiosDe(cfg: Nodo[], an: Analisis): { cambios: CambioAjuste[]; antenas: Antena[] } {
     const cambios: CambioAjuste[] = [];
     const porId = new Map(an.nodos.map((x) => [x.id, x]));
-    const usados = new Set(pedido.antenas.map((a) => a.nombre));
+    // Los nombres que ya hay (si llegan con los dos idiomas marcados, cada idioma por separado)
+    const usados = new Set<string>();
+    for (const a of pedido.antenas)
+      porTexto(a.nombre, (x) => {
+        usados.add(x);
+        return x;
+      });
     const renombre = new Map<string, { id: string; nombre: string }>();
     let k = 0;
     let n = 0;
     for (const x of cfg)
       if (x.origen === "apoyo") {
+        // El nombre libre en los dos idiomas («Apoyo N» o «Support N», los nombres de las piezas de apoyo)
         do k++;
-        while (usados.has(`Apoyo ${k}`));
-        renombre.set(x.a.id, { id: `nuevo-apoyo-${++n}`, nombre: `Apoyo ${k}` });
+        while (usados.has(`Apoyo ${k}`) || usados.has(`Support ${k}`));
+        renombre.set(x.a.id, { id: `nuevo-apoyo-${++n}`, nombre: tx(`Apoyo ${k}`, `Support ${k}`) });
       }
     const nombreDe = (id: string) => renombre.get(id)?.nombre ?? cfg.find((x) => x.a.id === id)?.a.nombre ?? id;
     for (const o of activas) {
@@ -1110,53 +1130,102 @@ function douglasPeucker(puntos: [number, number][], tol: number): [number, numbe
 }
 
 // ---------- Textos (sin precios) ----------
-const fp = (v: number) => (v >= 99.95 && v < 100 ? "99,9" : String(Math.floor(v * 10) / 10).replace(".", ","));
-const lista = (xs: string[]) => (xs.length <= 1 ? (xs[0] ?? "") : `${xs.slice(0, -1).join(", ")} y ${xs[xs.length - 1]}`);
+/** Porcentaje truncado a un decimal, con el separador decimal del idioma. */
+const fp = (v: number) => {
+  if (v >= 99.95 && v < 100) return tx("99,9", "99.9");
+  const s = String(Math.floor(v * 10) / 10);
+  return tx(s.replace(".", ","), s);
+};
+const lista = (xs: string[]) => listaLocal(xs);
 const PUNTOS = ["norte", "nororiente", "oriente", "suroriente", "sur", "suroccidente", "occidente", "noroccidente"];
-const haciaDonde = (g: number) => `al ${PUNTOS[Math.round((((g % 360) + 360) % 360) / 45) % 8]}`;
+const PUNTOS_EN = ["north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest"];
+/** El punto cardinal de un rumbo, sin el «al» («norte» / «north»). */
+const puntoHacia = (g: number) => {
+  const k = Math.round((((g % 360) + 360) % 360) / 45) % 8;
+  return tx(PUNTOS[k], PUNTOS_EN[k]);
+};
+const haciaDonde = (g: number) => {
+  const k = Math.round((((g % 360) + 360) % 360) / 45) % 8;
+  return tx(`al ${PUNTOS[k]}`, `to the ${PUNTOS_EN[k]}`);
+};
 const fc = (v: number) => v.toFixed(5).replace(/0+$/, "").replace(/\.$/, "");
-const fm = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(1).replace(".", ","));
+const fm = (v: number) => {
+  if (Number.isInteger(v)) return String(v);
+  const s = v.toFixed(1);
+  return tx(s.replace(".", ","), s);
+};
+/** El nombre de la zona de la red cuando no hay un área pedida. */
+const ZONA_DE_LA_RED = () => tx("la zona de la red", "the network area");
 
 export function nombrePatron(id: PatronId): string {
-  return { omni: "omnidireccional", yagi: "Yagi", panel: "panel", "sectorial-90": "sectorial de 90°", "sectorial-120": "sectorial de 120°", parabolica: "parabólica" }[id];
+  const es = { omni: "omnidireccional", yagi: "Yagi", panel: "panel", "sectorial-90": "sectorial de 90°", "sectorial-120": "sectorial de 120°", parabolica: "parabólica" }[id];
+  const en = { omni: "omnidirectional", yagi: "Yagi", panel: "panel", "sectorial-90": "90° sector", "sectorial-120": "120° sector", parabolica: "parabolic" }[id];
+  return tx(es, en);
 }
 
 /** Un cambio en palabras («Subir Gateway de 8 a 15 m»). */
 export function textoCambio(c: CambioAjuste): string {
   switch (c.tipo) {
     case "altura":
-      return `${c.aM > c.deM ? "Subir" : "Bajar"} ${c.nombre} de ${fm(c.deM)} a ${fm(c.aM)} m`;
+      return tx(`${c.aM > c.deM ? "Subir" : "Bajar"} ${c.nombre} de ${fm(c.deM)} a ${fm(c.aM)} m`, `${c.aM > c.deM ? "Raise" : "Lower"} ${c.nombre} from ${fm(c.deM)} to ${fm(c.aM)} m`);
     case "mover":
-      return `Correr ${c.nombre} ${Math.round(c.distanciaM / 10) * 10} m ${haciaDonde(c.rumboDeg)}, a una loma ${Math.max(1, Math.round(c.subeM))} m más alta (${fc(c.lat)}, ${fc(c.lon)})`;
+      return tx(
+        `Correr ${c.nombre} ${Math.round(c.distanciaM / 10) * 10} m ${haciaDonde(c.rumboDeg)}, a una loma ${Math.max(1, Math.round(c.subeM))} m más alta (${fc(c.lat)}, ${fc(c.lon)})`,
+        `Move ${c.nombre} ${Math.round(c.distanciaM / 10) * 10} m ${haciaDonde(c.rumboDeg)}, to a hill ${Math.max(1, Math.round(c.subeM))} m higher (${fc(c.lat)}, ${fc(c.lon)})`,
+      );
     case "antena":
-      return c.patron === "omni" ? `Volver ${c.nombre} a antena omnidireccional` : `Poner en ${c.nombre} una antena ${nombrePatron(c.patron)} apuntando a ${Math.round(c.azimutDeg)}° (${haciaDonde(c.azimutDeg).replace("al ", "")})`;
+      return c.patron === "omni"
+        ? tx(`Volver ${c.nombre} a antena omnidireccional`, `Return ${c.nombre} to an omnidirectional antenna`)
+        : tx(
+            `Poner en ${c.nombre} una antena ${nombrePatron(c.patron)} apuntando a ${Math.round(c.azimutDeg)}° (${puntoHacia(c.azimutDeg)})`,
+            `Give ${c.nombre} a ${nombrePatron(c.patron)} antenna pointing at ${Math.round(c.azimutDeg)}° (${puntoHacia(c.azimutDeg)})`,
+          );
     case "apoyo":
-      return `Antena de apoyo «${c.nombre}»${c.sitio ? ` en ${c.sitio}` : ""} en ${fc(c.lat)}, ${fc(c.lon)}, torre de ${fm(c.alturaM)} m${c.enlazaCon && c.enlaceDb !== null ? ` (enlaza con ${c.enlazaCon} a ${Math.round(c.enlaceDb)} dB)` : ""}`;
+      return tx(
+        `Antena de apoyo «${c.nombre}»${c.sitio ? ` en ${c.sitio}` : ""} en ${fc(c.lat)}, ${fc(c.lon)}, torre de ${fm(c.alturaM)} m${c.enlazaCon && c.enlaceDb !== null ? ` (enlaza con ${c.enlazaCon} a ${Math.round(c.enlaceDb)} dB)` : ""}`,
+        `Support antenna “${c.nombre}” ${c.sitio ? `at ${c.sitio} (${fc(c.lat)}, ${fc(c.lon)})` : `at ${fc(c.lat)}, ${fc(c.lon)}`}, ${fm(c.alturaM)} m tower${c.enlazaCon && c.enlaceDb !== null ? ` (links to ${c.enlazaCon} at ${Math.round(c.enlaceDb)} dB)` : ""}`,
+      );
     case "quitar":
-      return `Quitar ${c.nombre} (no hace falta)`;
+      return tx(`Quitar ${c.nombre} (no hace falta)`, `Remove ${c.nombre} (not needed)`);
   }
 }
 
 function tituloOpcion(id: OpcionAjuste["id"], modo: Ajuste["modo"]): string {
-  if (modo === "optimizar") return { economica: "Mínima factible", recomendada: "Misma cobertura, menos costo", maxima: "Más cobertura" }[id];
-  return { economica: "Económica", recomendada: "Recomendada", maxima: "Máxima cobertura" }[id];
+  if (modo === "optimizar")
+    return {
+      economica: tx("Mínima factible", "Minimum feasible"),
+      recomendada: tx("Misma cobertura, menos costo", "Same coverage, lower cost"),
+      maxima: tx("Más cobertura", "More coverage"),
+    }[id];
+  return { economica: tx("Económica", "Economical"), recomendada: tx("Recomendada", "Recommended"), maxima: tx("Máxima cobertura", "Maximum coverage") }[id];
 }
 
 function porQueOpcion(o: OpcionAjuste, todas: OpcionAjuste[], modo: Ajuste["modo"], inicial: ResumenRed): string {
   const r = o.resumen;
-  if (!o.cambios.length) return modo === "optimizar" ? "La red ya está bien dimensionada: no encontré cómo ahorrar sin perder cobertura." : "No encontré cambios que mejoren la red.";
+  if (!o.cambios.length)
+    return modo === "optimizar"
+      ? tx("La red ya está bien dimensionada: no encontré cómo ahorrar sin perder cobertura.", "The network is already well sized: I found no way to save without losing coverage.")
+      : tx("No encontré cambios que mejoren la red.", "I found no changes that improve the network.");
   if (modo === "optimizar") {
-    if (o.id === "recomendada") return `La misma cobertura útil (${fp(r.utilPct)} %) con menos infraestructura.`;
-    if (o.id === "economica") return `Lo mínimo que sigue siendo factible: cobertura útil de ${fp(r.utilPct)} %.`;
-    return `Gana cobertura (${fp(r.utilPct)} %) hasta donde cada antena extra todavía rinde.`;
+    if (o.id === "recomendada") return tx(`La misma cobertura útil (${fp(r.utilPct)} %) con menos infraestructura.`, `The same useful coverage (${fp(r.utilPct)}%) with less infrastructure.`);
+    if (o.id === "economica") return tx(`Lo mínimo que sigue siendo factible: cobertura útil de ${fp(r.utilPct)} %.`, `The minimum that is still feasible: useful coverage of ${fp(r.utilPct)}%.`);
+    return tx(`Gana cobertura (${fp(r.utilPct)} %) hasta donde cada antena extra todavía rinde.`, `Gains coverage (${fp(r.utilPct)}%) as far as each extra antenna still pays off.`);
   }
-  if (!r.factible) return `Lo mejor que se logra: cobertura útil de ${fp(r.utilPct)} %${r.conectada ? "" : ", pero algún nodo sigue sin llegar al gateway"}.`;
-  if (o.id === "economica") return `Lo mínimo para dejarla factible: cobertura útil de ${fp(r.utilPct)} % (antes ${fp(inicial.utilPct)} %).`;
+  if (!r.factible)
+    return tx(
+      `Lo mejor que se logra: cobertura útil de ${fp(r.utilPct)} %${r.conectada ? "" : ", pero algún nodo sigue sin llegar al gateway"}.`,
+      `The best that can be achieved: useful coverage of ${fp(r.utilPct)}%${r.conectada ? "" : ", but some node still doesn't reach the gateway"}.`,
+    );
+  if (o.id === "economica") return tx(`Lo mínimo para dejarla factible: cobertura útil de ${fp(r.utilPct)} % (antes ${fp(inicial.utilPct)} %).`, `The minimum to make it feasible: useful coverage of ${fp(r.utilPct)}% (before, ${fp(inicial.utilPct)}%).`);
   if (o.id === "recomendada") {
     const max = todas.find((x) => x.id === "maxima");
-    return `La mejor relación cobertura–costo: ${fp(r.utilPct)} % útil.${max && max.resumen.utilPct > r.utilPct + 0.5 ? " Más allá, cada antena extra aporta poco." : ""}`;
+    const masAlla = max && max.resumen.utilPct > r.utilPct + 0.5;
+    return tx(
+      `La mejor relación cobertura–costo: ${fp(r.utilPct)} % útil.${masAlla ? " Más allá, cada antena extra aporta poco." : ""}`,
+      `The best coverage–cost ratio: ${fp(r.utilPct)}% useful.${masAlla ? " Beyond that, each extra antenna adds little." : ""}`,
+    );
   }
-  return `La mayor cobertura útil que se logra con torres de hasta 30 m: ${fp(r.utilPct)} %.`;
+  return tx(`La mayor cobertura útil que se logra con torres de hasta 30 m: ${fp(r.utilPct)} %.`, `The highest useful coverage achievable with towers of up to 30 m: ${fp(r.utilPct)}%.`);
 }
 
 /** Resumen corto de lo que pide una opción («subir Gateway a 15 m y una antena de apoyo»). */
@@ -1170,15 +1239,15 @@ export function resumenCambios(o: Pick<OpcionAjuste, "cambios">): string {
   if (alturas.length) {
     const suben = alturas.filter((c) => c.aM > c.deM);
     const bajan = alturas.filter((c) => c.aM < c.deM);
-    if (suben.length === 1) partes.push(`subir ${suben[0].nombre} a ${fm(suben[0].aM)} m`);
-    else if (suben.length) partes.push(`subir ${suben.length} torres`);
-    if (bajan.length === 1) partes.push(`bajar ${bajan[0].nombre} a ${fm(bajan[0].aM)} m`);
-    else if (bajan.length) partes.push(`bajar ${bajan.length} torres`);
+    if (suben.length === 1) partes.push(tx(`subir ${suben[0].nombre} a ${fm(suben[0].aM)} m`, `raising ${suben[0].nombre} to ${fm(suben[0].aM)} m`));
+    else if (suben.length) partes.push(tx(`subir ${suben.length} torres`, `raising ${suben.length} towers`));
+    if (bajan.length === 1) partes.push(tx(`bajar ${bajan[0].nombre} a ${fm(bajan[0].aM)} m`, `lowering ${bajan[0].nombre} to ${fm(bajan[0].aM)} m`));
+    else if (bajan.length) partes.push(tx(`bajar ${bajan.length} torres`, `lowering ${bajan.length} towers`));
   }
-  if (mov) partes.push(mov === 1 ? "correr un nodo a una loma cercana" : `correr ${mov} nodos a lomas cercanas`);
-  if (ant) partes.push(ant === 1 ? "cambiar una antena" : `cambiar ${ant} antenas`);
-  if (apoyos) partes.push(apoyos === 1 ? "una antena de apoyo" : `${apoyos} antenas de apoyo`);
-  if (quitar) partes.push(quitar === 1 ? "quitar un nodo que sobra" : `quitar ${quitar} nodos que sobran`);
+  if (mov) partes.push(mov === 1 ? tx("correr un nodo a una loma cercana", "moving a node to a nearby hill") : tx(`correr ${mov} nodos a lomas cercanas`, `moving ${mov} nodes to nearby hills`));
+  if (ant) partes.push(ant === 1 ? tx("cambiar una antena", "changing an antenna") : tx(`cambiar ${ant} antenas`, `changing ${ant} antennas`));
+  if (apoyos) partes.push(apoyos === 1 ? tx("una antena de apoyo", "a support antenna") : tx(`${apoyos} antenas de apoyo`, `${apoyos} support antennas`));
+  if (quitar) partes.push(quitar === 1 ? tx("quitar un nodo que sobra", "removing a node that isn't needed") : tx(`quitar ${quitar} nodos que sobran`, `removing ${quitar} nodes that aren't needed`));
   return lista(partes);
 }
 
@@ -1186,31 +1255,71 @@ export function resumenCambios(o: Pick<OpcionAjuste, "cambios">): string {
 export function analisisAjuste(a: Ajuste, radioKm?: number): string[] {
   const salida: string[] = [];
   const i = a.inicial;
-  const zona = a.area.tipo === "objetivo" ? `«${a.area.nombre}»` : "la zona de la red";
-  const senal = a.margenDb >= 45 ? "buena" : a.margenDb >= 37 ? "estable o mejor" : "media o mejor";
-  const meta = `${fp(a.metaPct)} % de ${zona} con señal ${senal} (≥ ${a.margenDb} dB)`;
-  if (a.area.tipo === "zona") salida.push(`Como no hay un área pedida, evalué la zona de la red: los círculos de ${radioKm ? `${fm(radioKm)} km` : "estudio"} alrededor de sus nodos antena (${fm(Math.round(a.area.areaKm2))} km²). Al aplicar el ajuste la dejo como área objetivo, para que la factibilidad se mida siempre en la misma zona.`);
-  if (i.factible) salida.push(`Hoy ya es factible: cobertura útil de ${fp(i.utilPct)} % (meta ${meta}).`);
-  else salida.push(`Hoy no es factible: ${lista(i.problemas)}. La meta es ${meta}, con todos los nodos llegando al gateway por enlaces de 30 dB o más.`);
+  const zona = a.area.tipo === "objetivo" ? tx(`«${a.area.nombre}»`, `“${a.area.nombre}”`) : ZONA_DE_LA_RED();
+  const senal = a.margenDb >= 45 ? tx("buena", "good") : a.margenDb >= 37 ? tx("estable o mejor", "stable or better") : tx("media o mejor", "fair or better");
+  const meta = tx(`${fp(a.metaPct)} % de ${zona} con señal ${senal} (≥ ${a.margenDb} dB)`, `${fp(a.metaPct)}% of ${zona} with ${senal} signal (≥ ${a.margenDb} dB)`);
+  if (a.area.tipo === "zona")
+    salida.push(
+      tx(
+        `Como no hay un área pedida, evalué la zona de la red: los círculos de ${radioKm ? `${fm(radioKm)} km` : "estudio"} alrededor de sus nodos antena (${fm(Math.round(a.area.areaKm2))} km²). Al aplicar el ajuste la dejo como área objetivo, para que la factibilidad se mida siempre en la misma zona.`,
+        `Since no area was requested, I evaluated the network area: the ${radioKm ? `${fm(radioKm)} km` : "study"} circles around its antenna nodes (${fm(Math.round(a.area.areaKm2))} km²). When the adjustment is applied I'll set it as the target area, so feasibility is always measured in the same area.`,
+      ),
+    );
+  if (i.factible) salida.push(tx(`Hoy ya es factible: cobertura útil de ${fp(i.utilPct)} % (meta ${meta}).`, `It is already feasible: useful coverage of ${fp(i.utilPct)}% (target ${meta}).`));
+  else
+    salida.push(
+      tx(
+        `Hoy no es factible: ${lista(i.problemas)}. La meta es ${meta}, con todos los nodos llegando al gateway por enlaces de 30 dB o más.`,
+        `It is not feasible yet: ${lista(i.problemas)}. The target is ${meta}, with every node reaching the gateway over links of 30 dB or more.`,
+      ),
+    );
   const rec = a.opciones[a.recomendada];
   const eco = a.opciones.find((o) => o.id === "economica");
   const max = a.opciones.find((o) => o.id === "maxima");
   if (a.modo === "optimizar") {
-    if (rec && rec.cambios.length && rec.costoRelativo < 1) salida.push(`Para la misma cobertura basta con ${resumenCambios(rec)}: ${Math.round((1 - rec.costoRelativo) * 100)} % menos de inversión en infraestructura.`);
-    else salida.push("No encontré cómo ahorrar sin perder cobertura: la red ya está bien dimensionada.");
-    if (eco && eco !== rec && eco.cambios.length) salida.push(`Si basta con la meta (${fp(a.metaPct)} %), lo mínimo es ${resumenCambios(eco)} (${fp(eco.resumen.utilPct)} % útil).`);
-    if (max && rec && max.resumen.utilPct > rec.resumen.utilPct + 0.5) salida.push(`Si quiere más cobertura, ${resumenCambios(max)} la lleva a ${fp(max.resumen.utilPct)} % sin que la inversión deje de rendir.`);
+    if (rec && rec.cambios.length && rec.costoRelativo < 1)
+      salida.push(
+        tx(
+          `Para la misma cobertura basta con ${resumenCambios(rec)}: ${Math.round((1 - rec.costoRelativo) * 100)} % menos de inversión en infraestructura.`,
+          `For the same coverage, ${resumenCambios(rec)} is enough: ${Math.round((1 - rec.costoRelativo) * 100)}% less investment in infrastructure.`,
+        ),
+      );
+    else salida.push(tx("No encontré cómo ahorrar sin perder cobertura: la red ya está bien dimensionada.", "I found no way to save without losing coverage: the network is already well sized."));
+    if (eco && eco !== rec && eco.cambios.length)
+      salida.push(
+        tx(
+          `Si basta con la meta (${fp(a.metaPct)} %), lo mínimo es ${resumenCambios(eco)} (${fp(eco.resumen.utilPct)} % útil).`,
+          `If the target alone is enough (${fp(a.metaPct)}%), the minimum is ${resumenCambios(eco)} (${fp(eco.resumen.utilPct)}% useful).`,
+        ),
+      );
+    if (max && rec && max.resumen.utilPct > rec.resumen.utilPct + 0.5)
+      salida.push(
+        tx(
+          `Si quiere más cobertura, ${resumenCambios(max)} la lleva a ${fp(max.resumen.utilPct)} % sin que la inversión deje de rendir.`,
+          `If you want more coverage, ${resumenCambios(max)} takes it to ${fp(max.resumen.utilPct)}% while the investment still pays off.`,
+        ),
+      );
   } else {
-    if (eco && eco.resumen.factible) salida.push(`Lo mínimo para dejarla factible: ${resumenCambios(eco)} → ${fp(eco.resumen.utilPct)} % útil.`);
-    if (rec && rec !== eco && rec.resumen.factible) salida.push(`Recomiendo ${resumenCambios(rec)} → ${fp(rec.resumen.utilPct)} % útil: es hasta donde cada peso invertido todavía rinde.`);
+    if (eco && eco.resumen.factible) salida.push(tx(`Lo mínimo para dejarla factible: ${resumenCambios(eco)} → ${fp(eco.resumen.utilPct)} % útil.`, `The minimum to make it feasible: ${resumenCambios(eco)} → ${fp(eco.resumen.utilPct)}% useful.`));
+    if (rec && rec !== eco && rec.resumen.factible)
+      salida.push(
+        tx(
+          `Recomiendo ${resumenCambios(rec)} → ${fp(rec.resumen.utilPct)} % útil: es hasta donde cada peso invertido todavía rinde.`,
+          `I recommend ${resumenCambios(rec)} → ${fp(rec.resumen.utilPct)}% useful: that's as far as each peso invested still pays off.`,
+        ),
+      );
     if (max && rec && max !== rec && max.resumen.utilPct > rec.resumen.utilPct + 0.5) {
       const extra = max.resumen.nodosAntena - rec.resumen.nodosAntena;
+      const caro = max.costoRelativo > rec.costoRelativo * 1.4;
       salida.push(
-        `La de máxima cobertura llega a ${fp(max.resumen.utilPct)} % (+${fp(max.resumen.utilPct - rec.resumen.utilPct)} puntos)${extra > 0 ? ` con ${extra === 1 ? "una antena más" : `${extra} antenas más`}` : ""}: ${max.costoRelativo > rec.costoRelativo * 1.4 ? "cuesta bastante más por lo que agrega" : "agrega poco por lo que cuesta"}, salvo que esa zona sea crítica.`,
+        tx(
+          `La de máxima cobertura llega a ${fp(max.resumen.utilPct)} % (+${fp(max.resumen.utilPct - rec.resumen.utilPct)} puntos)${extra > 0 ? ` con ${extra === 1 ? "una antena más" : `${extra} antenas más`}` : ""}: ${caro ? "cuesta bastante más por lo que agrega" : "agrega poco por lo que cuesta"}, salvo que esa zona sea crítica.`,
+          `The maximum-coverage option reaches ${fp(max.resumen.utilPct)}% (+${fp(max.resumen.utilPct - rec.resumen.utilPct)} points)${extra > 0 ? ` with ${extra === 1 ? "one more antenna" : `${extra} more antennas`}` : ""}: ${caro ? "it costs considerably more for what it adds" : "it adds little for what it costs"}, unless that area is critical.`,
+        ),
       );
     }
   }
-  salida.push(`Ninguna torre pasa de ${fm(a.alturaMaxM)} m: más alto exige torres autosoportadas, mucho más costosas.`);
+  salida.push(tx(`Ninguna torre pasa de ${fm(a.alturaMaxM)} m: más alto exige torres autosoportadas, mucho más costosas.`, `No tower goes above ${fm(a.alturaMaxM)} m: going higher requires self-supporting towers, which are much more expensive.`));
   if (a.motivo) salida.push(a.motivo);
   return salida;
 }

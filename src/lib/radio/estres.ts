@@ -17,6 +17,7 @@
 // señal débil, canal, choques, cola o la fila del gateway). Con el perfil medido usa lo del gateway medido:
 // el largo real de los mensajes, el ritmo, la fila de a uno y la curva de entrega por enlace medida.
 // Son estimaciones para planear; se validan midiendo una red piloto.
+import { tx } from "../idioma";
 import { aireDeMensaje, ESPERA_MAXIMA_S, simularCargaDetalle, UMBRAL_COMPLETOS_PCT, BYTES_PAGO, type DetalleCarga, type GatewayCarga, type PedidoCarga } from "./carga";
 import { CLASES, presetPorId, presetsDe, type PresetId, type ProtocoloId } from "./constantes";
 import { distanciaM } from "./geo";
@@ -170,26 +171,53 @@ export type EstadoUsuario = "bien" | "funciona" | "medias" | "dificultad" | "no"
 /** Por qué no le funciona del todo a una persona. */
 export type CausaUsuario = "cobertura" | "saltos" | "senal" | "canal" | "choques" | "cola" | "gateway" | "espera";
 
+/** Estado con su nombre y su descripción en los dos idiomas (getters: salen en el idioma de la pantalla). */
+const estadoConTexto = (nombre: [string, string], color: string, descripcion: [string, string]) => ({
+  get nombre() {
+    return tx(nombre[0], nombre[1]);
+  },
+  color,
+  get descripcion() {
+    return tx(descripcion[0], descripcion[1]);
+  },
+});
+
 /** Estados de una persona en la prueba, con la paleta de los rangos de señal. */
 export const ESTADOS_USUARIO: Record<EstadoUsuario, { nombre: string; color: string; descripcion: string }> = {
-  bien: { nombre: "Le funciona bien", color: CLASES[0].color, descripcion: "El 95 % o más de sus mensajes vuelve, y en menos de 30 s." },
-  funciona: { nombre: "Le funciona", color: CLASES[1].color, descripcion: "El 90 % o más vuelve, en menos de un minuto." },
-  medias: { nombre: "A medias", color: CLASES[2].color, descripcion: "Vuelve del 75 al 90 %, o tarda más de un minuto." },
-  dificultad: { nombre: "Con dificultades", color: CLASES[3].color, descripcion: "Vuelve solo del 40 al 75 %: tiene que reintentar seguido." },
-  no: { nombre: "No le funciona", color: CLASES[4].color, descripcion: "Vuelve menos del 40 %, o no tiene ruta al gateway." },
+  bien: estadoConTexto(["Le funciona bien", "Works well"], CLASES[0].color, ["El 95 % o más de sus mensajes vuelve, y en menos de 30 s.", "95% or more of their messages come back, in under 30 s."]),
+  funciona: estadoConTexto(["Le funciona", "Works"], CLASES[1].color, ["El 90 % o más vuelve, en menos de un minuto.", "90% or more come back, in under a minute."]),
+  medias: estadoConTexto(["A medias", "Partly works"], CLASES[2].color, ["Vuelve del 75 al 90 %, o tarda más de un minuto.", "75 to 90% come back, or it takes more than a minute."]),
+  dificultad: estadoConTexto(["Con dificultades", "Struggling"], CLASES[3].color, ["Vuelve solo del 40 al 75 %: tiene que reintentar seguido.", "Only 40 to 75% come back: they have to retry often."]),
+  no: estadoConTexto(["No le funciona", "Doesn't work"], CLASES[4].color, ["Vuelve menos del 40 %, o no tiene ruta al gateway.", "Less than 40% come back, or there is no route to the gateway."]),
 };
 
 export const ORDEN_ESTADOS_USUARIO: EstadoUsuario[] = ["bien", "funciona", "medias", "dificultad", "no"];
 
 export const CAUSAS_USUARIO: Record<CausaUsuario, string> = {
-  cobertura: "sin cobertura",
-  saltos: "más saltos que el límite",
-  senal: "señal débil",
-  canal: "canal ocupado",
-  choques: "choques de paquetes",
-  cola: "cola llena en un nodo",
-  gateway: "fila del gateway",
-  espera: "espera larga",
+  get cobertura() {
+    return tx("sin cobertura", "no coverage");
+  },
+  get saltos() {
+    return tx("más saltos que el límite", "more hops than the limit");
+  },
+  get senal() {
+    return tx("señal débil", "weak signal");
+  },
+  get canal() {
+    return tx("canal ocupado", "busy channel");
+  },
+  get choques() {
+    return tx("choques de paquetes", "packet collisions");
+  },
+  get cola() {
+    return tx("cola llena en un nodo", "full queue at a node");
+  },
+  get gateway() {
+    return tx("fila del gateway", "gateway queue");
+  },
+  get espera() {
+    return tx("espera larga", "long wait");
+  },
 };
 
 export type UsuarioEstres = {
@@ -590,7 +618,11 @@ export function estadoUsuario(exitoPct: number, esperaP95S: number): EstadoUsuar
   return "no";
 }
 
-const fmt1 = (x: number, d = 0) => (Math.round(x * 10 ** d) / 10 ** d).toString().replace(".", ",");
+/** Número redondeado a `d` decimales con el separador decimal del idioma. */
+const fmt1 = (x: number, d = 0) => {
+  const s = (Math.round(x * 10 ** d) / 10 ** d).toString();
+  return tx(s.replace(".", ","), s);
+};
 
 /** Peso (en mensajes) de lo que dice la física de la ruta frente a los mensajes simulados de la persona. */
 const PESO_PREVIO = 4;
@@ -747,16 +779,25 @@ function evaluarUsuarios(q: PedidoEstres, corridas: Corrida[], zs: ZonaEstres[])
     if (!ruta) {
       const oyen = d0.alcanzables[i] ?? 0;
       const mejor = d0.mejorMargen[i];
-      if (estado === "bien" || estado === "funciona") porque = "Llega por la inundación aunque no tiene una ruta fija.";
+      if (estado === "bien" || estado === "funciona") porque = tx("Llega por la inundación aunque no tiene una ruta fija.", "It gets through by flooding even though it has no fixed route.");
       else if (oyen === 0 && !(mejor >= 0)) {
         causa = "cobertura";
-        porque = `Ningún repetidor ni el gateway lo oye${mt ? ", ni otra persona que repita" : ""}${Number.isFinite(mejor) ? ` (el más cercano le llega con ${fmt1(mejor, 1)} dB)` : ""}.`;
+        porque = tx(
+          `Ningún repetidor ni el gateway lo oye${mt ? ", ni otra persona que repita" : ""}${Number.isFinite(mejor) ? ` (el más cercano le llega con ${fmt1(mejor, 1)} dB)` : ""}.`,
+          `No repeater or gateway hears it${mt ? ", nor any other person who repeats" : ""}${Number.isFinite(mejor) ? ` (the closest one reaches it with ${fmt1(mejor, 1)} dB)` : ""}.`,
+        );
       } else if (mt) {
         causa = "saltos";
-        porque = `Lo oyen ${oyen} ${oyen === 1 ? "nodo" : "nodos"}, pero el gateway queda a más de ${Math.min(perfil.saltosMax, q.parametros.limiteSaltos)} saltos (límite de saltos de Meshtastic).`;
+        porque = tx(
+          `Lo oyen ${oyen} ${oyen === 1 ? "nodo" : "nodos"}, pero el gateway queda a más de ${Math.min(perfil.saltosMax, q.parametros.limiteSaltos)} saltos (límite de saltos de Meshtastic).`,
+          `${oyen} ${oyen === 1 ? "node hears" : "nodes hear"} it, but the gateway is more than ${Math.min(perfil.saltosMax, q.parametros.limiteSaltos)} hops away (Meshtastic's hop limit).`,
+        );
       } else {
         causa = "senal";
-        porque = `El nodo más cercano lo oye con ${fmt1(mejor, 1)} dB: por debajo de los 20 dB de servicio, sin ruta al gateway.`;
+        porque = tx(
+          `El nodo más cercano lo oye con ${fmt1(mejor, 1)} dB: por debajo de los 20 dB de servicio, sin ruta al gateway.`,
+          `The closest node hears it with ${fmt1(mejor, 1)} dB: below the 20 dB needed for service, with no route to the gateway.`,
+        );
       }
     } else if (estado !== "bien") {
       const perdFisica = 1 - fisica;
@@ -765,35 +806,59 @@ function evaluarUsuarios(q: PedidoEstres, corridas: Corrida[], zs: ZonaEstres[])
       if (exitoPct >= UMBRAL_COMPLETOS_PCT && esperaP95S > 30) {
         if (gwP95 > 0.4 * esperaP95S && gwP95 > 3) {
           causa = "gateway";
-          porque = `La fila del gateway: atiende de a uno y la espera en la fila llega a ${fmt1(gwP95)} s.`;
+          porque = tx(`La fila del gateway: atiende de a uno y la espera en la fila llega a ${fmt1(gwP95)} s.`, `The gateway queue: it serves one at a time and the wait in the queue reaches ${fmt1(gwP95)} s.`);
         } else {
           causa = "espera";
-          porque = `${ruta.length - 1} ${ruta.length === 2 ? "salto" : "saltos"}${zonaZ ? ` y el canal de ${zonaZ.nombre} ocupado el ${fmt1(zonaZ.canalPct)} %` : ""}: el 95 % de sus mensajes tarda hasta ${fmt1(esperaP95S)} s.`;
+          porque = tx(
+            `${ruta.length - 1} ${ruta.length === 2 ? "salto" : "saltos"}${zonaZ ? ` y el canal de ${zonaZ.nombre} ocupado el ${fmt1(zonaZ.canalPct)} %` : ""}: el 95 % de sus mensajes tarda hasta ${fmt1(esperaP95S)} s.`,
+            `${ruta.length - 1} ${ruta.length === 2 ? "hop" : "hops"}${zonaZ ? ` and the channel at ${zonaZ.nombre} busy ${fmt1(zonaZ.canalPct)}% of the time` : ""}: 95% of their messages take up to ${fmt1(esperaP95S)} s.`,
+          );
         }
       } else if (perdFisica >= perdCongestion && peor && margenDb !== null) {
         causa = "senal";
-        porque = `Su enlace más débil (${nombre(peor[0])} → ${nombre(peor[1])}) tiene ${fmt1(margenDb, 1)} dB de margen (SNR ≈ ${fmt1(margenDb + snrLimite(preset.sf), 1)} dB): con su ruta sola volvería el ${fmt1(100 * fisica)} %.`;
+        porque = tx(
+          `Su enlace más débil (${nombre(peor[0])} → ${nombre(peor[1])}) tiene ${fmt1(margenDb, 1)} dB de margen (SNR ≈ ${fmt1(margenDb + snrLimite(preset.sf), 1)} dB): con su ruta sola volvería el ${fmt1(100 * fisica)} %.`,
+          `Their weakest link (${nombre(peor[0])} → ${nombre(peor[1])}) has ${fmt1(margenDb, 1)} dB of margin (SNR ≈ ${fmt1(margenDb + snrLimite(preset.sf), 1)} dB): with their route alone ${fmt1(100 * fisica)}% would come back.`,
+        );
       } else if (culpable) {
         const canal = zonaPorIndice.get(culpable.k)?.canalPct ?? zonaZ?.canalPct ?? 0;
         if (culpable.tipo === "cola") {
           causa = "cola";
-          porque = `${nombre(culpable.k)} bota el ${fmt1(100 * culpable.valor)} % de lo que debe transmitir: su cola de ${perfil.colaRadio} paquetes se llena.`;
+          porque = tx(
+            `${nombre(culpable.k)} bota el ${fmt1(100 * culpable.valor)} % de lo que debe transmitir: su cola de ${perfil.colaRadio} paquetes se llena.`,
+            `${nombre(culpable.k)} drops ${fmt1(100 * culpable.valor)}% of what it has to transmit: its ${perfil.colaRadio}-packet queue fills up.`,
+          );
         } else if (canal >= perfil.canalAlertaPct) {
           causa = "canal";
           porque =
             culpable.k === i
-              ? `El canal ${zonaZ ? `en la zona de ${zonaZ.nombre}` : "donde está"} está ocupado el ${fmt1(canal)} % del tiempo: se le pierde el ${fmt1(100 * culpable.valor)} % de lo que le mandan.`
-              : `El canal en ${nombre(culpable.k)} está ocupado el ${fmt1(canal)} % del tiempo y pierde el ${fmt1(100 * culpable.valor)} % de lo que le llega.`;
+              ? tx(
+                  `El canal ${zonaZ ? `en la zona de ${zonaZ.nombre}` : "donde está"} está ocupado el ${fmt1(canal)} % del tiempo: se le pierde el ${fmt1(100 * culpable.valor)} % de lo que le mandan.`,
+                  `The channel ${zonaZ ? `in the ${zonaZ.nombre} zone` : "where they are"} is busy ${fmt1(canal)}% of the time: ${fmt1(100 * culpable.valor)}% of what is sent to them is lost.`,
+                )
+              : tx(
+                  `El canal en ${nombre(culpable.k)} está ocupado el ${fmt1(canal)} % del tiempo y pierde el ${fmt1(100 * culpable.valor)} % de lo que le llega.`,
+                  `The channel at ${nombre(culpable.k)} is busy ${fmt1(canal)}% of the time and it loses ${fmt1(100 * culpable.valor)}% of what reaches it.`,
+                );
         } else {
           causa = "choques";
           porque =
             culpable.k === i
-              ? `Se le pierde el ${fmt1(100 * culpable.valor)} % de lo que le mandan: paquetes que se pisan con otros o que llegan mientras transmite.`
-              : `En ${nombre(culpable.k)} se pierde el ${fmt1(100 * culpable.valor)} % de lo que le llega: paquetes que se pisan o que llegan mientras transmite.`;
+              ? tx(
+                  `Se le pierde el ${fmt1(100 * culpable.valor)} % de lo que le mandan: paquetes que se pisan con otros o que llegan mientras transmite.`,
+                  `${fmt1(100 * culpable.valor)}% of what is sent to them is lost: packets that collide with others or arrive while they are transmitting.`,
+                )
+              : tx(
+                  `En ${nombre(culpable.k)} se pierde el ${fmt1(100 * culpable.valor)} % de lo que le llega: paquetes que se pisan o que llegan mientras transmite.`,
+                  `At ${nombre(culpable.k)}, ${fmt1(100 * culpable.valor)}% of what reaches it is lost: packets that collide or arrive while it is transmitting.`,
+                );
         }
       } else if (peor && margenDb !== null) {
         causa = "senal";
-        porque = `Su enlace más débil (${nombre(peor[0])} → ${nombre(peor[1])}) tiene ${fmt1(margenDb, 1)} dB de margen.`;
+        porque = tx(
+          `Su enlace más débil (${nombre(peor[0])} → ${nombre(peor[1])}) tiene ${fmt1(margenDb, 1)} dB de margen.`,
+          `Their weakest link (${nombre(peor[0])} → ${nombre(peor[1])}) has ${fmt1(margenDb, 1)} dB of margin.`,
+        );
       }
     }
     lista.push({
@@ -1110,13 +1175,20 @@ function limiteDePunto(q: PedidoEstres, foco: string, base: Corrida[], zonasBase
     redYaFalla: false,
     motivo: null,
   };
-  if (!a || i0 < 0 || !(a.rol === "REPETIDOR" || a.pasarela)) return { ...vacio, motivo: "Ese nodo no es un gateway ni un repetidor activo." };
+  if (!a || i0 < 0 || !(a.rol === "REPETIDOR" || a.pasarela)) return { ...vacio, motivo: tx("Ese nodo no es un gateway ni un repetidor activo.", "That node is neither a gateway nor an active repeater.") };
   const porId = new Map(q.antenas.map((x) => [x.id, x]));
   const remitentes = [...d0.zonaDe.keys()];
   let grupo = remitentes.filter((r) => porId.get(d0.ids[r])?.zona === foco);
   const deZona = grupo.length > 0;
   if (!deZona) grupo = remitentes.filter((r) => d0.zonaDe.get(r) === i0);
-  if (!grupo.length) return { ...vacio, motivo: `${a.nombre} no tiene personas con ruta al gateway: póngale una zona de popularidad donde haya señal.` };
+  if (!grupo.length)
+    return {
+      ...vacio,
+      motivo: tx(
+        `${a.nombre} no tiene personas con ruta al gateway: póngale una zona de popularidad donde haya señal.`,
+        `${a.nombre} has no people with a route to the gateway: give it a popularity zone where there is signal.`,
+      ),
+    };
   const g = grupo.length;
   const otros = remitentes.length - g;
   const enGrupo = new Set(grupo);

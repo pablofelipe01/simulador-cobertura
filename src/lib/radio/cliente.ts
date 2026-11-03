@@ -3,7 +3,9 @@
 // artificial. Prohibido su uso, copia, modificación o distribución sin licencia escrita de los titulares (Ley 23 de
 // 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
 
-// Cliente del motor: envía trabajos al Web Worker y devuelve promesas.
+// Cliente del motor: envía trabajos al Web Worker y devuelve promesas. Los textos del motor llegan en los dos idiomas
+// y aquí se resuelven en el de la pantalla (cada resultado guarda el original para traducirlo después).
+import { recibirDelMotor, resolver, tx } from "../idioma";
 import { crearWorker } from "./crear-worker";
 import type { Entrada, Fase, PuntoDestino, Salida } from "./protocolo";
 import type { Ajuste, PedidoAjuste } from "./ajuste";
@@ -33,7 +35,7 @@ export class MotorCobertura {
     this.worker = crearWorker();
     this.worker.onmessage = (e: MessageEvent<Salida>) => this.recibir(e.data);
     this.worker.onerror = (e) => {
-      const error = new Error(e.message || "El motor de cálculo se detuvo.");
+      const error = new Error(e.message ? resolver(e.message) : tx("El motor de cálculo se detuvo.", "The calculation engine stopped."));
       for (const p of this.pendientes.values()) p.rechazar(error);
       this.pendientes.clear();
     };
@@ -47,41 +49,41 @@ export class MotorCobertura {
         p.progreso?.(m.fase, m.avance);
         return;
       case "resultado":
-        p.resolver(m.resultado);
+        p.resolver(recibirDelMotor(m.resultado));
         break;
       case "cancelado":
         p.resolver(null);
         break;
       case "inspeccion":
-        p.resolver(m.inspeccion);
+        p.resolver(recibirDelMotor(m.inspeccion));
         break;
       case "perfil":
       case "perfil-terreno":
-        p.resolver(m.perfil);
+        p.resolver(recibirDelMotor(m.perfil));
         break;
       case "siembra":
-        p.resolver(m.siembra);
+        p.resolver(recibirDelMotor(m.siembra));
         break;
       case "diseno":
-        p.resolver(m.diseno);
+        p.resolver(recibirDelMotor(m.diseno));
         break;
       case "ajuste":
-        p.resolver(m.ajuste);
+        p.resolver(recibirDelMotor(m.ajuste));
         break;
       case "carga":
-        p.resolver({ carga: m.carga, curva: m.curva });
+        p.resolver({ carga: recibirDelMotor(m.carga), curva: recibirDelMotor(m.curva) });
         break;
       case "estres":
-        p.resolver(m.estres);
+        p.resolver(recibirDelMotor(m.estres));
         break;
       case "optimizacion":
-        p.resolver(m.optimizacion);
+        p.resolver(recibirDelMotor(m.optimizacion));
         break;
       case "hgt":
-        p.resolver({ archivos: m.archivos, errores: m.errores });
+        p.resolver({ archivos: m.archivos, errores: m.errores.map((e) => resolver(e)) });
         break;
       case "error":
-        p.rechazar(new Error(m.mensaje));
+        p.rechazar(new Error(resolver(m.mensaje)));
         break;
     }
     this.pendientes.delete(m.id);

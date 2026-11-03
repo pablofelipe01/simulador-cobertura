@@ -22,6 +22,7 @@
 // otras (terminal oculto). El gateway contesta en paralelo (un servidor) o de a uno (como el gateway medido: ~1 s por
 // mensaje, hasta 15 s si la base de datos no responde). Es una estimación para planear; se valida midiendo el canal en
 // una red piloto.
+import { tx } from "../idioma";
 import { margenPlanoDe } from "./alcance-plano";
 import { presetPorId, type ProtocoloId } from "./constantes";
 import {
@@ -661,9 +662,19 @@ export function simularCargaDetalle(q: PedidoCarga): { resultado: ResultadoCarga
     protocolo,
     esperasGateway: [],
   };
-  if (!gateways.length && personas.length) return { resultado: { ...base, motivo: "No hay gateway: marque una antena como pasarela." }, detalle };
-  if (!remitentes.length) return { resultado: { ...base, motivo: "No hay personas con ruta al gateway: ponga personas (o «Poblar personas») donde haya cobertura y simule." }, detalle };
-  if (q.mensajes <= 0) return { resultado: { ...base, motivo: "Indique cuántos pagos o mensajes." }, detalle };
+  if (!gateways.length && personas.length) return { resultado: { ...base, motivo: tx("No hay gateway: marque una antena como pasarela.", "There is no gateway: mark an antenna as the gateway.") }, detalle };
+  if (!remitentes.length)
+    return {
+      resultado: {
+        ...base,
+        motivo: tx(
+          "No hay personas con ruta al gateway: ponga personas (o «Poblar personas») donde haya cobertura y simule.",
+          "There are no people with a route to the gateway: place people (or use “Populate people”) where there is coverage and simulate.",
+        ),
+      },
+      detalle,
+    };
+  if (q.mensajes <= 0) return { resultado: { ...base, motivo: tx("Indique cuántos pagos o mensajes.", "Specify how many payments or messages.") }, detalle };
 
   const agenda = new Agenda();
   /** Señales al aire o que terminaron hace poco (todas las de la red; cada receptor ve las que oye). */

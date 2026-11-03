@@ -3,7 +3,9 @@
 // artificial. Prohibido su uso, copia, modificación o distribución sin licencia escrita de los titulares (Ley 23 de
 // 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
 
-// Motor de cálculo en segundo plano: descarga y decodifica el relieve, y simula sin bloquear la interfaz.
+// Motor de cálculo en segundo plano: descarga y decodifica el relieve, y simula sin bloquear la interfaz. Sus textos
+// salen en los dos idiomas (la interfaz los resuelve en el suyo): por eso se importa primero bilingue-trabajador.
+import "./bilingue-trabajador";
 import { curvaCarga, simularCarga } from "./carga";
 import { estresMalla } from "./estres";
 import type { Entrada, Salida } from "./protocolo";

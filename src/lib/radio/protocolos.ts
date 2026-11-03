@@ -10,6 +10,7 @@
 // mensajes, cómo los atiende el gateway, la carga, la ocupación del canal, los errores y, antena por antena, la SNR
 // frente a la respuesta a los sondeos. La prueba de popularidad y estrés usa estos valores para decir, usuario por
 // usuario, a quién le funciona la red y a quién no.
+import { porIdioma, tx } from "../idioma";
 import type { ProtocoloId } from "./constantes";
 import { snrLimite } from "./mensaje";
 import { IDENTIDAD_GATEWAY } from "./ficha-gateway";
@@ -44,12 +45,42 @@ export type PerfilProtocolo = {
   notas: string[];
 };
 
+/** Las notas de cada protocolo, armadas una vez por idioma. */
+const NOTAS_MESHCORE = porIdioma(() => [
+  tx(
+    "Para América el proyecto recomienda 910,525 MHz · SF7 · 62,5 kHz (unas 2,5 veces más rápido en el aire que SF11 · 250 kHz).",
+    "For the Americas the project recommends 910.525 MHz · SF7 · 62.5 kHz (about 2.5 times faster on the air than SF11 · 250 kHz).",
+  ),
+  tx("Tasa de código 4/5 en enlaces estables; 4/7 u 4/8 en enlaces intermitentes.", "Coding rate 4/5 on stable links; 4/7 or 4/8 on intermittent links."),
+  tx("Texto de hasta 160 bytes: las tildes y la ñ ocupan 2 bytes cada una.", "Text of up to 160 bytes: accented letters and ñ take 2 bytes each."),
+  tx("Los canales de grupo siempre se inundan y gastan aire en toda la red.", "Group channels are always flooded and use airtime across the whole network."),
+  tx("Los repetidores se anuncian por inundación cada 12 horas (flood.advert.interval).", "Repeaters announce themselves by flooding every 12 hours (flood.advert.interval)."),
+]);
+const NOTAS_MESHTASTIC = porIdioma(() => [
+  tx("Cabecera de 16 bytes; carga útil de hasta ~237 bytes; preámbulo de 16 símbolos.", "16-byte header; payload of up to ~237 bytes; 16-symbol preamble."),
+  tx(
+    "Con más del 25 % del canal ocupado empieza a recortar el tráfico no esencial (posiciones y telemetría).",
+    "With more than 25% of the channel busy it starts cutting non-essential traffic (positions and telemetry).",
+  ),
+  tx(
+    "Los clientes que repiten todo multiplican el aire en las zonas densas: en redes grandes conviene dejar a los usuarios en CLIENT_MUTE y que repitan los ROUTER.",
+    "Clients that repeat everything multiply the airtime in dense areas: in large networks it's best to leave users in CLIENT_MUTE and let the ROUTERs repeat.",
+  ),
+]);
+
 export const PROTOCOLOS: Record<ProtocoloId, PerfilProtocolo> = {
   meshcore: {
     id: "meshcore",
     nombre: "MeshCore",
-    quienRetransmite: "Solo los repetidores (y los servidores de sala con la repetición activada); los equipos de los usuarios no",
-    ruteo: "El primer mensaje a un contacto se inunda; el acuse trae la ruta y los siguientes van solo por los repetidores de esa ruta. Tras 3 reintentos fallidos vuelve a inundar.",
+    get quienRetransmite() {
+      return tx("Solo los repetidores (y los servidores de sala con la repetición activada); los equipos de los usuarios no", "Only repeaters (and room servers with repeating turned on); the users' devices don't");
+    },
+    get ruteo() {
+      return tx(
+        "El primer mensaje a un contacto se inunda; el acuse trae la ruta y los siguientes van solo por los repetidores de esa ruta. Tras 3 reintentos fallidos vuelve a inundar.",
+        "The first message to a contact is flooded; the acknowledgment brings back the route and the following ones go only through the repeaters on that route. After 3 failed retries it floods again.",
+      );
+    },
     saltosDefecto: 3,
     saltosMax: 64,
     cargaMaxima: 184,
@@ -60,21 +91,26 @@ export const PROTOCOLOS: Record<ProtocoloId, PerfilProtocolo> = {
     colaRadio: 16,
     cicloPct: 50,
     canalAlertaPct: 30,
-    cifrado: "AES-128 ECB con HMAC de 2 bytes; mensajes directos con secreto compartido (ECDH)",
+    get cifrado() {
+      return tx("AES-128 ECB con HMAC de 2 bytes; mensajes directos con secreto compartido (ECDH)", "AES-128 ECB with a 2-byte HMAC; direct messages with a shared secret (ECDH)");
+    },
     licencia: "MIT",
-    notas: [
-      "Para América el proyecto recomienda 910,525 MHz · SF7 · 62,5 kHz (unas 2,5 veces más rápido en el aire que SF11 · 250 kHz).",
-      "Tasa de código 4/5 en enlaces estables; 4/7 u 4/8 en enlaces intermitentes.",
-      "Texto de hasta 160 bytes: las tildes y la ñ ocupan 2 bytes cada una.",
-      "Los canales de grupo siempre se inundan y gastan aire en toda la red.",
-      "Los repetidores se anuncian por inundación cada 12 horas (flood.advert.interval).",
-    ],
+    get notas() {
+      return NOTAS_MESHCORE();
+    },
   },
   meshtastic: {
     id: "meshtastic",
     nombre: "Meshtastic",
-    quienRetransmite: "Todos los nodos (ROUTER, CLIENT), salvo los configurados para no hacerlo (CLIENT_MUTE)",
-    ruteo: "Inundación administrada: cada nodo espera según la SNR (los lejanos primero) y, si oye que otro ya lo repitió, no lo repite; los ROUTER siempre repiten. Desde la versión 2.6 los mensajes directos aprenden el siguiente salto.",
+    get quienRetransmite() {
+      return tx("Todos los nodos (ROUTER, CLIENT), salvo los configurados para no hacerlo (CLIENT_MUTE)", "All nodes (ROUTER, CLIENT), except those configured not to (CLIENT_MUTE)");
+    },
+    get ruteo() {
+      return tx(
+        "Inundación administrada: cada nodo espera según la SNR (los lejanos primero) y, si oye que otro ya lo repitió, no lo repite; los ROUTER siempre repiten. Desde la versión 2.6 los mensajes directos aprenden el siguiente salto.",
+        "Managed flooding: each node waits according to the SNR (the farthest first) and, if it hears that another node already repeated the packet, it doesn't repeat it; ROUTERs always repeat. Since version 2.6, direct messages learn the next hop.",
+      );
+    },
     saltosDefecto: 3,
     saltosMax: 7,
     cargaMaxima: 237,
@@ -85,13 +121,13 @@ export const PROTOCOLOS: Record<ProtocoloId, PerfilProtocolo> = {
     colaRadio: 16,
     cicloPct: 100,
     canalAlertaPct: 25,
-    cifrado: "AES-256 CTR por canal; clave pública (X25519) en los mensajes directos",
+    get cifrado() {
+      return tx("AES-256 CTR por canal; clave pública (X25519) en los mensajes directos", "AES-256 CTR per channel; public key (X25519) in direct messages");
+    },
     licencia: "GPL-3.0",
-    notas: [
-      "Cabecera de 16 bytes; carga útil de hasta ~237 bytes; preámbulo de 16 símbolos.",
-      "Con más del 25 % del canal ocupado empieza a recortar el tráfico no esencial (posiciones y telemetría).",
-      "Los clientes que repiten todo multiplican el aire en las zonas densas: en redes grandes conviene dejar a los usuarios en CLIENT_MUTE y que repitan los ROUTER.",
-    ],
+    get notas() {
+      return NOTAS_MESHTASTIC();
+    },
   },
 };
 
@@ -125,21 +161,59 @@ const MEDIDAS_ANTENAS: Omit<AntenaMedida, "nombre" | "nodo" | "distanciaKm">[] =
 
 const ANTENAS_MEDIDAS: AntenaMedida[] = MEDIDAS_ANTENAS.map((m, i) => {
   const id = IDENTIDAD_GATEWAY.antenas[i] ?? { nombre: `Antena ${i + 1}`, nodo: null, distanciaKm: null };
-  return { nombre: id.nombre, nodo: id.nodo, distanciaKm: id.distanciaKm, ...m };
+  // El nombre en inglés, en el mismo orden (si falta, el de una antena genérica o el mismo nombre)
+  const en = IDENTIDAD_GATEWAY.en?.antenas?.[i] ?? (IDENTIDAD_GATEWAY.antenas[i] ? id.nombre : `Antenna ${i + 1}`);
+  return {
+    get nombre() {
+      return tx(id.nombre, en);
+    },
+    nodo: id.nodo,
+    distanciaKm: id.distanciaKm,
+    ...m,
+  };
 });
 
+/** Los nombres de la ficha en el idioma de la pantalla (los del gateway medido los da `ficha-gateway.ts`). */
+const identidad = (k: "nombre" | "medidoEn" | "enFrase" | "equipo" | "servicio") => tx(IDENTIDAD_GATEWAY[k], IDENTIDAD_GATEWAY.en?.[k] ?? IDENTIDAD_GATEWAY[k]);
+
+/** Lo que se observó en la ficha, armado una vez por idioma. */
+const OBSERVACIONES = porIdioma(() => [
+  tx(
+    `${ANTENAS_MEDIDAS[0].nombre} tiene la ocupación de canal más alta de la red (~23 %), cerca del 25 % en que Meshtastic empieza a recortar tráfico no esencial.`,
+    `${ANTENAS_MEDIDAS[0].nombre} has the highest channel occupancy in the network (~23%), close to the 25% at which Meshtastic starts cutting non-essential traffic.`,
+  ),
+  tx(
+    "Una SNR de −11 a −13 dB deja poco margen: LoRa aún decodifica, pero cualquier interferencia o lluvia provoca pérdidas.",
+    "An SNR of −11 to −13 dB leaves little margin: LoRa still decodes, but any interference or rain causes losses.",
+  ),
+  tx(`${ANTENAS_MEDIDAS[4].nombre} no respondió a ningún sondeo en el período medido.`, `${ANTENAS_MEDIDAS[4].nombre} didn't answer any probe during the measured period.`),
+  tx("Pendiente de confirmar el preset de módem (por ejemplo LongFast).", "The modem preset is still to be confirmed (for example LongFast)."),
+]);
+
 export const FICHA_GATEWAY = {
-  nombre: IDENTIDAD_GATEWAY.nombre,
+  get nombre() {
+    return identidad("nombre");
+  },
   /** Texto del perfil de tráfico medido y cómo se nombra el gateway en una frase. */
-  medidoEn: IDENTIDAD_GATEWAY.medidoEn,
-  enFrase: IDENTIDAD_GATEWAY.enFrase,
-  /** Palabras con que Melki reconoce que se habla de este gateway. */
+  get medidoEn() {
+    return identidad("medidoEn");
+  },
+  get enFrase() {
+    return identidad("enFrase");
+  },
+  /** Palabras con que Melki reconoce que se habla de este gateway (en español: se comparan con lo que se escribe). */
   claves: IDENTIDAD_GATEWAY.claves,
   fecha: "2026-10-26",
-  semana: "19 al 26 de octubre de 2026",
+  get semana() {
+    return tx("19 al 26 de octubre de 2026", "October 19–26, 2026");
+  },
   protocolo: "meshtastic" as ProtocoloId,
-  equipo: IDENTIDAD_GATEWAY.equipo,
-  servicio: IDENTIDAD_GATEWAY.servicio,
+  get equipo() {
+    return identidad("equipo");
+  },
+  get servicio() {
+    return identidad("servicio");
+  },
   /** Carga útil máxima por paquete (no fragmenta lo que recibe) y tamaño de cada parte de una respuesta larga ([i/n]). */
   cargaMaxima: 237,
   respuestaParte: 200,
@@ -158,16 +232,20 @@ export const FICHA_GATEWAY = {
   picos: { minuto: 11, hora: 45, dia: 185 },
   antenas: ANTENAS_MEDIDAS,
   radios: [
-    { modelo: "Heltec V4", chip: "SX1262 + amplificador", potenciaDbm: 28, sensibilidadDbm: -148 },
+    {
+      modelo: "Heltec V4",
+      get chip() {
+        return tx("SX1262 + amplificador", "SX1262 + amplifier");
+      },
+      potenciaDbm: 28,
+      sensibilidadDbm: -148,
+    },
     { modelo: "Heltec V3", chip: "SX1262", potenciaDbm: 22, sensibilidadDbm: -148 },
     { modelo: "Seeed Solar Node", chip: "SX1262", potenciaDbm: 22, sensibilidadDbm: -148 },
   ],
-  observaciones: [
-    `${ANTENAS_MEDIDAS[0].nombre} tiene la ocupación de canal más alta de la red (~23 %), cerca del 25 % en que Meshtastic empieza a recortar tráfico no esencial.`,
-    "Una SNR de −11 a −13 dB deja poco margen: LoRa aún decodifica, pero cualquier interferencia o lluvia provoca pérdidas.",
-    `${ANTENAS_MEDIDAS[4].nombre} no respondió a ningún sondeo en el período medido.`,
-    "Pendiente de confirmar el preset de módem (por ejemplo LongFast).",
-  ],
+  get observaciones() {
+    return OBSERVACIONES();
+  },
 };
 
 /** Ocupación del canal medida en el router solar, el más cargado de la red (%). */

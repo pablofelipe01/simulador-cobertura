@@ -5,6 +5,7 @@
 
 // Modelo digital de elevación en una malla de píxeles Web Mercator (como las teselas XYZ).
 // Fuentes: teselas Terrarium (abiertas, en línea), archivos SRTM .hgt cargados por el usuario, o terreno plano.
+import { decimalLocal, tx } from "../idioma";
 import { latAPixel, lonAPixel } from "./geo";
 import type { Caja, EstadoRelieve } from "./tipos";
 
@@ -96,7 +97,7 @@ export function relievePlano(caja: Caja, mensaje?: string): Relieve {
     solicitadas: 0,
     fallidas: 0,
     resolucionM: 0,
-    mensaje: mensaje ?? "Terreno plano: no se considera el relieve.",
+    mensaje: mensaje ?? tx("Terreno plano: no se considera el relieve.", "Flat terrain: the terrain relief is not taken into account."),
   });
 }
 
@@ -170,7 +171,7 @@ export async function relieveDesdeTeselas(
   };
   await Promise.all(Array.from({ length: Math.min(paralelo, lista.length) }, trabajar));
 
-  if (cuenta === 0) return relievePlano(caja, "No se pudo descargar el relieve (sin conexión o servicio no disponible). Se simuló en terreno plano.");
+  if (cuenta === 0) return relievePlano(caja, tx("No se pudo descargar el relieve (sin conexión o servicio no disponible). Se simuló en terreno plano.", "The terrain could not be downloaded (no connection or service unavailable). It was simulated on flat terrain."));
   rellenarVacios(datos, suma / cuenta);
   const latMedia = (caja.norte + caja.sur) / 2;
   const relieve = new Relieve(zoom, e.x0, e.y0, e.ancho, e.alto, datos, {
@@ -180,7 +181,7 @@ export async function relieveDesdeTeselas(
     resolucionM: 0,
     mensaje:
       fallidas > 0
-        ? `No se descargaron ${fallidas} de ${lista.length} teselas de relieve; esas zonas se rellenaron con la elevación media.`
+        ? tx(`No se descargaron ${fallidas} de ${lista.length} teselas de relieve; esas zonas se rellenaron con la elevación media.`, `${fallidas} of ${lista.length} terrain tiles could not be downloaded; those areas were filled with the average elevation.`)
         : undefined,
   });
   relieve.estado.resolucionM = Math.round(relieve.resolucionM(latMedia));
@@ -198,12 +199,12 @@ export type Hgt = { nombre: string; lat: number; lon: number; n: number; datos: 
 /** Interpreta un archivo .hgt (nombre tipo N04W073.hgt; enteros de 16 bits big-endian). */
 export function leerHgt(nombre: string, buffer: ArrayBuffer): Hgt {
   const m = nombre.toUpperCase().match(/([NS])(\d{2})([EW])(\d{3})/);
-  if (!m) throw new Error(`El nombre «${nombre}» no tiene el formato SRTM (por ejemplo N04W073.hgt).`);
+  if (!m) throw new Error(tx(`El nombre «${nombre}» no tiene el formato SRTM (por ejemplo N04W073.hgt).`, `The name “${nombre}” is not in SRTM format (for example N04W073.hgt).`));
   const lat = Number(m[2]) * (m[1] === "S" ? -1 : 1);
   const lon = Number(m[4]) * (m[3] === "W" ? -1 : 1);
   const muestras = buffer.byteLength / 2;
   const n = Math.round(Math.sqrt(muestras));
-  if (n * n !== muestras || (n !== 3601 && n !== 1201)) throw new Error(`«${nombre}» no tiene un tamaño SRTM válido (1″ o 3″).`);
+  if (n * n !== muestras || (n !== 3601 && n !== 1201)) throw new Error(tx(`«${nombre}» no tiene un tamaño SRTM válido (1″ o 3″).`, `“${nombre}” does not have a valid SRTM size (1″ or 3″).`));
   const vista = new DataView(buffer);
   const datos = new Int16Array(muestras);
   for (let i = 0; i < muestras; i++) datos[i] = vista.getInt16(i * 2, false);
@@ -253,7 +254,7 @@ export class ColeccionHgt {
 
 /** Remuestrea los .hgt a una malla Web Mercator (zoom 13 para 1″, 12 para 3″). */
 export function relieveDesdeHgt(caja: Caja, coleccion: ColeccionHgt, progreso?: (avance: number) => void): Relieve {
-  if (coleccion.tamano === 0) return relievePlano(caja, "No hay archivos de relieve local cargados. Se simuló en terreno plano.");
+  if (coleccion.tamano === 0) return relievePlano(caja, tx("No hay archivos de relieve local cargados. Se simuló en terreno plano.", "No local terrain files are loaded. It was simulated on flat terrain."));
   const zoom = zoomParaCaja(caja, coleccion.segundos === 1 ? 13 : 12);
   const e = extension(caja, zoom);
   const datos = new Float32Array(e.ancho * e.alto);
@@ -277,7 +278,7 @@ export function relieveDesdeHgt(caja: Caja, coleccion: ColeccionHgt, progreso?: 
     }
     if (progreso && j % 64 === 0) progreso(j / e.alto);
   }
-  if (cuenta === 0) return relievePlano(caja, "Los archivos de relieve cargados no cubren el área simulada. Se simuló en terreno plano.");
+  if (cuenta === 0) return relievePlano(caja, tx("Los archivos de relieve cargados no cubren el área simulada. Se simuló en terreno plano.", "The loaded terrain files don't cover the simulated area. It was simulated on flat terrain."));
   rellenarVacios(datos, suma / cuenta);
   const total = e.ancho * e.alto;
   const relieve = new Relieve(zoom, e.x0, e.y0, e.ancho, e.alto, datos, {
@@ -287,7 +288,10 @@ export function relieveDesdeHgt(caja: Caja, coleccion: ColeccionHgt, progreso?: 
     resolucionM: 0,
     mensaje:
       vacios > total * 0.001
-        ? `El relieve local no cubre el ${((100 * vacios) / total).toFixed(1).replace(".", ",")} % del área; esa parte se rellenó con la elevación media.`
+        ? tx(
+            `El relieve local no cubre el ${decimalLocal((100 * vacios) / total, 1)} % del área; esa parte se rellenó con la elevación media.`,
+            `The local terrain doesn't cover ${decimalLocal((100 * vacios) / total, 1)}% of the area; that part was filled with the average elevation.`,
+          )
         : undefined,
   });
   relieve.estado.resolucionM = Math.round(relieve.resolucionM((caja.norte + caja.sur) / 2));

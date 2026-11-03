@@ -7,6 +7,7 @@
 // de MeshCore), espera de cada repetidor antes de retransmitir (txdelay del firmware), ruta directa aprendida o
 // inundación, acuses y reintentos, y la probabilidad de entrega según el margen de cada enlace. Los valores salen del
 // código del firmware MeshCore (Dispatcher, Mesh, simple_repeater, companion_radio) y del documento de Trama.
+import { decimalLocal, tx } from "../idioma";
 import { presetPorId, type Preset } from "./constantes";
 import type { Antena, Enlace, Parametros } from "./tipos";
 
@@ -231,7 +232,7 @@ export function simularMensaje(ruta: string[], antenas: Antena[], enlaces: Enlac
     return {
       ...base,
       llega: false,
-      motivo: ruta.length === 1 && porId.get(ruta[0])?.pasarela ? "Ya está en el gateway." : "No tiene ruta hacia el gateway.",
+      motivo: ruta.length === 1 && porId.get(ruta[0])?.pasarela ? tx("Ya está en el gateway.", "It's already at the gateway.") : tx("No tiene ruta hacia el gateway.", "It has no route to the gateway."),
       saltos: 0,
       tramos: [],
       totalMs: { min: 0, tipica: 0, max: 0 },
@@ -274,9 +275,20 @@ export function simularMensaje(ruta: string[], antenas: Antena[], enlaces: Enlac
   const noRepite = ruta.slice(1, -1).map((id) => porId.get(id)).find((x) => x && x.rol !== "REPETIDOR");
   let motivo: string | null = null;
   if (noRepite && !(preset.protocolo === "meshtastic" && p.usuariosRepiten !== false && !noRepite.pasarela))
-    motivo = `${noRepite.nombre} no es repetidor: en ${preset.protocolo === "meshtastic" ? "Meshtastic con los equipos mudos (CLIENT_MUTE)" : "MeshCore"} solo los repetidores pasan los paquetes de otros.`;
-  else if (saltos > p.limiteSaltos) motivo = `Necesita ${saltos} saltos y el diseño permite ${p.limiteSaltos}: cada mensaje tardaría demasiado y le quitaría capacidad a la frecuencia.`;
-  else if (sinEnlace) motivo = `El tramo ${porId.get(sinEnlace.de)?.nombre ?? "?"} → ${porId.get(sinEnlace.a)?.nombre ?? "?"} no tiene enlace (${sinEnlace.margenDb.toFixed(1).replace(".", ",")} dB; se necesitan 20 dB).`;
+    motivo = tx(
+      `${noRepite.nombre} no es repetidor: en ${preset.protocolo === "meshtastic" ? "Meshtastic con los equipos mudos (CLIENT_MUTE)" : "MeshCore"} solo los repetidores pasan los paquetes de otros.`,
+      `${noRepite.nombre} is not a repeater: in ${preset.protocolo === "meshtastic" ? "Meshtastic with muted devices (CLIENT_MUTE)" : "MeshCore"} only repeaters pass on other nodes' packets.`,
+    );
+  else if (saltos > p.limiteSaltos)
+    motivo = tx(
+      `Necesita ${saltos} saltos y el diseño permite ${p.limiteSaltos}: cada mensaje tardaría demasiado y le quitaría capacidad a la frecuencia.`,
+      `It needs ${saltos} hops and the design allows ${p.limiteSaltos}: each message would take too long and eat into the frequency's capacity.`,
+    );
+  else if (sinEnlace)
+    motivo = tx(
+      `El tramo ${porId.get(sinEnlace.de)?.nombre ?? "?"} → ${porId.get(sinEnlace.a)?.nombre ?? "?"} no tiene enlace (${decimalLocal(sinEnlace.margenDb, 1)} dB; se necesitan 20 dB).`,
+      `The ${porId.get(sinEnlace.de)?.nombre ?? "?"} → ${porId.get(sinEnlace.a)?.nombre ?? "?"} hop has no link (${decimalLocal(sinEnlace.margenDb, 1)} dB; 20 dB are needed).`,
+    );
   return {
     ...base,
     llega: motivo === null,
