@@ -21,7 +21,8 @@ function contorno(a: Antena, porRumbo: number[]): [number, number][] {
   return puntos;
 }
 
-export type EtiquetaAlcance = { clave: string; lon: number; lat: number; texto: string; clase: string };
+/** `centro`: el nodo del que sale (lejos, cuando la etiqueta quedaría encima de él, no se muestra). */
+export type EtiquetaAlcance = { clave: string; lon: number; lat: number; texto: string; clase: string; centro?: [number, number] };
 
 /** Contornos de alcance de los nodos antena simulados (o solo del seleccionado); las etiquetas, en el idioma de la pantalla. */
 export function geojsonAlcance(r: ResultadoSimulacion, antenas: Antena[], soloId: string | null): { datos: FeatureCollection<LineString>; etiquetas: EtiquetaAlcance[] } {
@@ -36,13 +37,13 @@ export function geojsonAlcance(r: ResultadoSimulacion, antenas: Antena[], soloId
       const k = s.alcancePorRumbo.indexOf(Math.max(...s.alcancePorRumbo));
       const p = desplazar(a.lat, a.lon, s.alcancePorRumbo[k] * 1000, (k + 0.5) * SECTOR);
       const km = `${s.alcanceLimitado ? "≥ " : ""}${decimalLocal(s.alcanceKm, 1)} km`;
-      etiquetas.push({ clave: `${s.id}:s`, lon: p.lon, lat: p.lat, texto: tx(`${km} con servicio`, `${km} with service`), clase: "alcance-servicio" });
+      etiquetas.push({ clave: `${s.id}:s`, lon: p.lon, lat: p.lat, texto: tx(`${km} con servicio`, `${km} with service`), clase: "alcance-servicio", centro: [a.lon, a.lat] });
     }
     if (s.alcanceConfiableKm > 0) {
       features.push({ type: "Feature", properties: { clase: "confiable", id: s.id }, geometry: { type: "LineString", coordinates: contorno(a, s.alcanceConfiablePorRumbo) } });
       const k = s.alcanceConfiablePorRumbo.indexOf(Math.max(...s.alcanceConfiablePorRumbo));
       const p = desplazar(a.lat, a.lon, s.alcanceConfiablePorRumbo[k] * 1000, (k + 0.5) * SECTOR);
-      etiquetas.push({ clave: `${s.id}:c`, lon: p.lon, lat: p.lat, texto: tx(`${decimalLocal(s.alcanceConfiableKm, 1)} km confiable`, `${decimalLocal(s.alcanceConfiableKm, 1)} km reliable`), clase: "alcance-confiable" });
+      etiquetas.push({ clave: `${s.id}:c`, lon: p.lon, lat: p.lat, texto: tx(`${decimalLocal(s.alcanceConfiableKm, 1)} km confiable`, `${decimalLocal(s.alcanceConfiableKm, 1)} km reliable`), clase: "alcance-confiable", centro: [a.lon, a.lat] });
     }
   }
   return { datos: { type: "FeatureCollection", features }, etiquetas };
@@ -70,7 +71,7 @@ export function geojsonAnillos(a: Antena, radioKm: number): { datos: FeatureColl
     }
     features.push({ type: "Feature", properties: { km }, geometry: { type: "LineString", coordinates: coords } });
     const p = desplazar(a.lat, a.lon, km * 1000, 0);
-    etiquetas.push({ clave: `anillo:${km}`, lon: p.lon, lat: p.lat, texto: tx(`${String(km).replace(".", ",")} km`, `${km} km`), clase: "anillo" });
+    etiquetas.push({ clave: `anillo:${km}`, lon: p.lon, lat: p.lat, texto: tx(`${String(km).replace(".", ",")} km`, `${km} km`), clase: "anillo", centro: [a.lon, a.lat] });
   }
   return { datos: { type: "FeatureCollection", features }, etiquetas };
 }

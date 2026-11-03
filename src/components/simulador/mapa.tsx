@@ -23,7 +23,7 @@ import { useIdioma } from "@/lib/use-idioma";
 
 import { geojsonAlcance, geojsonAnillos, type EtiquetaAlcance } from "./capa-alcance";
 import { COLORES_ANTENA, esquinas, opcionesEscala, pintarCobertura } from "./capa-cobertura";
-import { colorearReferencia, crearCapasReferencia, EtiquetasReferencia, visibilidadReferencia } from "./capas-referencia";
+import { colorearReferencia, crearCapasReferencia, EtiquetasReferencia, nombresEsriVisibles, visibilidadReferencia, ZOOM_NOMBRES_ESRI } from "./capas-referencia";
 import type { Accion, Estado, FondoMapa } from "./estado";
 import { AnimadorMalla, COLOR_FLUJO, COLOR_MENSAJE, type RutaViva } from "./animacion-malla";
 import { estadoNodo, htmlMarcador, htmlPieza, htmlPiezaPropuesta, RADIO_PIEZA } from "./marcador";
@@ -216,7 +216,34 @@ function sincronizarEtiquetas(m: MapaML, vivas: Map<string, Marker>, lista: Etiq
     const el = document.createElement("div");
     el.className = `etiqueta-mapa ${e.clase}`;
     el.textContent = e.texto;
+    if (e.centro) el.dataset.centro = e.centro.join(",");
     vivas.set(e.clave, new maplibregl.Marker({ element: el, anchor: "bottom" }).setLngLat([e.lon, e.lat]).addTo(m));
+  }
+  acomodarEtiquetasDeAlcance(m, vivas);
+}
+
+/**
+ * Las etiquetas del alcance y de los anillos van a proporción de la distancia: lejos, cuando quedarían encima de su
+ * nodo (el anillo mide unos pocos píxeles) o encima de otra, no se muestran; al acercarse vuelven a aparecer.
+ */
+function acomodarEtiquetasDeAlcance(m: MapaML, vivas: Map<string, Marker>) {
+  const puestas: DOMRect[] = [];
+  for (const mk of vivas.values()) {
+    const el = mk.getElement();
+    const centro = el.dataset.centro?.split(",").map(Number);
+    let ver = true;
+    if (centro?.length === 2) {
+      const a = m.project(mk.getLngLat());
+      const c = m.project([centro[0], centro[1]]);
+      ver = Math.hypot(a.x - c.x, a.y - c.y) >= 48;
+    }
+    if (ver) {
+      const r = el.getBoundingClientRect();
+      ver = !puestas.some((o) => r.left < o.right && o.left < r.right && r.top < o.bottom && o.top < r.bottom);
+      if (ver) puestas.push(r);
+    }
+    const v = ver ? "" : "hidden";
+    if (el.style.visibility !== v) el.style.visibility = v;
   }
 }
 
@@ -264,7 +291,8 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
     m.addControl(new maplibregl.ScaleControl({ unit: "metric", maxWidth: 120 }), "bottom-left");
     m.on("load", () => {
       crearCapasReferencia(m);
-      m.addLayer({ id: "capa-etiquetas", type: "raster", source: "etiquetas", layout: { visibility: "none" } });
+      // Los nombres de Esri, solo de cerca: más lejos repiten los países, departamentos y ciudades que pinta el simulador
+      m.addLayer({ id: "capa-etiquetas", type: "raster", source: "etiquetas", minzoom: ZOOM_NOMBRES_ESRI, layout: { visibility: "none" } });
       for (const id of ["circulos", "anillos", "alcance", "enlaces", "haces", "propuesta", "ajuste", "ruta-mensaje", "estres", "usuarios-estres"]) m.addSource(id, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       // Zonas de la prueba de estrés, debajo de todo lo demás
       m.addLayer({ id: "estres-relleno", type: "fill", source: "estres", paint: { "fill-color": ["get", "color"], "fill-opacity": 0.2 } });
@@ -357,7 +385,21 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
           }
         },
       );
+      // Las etiquetas del alcance y de los anillos, a proporción del zoom (antes que los nombres del mapa, que las esquivan)
+      let cuadro = 0;
+      const acomodar = () => {
+        cuadro = 0;
+        acomodarEtiquetasDeAlcance(m, etiquetasAlcance.current);
+        acomodarEtiquetasDeAlcance(m, etiquetasAnillos.current);
+      };
+      m.on("zoom", () => {
+        if (!cuadro) cuadro = requestAnimationFrame(acomodar);
+      });
+      m.on("moveend", acomodar);
       referencias.current = new EtiquetasReferencia(m);
+      // Pruebas automáticas: el mapa a mano para ir a un zoom exacto
+      const pruebas = (window as unknown as { __simuladorPruebas?: Record<string, unknown> }).__simuladorPruebas;
+      if (pruebas) pruebas.mapa = m;
       // Créditos plegados en un botón «i» para que no tapen la leyenda (se pliegan la primera vez que aparecen)
       const plegarCreditos = () => {
         const creditos = contenedor.current?.querySelector(".maplibregl-ctrl-attrib");
@@ -409,6 +451,8 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
     }
     control.options = { ...control.options, customAttribution: CONFIG.atribucion.division };
     control._updateAttributions();
+    // Los nombres del mapa que cambian de idioma (países, aguas, algunas ciudades)
+    referencias.current?.retitular();
   }, [lengua, listo]);
 
   // Cursor según la herramienta
@@ -424,7 +468,7 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
     const m = mapa.current;
     if (!m || !listo) return;
     for (const [fondo, id] of Object.entries(FONDOS)) m.setLayoutProperty(id, "visibility", fondo === v.fondo ? "visible" : "none");
-    m.setLayoutProperty("capa-etiquetas", "visibility", v.refNombres ? "visible" : "none");
+    m.setLayoutProperty("capa-etiquetas", "visibility", nombresEsriVisibles(v) ? "visible" : "none");
     m.setLayoutProperty("capa-vias", "visibility", v.refVias ? "visible" : "none");
     colorearReferencia(m, v.fondo);
     visibilidadReferencia(m, v);
