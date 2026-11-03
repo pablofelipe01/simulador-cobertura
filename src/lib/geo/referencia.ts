@@ -7,6 +7,7 @@
 // en qué municipio cae un punto, búsqueda de lugares por nombre y reconocimiento de lugares dichos por voz (aunque el
 // dictado los escriba mal). Todo local, sin servicios externos.
 import type { FeatureCollection, MultiPolygon, Polygon } from "geojson";
+import { tx } from "../idioma";
 import { claveFonetica, parecidoFonetico } from "./fonetica";
 
 export type PropsMunicipio = { n: string; d: string };
@@ -101,11 +102,15 @@ const normal = (t: string) =>
 export type Lugar = {
   tipo: "municipio" | "departamento" | "pais";
   nombre: string;
+  /** El departamento de un municipio (dato); en un departamento o un país, solo una etiqueta para mostrar. */
   detalle: string;
   lat: number;
   lon: number;
   caja?: [number, number, number, number];
 };
+
+/** «Departamento» en el idioma de la pantalla (la etiqueta de un departamento en el buscador). */
+const etiquetaDepartamento = () => tx("Departamento", "Department");
 
 /** El nombre sin espacios ni artículos: «Barranca de Upía» → «barrancaupia» (así lo escribe a veces el dictado). */
 export const nombreCompacto = (t: string) => normal(t).replace(/\b(de|del|la|las|los|el|y)\b/g, " ").replace(/\s+/g, "");
@@ -158,9 +163,23 @@ export function buscarLugares(texto: string, max = 8): Lugar[] {
     }
     return 0;
   };
+  // La etiqueta de los departamentos y los países se lee al mostrarla, en el idioma de ese momento
   for (const [n, lon, lat, o, s, e, nn] of datos.lugares.departamentos) {
     const p = puntaje(n, "departamento");
-    if (p) resultados.push({ l: { tipo: "departamento", nombre: n, detalle: "Departamento", lat, lon, caja: [o, s, e, nn] }, p: p + 5 });
+    if (p)
+      resultados.push({
+        l: {
+          tipo: "departamento",
+          nombre: n,
+          get detalle() {
+            return etiquetaDepartamento();
+          },
+          lat,
+          lon,
+          caja: [o, s, e, nn],
+        },
+        p: p + 5,
+      });
   }
   for (const [n, d, lon, lat, o, s, e, nn] of datos.lugares.municipios) {
     const p = puntaje(n, d);
@@ -168,7 +187,19 @@ export function buscarLugares(texto: string, max = 8): Lugar[] {
   }
   for (const [n, lon, lat] of datos.lugares.paises) {
     const p = puntaje(n, "pais");
-    if (p) resultados.push({ l: { tipo: "pais", nombre: n, detalle: "País", lat, lon }, p: p - 5 });
+    if (p)
+      resultados.push({
+        l: {
+          tipo: "pais",
+          nombre: n,
+          get detalle() {
+            return tx("País", "Country");
+          },
+          lat,
+          lon,
+        },
+        p: p - 5,
+      });
   }
   // Nada escrito así: lo que suena parecido («barranco vía meta» → Barranca de Upía)
   if (!resultados.length && qc.length >= 5) {
@@ -224,7 +255,17 @@ function indiceLugares(): Entrada[] {
     lista.push({ lugar, compacto, clave: claveFonetica(compacto), departamento });
   };
   for (const [n, lon, lat, o, s, e, nn] of datos.lugares.departamentos) {
-    const lugar: Lugar = { tipo: "departamento", nombre: n, detalle: "Departamento", lat, lon, caja: [o, s, e, nn] };
+    // El índice se arma una vez: la etiqueta se lee al mostrarla, en el idioma de ese momento
+    const lugar: Lugar = {
+      tipo: "departamento",
+      nombre: n,
+      get detalle() {
+        return etiquetaDepartamento();
+      },
+      lat,
+      lon,
+      caja: [o, s, e, nn],
+    };
     agregar(lugar, n, n);
     for (const a of ALIAS_DEPARTAMENTO[n] ?? []) agregar(lugar, a, n);
   }
@@ -334,9 +375,15 @@ export function decidirLugar(candidatos: CandidatoLugar[]): DecisionLugar {
   return { tipo: "ninguno", opciones: candidatos.filter((x) => x.puntaje >= 0.62).slice(0, 3) };
 }
 
-/** «Barranca de Upía (Meta)», «el Meta». */
+/** «Barranca de Upía (Meta)», «el departamento de Meta» (en inglés, «the department of Meta»). */
 export const nombreLugar = (l: Lugar) =>
-  l.tipo === "municipio" ? `${l.nombre} (${l.detalle})` : l.tipo === "departamento" ? (l.nombre.startsWith("Bogotá") ? l.nombre : `el departamento de ${l.nombre}`) : l.nombre;
+  l.tipo === "municipio"
+    ? `${l.nombre} (${l.detalle})`
+    : l.tipo === "departamento"
+      ? l.nombre.startsWith("Bogotá")
+        ? l.nombre
+        : tx(`el departamento de ${l.nombre}`, `the department of ${l.nombre}`)
+      : l.nombre;
 
 const areaGrados = (r: number[][]) => {
   let s = 0;
