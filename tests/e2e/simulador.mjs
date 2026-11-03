@@ -3133,7 +3133,12 @@ await flujo("nombres-mapa", async (page, foto) => {
     });
   };
   const cruza = (a, b, t = 1) => a.x0 < b.x1 - t && b.x0 < a.x1 - t && a.y0 < b.y1 - t && b.y0 < a.y1 - t;
-  /** Ningún nombre repetido (los ríos, solo si quedan lejos), ninguno encima de otro ni de los controles, todos dentro del mapa. */
+  /** El nombre sin tildes, mayúsculas ni «D. C.»: «BOGOTÁ, D. C.» y «Bogotá», o «ARAUCA» y «Arauca», son el mismo. */
+  const base = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLocaleLowerCase("es").replace(/,?\s*d\.?\s*c\.?$/, "").replace(/\s+/g, " ").trim();
+  /**
+   * Ningún nombre repetido, aunque sea de otra clase (los ríos y los océanos, solo si quedan lejos), ninguno encima de
+   * otro ni de los controles, todos dentro del mapa.
+   */
   const revisar = (d, donde) => {
     const n = d.nombres;
     afirmar(n.length > 0, `${donde}: no hay nombres`);
@@ -3144,10 +3149,9 @@ await flujo("nombres-mapa", async (page, foto) => {
       for (let j = i + 1; j < n.length; j++) {
         const b = n[j];
         afirmar(!cruza(a, b), `${donde}: «${a.texto}» y «${b.texto}» se tapan`);
-        const mismo = a.texto.toLocaleLowerCase("es") === b.texto.toLocaleLowerCase("es");
-        if (!mismo) continue;
+        if (base(a.texto) !== base(b.texto)) continue;
         const lejos = Math.hypot((a.x0 + a.x1 - b.x0 - b.x1) / 2, (a.y0 + a.y1 - b.y0 - b.y1) / 2);
-        afirmar(a.clase === b.clase ? a.clase === "rio" && lejos > 300 : !["ciudad", "municipio"].includes(a.clase) || !["ciudad", "municipio"].includes(b.clase), `${donde}: «${a.texto}» sale repetido (${a.clase}, ${b.clase}, a ${Math.round(lejos)} px)`);
+        afirmar(a.clase === b.clase && ((a.clase === "rio" && lejos > 300) || (["oceano", "mar"].includes(a.clase) && lejos > 600)), `${donde}: «${a.texto}» y «${b.texto}» repiten el nombre (${a.clase}, ${b.clase}, a ${Math.round(lejos)} px)`);
       }
     }
     return n;
@@ -3174,6 +3178,9 @@ await flujo("nombres-mapa", async (page, foto) => {
   d = await ir(-73.4, 4.6, 6.4);
   n = revisar(d, "zoom 6,4");
   afirmar(n.some((x) => x.clase === "departamento") && n.some((x) => x.clase === "ciudad"), "A este zoom deberían verse departamentos y ciudades");
+  // La capital que se llama como su departamento sale una sola vez, como ciudad (con su punto)
+  afirmar(n.some((x) => x.texto === "Bogotá" && x.clase === "ciudad") && !n.some((x) => x.clase === "departamento" && base(x.texto) === "bogota"), `Bogotá debería salir una vez, como ciudad: ${n.filter((x) => base(x.texto) === "bogota").map((x) => `${x.clase}:${x.texto}`).join(", ")}`);
+  afirmar(n.filter((x) => base(x.texto) === "arauca").length <= 1, `Arauca sale repetida: ${n.filter((x) => base(x.texto) === "arauca").map((x) => `${x.clase}:${x.texto}`).join(", ")}`);
   const pais6 = n.find((x) => x.clase === "pais");
   afirmar(!pais6 || pais6.tam > tamPais4, "Los nombres deberían crecer al acercarse");
   afirmar(n.some((x) => x.clase === "rio" && /^Río /.test(x.texto)), "Los ríos deberían llamarse «Río …»");
