@@ -35,7 +35,9 @@ import type { Fase } from "@/lib/radio/protocolo";
 import type { Inspeccion } from "@/lib/radio/simulacion";
 import type { Antena, AreaObjetivo, Escenario, FuenteRelieve, Medicion, Perfil, PerfilTerreno, ResultadoSimulacion, TipoNodo } from "@/lib/radio/tipos";
 
-import { AVISO_CODIGO, PROGRAMA } from "@/lib/autoria";
+import { avisoCodigo, programa } from "@/lib/autoria";
+import { idioma, iniciarIdioma, numeroLocal, retraducir, suscribirIdioma, tx } from "@/lib/idioma";
+import { useIdioma } from "@/lib/use-idioma";
 
 import { Acerca } from "./acerca";
 import { BarraSuperior } from "./barra-superior";
@@ -75,10 +77,42 @@ import { CoordenadasCursor, MenuContextual, TarjetaNodo, TarjetaPunto, type Acci
 import { Regla } from "./regla";
 import { Interruptor, Segmentado } from "./ui";
 
+// El idioma (el guardado o, la primera vez, el del navegador) antes de dibujar la pantalla
+if (typeof window !== "undefined") iniciarIdioma();
+
+/**
+ * Los paneles de los lados empiezan ocultos siempre (se abren con sus botones, con Melki o con los tours). Solo las
+ * pruebas de extremo a extremo de siempre los piden abiertos al arrancar.
+ */
+const panelesAlIniciar = () => typeof window !== "undefined" && (window as unknown as { __simuladorPruebas?: { paneles?: boolean } }).__simuladorPruebas?.paneles === true;
+
+/** El título de la pestaña del navegador en el idioma actual. */
+const tituloPagina = () => tx("Simulador de cobertura · Red mesh LoRa 915 MHz", "Coverage Simulator · LoRa 915 MHz mesh network");
+
 type Pestana = "antenas" | "parametros";
 type Hoja = Pestana | "resultado" | "sembrar" | null;
 
-const TEXTO_FASE: Record<Fase, string> = { relieve: "Obteniendo el relieve", cobertura: "Calculando la cobertura", enlaces: "Analizando la malla", estres: "Probando la hora pico", optimizar: "Optimizando la red" };
+/** Lo que está haciendo el motor, en el idioma de la pantalla. */
+const TEXTO_FASE: Record<Fase, string> = {
+  get relieve() {
+    return tx("Obteniendo el relieve", "Getting the terrain");
+  },
+  get cobertura() {
+    return tx("Calculando la cobertura", "Calculating the coverage");
+  },
+  get enlaces() {
+    return tx("Analizando la malla", "Analyzing the mesh");
+  },
+  get estres() {
+    return tx("Probando la hora pico", "Testing the peak hour");
+  },
+  get optimizar() {
+    return tx("Optimizando la red", "Optimizing the network");
+  },
+};
+
+/** Un porcentaje: «45 %» en español, «45%» en inglés. */
+const porcentaje = (n: number) => tx(`${n} %`, `${n}%`);
 
 function fuenteDe(relieve: TipoRelieve, hgt: string[]): FuenteRelieve {
   if (relieve === "plano") return { tipo: "plano" };
@@ -109,22 +143,59 @@ type ViajeGuardado = ViajeVisible & { firma: string; animacion: AnimacionMensaje
 const RADIO_ZONA_POBLAR_KM = 3;
 
 /**
+ * Un área para poblar con su `etiqueta` para mostrar en el idioma de la pantalla. El `nombre` queda en español:
+ * Melki lo compara con lo que escribe el usuario para hallar el área por su nombre («pobla 300 en el área Norte»).
+ */
+type AreaPoblarConEtiqueta = AreaPoblar & { readonly etiqueta: string };
+
+/**
  * Áreas donde se pueden poblar personas: el área objetivo, las otras áreas de la regla, la zona alrededor de la red
  * y toda el área de estudio. Las personas pobladas no cuentan para dibujar la zona.
  */
-function areasPoblar(e: Escenario): AreaPoblar[] {
-  const lista: AreaPoblar[] = [];
+function areasPoblar(e: Escenario): AreaPoblarConEtiqueta[] {
+  const lista: AreaPoblarConEtiqueta[] = [];
   const km2 = (p: [number, number][]) => areaM2(p) / 1e6;
   for (const m of e.mediciones ?? []) {
     if (m.tipo !== "area" || m.puntos.length < 3) continue;
-    lista.push({ id: m.id, nombre: m.objetivo ? `Área objetivo «${m.nombre}»` : `Área «${m.nombre}»`, km2: km2(m.puntos), poligono: m.puntos, objetivo: Boolean(m.objetivo) });
+    const objetivo = Boolean(m.objetivo);
+    lista.push({
+      id: m.id,
+      nombre: objetivo ? `Área objetivo «${m.nombre}»` : `Área «${m.nombre}»`,
+      get etiqueta() {
+        return objetivo ? tx(`Área objetivo «${m.nombre}»`, `Target area “${m.nombre}”`) : tx(`Área «${m.nombre}»`, `Area “${m.nombre}”`);
+      },
+      km2: km2(m.puntos),
+      poligono: m.puntos,
+      objetivo,
+    });
   }
   lista.sort((a, b) => Number(b.objetivo) - Number(a.objetivo));
   const red = e.antenas.filter((a) => !a.poblada);
   const zona = zonaDeRed(red, RADIO_ZONA_POBLAR_KM);
-  if (zona) lista.push({ id: "zona-red", nombre: `Alrededor de la red (${RADIO_ZONA_POBLAR_KM} km)`, km2: km2(zona), poligono: zona, objetivo: false });
-  const estudio = zonaDeRed(red, e.parametros.radioKm);
-  if (estudio) lista.push({ id: "zona-estudio", nombre: `Área de estudio (${e.parametros.radioKm} km)`, km2: km2(estudio), poligono: estudio, objetivo: false });
+  if (zona)
+    lista.push({
+      id: "zona-red",
+      nombre: `Alrededor de la red (${RADIO_ZONA_POBLAR_KM} km)`,
+      get etiqueta() {
+        return tx(`Alrededor de la red (${RADIO_ZONA_POBLAR_KM} km)`, `Around the network (${RADIO_ZONA_POBLAR_KM} km)`);
+      },
+      km2: km2(zona),
+      poligono: zona,
+      objetivo: false,
+    });
+  const radioKm = e.parametros.radioKm;
+  const estudio = zonaDeRed(red, radioKm);
+  if (estudio)
+    lista.push({
+      id: "zona-estudio",
+      nombre: `Área de estudio (${radioKm} km)`,
+      get etiqueta() {
+        return tx(`Área de estudio (${radioKm} km)`, `Study area (${radioKm} km)`);
+      },
+      km2: km2(estudio),
+      poligono: estudio,
+      objetivo: false,
+    });
   return lista;
 }
 
@@ -139,15 +210,16 @@ function centrosDe(antenas: Antena[]): CentroZona[] {
 }
 
 /**
- * Personas pobladas en lote (cientos o miles): los nombres «Persona N» se reparten de una vez, sin recorrer la lista
- * entera por cada una.
+ * Personas pobladas en lote (cientos o miles): los nombres «Persona N» («Person N» en inglés, el idioma al poblar) se
+ * reparten de una vez, sin recorrer la lista entera por cada una.
  */
 function personasEnLote(puntos: { lat: number; lon: number }[], existentes: Antena[], zona?: string): Antena[] {
   const usados = new Set(existentes.map((a) => a.nombre));
+  const base = tx("Persona", "Person");
   let k = 1;
   return puntos.map((q) => {
-    while (usados.has(`Persona ${k}`)) k++;
-    const nombre = `Persona ${k}`;
+    while (usados.has(`${base} ${k}`)) k++;
+    const nombre = `${base} ${k}`;
     usados.add(nombre);
     return { ...nuevaPieza("persona", q.lat, q.lon, []), nombre, poblada: true, ...(zona ? { zona } : {}) };
   });
@@ -165,14 +237,23 @@ export function Simulador() {
   const [hgt, setHgt] = useState<string[]>([]);
   const [avisoHgt, setAvisoHgt] = useState<string | null>(null);
   const [pestana, setPestana] = useState<Pestana>("antenas");
-  const [resultadosAbiertos, setResultadosAbiertos] = useState(true);
+  // Al cambiar de idioma se vuelve a dibujar todo
+  useIdioma();
+  const [resultadosAbiertos, setResultadosAbiertos] = useState(panelesAlIniciar);
+  // Resultado nuevo con el panel cerrado: su botón lo avisa con un puntico (hasta que se abra el panel)
+  const [resultadoSinVer, setResultadoSinVer] = useState(false);
+  const [abiertosAntes, setAbiertosAntes] = useState(resultadosAbiertos);
+  if (abiertosAntes !== resultadosAbiertos) {
+    setAbiertosAntes(resultadosAbiertos);
+    if (resultadosAbiertos) setResultadoSinVer(false);
+  }
   // Panel izquierdo plegable (en el escritorio) y Melki manos libres
-  const [panelIzquierdo, setPanelIzquierdo] = useState(true);
+  const [panelIzquierdo, setPanelIzquierdo] = useState(panelesAlIniciar);
   const [manosLibres, setManosLibres] = useState(false);
   const [acerca, setAcerca] = useState(false);
-  // Autoría y licencia también en la consola del navegador
+  // Autoría y licencia también en la consola del navegador (en el idioma de la pantalla al abrir)
   useEffect(() => {
-    console.info(`%c${PROGRAMA}%c\n${AVISO_CODIGO}`, "font-weight:600", "");
+    console.info(`%c${programa()}%c\n${avisoCodigo()}`, "font-weight:600", "");
   }, []);
   const [hoja, setHoja] = useState<Hoja>(null);
   const [tour, setTour] = useState<IdTour | null>(null);
@@ -256,6 +337,8 @@ export function Simulador() {
   const nPobladas = useMemo(() => escenario.antenas.filter((a) => a.poblada && !a.zona).length, [escenario.antenas]);
   // Zonas de popularidad: cada gateway y repetidor activo, con las personas que tiene alrededor
   const centros = useMemo(() => centrosDe(escenario.antenas), [escenario.antenas]);
+  // El idioma de ahora: las etiquetas de las zonas y de las personas en el mapa se rehacen al cambiarlo
+  const lengua = idioma();
   // Zonas de la prueba de estrés en el mapa (mientras valga para la red de ahora)
   const zonasMapa = useMemo<ZonaMapa[] | null>(() => {
     if (estres.fase !== "listo" || estres.firma !== firma || estres.resultado.motivo) return null;
@@ -263,11 +346,15 @@ export function Simulador() {
     return estres.resultado.zonas.flatMap((z) => {
       const a = porId.get(z.id);
       if (!a || z.usuarios === 0) return [];
-      const texto = `${z.nombre} · ${TEXTO_ESTADO[z.estado].toLowerCase()} · ${Math.round(z.completosPct)} %`;
-      const titulo = `${z.nombre}: ${z.usuarios} personas, ${Math.round(z.pagosHora)} mensajes/h; ${Math.round(z.completosPct)} % completos, el 95 % en ${Math.round(z.p95S)} s, canal ${Math.round(z.canalPct)} %`;
+      const texto = `${z.nombre} · ${TEXTO_ESTADO[z.estado].toLowerCase()} · ${porcentaje(Math.round(z.completosPct))}`;
+      const titulo = tx(
+        `${z.nombre}: ${z.usuarios} personas, ${Math.round(z.pagosHora)} mensajes/h; ${Math.round(z.completosPct)} % completos, el 95 % en ${Math.round(z.p95S)} s, canal ${Math.round(z.canalPct)} %`,
+        `${z.nombre}: ${numeroLocal(z.usuarios)} people, ${numeroLocal(Math.round(z.pagosHora))} messages/h; ${Math.round(z.completosPct)}% complete, 95% within ${Math.round(z.p95S)} s, channel ${Math.round(z.canalPct)}%`,
+      );
       return [{ id: z.id, lat: a.lat, lon: a.lon, radioKm: z.radioZonaKm, color: COLOR_ESTADO[z.estado], texto, titulo }];
     });
-  }, [estres, firma, escenario.antenas]);
+    // «lengua»: los textos (tx) cambian con el idioma
+  }, [estres, firma, escenario.antenas, lengua]); // eslint-disable-line react-hooks/exhaustive-deps
   // Cada persona de la prueba de estrés: el color de su estado en el contorno de su marcador y un aro en el mapa
   const usuariosMapa = useMemo<Map<string, UsuarioMapa> | null>(() => {
     if (estres.fase !== "listo" || estres.firma !== firma || estres.resultado.motivo || !estres.resultado.porUsuario?.length) return null;
@@ -279,11 +366,15 @@ export function Simulador() {
           lon: u.lon,
           color: ESTADOS_USUARIO[u.estado].color,
           estado: u.estado,
-          titulo: `${u.nombre}: ${ESTADOS_USUARIO[u.estado].nombre.toLowerCase()} · vuelve el ${Math.round(u.exitoPct)} % · espera hasta ${Math.round(u.esperaP95S)} s${u.porque ? ` · ${u.porque}` : ""}`,
+          titulo: tx(
+            `${u.nombre}: ${ESTADOS_USUARIO[u.estado].nombre.toLowerCase()} · vuelve el ${Math.round(u.exitoPct)} % · espera hasta ${Math.round(u.esperaP95S)} s${u.porque ? ` · ${u.porque}` : ""}`,
+            `${u.nombre}: ${ESTADOS_USUARIO[u.estado].nombre.toLowerCase()} · ${Math.round(u.exitoPct)}% come back · waits up to ${Math.round(u.esperaP95S)} s${u.porque ? ` · ${u.porque}` : ""}`,
+          ),
         },
       ]),
     );
-  }, [estres, firma]);
+    // «lengua»: los textos (tx) cambian con el idioma
+  }, [estres, firma, lengua]); // eslint-disable-line react-hooks/exhaustive-deps
   const resumenUsuarios = usuariosMapa && estres.fase === "listo" ? estres.resultado.resumenUsuarios : null;
   const remitentes = useMemo(() => {
     if (!resultado) return 0;
@@ -301,10 +392,31 @@ export function Simulador() {
   const ultimo = useRef({ estado, fuente, firma, resultado, firmaResultado, inspeccion, perfil, perfilTerreno, red, siembra: siembraVisible, alturaRepetidor, viaje: viajeVisible, ajuste: ajusteVisible, carga, estres, optimizacion });
   /** Nodos insertados desde el último render (dos pedidos seguidos no repiten nombre). */
   const recientes = useRef<Antena[]>([]);
+  const resultadosVisibles = useRef(resultadosAbiertos);
   useEffect(() => {
     ultimo.current = { estado, fuente, firma, resultado, firmaResultado, inspeccion, perfil, perfilTerreno, red, siembra: siembraVisible, alturaRepetidor, viaje: viajeVisible, ajuste: ajusteVisible, carga, estres, optimizacion };
     recientes.current = [];
+    resultadosVisibles.current = resultadosAbiertos;
   });
+
+  // Al cambiar de idioma, lo que calculó el motor (veredictos, recomendaciones, informes, pruebas) cambia de una vez,
+  // sin volver a calcular; también el título de la pestaña
+  useEffect(() => {
+    document.title = tituloPagina();
+    return suscribirIdioma(() => {
+      const i = idioma();
+      document.title = tituloPagina();
+      setResultado((x) => retraducir(x, i));
+      setInspeccion((x) => retraducir(x, i));
+      setPerfil((x) => retraducir(x, i));
+      setPerfilTerreno((x) => retraducir(x, i));
+      setSiembra((x) => retraducir(x, i));
+      setAjuste((x) => retraducir(x, i));
+      setCarga((x) => retraducir(x, i));
+      setEstres((x) => retraducir(x, i));
+      setOptimizacion((x) => retraducir(x, i));
+    });
+  }, []);
   const existentes = () => {
     const actuales = ultimo.current.estado.escenario.antenas;
     return [...actuales, ...recientes.current.filter((a) => !actuales.some((x) => x.id === a.id))];
@@ -355,6 +467,7 @@ export function Simulador() {
         if (r && id === idSimulacion.current) {
           setResultado(r);
           setFirmaResultado(fi);
+          if (!resultadosVisibles.current) setResultadoSinVer(true);
           // Solo se anuncia si el resultado corresponde a lo que hay en pantalla
           if (fi === ultimo.current.firma) for (const f of oyentes.current) f(r);
         }
@@ -507,7 +620,12 @@ export function Simulador() {
     if (!m || !destinos.length) return Promise.resolve(null);
     const origenes = e.escenario.antenas.filter((a) => a.activa && piezaDe(a) !== "persona" && ["gateway", "conectado"].includes(r.porNodo.get(a.id)?.estado ?? ""));
     if (!origenes.length) {
-      setSiembra({ fase: "error", texto: r.gateways.length ? "Espere a que termine el cálculo de la red y vuelva a intentarlo." : "Primero ponga el Gateway + Internet." });
+      setSiembra({
+        fase: "error",
+        texto: r.gateways.length
+          ? tx("Espere a que termine el cálculo de la red y vuelva a intentarlo.", "Wait for the network calculation to finish and try again.")
+          : tx("Primero ponga el Gateway + Internet.", "First place the Gateway + Internet."),
+      });
       return Promise.resolve(null);
     }
     const limite = e.escenario.parametros.limiteSaltos;
@@ -662,7 +780,7 @@ export function Simulador() {
         return a;
       })
       .catch((err: Error) => {
-        setAjuste({ fase: "error", texto: err.message || "No pude calcular el ajuste." });
+        setAjuste({ fase: "error", texto: err.message || tx("No pude calcular el ajuste.", "I couldn’t calculate the adjustment.") });
         return null;
       });
   }, []);
@@ -690,7 +808,7 @@ export function Simulador() {
     for (const x of o.antenas.filter((y) => y.id.startsWith("nuevo-apoyo-"))) {
       const todas = [...nuevas, ...apoyos];
       const base = nuevaPieza("repetidor", x.lat, x.lon, todas, x.alturaM);
-      const nombre = todas.some((y) => y.nombre === x.nombre) ? nombreLibre("Apoyo", todas) : x.nombre;
+      const nombre = todas.some((y) => y.nombre === x.nombre) ? nombreLibre(tx("Apoyo", "Support"), todas) : x.nombre;
       apoyos.push({ ...base, nombre, ...(x.patron ? { patron: x.patron, azimutDeg: x.azimutDeg, elevacionDeg: x.elevacionDeg, gananciaDbi: x.gananciaDbi } : {}) });
     }
     ajusteAntes.current = antes;
@@ -699,7 +817,7 @@ export function Simulador() {
     // Sin área pedida, la zona evaluada queda como área objetivo: la factibilidad se mide siempre ahí
     if (a.area.tipo === "zona" && a.area.poligono.length >= 3 && !areaObjetivoDe(antes)) {
       const id = `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
-      despachar({ tipo: "medicion-agregar", medicion: { id, nombre: "Zona de la red", tipo: "area", puntos: a.area.poligono, visible: true } });
+      despachar({ tipo: "medicion-agregar", medicion: { id, nombre: tx("Zona de la red", "Network zone"), tipo: "area", puntos: a.area.poligono, visible: true } });
       despachar({ tipo: "medicion-seleccionar", id: null });
       despachar({ tipo: "area-objetivo", id, objetivo: { metaPct: a.metaPct, margenDb: a.margenDb } });
     }
@@ -755,7 +873,7 @@ export function Simulador() {
       const areas = areasPoblar(e.escenario);
       const area = areas.find((a) => a.id === o.areaId) ?? areas[0];
       if (!area) {
-        const x = { error: "Ponga primero el gateway (y los repetidores): las personas se reparten en la zona de la red." };
+        const x = { error: tx("Ponga primero el gateway (y los repetidores): las personas se reparten en la zona de la red.", "First place the gateway (and the repeaters): the people are spread over the network’s zone.") };
         setUltimoPoblado(x);
         return x;
       }
@@ -771,7 +889,8 @@ export function Simulador() {
       const nuevas = personasEnLote(puntos, existentes().filter((a) => !viejas.has(a.id)));
       if (viejas.size) despachar({ tipo: "eliminar-varias", ids: [...viejas] });
       if (nuevas.length) despachar({ tipo: "insertar-varias", antenas: nuevas });
-      const x: ResultadoPoblar = { puestas: nuevas.length, pedidas, area: area.nombre, km2: area.km2, conSenal, quitadas: viejas.size };
+      // El nombre del área para mostrar (y para que Melki lo diga) va en el idioma de la pantalla
+      const x: ResultadoPoblar = { puestas: nuevas.length, pedidas, area: area.etiqueta, km2: area.km2, conSenal, quitadas: viejas.size };
       setUltimoPoblado(x);
       setCarga({ fase: "nada" });
       setEstres({ fase: "nada" });
@@ -815,7 +934,11 @@ export function Simulador() {
       const infra = todos.filter((a) => a.activa && !a.poblada && (a.rol === "REPETIDOR" || a.pasarela));
       const centrosZona = o.centros?.length ? infra.filter((a) => o.centros!.includes(a.id)) : infra;
       if (!centrosZona.length) {
-        const x = { error: o.centros?.length ? "Ese nodo no es un gateway ni un repetidor activo." : "Ponga primero el gateway y los repetidores: cada zona de popularidad es gente alrededor de uno de ellos." };
+        const x = {
+          error: o.centros?.length
+            ? tx("Ese nodo no es un gateway ni un repetidor activo.", "That node is not an active gateway or repeater.")
+            : tx("Ponga primero el gateway y los repetidores: cada zona de popularidad es gente alrededor de uno de ellos.", "First place the gateway and the repeaters: each popularity zone is people around one of them."),
+        };
         setUltimoZonas(x);
         return x;
       }
@@ -895,7 +1018,7 @@ export function Simulador() {
       if (!r || ultimo.current.firma !== ultimo.current.firmaResultado) r = await esperarResultado();
       if (id !== idEstres.current) return null;
       if (!r) {
-        setEstres({ fase: "error", texto: "No pude simular la red para hacer la prueba." });
+        setEstres({ fase: "error", texto: tx("No pude simular la red para hacer la prueba.", "I couldn’t simulate the network to run the test.") });
         return null;
       }
       const { estado: e, firma: fi } = ultimo.current;
@@ -910,7 +1033,7 @@ export function Simulador() {
         setEstres({ fase: "listo", resultado: x, firma: fi, opciones });
         return x;
       } catch (err) {
-        if (id === idEstres.current) setEstres({ fase: "error", texto: (err as Error).message || "No pude hacer la prueba de estrés." });
+        if (id === idEstres.current) setEstres({ fase: "error", texto: (err as Error).message || tx("No pude hacer la prueba de estrés.", "I couldn’t run the stress test.") });
         return null;
       }
     },
@@ -931,18 +1054,18 @@ export function Simulador() {
       let res = u.estres.fase === "listo" && u.estres.firma === u.firma && !u.estres.resultado.motivo && !u.estres.resultado.limite ? u.estres.resultado : null;
       if (u.estres.fase === "listo" && Object.keys(o).length) res = null;
       if (!res) {
-        setOptimizacion({ fase: "buscando", avance: 0, texto: "Primero pruebo la hora pico…" });
+        setOptimizacion({ fase: "buscando", avance: 0, texto: tx("Primero pruebo la hora pico…", "First I’ll test the peak hour…") });
         res = await probarEstres(opciones);
         if (id !== idOptimizar.current) return null;
         if (!res || res.motivo) {
-          setOptimizacion({ fase: "error", texto: res?.motivo ?? "No pude probar la hora pico para optimizar." });
+          setOptimizacion({ fase: "error", texto: res?.motivo ?? tx("No pude probar la hora pico para optimizar.", "I couldn’t test the peak hour to optimize.") });
           return null;
         }
       } else if (u.estres.fase === "listo") opciones = { ...u.estres.opciones, ...o, rampa: false, comparar: false, foco: null };
       const r = ultimo.current.resultado;
       const { estado: e, fuente: f, firma: fi } = ultimo.current;
       if (!r) {
-        setOptimizacion({ fase: "error", texto: "Falta simular la red." });
+        setOptimizacion({ fase: "error", texto: tx("Falta simular la red.", "The network still has to be simulated.") });
         return null;
       }
       setOptimizacion({ fase: "buscando", avance: 0 });
@@ -961,7 +1084,7 @@ export function Simulador() {
         setOptimizacion({ fase: "listo", resultado: x, firma: fi, opciones });
         return x;
       } catch (err) {
-        if (id === idOptimizar.current) setOptimizacion({ fase: "error", texto: (err as Error).message || "No pude optimizar la red." });
+        if (id === idOptimizar.current) setOptimizacion({ fase: "error", texto: (err as Error).message || tx("No pude optimizar la red.", "I couldn’t optimize the network.") });
         return null;
       }
     },
@@ -1009,7 +1132,7 @@ export function Simulador() {
     async (o: PedidoZonas, opciones: Partial<OpcionesEstres> = {}): Promise<{ zonas: ResultadoZonas; estres: ResultadoEstres | null }> => {
       const zonas = poblarZonas(o);
       if ("error" in zonas) return { zonas, estres: null };
-      setPuntoOcupado({ id: o.centros?.length === 1 ? o.centros[0] : null, texto: "Simulando la red con la gente nueva…" });
+      setPuntoOcupado({ id: o.centros?.length === 1 ? o.centros[0] : null, texto: tx("Simulando la red con la gente nueva…", "Simulating the network with the new people…") });
       try {
         await esperarResultado();
         return { zonas, estres: await probarEstres({ ...opciones, foco: null, rampa: false }) };
@@ -1029,7 +1152,8 @@ export function Simulador() {
   const evaluarPunto = useCallback(
     async (o: PedidoPunto): Promise<ResultadoPunto> => {
       const a = existentes().find((x) => x.id === o.centro);
-      if (!a || !a.activa || a.poblada || !(a.rol === "REPETIDOR" || a.pasarela)) return { nombre: a?.nombre ?? o.centro, zonas: null, estres: null, limite: null, error: "Ese nodo no es un gateway ni un repetidor activo." };
+      if (!a || !a.activa || a.poblada || !(a.rol === "REPETIDOR" || a.pasarela))
+        return { nombre: a?.nombre ?? o.centro, zonas: null, estres: null, limite: null, error: tx("Ese nodo no es un gateway ni un repetidor activo.", "That node is not an active gateway or repeater.") };
       const radioKm = o.radioKm ?? ZONA_DEFECTO.radioKm;
       const tiene = () => existentes().filter((x) => x.poblada && x.zona === a.id).length;
       let zonas: ResultadoZonas | null = null;
@@ -1043,14 +1167,14 @@ export function Simulador() {
         return null;
       };
       try {
-        setPuntoOcupado({ id: a.id, texto: "Preparando…" });
+        setPuntoOcupado({ id: a.id, texto: tx("Preparando…", "Preparing…") });
         if (o.accion === "probar") {
           const n = Math.min(MAX_POR_ZONA, Math.max(1, Math.round(o.n ?? ZONA_DEFECTO.n)));
-          const err = await poner(n, `Poniendo ${n.toLocaleString("es-CO")} personas y simulando la red…`);
+          const err = await poner(n, tx(`Poniendo ${numeroLocal(n)} personas y simulando la red…`, `Placing ${numeroLocal(n)} people and simulating the network…`));
           if (err) return salida({ error: err });
-          setPuntoOcupado({ id: a.id, texto: "Simulando la hora pico…" });
+          setPuntoOcupado({ id: a.id, texto: tx("Simulando la hora pico…", "Simulating the peak hour…") });
           const e = await probarEstres({ ...o.opciones, foco: null, rampa: false });
-          return salida({ estres: e, error: e ? null : "No pude hacer la prueba de la hora pico." });
+          return salida({ estres: e, error: e ? null : tx("No pude hacer la prueba de la hora pico.", "I couldn’t run the peak-hour test.") });
         }
         // El límite: el que ya se buscó para este punto (al llenar desde su botón) o uno nuevo
         const u = ultimo.current.estres;
@@ -1058,23 +1182,24 @@ export function Simulador() {
         let e: ResultadoEstres | null = null;
         if (!lim) {
           if (!tiene()) {
-            const err = await poner(Math.min(MAX_POR_ZONA, Math.max(1, Math.round(o.n ?? MUESTRA_PUNTO))), "Poniendo una muestra de gente y simulando la red…");
+            const err = await poner(Math.min(MAX_POR_ZONA, Math.max(1, Math.round(o.n ?? MUESTRA_PUNTO))), tx("Poniendo una muestra de gente y simulando la red…", "Placing a sample of people and simulating the network…"));
             if (err) return salida({ error: err });
           }
-          setPuntoOcupado({ id: a.id, texto: `Buscando el límite de ${a.nombre}…` });
-          e = await probarEstres({ ...o.opciones, foco: a.id, rampa: false, comparar: false }, `Buscando el límite de ${a.nombre}…`);
+          const buscando = tx(`Buscando el límite de ${a.nombre}…`, `Finding the limit of ${a.nombre}…`);
+          setPuntoOcupado({ id: a.id, texto: buscando });
+          e = await probarEstres({ ...o.opciones, foco: a.id, rampa: false, comparar: false }, buscando);
           lim = e?.limite ?? null;
-          if (!lim) return salida({ estres: e, error: "No pude buscar el límite (falta simular la red o el motor se detuvo)." });
+          if (!lim) return salida({ estres: e, error: tx("No pude buscar el límite (falta simular la red o el motor se detuvo).", "I couldn’t find the limit (the network still has to be simulated, or the engine stopped).") });
         }
         if (o.accion !== "llenar" || lim.motivo || lim.redYaFalla || lim.personasSeguro === null) return salida({ estres: e, limite: lim });
         // Llenar hasta el límite y confirmarlo con la gente puesta
         let n = Math.min(MAX_POR_ZONA, Math.max(1, Math.round(o.n ?? lim.personasSeguro)));
         let llenado: LimitePunto["llenado"] = null;
         for (let intento = 1; intento <= 3; intento++) {
-          const err = await poner(n, `Llenando ${a.nombre} con ${n.toLocaleString("es-CO")} personas…`);
+          const err = await poner(n, tx(`Llenando ${a.nombre} con ${numeroLocal(n)} personas…`, `Filling ${a.nombre} with ${numeroLocal(n)} people…`));
           if (err) return salida({ estres: e, limite: lim, error: err });
-          setPuntoOcupado({ id: a.id, texto: `Confirmando la hora pico con ${n.toLocaleString("es-CO")} personas…` });
-          const c = await probarEstres({ ...o.opciones, foco: null, rampa: false, comparar: false }, `Confirmando ${a.nombre} con ${n.toLocaleString("es-CO")} personas…`);
+          setPuntoOcupado({ id: a.id, texto: tx(`Confirmando la hora pico con ${numeroLocal(n)} personas…`, `Confirming the peak hour with ${numeroLocal(n)} people…`) });
+          const c = await probarEstres({ ...o.opciones, foco: null, rampa: false, comparar: false }, tx(`Confirmando ${a.nombre} con ${numeroLocal(n)} personas…`, `Confirming ${a.nombre} with ${numeroLocal(n)} people…`));
           if (!c) break;
           e = c;
           const conDatos = c.zonas.filter((z) => z.pagos >= 4);
@@ -1101,25 +1226,25 @@ export function Simulador() {
     async (o: { centros?: string[]; n?: number; radioKm?: number; opciones?: Partial<OpcionesEstres> } = {}): Promise<{ limites: LimitePunto[]; zonas: ResultadoZonas | null; error: string | null }> => {
       const todos = centrosDe(existentes());
       const lista = o.centros?.length ? todos.filter((c) => o.centros!.includes(c.id)) : todos;
-      if (!lista.length) return { limites: [], zonas: null, error: "Ponga primero el gateway y los repetidores: cada punto es uno de ellos." };
+      if (!lista.length) return { limites: [], zonas: null, error: tx("Ponga primero el gateway y los repetidores: cada punto es uno de ellos.", "First place the gateway and the repeaters: each point is one of them.") };
       let zonas: ResultadoZonas | null = null;
       try {
         const vacios = lista.filter((c) => !c.personas);
         if (vacios.length) {
           zonas = poblarZonas({ centros: vacios.map((c) => c.id), n: o.n ?? MUESTRA_PUNTO, radioKm: o.radioKm });
           if ("error" in zonas) return { limites: [], zonas, error: zonas.error };
-          setPuntoOcupado({ id: null, texto: "Poniendo una muestra de gente y simulando la red…" });
+          setPuntoOcupado({ id: null, texto: tx("Poniendo una muestra de gente y simulando la red…", "Placing a sample of people and simulating the network…") });
           await esperarResultado();
         }
         const limites: LimitePunto[] = [];
         for (const [k, c] of lista.entries()) {
-          const texto = `Límite de ${c.nombre} (${k + 1} de ${lista.length})…`;
+          const texto = tx(`Límite de ${c.nombre} (${k + 1} de ${lista.length})…`, `Limit of ${c.nombre} (${k + 1} of ${lista.length})…`);
           setPuntoOcupado({ id: c.id, texto });
           const e = await probarEstres({ ...o.opciones, foco: c.id, rampa: false, comparar: false }, texto);
           if (e?.limite) limites.push(e.limite);
         }
         if (limites.length > 1) setEstres((f) => (f.fase === "listo" ? { ...f, limites } : f));
-        return { limites, zonas, error: limites.length ? null : "No pude buscar los límites (falta simular la red o el motor se detuvo)." };
+        return { limites, zonas, error: limites.length ? null : tx("No pude buscar los límites (falta simular la red o el motor se detuvo).", "I couldn’t find the limits (the network still has to be simulated, or the engine stopped).") };
       } finally {
         setPuntoOcupado(null);
       }
@@ -1141,7 +1266,7 @@ export function Simulador() {
       if (!r || ultimo.current.firma !== ultimo.current.firmaResultado) r = await esperarResultado();
       if (id !== idCarga.current) return null;
       if (!r) {
-        setCarga({ fase: "error", texto: "No pude simular la red para hacer la prueba." });
+        setCarga({ fase: "error", texto: tx("No pude simular la red para hacer la prueba.", "I couldn’t simulate the network to run the test.") });
         return null;
       }
       const { estado: e, firma: fi } = ultimo.current;
@@ -1152,7 +1277,7 @@ export function Simulador() {
         setCarga({ fase: "listo", resultado: x.carga, curva: x.curva, firma: fi, opciones });
         return x;
       } catch (err) {
-        if (id === idCarga.current) setCarga({ fase: "error", texto: (err as Error).message || "No pude hacer la prueba de carga." });
+        if (id === idCarga.current) setCarga({ fase: "error", texto: (err as Error).message || tx("No pude hacer la prueba de carga.", "I couldn’t run the load test.") });
         return null;
       }
     },
@@ -1267,7 +1392,7 @@ export function Simulador() {
       despachar({ tipo: "cargar", escenario: e });
       encuadrar();
     } catch {
-      setError(`«${f.name}» no es un escenario válido. Use un archivo .json guardado desde este simulador.`);
+      setError(tx(`«${f.name}» no es un escenario válido. Use un archivo .json guardado desde este simulador.`, `“${f.name}” is not a valid scenario. Use a .json file saved from this simulator.`));
     }
   };
 
@@ -1307,7 +1432,7 @@ export function Simulador() {
         const lats = m.puntos.map((q) => q[1]);
         encuadrarCaja([Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)]);
       },
-      perfil: (a, b, informe) => abrirPerfil(a, b, `${a.nombre} → ${"nombre" in b ? b.nombre : "punto"}`, informe),
+      perfil: (a, b, informe) => abrirPerfil(a, b, `${a.nombre} → ${"nombre" in b ? b.nombre : tx("punto", "point")}`, informe),
       vista: (cambios) => despachar({ tipo: "vista", cambios }),
       senal: (lat, lon) => {
         inspeccionar(lat, lon);
@@ -1622,7 +1747,7 @@ export function Simulador() {
         setPunto(null);
         break;
       case "marcar":
-        setPunto({ lat, lon, titulo: "Punto marcado" });
+        setPunto({ lat, lon, titulo: tx("Punto marcado", "Marked point") });
         break;
       case "centrar":
         centrar(lat, lon);
@@ -1636,7 +1761,7 @@ export function Simulador() {
   const irA = (d: Destino) => {
     if (d.tipo === "coordenada") {
       centrar(d.lat, d.lon, 13);
-      setPunto({ lat: d.lat, lon: d.lon, titulo: "Coordenada buscada" });
+      setPunto({ lat: d.lat, lon: d.lon, titulo: tx("Coordenada buscada", "Searched coordinate") });
     } else if (d.tipo === "nodo") {
       centrar(d.antena.lat, d.antena.lon, 13);
       despachar({ tipo: "seleccionar", id: d.antena.id });
@@ -1726,8 +1851,8 @@ export function Simulador() {
     <div className="flex gap-1 border-b border-linea px-3 pt-2" role="tablist" aria-label="Panel">
       {(
         [
-          ["antenas", `Nodos (${escenario.antenas.length})`, <RadioTower key="i" size={16} />],
-          ["parametros", "Parámetros", <SlidersHorizontal key="i" size={16} />],
+          ["antenas", tx(`Nodos (${escenario.antenas.length})`, `Nodes (${escenario.antenas.length})`), <RadioTower key="i" size={16} />],
+          ["parametros", tx("Parámetros", "Parameters"), <SlidersHorizontal key="i" size={16} />],
         ] as const
       ).map(([id, texto, icono]) => (
         <button
@@ -1759,13 +1884,13 @@ export function Simulador() {
         <div>
           <div className="mb-1.5 flex items-center justify-between text-[13px]">
             <span>{TEXTO_FASE[progreso.fase]}…</span>
-            <span className="text-tenue tabular-nums">{Math.round(progreso.avance * 100)} %</span>
+            <span className="text-tenue tabular-nums">{porcentaje(Math.round(progreso.avance * 100))}</span>
           </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-linea" role="progressbar" aria-valuenow={Math.round(progreso.avance * 100)} aria-valuemin={0} aria-valuemax={100}>
             <div className="h-full rounded-full bg-salvia transition-[width]" style={{ width: `${Math.max(4, progreso.avance * 100)}%` }} />
           </div>
           <button type="button" onClick={detener} className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-lg py-2 text-[14px] font-medium ring-1 ring-linea hover:bg-papel-2">
-            <Square size={14} /> Detener
+            <Square size={14} /> {tx("Detener", "Stop")}
           </button>
         </div>
       ) : (
@@ -1775,12 +1900,16 @@ export function Simulador() {
           disabled={activas === 0}
           className="flex w-full items-center justify-center gap-2 rounded-lg bg-carbon py-2.5 text-[15px] font-semibold text-white hover:bg-carbon-2 disabled:bg-carbon/40"
         >
-          <Play size={16} /> {resultado && !desactualizado ? "Simular de nuevo" : "Simular"}
-          {activas > 0 && <span className="font-normal text-white/70">· {activas} {activas === 1 ? "nodo" : "nodos"}</span>}
+          <Play size={16} /> {resultado && !desactualizado ? tx("Simular de nuevo", "Simulate again") : tx("Simular", "Simulate")}
+          {activas > 0 && (
+            <span className="font-normal text-white/70">
+              · {activas} {activas === 1 ? tx("nodo", "node") : tx("nodos", "nodes")}
+            </span>
+          )}
         </button>
       )}
       <div className="mt-2">
-        <Interruptor etiqueta="Simular al cambiar" activo={estado.autoSimular} onCambio={(v) => despachar({ tipo: "auto", valor: v })} />
+        <Interruptor etiqueta={tx("Simular al cambiar", "Simulate on change")} activo={estado.autoSimular} onCambio={(v) => despachar({ tipo: "auto", valor: v })} />
       </div>
       {error && (
         <p className="mt-1.5 text-[13px] leading-snug text-sin" role="alert">
@@ -1794,12 +1923,12 @@ export function Simulador() {
     <div className="flex items-center gap-1.5 border-b border-linea px-3 py-2">
       <div className="min-w-0 flex-1" data-tour="modo">
         <Segmentado<ModoApp>
-          etiqueta="Modo de la pantalla"
+          etiqueta={tx("Modo de la pantalla", "Screen mode")}
           valor={estado.modo}
           onCambio={cambiarModo}
           opciones={[
-            { valor: "sembrar", texto: <><Sprout size={15} /> Sembrar la malla</>, titulo: "Paso a paso: gateway, repetidores y personas, como en Trama" },
-            { valor: "avanzado", texto: <><Settings2 size={15} /> Modo avanzado</>, titulo: "Todos los nodos, parámetros y herramientas del simulador" },
+            { valor: "sembrar", texto: <><Sprout size={15} /> {tx("Sembrar la malla", "Seed the mesh")}</>, titulo: tx("Paso a paso: gateway, repetidores y personas, como en Trama", "Step by step: gateway, repeaters and people, as in Trama") },
+            { valor: "avanzado", texto: <><Settings2 size={15} /> {tx("Modo avanzado", "Advanced mode")}</>, titulo: tx("Todos los nodos, parámetros y herramientas del simulador", "All of the simulator’s nodes, parameters and tools") },
           ]}
         />
       </div>
@@ -1807,8 +1936,8 @@ export function Simulador() {
         type="button"
         onClick={() => setPanelIzquierdo(false)}
         className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-carbon-2 hover:bg-black/5 hover:text-carbon"
-        title="Ocultar el panel (más espacio para el mapa). También: «Melki, pantalla limpia»"
-        aria-label="Ocultar el panel izquierdo"
+        title={tx("Ocultar el panel (más espacio para el mapa). También: «Melki, pantalla limpia»", "Hide the panel (more room for the map). Also: “Melki, clear the screen”")}
+        aria-label={tx("Ocultar el panel izquierdo", "Hide the left panel")}
         data-tour="plegar-panel"
       >
         <PanelLeftClose size={18} />
@@ -1853,7 +1982,15 @@ export function Simulador() {
         zona={zonaEstres(a.id)}
         red={estresAlDia ? estresAlDia.estado : null}
         limite={estres.fase === "listo" && estres.resultado.limite?.id === a.id ? estres.resultado.limite : (estres.fase === "listo" ? (estres.limites?.find((l) => l.id === a.id) ?? null) : null)}
-        ocupado={puntoOcupado ? (puntoOcupado.id === a.id || puntoOcupado.id === null ? puntoOcupado.texto : "Probando otro punto…") : estres.fase === "probando" ? (estres.texto ?? "Probando la hora pico…") : null}
+        ocupado={
+          puntoOcupado
+            ? puntoOcupado.id === a.id || puntoOcupado.id === null
+              ? puntoOcupado.texto
+              : tx("Probando otro punto…", "Testing another point…")
+            : estres.fase === "probando"
+              ? (estres.texto ?? tx("Probando la hora pico…", "Testing the peak hour…"))
+              : null
+        }
         onPoner={(n, radioKm) => void poblarZonas({ centros: [a.id], n, radioKm })}
         onPunto={(accion, n, radioKm) => void evaluarPunto({ centro: a.id, accion, n, radioKm })}
         onQuitar={() => void quitarZonas([a.id])}
@@ -1986,10 +2123,11 @@ export function Simulador() {
         onExportarCsv={() => exportarCsv(escenario, resultado)}
         onExportarKmz={kmz}
         onRecorrido={() => avisarMelki("tours")}
-        onRecorridoRed={() => avisarMelki("pedir", "hazme un recorrido por la red")}
-        onPitch={() => avisarMelki("pedir", "preséntame el modelo de negocio")}
+        onRecorridoRed={() => avisarMelki("pedir", tx("hazme un recorrido por la red", "walk me through the network"))}
+        onPitch={() => avisarMelki("pedir", tx("preséntame el modelo de negocio", "present the business model"))}
         onAcerca={() => setAcerca(true)}
         resultadosAbiertos={resultadosAbiertos}
+        resultadoNuevo={resultadoSinVer && !resultadosAbiertos}
         onResultados={() => setResultadosAbiertos((v) => !v)}
         panelIzquierdo={panelIzquierdo}
         onPanelIzquierdo={() => setPanelIzquierdo((v) => !v)}
@@ -2000,7 +2138,7 @@ export function Simulador() {
       <div className="relative flex min-h-0 flex-1">
         <aside
           className={`hidden w-[340px] shrink-0 flex-col border-r border-linea bg-papel ${panelIzquierdo ? "lg:flex" : ""}`}
-          aria-label={estado.modo === "sembrar" ? "Sembrar la malla" : "Nodos y parámetros"}
+          aria-label={estado.modo === "sembrar" ? tx("Sembrar la malla", "Seed the mesh") : tx("Nodos y parámetros", "Nodes and parameters")}
           data-tour="panel-izquierdo"
         >
           {selectorModo}
@@ -2038,7 +2176,7 @@ export function Simulador() {
             onPieza={ponerPieza}
             onDestino={(lat, lon) => {
               despachar({ tipo: "herramienta", herramienta: "mover" });
-              void sembrarHacia([{ lat, lon, nombre: "El punto elegido" }]);
+              void sembrarHacia([{ lat, lon, nombre: tx("El punto elegido", "The chosen point") }]);
               if (!esEscritorio()) setHoja("sembrar");
             }}
           />
@@ -2073,7 +2211,7 @@ export function Simulador() {
           {menu && <MenuContextual x={menu.x} y={menu.y} lat={menu.lat} lon={menu.lon} onAccion={(a) => accionPunto(a, menu.lat, menu.lon)} onCerrar={() => setMenu(null)} />}
           {calculando && (
             <div className="pointer-events-none absolute top-14 left-1/2 z-10 -translate-x-1/2 rounded-full bg-carbon/90 px-3 py-1 text-[13px] text-white shadow lg:hidden">
-              {TEXTO_FASE[progreso.fase]}… {Math.round(progreso.avance * 100)} %
+              {TEXTO_FASE[progreso.fase]}… {porcentaje(Math.round(progreso.avance * 100))}
             </div>
           )}
           <Inspector
@@ -2083,7 +2221,7 @@ export function Simulador() {
             onCerrar={() => setInspeccion(null)}
             onPerfil={(id) => {
               const a = escenario.antenas.find((x) => x.id === id);
-              if (a && inspeccion) abrirPerfil(a, { lat: inspeccion.lat, lon: inspeccion.lon }, `${a.nombre} → punto medido`);
+              if (a && inspeccion) abrirPerfil(a, { lat: inspeccion.lat, lon: inspeccion.lon }, tx(`${a.nombre} → punto medido`, `${a.nombre} → measured point`));
             }}
           />
           <Leyenda estado={estado} resultado={resultado} antenas={escenario.antenas} usuarios={resumenUsuarios} />
@@ -2108,9 +2246,17 @@ export function Simulador() {
           {hoja && (
             <section className="absolute inset-x-0 bottom-0 z-40 flex max-h-[72%] flex-col rounded-t-2xl bg-papel shadow-2xl ring-1 ring-black/10 lg:hidden" aria-label="Panel">
               <div className="flex items-center justify-between px-4 pt-3 pb-1">
-                <p className="font-cond text-[17px] font-semibold">{hoja === "sembrar" ? "Sembrar la malla" : hoja === "antenas" ? "Nodos" : hoja === "parametros" ? "Parámetros" : "Resultado"}</p>
+                <p className="font-cond text-[17px] font-semibold">
+                  {hoja === "sembrar"
+                    ? tx("Sembrar la malla", "Seed the mesh")
+                    : hoja === "antenas"
+                      ? tx("Nodos", "Nodes")
+                      : hoja === "parametros"
+                        ? tx("Parámetros", "Parameters")
+                        : tx("Resultado", "Result")}
+                </p>
                 <button type="button" onClick={() => setHoja(null)} className="rounded-md px-2 py-1 text-[14px] text-carbon-2 hover:bg-black/5">
-                  Cerrar
+                  {tx("Cerrar", "Close")}
                 </button>
               </div>
               <div className="desplazable min-h-0 flex-1 overflow-y-auto px-3 pb-3">{hoja === "resultado" ? resultados : hoja === "sembrar" ? panelSembrar : contenidoPestana(hoja)}</div>
@@ -2120,23 +2266,23 @@ export function Simulador() {
         </main>
 
         {resultadosAbiertos && (
-          <aside className="hidden w-[360px] shrink-0 flex-col border-l border-linea bg-papel lg:flex" aria-label="Resultados">
+          <aside className="hidden w-[360px] shrink-0 flex-col border-l border-linea bg-papel lg:flex" aria-label={tx("Resultados", "Results")}>
             <div className="flex items-center gap-2 border-b border-linea px-4 py-2.5">
               <Waypoints size={17} className="text-salvia-oscura" />
-              <h2 className="font-cond text-[17px] font-semibold">Resultado</h2>
+              <h2 className="font-cond text-[17px] font-semibold">{tx("Resultado", "Result")}</h2>
             </div>
             <div className="desplazable min-h-0 flex-1 overflow-y-auto p-4">{resultados}</div>
           </aside>
         )}
       </div>
 
-      <nav className="flex shrink-0 border-t border-linea bg-papel lg:hidden" aria-label="Paneles">
+      <nav className="flex shrink-0 border-t border-linea bg-papel lg:hidden" aria-label={tx("Paneles", "Panels")}>
         {(
           [
-            ["sembrar", "Sembrar", <Sprout key="i" size={18} />],
-            ["antenas", "Nodos", <RadioTower key="i" size={18} />],
-            ["parametros", "Parámetros", <SlidersHorizontal key="i" size={18} />],
-            ["resultado", "Resultado", <Waypoints key="i" size={18} />],
+            ["sembrar", tx("Sembrar", "Seed"), <Sprout key="i" size={18} />],
+            ["antenas", tx("Nodos", "Nodes"), <RadioTower key="i" size={18} />],
+            ["parametros", tx("Parámetros", "Parameters"), <SlidersHorizontal key="i" size={18} />],
+            ["resultado", tx("Resultado", "Result"), <Waypoints key="i" size={18} />],
           ] as const
         ).map(([id, texto, icono]) => (
           <button

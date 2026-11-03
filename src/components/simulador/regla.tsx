@@ -13,8 +13,10 @@ import type { Feature, FeatureCollection } from "geojson";
 import { Eye, EyeOff, LocateFixed, Mountain, Ruler, Trash, Undo2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type Dispatch } from "react";
 
+import { tx } from "@/lib/idioma";
 import { areaPoligonoM2, distanciaM, formatoArea, formatoDistancia, longitudRutaM, rumbo, rumboTexto } from "@/lib/radio/geo";
 import type { Medicion, TipoMedicion } from "@/lib/radio/tipos";
+import { useIdioma } from "@/lib/use-idioma";
 
 import type { Accion, Estado } from "./estado";
 import { nuevoId } from "./estado";
@@ -22,7 +24,18 @@ import { Segmentado } from "./ui";
 
 type Punto = [number, number];
 const COLOR = "#1FC8F0";
-const NOMBRES: Record<TipoMedicion, string> = { linea: "Línea", trayecto: "Trayecto", area: "Área" };
+/** Nombre de cada tipo de medición en el idioma de la pantalla (también el de las mediciones nuevas: «Trayecto 1»). */
+const NOMBRES: Record<TipoMedicion, string> = {
+  get linea() {
+    return tx("Línea", "Line");
+  },
+  get trayecto() {
+    return tx("Trayecto", "Path");
+  },
+  get area() {
+    return tx("Área", "Area");
+  },
+};
 const VACIO: FeatureCollection = { type: "FeatureCollection", features: [] };
 
 export function resumenMedicion(m: { tipo: TipoMedicion; puntos: Punto[] }) {
@@ -37,8 +50,8 @@ export function resumenMedicion(m: { tipo: TipoMedicion; puntos: Punto[] }) {
 
 export function textoMedicion(m: { tipo: TipoMedicion; puntos: Punto[] }) {
   const r = resumenMedicion(m);
-  if (m.tipo === "area") return m.puntos.length >= 3 ? `${formatoArea(r.area)} · perímetro ${formatoDistancia(r.longitud)}` : formatoDistancia(r.longitud);
-  if (m.tipo === "linea" && r.tramos[0]) return `${formatoDistancia(r.longitud)} · rumbo ${rumboTexto(r.tramos[0].rumbo)}`;
+  if (m.tipo === "area") return m.puntos.length >= 3 ? tx(`${formatoArea(r.area)} · perímetro ${formatoDistancia(r.longitud)}`, `${formatoArea(r.area)} · perimeter ${formatoDistancia(r.longitud)}`) : formatoDistancia(r.longitud);
+  if (m.tipo === "linea" && r.tramos[0]) return tx(`${formatoDistancia(r.longitud)} · rumbo ${rumboTexto(r.tramos[0].rumbo)}`, `${formatoDistancia(r.longitud)} · bearing ${rumboTexto(r.tramos[0].rumbo)}`);
   return formatoDistancia(r.longitud);
 }
 
@@ -70,6 +83,8 @@ type Props = {
 };
 
 export function Regla({ mapa, estado, despachar, onPerfil, onCentrar, semilla }: Props) {
+  // Las etiquetas y las manijas sobre el mapa se vuelven a armar al cambiar de idioma
+  const lengua = useIdioma();
   const activa = estado.herramienta === "regla";
   const tipo = estado.reglaTipo;
   const mediciones = estado.escenario.mediciones;
@@ -256,7 +271,7 @@ export function Regla({ mapa, estado, despachar, onPerfil, onCentrar, semilla }:
       el.textContent = e.texto;
       vivas.set(e.clave, new maplibregl.Marker({ element: el, anchor: e.clase.startsWith("regla-total") ? "bottom-left" : "center", offset: e.clase.startsWith("regla-total") ? [8, -6] : [0, 0] }).setLngLat(e.lonlat).addTo(mapa));
     }
-  }, [mapa, mediciones, estado.medicionSel, vistaPrevia, tipo, seleccion]);
+  }, [mapa, mediciones, estado.medicionSel, vistaPrevia, tipo, seleccion, lengua]);
 
   // Manijas para editar la medición seleccionada
   useEffect(() => {
@@ -269,7 +284,7 @@ export function Regla({ mapa, estado, despachar, onPerfil, onCentrar, semilla }:
     puntos.forEach((p, i) => {
       const el = document.createElement("div");
       el.className = "manija-regla";
-      el.title = "Arrastre para mover · clic derecho o doble clic para borrar";
+      el.title = tx("Arrastre para mover · clic derecho o doble clic para borrar", "Drag to move · right-click or double-click to delete");
       const borrar = (ev: Event) => {
         ev.preventDefault();
         ev.stopPropagation();
@@ -290,7 +305,7 @@ export function Regla({ mapa, estado, despachar, onPerfil, onCentrar, semilla }:
       const b = puntos[(i + 1) % puntos.length];
       const el = document.createElement("div");
       el.className = "manija-regla media";
-      el.title = "Arrastre para agregar un punto";
+      el.title = tx("Arrastre para agregar un punto", "Drag to add a point");
       const mk = new maplibregl.Marker({ element: el, draggable: true }).setLngLat([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]).addTo(mapa);
       mk.on("dragend", () => {
         const q = mk.getLngLat();
@@ -304,7 +319,7 @@ export function Regla({ mapa, estado, despachar, onPerfil, onCentrar, semilla }:
       for (const mk of manijas.current) mk.remove();
       manijas.current = [];
     };
-  }, [mapa, seleccion, despachar]);
+  }, [mapa, seleccion, despachar, lengua]);
 
   if (!activa && !seleccion) return null;
 
@@ -314,16 +329,16 @@ export function Regla({ mapa, estado, despachar, onPerfil, onCentrar, semilla }:
   return (
     <section
       className="pointer-events-auto absolute top-28 left-3 z-20 flex max-h-[calc(100%-190px)] sm:top-16 sm:max-h-[calc(100%-150px)] w-[min(330px,calc(100%-24px))] flex-col overflow-hidden rounded-xl bg-white text-carbon shadow-lg ring-1 ring-black/10"
-      aria-label="Regla de medición"
+      aria-label={tx("Regla de medición", "Measuring ruler")}
       data-tour="regla"
     >
       <header className="flex items-center gap-2 border-b border-linea px-3 py-2">
         <Ruler size={17} className="text-salvia-oscura" />
-        <h2 className="flex-1 font-cond text-[16px] font-semibold">Regla</h2>
+        <h2 className="flex-1 font-cond text-[16px] font-semibold">{tx("Regla", "Ruler")}</h2>
         <button
           type="button"
           className="rounded p-1 text-tenue hover:bg-black/5"
-          aria-label="Cerrar la regla"
+          aria-label={tx("Cerrar la regla", "Close the ruler")}
           onClick={() => {
             despachar({ tipo: "medicion-seleccionar", id: null });
             if (activa) despachar({ tipo: "herramienta", herramienta: "mover" });
@@ -337,16 +352,16 @@ export function Regla({ mapa, estado, despachar, onPerfil, onCentrar, semilla }:
         {activa ? (
           <div className="space-y-2">
             <Segmentado<TipoMedicion>
-              etiqueta="Tipo de medición"
+              etiqueta={tx("Tipo de medición", "Measurement type")}
               valor={tipo}
               onCambio={(t) => {
                 despachar({ tipo: "regla-tipo", valor: t });
                 setBorrador([]);
               }}
               opciones={[
-                { valor: "linea", texto: "Línea", titulo: "Dos puntos: distancia y rumbo" },
-                { valor: "trayecto", texto: "Trayecto", titulo: "Varios puntos: distancia total" },
-                { valor: "area", texto: "Área", titulo: "Polígono: área y perímetro" },
+                { valor: "linea", texto: NOMBRES.linea, titulo: tx("Dos puntos: distancia y rumbo", "Two points: distance and bearing") },
+                { valor: "trayecto", texto: NOMBRES.trayecto, titulo: tx("Varios puntos: distancia total", "Several points: total distance") },
+                { valor: "area", texto: NOMBRES.area, titulo: tx("Polígono: área y perímetro", "Polygon: area and perimeter") },
               ]}
             />
             <div className="rounded-lg bg-papel px-2.5 py-2">
@@ -357,52 +372,60 @@ export function Regla({ mapa, estado, despachar, onPerfil, onCentrar, semilla }:
                   </p>
                   <p className="text-[12px] text-tenue">
                     {tipo === "linea" && enCurso.tramos[0]
-                      ? `Rumbo ${rumboTexto(enCurso.tramos[0].rumbo)}`
+                      ? tx(`Rumbo ${rumboTexto(enCurso.tramos[0].rumbo)}`, `Bearing ${rumboTexto(enCurso.tramos[0].rumbo)}`)
                       : tipo === "area"
-                        ? `Perímetro ${formatoDistancia(longitudRutaM(vistaPrevia, true))} · ${vistaPrevia.length} puntos`
-                        : `${vistaPrevia.length} puntos · ${enCurso.tramos.length} tramos`}
+                        ? tx(
+                            `Perímetro ${formatoDistancia(longitudRutaM(vistaPrevia, true))} · ${vistaPrevia.length} puntos`,
+                            `Perimeter ${formatoDistancia(longitudRutaM(vistaPrevia, true))} · ${vistaPrevia.length} points`,
+                          )
+                        : tx(
+                            `${vistaPrevia.length} puntos · ${enCurso.tramos.length} tramos`,
+                            `${vistaPrevia.length} points · ${enCurso.tramos.length} ${enCurso.tramos.length === 1 ? "segment" : "segments"}`,
+                          )}
                   </p>
                 </>
               ) : (
                 <p className="text-[13px] leading-snug text-carbon-2">
-                  {tipo === "linea" ? "Haga clic en el punto de inicio y luego en el de llegada." : "Haga clic para agregar puntos; doble clic o Enter para terminar."}
+                  {tipo === "linea"
+                    ? tx("Haga clic en el punto de inicio y luego en el de llegada.", "Click the starting point and then the end point.")
+                    : tx("Haga clic para agregar puntos; doble clic o Enter para terminar.", "Click to add points; double-click or press Enter to finish.")}
                 </p>
               )}
-              <p className="mt-1 text-[11.5px] leading-snug text-tenue">Esc cancela · Retroceso borra el último punto</p>
+              <p className="mt-1 text-[11.5px] leading-snug text-tenue">{tx("Esc cancela · Retroceso borra el último punto", "Esc cancels · Backspace deletes the last point")}</p>
             </div>
             {borrador.length > 0 && (
               <div className="flex gap-1.5">
                 {tipo !== "linea" && (
                   <button type="button" onClick={() => terminar()} className="rounded-lg bg-carbon px-3 py-1.5 text-[13px] font-medium text-white hover:bg-carbon-2">
-                    Terminar
+                    {tx("Terminar", "Finish")}
                   </button>
                 )}
                 <button type="button" onClick={() => setBorrador((b) => b.slice(0, -1))} className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[13px] ring-1 ring-linea hover:bg-papel-2">
-                  <Undo2 size={14} /> Quitar punto
+                  <Undo2 size={14} /> {tx("Quitar punto", "Remove point")}
                 </button>
                 <button type="button" onClick={() => setBorrador([])} className="rounded-lg px-2.5 py-1.5 text-[13px] text-carbon-2 hover:bg-black/5">
-                  Cancelar
+                  {tx("Cancelar", "Cancel")}
                 </button>
               </div>
             )}
           </div>
         ) : (
           <button type="button" onClick={() => despachar({ tipo: "herramienta", herramienta: "regla" })} className="w-full rounded-lg px-3 py-1.5 text-[13px] font-medium ring-1 ring-linea hover:bg-papel-2">
-            Medir otra distancia
+            {tx("Medir otra distancia", "Measure another distance")}
           </button>
         )}
 
         <div>
           <div className="mb-1.5 flex items-center justify-between">
-            <p className="font-cond text-[14px] font-semibold">Mediciones ({lista.length})</p>
+            <p className="font-cond text-[14px] font-semibold">{tx(`Mediciones (${lista.length})`, `Measurements (${lista.length})`)}</p>
             {lista.length > 1 && (
               <button type="button" className="text-[12px] text-sin hover:underline" onClick={() => despachar({ tipo: "mediciones-borrar" })}>
-                Borrar todas
+                {tx("Borrar todas", "Delete all")}
               </button>
             )}
           </div>
           {lista.length === 0 ? (
-            <p className="text-[12.5px] text-tenue">Aún no hay mediciones guardadas.</p>
+            <p className="text-[12.5px] text-tenue">{tx("Aún no hay mediciones guardadas.", "No saved measurements yet.")}</p>
           ) : (
             <ul className="space-y-1.5">
               {lista.map((m) => {
@@ -420,14 +443,20 @@ export function Regla({ mapa, estado, despachar, onPerfil, onCentrar, semilla }:
                         <span className="block truncate text-[13.5px] font-medium">{m.nombre}</span>
                         <span className="block truncate text-[12px] text-tenue tabular-nums">{textoMedicion(m)}</span>
                       </button>
-                      <button type="button" className="rounded p-1 text-carbon-2 hover:bg-black/5" title={m.visible ? "Ocultar" : "Mostrar"} aria-label={m.visible ? `Ocultar ${m.nombre}` : `Mostrar ${m.nombre}`} onClick={() => despachar({ tipo: "medicion-editar", id: m.id, cambios: { visible: !m.visible } })}>
+                      <button
+                        type="button"
+                        className="rounded p-1 text-carbon-2 hover:bg-black/5"
+                        title={m.visible ? tx("Ocultar", "Hide") : tx("Mostrar", "Show")}
+                        aria-label={m.visible ? tx(`Ocultar ${m.nombre}`, `Hide ${m.nombre}`) : tx(`Mostrar ${m.nombre}`, `Show ${m.nombre}`)}
+                        onClick={() => despachar({ tipo: "medicion-editar", id: m.id, cambios: { visible: !m.visible } })}
+                      >
                         {m.visible ? <Eye size={15} /> : <EyeOff size={15} />}
                       </button>
                       <button
                         type="button"
                         className="rounded p-1 text-carbon-2 hover:bg-black/5"
-                        title="Ver en el mapa"
-                        aria-label={`Ver ${m.nombre} en el mapa`}
+                        title={tx("Ver en el mapa", "Show on the map")}
+                        aria-label={tx(`Ver ${m.nombre} en el mapa`, `Show ${m.nombre} on the map`)}
                         onClick={() => {
                           const lons = m.puntos.map((q) => q[0]);
                           const lats = m.puntos.map((q) => q[1]);
@@ -437,18 +466,30 @@ export function Regla({ mapa, estado, despachar, onPerfil, onCentrar, semilla }:
                         <LocateFixed size={15} />
                       </button>
                       {m.tipo !== "area" && (
-                        <button type="button" className="rounded p-1 text-carbon-2 hover:bg-black/5" title="Perfil del terreno" aria-label={`Perfil del terreno de ${m.nombre}`} onClick={() => onPerfil(m)}>
+                        <button
+                          type="button"
+                          className="rounded p-1 text-carbon-2 hover:bg-black/5"
+                          title={tx("Perfil del terreno", "Terrain profile")}
+                          aria-label={tx(`Perfil del terreno de ${m.nombre}`, `Terrain profile of ${m.nombre}`)}
+                          onClick={() => onPerfil(m)}
+                        >
                           <Mountain size={15} />
                         </button>
                       )}
-                      <button type="button" className="rounded p-1 text-sin hover:bg-sin/10" title="Borrar" aria-label={`Borrar ${m.nombre}`} onClick={() => despachar({ tipo: "medicion-eliminar", id: m.id })}>
+                      <button
+                        type="button"
+                        className="rounded p-1 text-sin hover:bg-sin/10"
+                        title={tx("Borrar", "Delete")}
+                        aria-label={tx(`Borrar ${m.nombre}`, `Delete ${m.nombre}`)}
+                        onClick={() => despachar({ tipo: "medicion-eliminar", id: m.id })}
+                      >
                         <Trash size={15} />
                       </button>
                     </div>
                     {sel && (
                       <div className="space-y-1.5 border-t border-linea px-2 pt-1.5 pb-2">
                         <label className="block">
-                          <span className="mb-0.5 block text-[12px] text-carbon-2">Nombre</span>
+                          <span className="mb-0.5 block text-[12px] text-carbon-2">{tx("Nombre", "Name")}</span>
                           <input
                             className="campo"
                             value={m.nombre}
@@ -459,7 +500,7 @@ export function Regla({ mapa, estado, despachar, onPerfil, onCentrar, semilla }:
                         <ol className="space-y-0.5 text-[12px] tabular-nums">
                           {r.tramos.map((t, i) => (
                             <li key={i} className="flex justify-between gap-2">
-                              <span className="text-tenue">Tramo {i + 1}</span>
+                              <span className="text-tenue">{tx(`Tramo ${i + 1}`, `Segment ${i + 1}`)}</span>
                               <span>
                                 {formatoDistancia(t.distancia)} · {rumboTexto(t.rumbo)}
                               </span>
@@ -467,12 +508,17 @@ export function Regla({ mapa, estado, despachar, onPerfil, onCentrar, semilla }:
                           ))}
                           {m.tipo === "area" && m.puntos.length >= 3 && (
                             <li className="flex justify-between gap-2 border-t border-linea pt-0.5">
-                              <span className="text-tenue">Área</span>
+                              <span className="text-tenue">{tx("Área", "Area")}</span>
                               <span>{formatoArea(r.area)}</span>
                             </li>
                           )}
                         </ol>
-                        <p className="text-[11.5px] leading-snug text-tenue">Arrastre un punto para moverlo, el punto medio de un tramo para agregar uno, y clic derecho o doble clic sobre un punto para borrarlo.</p>
+                        <p className="text-[11.5px] leading-snug text-tenue">
+                          {tx(
+                            "Arrastre un punto para moverlo, el punto medio de un tramo para agregar uno, y clic derecho o doble clic sobre un punto para borrarlo.",
+                            "Drag a point to move it, the midpoint of a segment to add a new one, and right-click or double-click a point to delete it.",
+                          )}
+                        </p>
                       </div>
                     )}
                   </li>

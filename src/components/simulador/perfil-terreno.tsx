@@ -8,8 +8,10 @@
 // Perfil del terreno de una medición (sin cálculo de radio): alturas, puntos de quiebre, subida y bajada.
 import { X } from "lucide-react";
 
+import { tx } from "@/lib/idioma";
 import { formatoDistancia } from "@/lib/radio/geo";
 import type { PerfilTerreno } from "@/lib/radio/tipos";
+import { useIdioma } from "@/lib/use-idioma";
 
 import { fmt } from "./ui";
 
@@ -27,10 +29,11 @@ function ticks(min: number, max: number, n: number) {
 }
 
 export function PerfilTerrenoPanel({ perfil: p, titulo, onCerrar }: { perfil: PerfilTerreno | null; titulo: string; onCerrar: () => void }) {
+  useIdioma();
   if (!p) {
     return (
       <div className="pointer-events-auto absolute right-3 bottom-10 left-3 z-20 rounded-xl bg-white p-4 shadow-lg ring-1 ring-black/10 sm:right-24">
-        <p className="text-[14px] text-tenue">Calculando el perfil del terreno…</p>
+        <p className="text-[14px] text-tenue">{tx("Calculando el perfil del terreno…", "Calculating the terrain profile…")}</p>
       </div>
     );
   }
@@ -46,21 +49,30 @@ export function PerfilTerrenoPanel({ perfil: p, titulo, onCerrar }: { perfil: Pe
   const xs = ticks(0, d / 1000, 6);
   const ys = ticks(y0, y1, 4);
   const pendiente = p.puntos.length > 1 ? Math.max(...p.puntos.slice(1).map((q, i) => Math.abs(q.terrenoM - p.puntos[i].terrenoM) / Math.max(1, q.distanciaM - p.puntos[i].distanciaM))) : 0;
+  const distancia = formatoDistancia(p.distanciaM);
+  const minimo = Math.round(p.minimoM);
+  const maximo = Math.round(p.maximoM);
+  const subida = Math.round(p.subidaM);
+  const bajada = Math.round(p.bajadaM);
+  const pendientePct = fmt(pendiente * 100, 0);
   return (
-    <div className="pointer-events-auto absolute right-3 bottom-10 left-3 z-20 rounded-xl bg-white p-3 text-carbon shadow-lg ring-1 ring-black/10 sm:right-24" role="dialog" aria-label={`Perfil del terreno ${titulo}`}>
+    <div className="pointer-events-auto absolute right-3 bottom-10 left-3 z-20 rounded-xl bg-white p-3 text-carbon shadow-lg ring-1 ring-black/10 sm:right-24" role="dialog" aria-label={tx(`Perfil del terreno ${titulo}`, `Terrain profile ${titulo}`)}>
       <div className="flex flex-wrap items-start gap-x-5 gap-y-1">
         <div className="min-w-0 flex-1">
-          <p className="truncate font-cond text-[16px] font-semibold">Perfil del terreno · {titulo}</p>
+          <p className="truncate font-cond text-[16px] font-semibold">{tx(`Perfil del terreno · ${titulo}`, `Terrain profile · ${titulo}`)}</p>
           <p className="text-[12px] text-tenue">
-            {formatoDistancia(p.distanciaM)} · altura {Math.round(p.minimoM)}–{Math.round(p.maximoM)} m s. n. m. · sube {Math.round(p.subidaM)} m · baja {Math.round(p.bajadaM)} m · pendiente máx. ≈ {fmt(pendiente * 100, 0)} %
-            {p.fuente === "plano" ? " · sin datos de relieve (terreno plano)" : ""}
+            {tx(
+              `${distancia} · altura ${minimo}–${maximo} m s. n. m. · sube ${subida} m · baja ${bajada} m · pendiente máx. ≈ ${pendientePct} %`,
+              `${distancia} · elevation ${minimo}–${maximo} m a.s.l. · climbs ${subida} m · descends ${bajada} m · max. slope ≈ ${pendientePct}%`,
+            )}
+            {p.fuente === "plano" ? tx(" · sin datos de relieve (terreno plano)", " · no terrain data (flat terrain)") : ""}
           </p>
         </div>
-        <button type="button" onClick={onCerrar} className="rounded p-1 text-tenue hover:bg-black/5" aria-label="Cerrar perfil del terreno">
+        <button type="button" onClick={onCerrar} className="rounded p-1 text-tenue hover:bg-black/5" aria-label={tx("Cerrar perfil del terreno", "Close terrain profile")}>
           <X size={18} />
         </button>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="mt-1 h-auto w-full" role="img" aria-label="Perfil del terreno">
+      <svg viewBox={`0 0 ${W} ${H}`} className="mt-1 h-auto w-full" role="img" aria-label={tx("Perfil del terreno", "Terrain profile")}>
         {ys.map((v) => (
           <g key={`y${v}`}>
             <line x1={M.izq} x2={W - M.der} y1={sy(v)} y2={sy(v)} stroke="#E8E4DC" />

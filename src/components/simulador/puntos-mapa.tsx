@@ -11,13 +11,19 @@ import { Copy, Crosshair, Eye, MapPin, Ruler, Signal, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { textoUbicacion } from "@/lib/geo/referencia";
+import { tx } from "@/lib/idioma";
 import { aGMS } from "@/lib/radio/geo";
 import type { Antena, NodoMalla, ResumenAntena } from "@/lib/radio/tipos";
+import { useIdioma } from "@/lib/use-idioma";
 
 import { IconoEquipo, IconoNodo, IconoTorre } from "./icono-torre";
 import { fmt } from "./ui";
 
+/** «m s. n. m.» (metros sobre el nivel del mar) en el idioma de la pantalla. */
+const sobreElMar = () => tx("m s. n. m.", "m a.s.l.");
+
 export function CoordenadasCursor({ mapa }: { mapa: MapaML | null }) {
+  useIdioma();
   const [p, setP] = useState<{ lat: number; lon: number } | null>(null);
   useEffect(() => {
     if (!mapa) return;
@@ -48,6 +54,7 @@ export function CoordenadasCursor({ mapa }: { mapa: MapaML | null }) {
 export type AccionPunto = "antena" | "nodo" | "senal" | "medir" | "centrar" | "copiar" | "marcar";
 
 export function MenuContextual({ x, y, lat, lon, onAccion, onCerrar }: { x: number; y: number; lat: number; lon: number; onAccion: (a: AccionPunto) => void; onCerrar: () => void }) {
+  useIdioma();
   const caja = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const cerrar = (e: MouseEvent | KeyboardEvent) => {
@@ -77,22 +84,23 @@ export function MenuContextual({ x, y, lat, lon, onAccion, onCerrar }: { x: numb
   );
   const lugar = textoUbicacion(lat, lon);
   return (
-    <div ref={caja} role="menu" aria-label="Acciones en este punto" className="absolute z-40 w-64 rounded-xl bg-white p-1.5 text-carbon shadow-xl ring-1 ring-black/10" style={{ left: x, top: y }}>
+    <div ref={caja} role="menu" aria-label={tx("Acciones en este punto", "Actions at this point")} className="absolute z-40 w-64 rounded-xl bg-white p-1.5 text-carbon shadow-xl ring-1 ring-black/10" style={{ left: x, top: y }}>
       <p className="px-2.5 pt-1 pb-1.5 text-[11.5px] leading-snug text-tenue tabular-nums">
         {aGMS(lat, "lat")} · {aGMS(lon, "lon")}
         {lugar ? <span className="block">{lugar}</span> : null}
       </p>
-      {item("antena", <IconoTorre className="h-4 w-4" />, "Agregar nodo antena aquí")}
-      {item("nodo", <IconoEquipo className="h-4 w-4" />, "Agregar nodo de campo aquí")}
-      {item("senal", <Signal size={16} />, "Señal en este punto")}
-      {item("medir", <Ruler size={16} />, "Medir desde aquí")}
-      {item("marcar", <Crosshair size={16} />, "Marcar este punto")}
-      {item("copiar", <Copy size={16} />, "Copiar coordenadas")}
+      {item("antena", <IconoTorre className="h-4 w-4" />, tx("Agregar nodo antena aquí", "Add antenna node here"))}
+      {item("nodo", <IconoEquipo className="h-4 w-4" />, tx("Agregar nodo de campo aquí", "Add field node here"))}
+      {item("senal", <Signal size={16} />, tx("Señal en este punto", "Signal at this point"))}
+      {item("medir", <Ruler size={16} />, tx("Medir desde aquí", "Measure from here"))}
+      {item("marcar", <Crosshair size={16} />, tx("Marcar este punto", "Mark this point"))}
+      {item("copiar", <Copy size={16} />, tx("Copiar coordenadas", "Copy coordinates"))}
     </div>
   );
 }
 
 export function TarjetaPunto({ lat, lon, titulo, onAccion, onCerrar }: { lat: number; lon: number; titulo: string; onAccion: (a: AccionPunto) => void; onCerrar: () => void }) {
+  useIdioma();
   const lugar = textoUbicacion(lat, lon);
   const boton = (a: AccionPunto, texto: string) => (
     <button type="button" onClick={() => onAccion(a)} className="rounded-lg px-2.5 py-1 text-[12.5px] font-medium ring-1 ring-linea hover:bg-papel-2">
@@ -100,7 +108,7 @@ export function TarjetaPunto({ lat, lon, titulo, onAccion, onCerrar }: { lat: nu
     </button>
   );
   return (
-    <div className="pointer-events-auto absolute top-28 left-1/2 z-20 sm:top-16 w-[min(380px,calc(100%-24px))] -translate-x-1/2 rounded-xl bg-white p-3 text-carbon shadow-lg ring-1 ring-black/10" role="dialog" aria-label="Punto marcado">
+    <div className="pointer-events-auto absolute top-28 left-1/2 z-20 sm:top-16 w-[min(380px,calc(100%-24px))] -translate-x-1/2 rounded-xl bg-white p-3 text-carbon shadow-lg ring-1 ring-black/10" role="dialog" aria-label={tx("Punto marcado", "Marked point")}>
       <div className="flex items-start gap-2">
         <MapPin size={18} className="mt-0.5 shrink-0 text-melki" />
         <div className="min-w-0 flex-1">
@@ -110,16 +118,16 @@ export function TarjetaPunto({ lat, lon, titulo, onAccion, onCerrar }: { lat: nu
           </p>
           {lugar && <p className="text-[12px] text-carbon-2">{lugar}</p>}
         </div>
-        <button type="button" onClick={onCerrar} className="rounded p-1 text-tenue hover:bg-black/5" aria-label="Quitar el punto">
+        <button type="button" onClick={onCerrar} className="rounded p-1 text-tenue hover:bg-black/5" aria-label={tx("Quitar el punto", "Remove the point")}>
           <X size={16} />
         </button>
       </div>
       <div className="mt-2 flex flex-wrap gap-1.5">
-        {boton("antena", "Agregar nodo antena")}
-        {boton("nodo", "Agregar nodo")}
-        {boton("senal", "Señal aquí")}
-        {boton("medir", "Medir desde aquí")}
-        {boton("copiar", "Copiar")}
+        {boton("antena", tx("Agregar nodo antena", "Add antenna node"))}
+        {boton("nodo", tx("Agregar nodo", "Add node"))}
+        {boton("senal", tx("Señal aquí", "Signal here"))}
+        {boton("medir", tx("Medir desde aquí", "Measure from here"))}
+        {boton("copiar", tx("Copiar", "Copy"))}
       </div>
     </div>
   );
@@ -147,13 +155,26 @@ export function TarjetaNodo({
   onSolo: (v: boolean) => void;
   onCerrar: () => void;
 }) {
+  useIdioma();
   const campo = (antena.tipo ?? "antena") === "nodo";
   const lugar = textoUbicacion(antena.lat, antena.lon);
   // En el modo «Sembrar la malla» se habla de gateway, repetidores y personas
-  const clase = sembrar ? (antena.pasarela ? "Gateway + Internet" : campo ? "Persona" : "Repetidor") : `${campo ? "Nodo de campo" : "Nodo antena"}${antena.pasarela ? " · pasarela" : ""}`;
+  const clase = sembrar
+    ? antena.pasarela
+      ? "Gateway + Internet"
+      : campo
+        ? tx("Persona", "Person")
+        : tx("Repetidor", "Repeater")
+    : `${campo ? tx("Nodo de campo", "Field node") : tx("Nodo antena", "Antenna node")}${antena.pasarela ? tx(" · pasarela", " · gateway") : ""}`;
   const destino = sembrar ? "del gateway" : "de la pasarela";
+  // Ruta hasta el gateway (la pasarela): «A 2 saltos del gateway: Persona 1 → Repetidor 1 → Gateway.»
+  const ruta = (n: NodoMalla) => {
+    if (n.saltos === null) return tx(`Sin ruta ${sembrar ? "al gateway" : "a la pasarela"}.`, "No route to the gateway.");
+    const camino = n.ruta.map((id) => nombres.get(id) ?? id).join(" → ");
+    return tx(`A ${n.saltos} ${n.saltos === 1 ? "salto" : "saltos"} ${destino}: ${camino}.`, `${n.saltos} ${n.saltos === 1 ? "hop" : "hops"} from the gateway: ${camino}.`);
+  };
   return (
-    <div className="pointer-events-auto absolute right-3 bottom-28 z-10 hidden w-72 rounded-xl bg-white/95 p-3 text-carbon shadow-lg ring-1 ring-black/10 xl:block" aria-label={`Información de ${antena.nombre}`} data-tour="tarjeta-nodo">
+    <div className="pointer-events-auto absolute right-3 bottom-28 z-10 hidden w-72 rounded-xl bg-white/95 p-3 text-carbon shadow-lg ring-1 ring-black/10 xl:block" aria-label={tx(`Información de ${antena.nombre}`, `Information about ${antena.nombre}`)} data-tour="tarjeta-nodo">
       <div className="flex items-start gap-2">
         <span className="text-carbon">
           <IconoNodo tipo={antena.tipo} className="h-7 w-7" />
@@ -164,7 +185,7 @@ export function TarjetaNodo({
             {clase} · {fmt(antena.alturaM, antena.alturaM % 1 ? 1 : 0)} m · {fmt(antena.gananciaDbi)} dBi
           </p>
         </div>
-        <button type="button" onClick={onCerrar} className="rounded p-1 text-tenue hover:bg-black/5" aria-label="Cerrar la información">
+        <button type="button" onClick={onCerrar} className="rounded p-1 text-tenue hover:bg-black/5" aria-label={tx("Cerrar la información", "Close the information")}>
           <X size={15} />
         </button>
       </div>
@@ -174,27 +195,25 @@ export function TarjetaNodo({
       </p>
       {resumen && (
         <dl className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-[12.5px]">
-          <dt className="text-tenue">Alcance con servicio</dt>
+          <dt className="text-tenue">{tx("Alcance con servicio", "Range with service")}</dt>
           <dd className="text-right tabular-nums">
             {resumen.alcanceLimitado ? "≥ " : ""}
             {fmt(resumen.alcanceKm, 1)} km
           </dd>
-          <dt className="text-tenue">Alcance confiable</dt>
+          <dt className="text-tenue">{tx("Alcance confiable", "Reliable range")}</dt>
           <dd className="text-right tabular-nums">{fmt(resumen.alcanceConfiableKm, 1)} km</dd>
-          <dt className="text-tenue">Área con servicio</dt>
+          <dt className="text-tenue">{tx("Área con servicio", "Area with service")}</dt>
           <dd className="text-right tabular-nums">{fmt(resumen.areaServicioKm2, 1)} km²</dd>
-          <dt className="text-tenue">Terreno</dt>
-          <dd className="text-right tabular-nums">{resumen.elevacionM} m s. n. m.</dd>
+          <dt className="text-tenue">{tx("Terreno", "Terrain")}</dt>
+          <dd className="text-right tabular-nums">
+            {resumen.elevacionM} {sobreElMar()}
+          </dd>
         </dl>
       )}
-      {nodo && !antena.pasarela && (
-        <p className="mt-1.5 text-[12px] leading-snug text-carbon-2">
-          {nodo.saltos === null ? `Sin ruta ${sembrar ? "al gateway" : "a la pasarela"}.` : `A ${nodo.saltos} ${nodo.saltos === 1 ? "salto" : "saltos"} ${destino}: ${nodo.ruta.map((id) => nombres.get(id) ?? id).join(" → ")}.`}
-        </p>
-      )}
+      {nodo && !antena.pasarela && <p className="mt-1.5 text-[12px] leading-snug text-carbon-2">{ruta(nodo)}</p>}
       {resumen && (
         <button type="button" onClick={() => onSolo(!soloSeleccionada)} className="mt-2 flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12.5px] font-medium ring-1 ring-linea hover:bg-papel-2" aria-pressed={soloSeleccionada}>
-          <Eye size={14} /> {soloSeleccionada ? "Ver la cobertura de todos" : "Ver solo su cobertura"}
+          <Eye size={14} /> {soloSeleccionada ? tx("Ver la cobertura de todos", "Show everyone’s coverage") : tx("Ver solo su cobertura", "Show only its coverage")}
         </button>
       )}
       {extra && <div className="mt-2">{extra}</div>}

@@ -11,6 +11,7 @@ import maplibregl, { type GeoJSONSource, type ImageSource, type Map as MapaML, t
 import { useEffect, useRef, useState, type Dispatch } from "react";
 
 import { CONFIG, urlsTeselas } from "@/lib/config";
+import { decimalLocal, tx } from "@/lib/idioma";
 import type { CambioAjuste } from "@/lib/radio/ajuste";
 import type { EstadoRed } from "@/lib/radio/estado-red";
 import { metrosPorGrado } from "@/lib/radio/geo";
@@ -18,6 +19,7 @@ import { anchosHaz, esDireccional } from "@/lib/radio/patron";
 import type { DestinoSiembra, PuntoSiembra } from "@/lib/radio/siembra";
 import type { Inspeccion } from "@/lib/radio/simulacion";
 import type { Antena, ResultadoSimulacion } from "@/lib/radio/tipos";
+import { useIdioma } from "@/lib/use-idioma";
 
 import { geojsonAlcance, geojsonAnillos, type EtiquetaAlcance } from "./capa-alcance";
 import { COLORES_ANTENA, esquinas, opcionesEscala, pintarCobertura } from "./capa-cobertura";
@@ -106,6 +108,18 @@ export const ZOOM_MAXIMO = 17;
  * Esri tiene nivel 17 en toda Colombia, pero el 18 falta en zonas rurales (p. ej. Vichada) y el 19 en casi todo el campo.
  */
 const ZOOM_IMAGENES = { esri: 17, opentopomap: 17, osm: 19 } as const;
+
+/** El crédito de cada fuente del estilo (el mismo que le pone `estilo()`), para cambiarlo de idioma. */
+const CREDITO_FUENTE: Record<string, keyof typeof CONFIG.atribucion> = {
+  satelite: "esri",
+  etiquetas: "esri",
+  vias: "esri",
+  topografico: "esri",
+  opentopomap: "opentopomap",
+  calles: "osm",
+  "dem-terreno": "relieve",
+  "dem-sombra": "relieve",
+};
 
 function estilo(): maplibregl.StyleSpecification {
   const raster = (url: string, attribution: string, maxzoom: number): maplibregl.RasterSourceSpecification => ({
@@ -207,8 +221,11 @@ function sincronizarEtiquetas(m: MapaML, vivas: Map<string, Marker>, lista: Etiq
 }
 
 export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar, solicitud, punto, onMenu, onListo, sembrar, onPieza, onDestino, ajuste, estres, usuarios }: Props) {
+  // Los textos que se pintan a mano sobre el mapa (etiquetas, títulos, créditos) se rehacen al cambiar de idioma
+  const lengua = useIdioma();
   const contenedor = useRef<HTMLDivElement>(null);
   const mapa = useRef<MapaML | null>(null);
+  const creditos = useRef<maplibregl.AttributionControl | null>(null);
   const marcadores = useRef(new Map<string, Marker>());
   const etiquetasEnlace = useRef<Marker[]>([]);
   const etiquetasAlcance = useRef(new Map<string, Marker>());
@@ -241,7 +258,8 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
       maxPitch: 70,
       fadeDuration: 0,
     });
-    m.addControl(new maplibregl.AttributionControl({ compact: true, customAttribution: CONFIG.atribucion.division }), "bottom-right");
+    creditos.current = new maplibregl.AttributionControl({ compact: true, customAttribution: CONFIG.atribucion.division });
+    m.addControl(creditos.current, "bottom-right");
     m.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
     m.addControl(new maplibregl.ScaleControl({ unit: "metric", maxWidth: 120 }), "bottom-left");
     m.on("load", () => {
@@ -376,8 +394,22 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
       marcas.clear();
       m.remove();
       mapa.current = null;
+      creditos.current = null;
     };
   }, []);
+
+  // Créditos del mapa (los de cada fuente y el de los límites) en el idioma de la pantalla; se quedan plegados
+  useEffect(() => {
+    const m = mapa.current;
+    const control = creditos.current;
+    if (!m || !control || !listo) return;
+    for (const [id, clave] of Object.entries(CREDITO_FUENTE)) {
+      const fuente = m.getSource(id);
+      if (fuente) fuente.attribution = CONFIG.atribucion[clave];
+    }
+    control.options = { ...control.options, customAttribution: CONFIG.atribucion.division };
+    control._updateAttributions();
+  }, [lengua, listo]);
 
   // Cursor según la herramienta
   useEffect(() => {
@@ -502,7 +534,7 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
       estado.vista.mostrarAnillos && centroAnillos ? geojsonAnillos(centroAnillos, radioKm) : { datos: { type: "FeatureCollection" as const, features: [] }, etiquetas: [] };
     (m.getSource("anillos") as GeoJSONSource | undefined)?.setData(anillos.datos);
     sincronizarEtiquetas(m, etiquetasAnillos.current, anillos.etiquetas);
-  }, [resultado, antenas, estado.vista.mostrarAlcance, estado.vista.mostrarAnillos, estado.vista.soloSeleccionada, estado.seleccion, centroAnillos, radioKm, listo, redMapa]);
+  }, [resultado, antenas, estado.vista.mostrarAlcance, estado.vista.mostrarAnillos, estado.vista.soloSeleccionada, estado.seleccion, centroAnillos, radioKm, listo, redMapa, lengua]);
 
   // Estilo del alcance según el modo
   const modoSembrar = Boolean(sembrar);
@@ -567,10 +599,13 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
       const el = document.createElement("div");
       el.className = `etiqueta-enlace enlace-${e.clase}`;
       el.textContent = `${e.margen.toFixed(0)} dB`;
-      el.title = `${a.nombre} – ${b.nombre}: ${e.margen.toFixed(1).replace(".", ",")} dB a ${e.distanciaKm.toFixed(2).replace(".", ",")} km`;
+      el.title = tx(
+        `${a.nombre} – ${b.nombre}: ${decimalLocal(e.margen, 1)} dB a ${decimalLocal(e.distanciaKm, 2)} km`,
+        `${a.nombre} – ${b.nombre}: ${decimalLocal(e.margen, 1)} dB at ${decimalLocal(e.distanciaKm, 2)} km`,
+      );
       return new maplibregl.Marker({ element: el }).setLngLat([(a.lon + b.lon) / 2, (a.lat + b.lat) / 2]).addTo(m);
     });
-  }, [resultado, antenas, estado.vista.mostrarEnlaces, estado.vista.mostrarSinEnlace, listo]);
+  }, [resultado, antenas, estado.vista.mostrarEnlaces, estado.vista.mostrarSinEnlace, listo, lengua]);
 
   // Marcadores de nodos
   const red = redMapa;
@@ -636,11 +671,16 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
         el.removeAttribute("title");
       }
       mk.setOffset(marca ? [0, RADIO_PIEZA] : [0, 0]);
-      el.setAttribute("aria-label", red ? `${{ gateway: "Gateway", repetidor: "Repetidor", persona: "Persona" }[piezaDe(a)]} ${a.nombre}` : `${(a.tipo ?? "antena") === "nodo" ? "Nodo" : "Nodo antena"} ${a.nombre}`);
+      const clase = red
+        ? { gateway: "Gateway", repetidor: tx("Repetidor", "Repeater"), persona: tx("Persona", "Person") }[piezaDe(a)]
+        : (a.tipo ?? "antena") === "nodo"
+          ? tx("Nodo", "Node")
+          : tx("Nodo antena", "Antenna node");
+      el.setAttribute("aria-label", `${clase} ${a.nombre}`);
       const p = mk.getLngLat();
       if (Math.abs(p.lat - a.lat) > 1e-7 || Math.abs(p.lng - a.lon) > 1e-7) mk.setLngLat([a.lon, a.lat]);
     });
-  }, [antenas, estado.seleccion, resultado, estado.vista.modo, red, usuarios]);
+  }, [antenas, estado.seleccion, resultado, estado.vista.modo, red, usuarios, lengua]);
 
   // Repetidores propuestos por el sembrado automático: torres fantasma y la cadena hasta cada destino
   const propuesta = sembrar?.propuesta ?? null;
@@ -662,19 +702,19 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
       if (desde) features.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [desde, [q.lon, q.lat]] } });
       const el = document.createElement("div");
       el.className = "marcador-raiz";
-      el.innerHTML = htmlPiezaPropuesta(q.id.replace("propuesto-", "Propuesto "), q.margenDb);
+      el.innerHTML = htmlPiezaPropuesta(q.id.replace("propuesto-", tx("Propuesto ", "Proposed ")), q.margenDb);
       propuestos.current.push(new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat([q.lon, q.lat]).addTo(m));
     }
     for (const d of propuesta.destinos) {
       if (!d.antena) {
         const el = document.createElement("div");
         el.className = "destino-siembra";
-        el.title = d.nombre ?? "Destino";
+        el.title = d.nombre ?? tx("Destino", "Destination");
         propuestos.current.push(new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat([d.lon, d.lat]).addTo(m));
       }
     }
     fuente?.setData({ type: "FeatureCollection", features });
-  }, [propuesta, antenas, listo]);
+  }, [propuesta, antenas, listo, lengua]);
 
   // Zonas de la prueba de estrés: círculo de color por zona y una etiqueta con el resultado
   const etiquetasEstres = useRef<Marker[]>([]);
@@ -752,11 +792,17 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
         if (a) features.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [[a.lon, a.lat], [c.lon, c.lat]] } });
         const el = document.createElement("div");
         el.className = "marcador-raiz";
-        el.innerHTML = htmlPiezaPropuesta(`${c.nombre} (nuevo sitio)`, 0);
+        el.innerHTML = htmlPiezaPropuesta(tx(`${c.nombre} (nuevo sitio)`, `${c.nombre} (new site)`), 0);
         poner(el, [c.lon, c.lat]);
       } else if (c.tipo === "altura") etiquetar(c.id, `${c.aM > c.deM ? "↑" : "↓"} ${c.aM} m`);
-      else if (c.tipo === "antena") etiquetar(c.id, c.patron === "omni" ? "omni" : `${c.patron === "sectorial-90" ? "sector 90°" : c.patron === "sectorial-120" ? "sector 120°" : c.patron} → ${Math.round(c.azimutDeg)}°`);
-      else if (c.tipo === "quitar") etiquetar(c.id, "quitar");
+      else if (c.tipo === "antena")
+        etiquetar(
+          c.id,
+          c.patron === "omni"
+            ? "omni"
+            : `${c.patron === "sectorial-90" ? "sector 90°" : c.patron === "sectorial-120" ? "sector 120°" : c.patron === "parabolica" ? tx("parabolica", "parabolic") : c.patron} → ${Math.round(c.azimutDeg)}°`,
+        );
+      else if (c.tipo === "quitar") etiquetar(c.id, tx("quitar", "remove"));
     }
     for (const [id, textos] of etiquetas) {
       const a = porId.get(id);
@@ -768,7 +814,7 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
       poner(el, movido ? [movido.lon, movido.lat] : [a.lon, a.lat], "bottom", [0, -24]);
     }
     fuente?.setData({ type: "FeatureCollection", features });
-  }, [ajuste, antenas, listo]);
+  }, [ajuste, antenas, listo, lengua]);
 
   // Flujo vivo de la malla: rutas de la gente conectada hasta el gateway (y de los repetidores, para la troncal)
   const animarRed = estado.vista.animarRed;
@@ -878,7 +924,7 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
                 vuelta = true;
                 el.style.opacity = "";
                 el.classList.add("respuesta");
-                el.innerHTML = "<b>IA</b>";
+                el.innerHTML = `<b>${tx("IA", "AI")}</b>`;
                 k = puntos.length - 1;
                 tramo = [{ de: k, a: k - 1, t0: performance.now() }];
                 inicio = performance.now();

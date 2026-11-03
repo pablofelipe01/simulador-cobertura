@@ -4,12 +4,15 @@
 // 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
 
 // Exportación del escenario (JSON), de los nodos (CSV) y de la simulación para Google Earth (KMZ):
-// cobertura, nodos, enlaces, rango de alcance y mediciones de la regla.
+// cobertura, nodos, enlaces, rango de alcance y mediciones de la regla. Los textos (columnas, carpetas, descripciones,
+// leyenda y nombres de los archivos) van en el idioma de la pantalla; las coordenadas y las columnas numéricas, igual
+// en los dos idiomas para que las lean otros programas.
+import { decimalLocal, tx } from "@/lib/idioma";
 import { CLASES, ENLACES } from "@/lib/radio/constantes";
 import { aGMS, formatoArea, formatoDistancia, latAMercator } from "@/lib/radio/geo";
 import { esDireccional, patronPorId } from "@/lib/radio/patron";
 import { resumenRed } from "@/lib/radio/red";
-import type { Antena, Escenario, ResultadoSimulacion } from "@/lib/radio/tipos";
+import type { Antena, Escenario, ResultadoSimulacion, Rol } from "@/lib/radio/tipos";
 import { textoNivel, type UnidadId } from "@/lib/radio/unidades";
 
 import { geojsonAlcance } from "./capa-alcance";
@@ -35,23 +38,47 @@ export function nombreArchivo(base: string) {
     .replace(/[^\w-]+/g, "_")
     .replace(/_+/g, "_")
     .replace(/^_|_$/g, "");
-  return limpio || "escenario";
+  return limpio || tx("escenario", "scenario");
 }
 
 export function exportarJson(e: Escenario) {
   descargar(`${nombreArchivo(e.nombre)}.json`, new Blob([JSON.stringify(e, null, 2)], { type: "application/json" }));
 }
 
+/** El rol como se escribe en la tabla (en inglés, «REPEATER»; los demás roles de MeshCore ya están en inglés). */
+const rolCsv = (r: Rol) => (r === "REPETIDOR" ? tx("REPETIDOR", "REPEATER") : r);
+
 export function exportarCsv(e: Escenario, r: ResultadoSimulacion | null) {
+  const si = tx("sí", "yes");
   const filas = [
-    ["nombre", "tipo", "lat_wgs84", "lon_wgs84", "lat_gms", "lon_gms", "altura_m", "potencia_dbm", "ganancia_dbi", "perdida_cable_db", "antena", "azimut_grados", "elevacion_grados", "rol", "pasarela", "activa", "alcance_km", "area_servicio_km2", "saltos"],
+    [
+      tx("nombre", "name"),
+      tx("tipo", "type"),
+      "lat_wgs84",
+      "lon_wgs84",
+      tx("lat_gms", "lat_dms"),
+      tx("lon_gms", "lon_dms"),
+      tx("altura_m", "height_m"),
+      tx("potencia_dbm", "power_dbm"),
+      tx("ganancia_dbi", "gain_dbi"),
+      tx("perdida_cable_db", "cable_loss_db"),
+      tx("antena", "antenna"),
+      tx("azimut_grados", "azimuth_deg"),
+      tx("elevacion_grados", "elevation_deg"),
+      tx("rol", "role"),
+      tx("pasarela", "gateway"),
+      tx("activa", "active"),
+      tx("alcance_km", "range_km"),
+      tx("area_servicio_km2", "service_area_km2"),
+      tx("saltos", "hops"),
+    ],
   ];
   for (const a of e.antenas) {
     const s = r?.antenas.find((x) => x.id === a.id);
     const n = r?.nodos.find((x) => x.id === a.id);
     filas.push([
       a.nombre,
-      (a.tipo ?? "antena") === "nodo" ? "nodo" : "nodo antena",
+      (a.tipo ?? "antena") === "nodo" ? tx("nodo", "node") : tx("nodo antena", "antenna node"),
       a.lat.toFixed(6),
       a.lon.toFixed(6),
       aGMS(a.lat, "lat"),
@@ -63,17 +90,19 @@ export function exportarCsv(e: Escenario, r: ResultadoSimulacion | null) {
       patronPorId(a.patron).nombre,
       esDireccional(a) ? String(a.azimutDeg ?? 0) : "",
       esDireccional(a) ? String(a.elevacionDeg ?? 0) : "",
-      a.rol,
-      a.pasarela ? "sí" : "no",
-      a.activa ? "sí" : "no",
+      rolCsv(a.rol),
+      a.pasarela ? si : "no",
+      a.activa ? si : "no",
       s ? s.alcanceKm.toFixed(2) : "",
       s ? s.areaServicioKm2.toFixed(2) : "",
       n?.saltos === null || n === undefined ? "" : String(n.saltos),
     ]);
   }
-  // Separador «;» y BOM para que Excel en español lo abra con tildes y columnas correctas
-  const csv = "﻿" + filas.map((f) => f.map((c) => (/[;"\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c)).join(";")).join("\r\n");
-  descargar(`${nombreArchivo(e.nombre)}_nodos.csv`, new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  // Separador «;» y BOM para que Excel en español lo abra con tildes y columnas correctas; en inglés, «,» (el
+  // separador de listas de Excel en inglés). Los números van con punto en los dos idiomas.
+  const sep = tx(";", ",");
+  const csv = "﻿" + filas.map((f) => f.map((c) => (c.includes(sep) || /["\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c)).join(sep)).join("\r\n");
+  descargar(`${nombreArchivo(e.nombre)}${tx("_nodos", "_nodes")}.csv`, new Blob([csv], { type: "text/csv;charset=utf-8" }));
 }
 
 /* ───────────── ZIP sin compresión (suficiente para KMZ) ───────────── */
@@ -137,7 +166,7 @@ export function zip(archivos: { nombre: string; datos: Uint8Array }[]): Blob {
 
 async function png(lienzo: HTMLCanvasElement): Promise<Uint8Array> {
   const blob = await new Promise<Blob | null>((r) => lienzo.toBlob(r, "image/png"));
-  if (!blob) throw new Error("No se pudo generar la imagen.");
+  if (!blob) throw new Error(tx("No se pudo generar la imagen.", "The image could not be generated."));
   return new Uint8Array(await blob.arrayBuffer());
 }
 
@@ -163,10 +192,18 @@ function aLatitudLineal(r: ResultadoSimulacion, fuente: HTMLCanvasElement): HTML
 }
 
 const SUBTITULO: Record<UnidadId, string> = {
-  margen: "Margen sobre la sensibilidad",
-  dbm: "Potencia recibida",
-  uv: "Tensión en el receptor (50 Ω)",
-  dbuvm: "Intensidad de campo",
+  get margen() {
+    return tx("Margen sobre la sensibilidad", "Margin over sensitivity");
+  },
+  get dbm() {
+    return tx("Potencia recibida", "Received power");
+  },
+  get uv() {
+    return tx("Tensión en el receptor (50 Ω)", "Voltage at the receiver (50 Ω)");
+  },
+  get dbuvm() {
+    return tx("Intensidad de campo", "Field strength");
+  },
 };
 
 /** Leyenda del mapa de señal según la unidad y la escala de colores elegidas. */
@@ -176,11 +213,11 @@ function leyendaPng(r: ResultadoSimulacion, v: Vista): HTMLCanvasElement {
   const filas: { color: string; texto: string; rango: string }[] =
     v.escala === "umbral"
       ? [
-          { color: v.colorUmbral, texto: "Con señal", rango: `≥ ${nivel(v.umbralDbm)}` },
-          { color: CLASES[4].color, texto: "Por debajo", rango: `< ${nivel(v.umbralDbm)}` },
+          { color: v.colorUmbral, texto: tx("Con señal", "With signal"), rango: `≥ ${nivel(v.umbralDbm)}` },
+          { color: CLASES[4].color, texto: tx("Por debajo", "Below"), rango: `< ${nivel(v.umbralDbm)}` },
         ]
       : v.escala === "arcoiris"
-        ? [{ color: COLOR_BAJO_ESCALA, texto: "Por debajo del mínimo", rango: `< ${nivel(v.escalaMinDbm)}` }]
+        ? [{ color: COLOR_BAJO_ESCALA, texto: tx("Por debajo del mínimo", "Below the minimum"), rango: `< ${nivel(v.escalaMinDbm)}` }]
         : CLASES.map((k) => ({ color: k.color, texto: k.nombre, rango: k.id === "sin" ? `< ${nivel(20 + rx.sensibilidadDbm)}` : `≥ ${nivel(k.minimoDb + rx.sensibilidadDbm)}` }));
   const barra = v.escala === "arcoiris" ? 40 : 0;
   const alto = 52 + barra + filas.length * 24;
@@ -196,7 +233,7 @@ function leyendaPng(r: ResultadoSimulacion, v: Vista): HTMLCanvasElement {
   ctx.fill();
   ctx.fillStyle = "#2B2F2E";
   ctx.font = "600 15px Arial, sans-serif";
-  ctx.fillText("Nivel de señal", 12, 22);
+  ctx.fillText(tx("Nivel de señal", "Signal level"), 12, 22);
   ctx.font = "11px Arial, sans-serif";
   ctx.fillStyle = "#6F7572";
   ctx.fillText(SUBTITULO[v.unidad], 12, 38);
@@ -272,7 +309,7 @@ function equipoPng(): HTMLCanvasElement {
 const xml = (t: string) => t.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[c]!);
 /** Color KML (aabbggrr) desde #rrggbb. */
 const kmlColor = (hex: string, alfa = "ff") => `${alfa}${hex.slice(5, 7)}${hex.slice(3, 5)}${hex.slice(1, 3)}`.toLowerCase();
-const num = (n: number, d = 1) => n.toFixed(d).replace(".", ",");
+const num = (n: number, d = 1) => decimalLocal(n, d);
 
 export async function exportarKmz(e: Escenario, r: ResultadoSimulacion, antenas: Antena[], vista: Vista = VISTA_DEFECTO) {
   const enc = new TextEncoder();
@@ -284,13 +321,28 @@ export async function exportarKmz(e: Escenario, r: ResultadoSimulacion, antenas:
       const s = r.antenas.find((x) => x.id === a.id);
       const n = r.nodos.find((x) => x.id === a.id);
       const campo = (a.tipo ?? "antena") === "nodo";
+      const patron = patronPorId(a.patron).nombre;
+      const azimut = num(a.azimutDeg ?? 0, 0);
+      const elevacion = num(a.elevacionDeg ?? 0, 0);
+      const alcanceKm = s ? `${s.alcanceLimitado ? "≥ " : ""}${num(s.alcanceKm, 2)} km` : "";
       const detalle = [
-        campo ? "Nodo de campo" : "Nodo antena",
-        `Coordenadas: ${aGMS(a.lat, "lat")}, ${aGMS(a.lon, "lon")}`,
-        `Altura: ${num(a.alturaM)} m · ${num(a.potenciaDbm, 0)} dBm · ${num(a.gananciaDbi)} dBi`,
-        ...(esDireccional(a) ? [`Antena ${patronPorId(a.patron).nombre.toLowerCase()} apuntando a ${num(a.azimutDeg ?? 0, 0)}° (elevación ${num(a.elevacionDeg ?? 0, 0)}°)`] : []),
-        a.pasarela ? "Pasarela" : n?.saltos === null || !n ? "Sin ruta a la pasarela" : `${n.saltos} salto(s) a la pasarela`,
-        s ? `Alcance con servicio: ${s.alcanceLimitado ? "≥ " : ""}${num(s.alcanceKm, 2)} km · confiable: ${num(s.alcanceConfiableKm, 2)} km · Área: ${num(s.areaServicioKm2)} km²` : campo ? "Participa en la malla (no genera cobertura)" : "No incluido en la simulación",
+        campo ? tx("Nodo de campo", "Field node") : tx("Nodo antena", "Antenna node"),
+        tx(`Coordenadas: ${aGMS(a.lat, "lat")}, ${aGMS(a.lon, "lon")}`, `Coordinates: ${aGMS(a.lat, "lat")}, ${aGMS(a.lon, "lon")}`),
+        tx(`Altura: ${num(a.alturaM)} m · ${num(a.potenciaDbm, 0)} dBm · ${num(a.gananciaDbi)} dBi`, `Height: ${num(a.alturaM)} m · ${num(a.potenciaDbm, 0)} dBm · ${num(a.gananciaDbi)} dBi`),
+        ...(esDireccional(a) ? [tx(`Antena ${patron.toLowerCase()} apuntando a ${azimut}° (elevación ${elevacion}°)`, `${patron} antenna pointing at ${azimut}° (elevation ${elevacion}°)`)] : []),
+        a.pasarela
+          ? tx("Pasarela", "Gateway")
+          : n?.saltos === null || !n
+            ? tx("Sin ruta a la pasarela", "No route to the gateway")
+            : tx(`${n.saltos} salto(s) a la pasarela`, `${n.saltos} ${n.saltos === 1 ? "hop" : "hops"} to the gateway`),
+        s
+          ? tx(
+              `Alcance con servicio: ${alcanceKm} · confiable: ${num(s.alcanceConfiableKm, 2)} km · Área: ${num(s.areaServicioKm2)} km²`,
+              `Range with service: ${alcanceKm} · reliable: ${num(s.alcanceConfiableKm, 2)} km · Area: ${num(s.areaServicioKm2)} km²`,
+            )
+          : campo
+            ? tx("Participa en la malla (no genera cobertura)", "Takes part in the mesh (does not generate coverage)")
+            : tx("No incluido en la simulación", "Not included in the simulation"),
       ].join("<br/>");
       return `<Placemark><name>${xml(a.nombre)}</name><styleUrl>#${campo ? "equipo" : "torre"}</styleUrl><description><![CDATA[${detalle}]]></description><Point><coordinates>${a.lon},${a.lat},0</coordinates></Point></Placemark>`;
     })
@@ -307,7 +359,7 @@ export async function exportarKmz(e: Escenario, r: ResultadoSimulacion, antenas:
     .datos.features.map((f, i) => {
       const clase = f.properties?.clase === "confiable" ? "confiable" : "servicio";
       const coords = f.geometry.coordinates.map((c) => `${c[0]},${c[1]},0`).join(" ");
-      return `<Placemark><name>${clase === "confiable" ? "Alcance confiable" : "Alcance con servicio"} ${i + 1}</name><styleUrl>#alcance-${clase}</styleUrl><LineString><tessellate>1</tessellate><coordinates>${coords}</coordinates></LineString></Placemark>`;
+      return `<Placemark><name>${clase === "confiable" ? tx("Alcance confiable", "Reliable range") : tx("Alcance con servicio", "Range with service")} ${i + 1}</name><styleUrl>#alcance-${clase}</styleUrl><LineString><tessellate>1</tessellate><coordinates>${coords}</coordinates></LineString></Placemark>`;
     })
     .join("\n");
   const mediciones = (e.mediciones ?? [])
@@ -316,7 +368,9 @@ export async function exportarKmz(e: Escenario, r: ResultadoSimulacion, antenas:
       const res = resumenMedicion(m);
       const area = m.tipo === "area" && m.puntos.length >= 3;
       const coords = (area ? [...m.puntos, m.puntos[0]] : m.puntos).map((p) => `${p[0]},${p[1]},0`).join(" ");
-      const texto = area ? `Área: ${formatoArea(res.area)} · perímetro ${formatoDistancia(res.longitud)}` : `Distancia: ${formatoDistancia(res.longitud)}`;
+      const texto = area
+        ? tx(`Área: ${formatoArea(res.area)} · perímetro ${formatoDistancia(res.longitud)}`, `Area: ${formatoArea(res.area)} · perimeter ${formatoDistancia(res.longitud)}`)
+        : tx(`Distancia: ${formatoDistancia(res.longitud)}`, `Distance: ${formatoDistancia(res.longitud)}`);
       const geom = area ? `<Polygon><tessellate>1</tessellate><outerBoundaryIs><LinearRing><coordinates>${coords}</coordinates></LinearRing></outerBoundaryIs></Polygon>` : `<LineString><tessellate>1</tessellate><coordinates>${coords}</coordinates></LineString>`;
       return `<Placemark><name>${xml(m.nombre)}</name><description>${xml(texto)}</description><styleUrl>#medicion</styleUrl>${geom}</Placemark>`;
     })
@@ -325,7 +379,7 @@ export async function exportarKmz(e: Escenario, r: ResultadoSimulacion, antenas:
 <kml xmlns="http://www.opengis.net/kml/2.2">
 <Document>
 <name>${xml(e.nombre)}</name>
-<description>${xml(`Modelo ${e.parametros.modelo === "itm" ? "Longley-Rice (ITM)" : "calibrado contra Radio Mobile"}. ${resumenRed(e.parametros)}.`)}</description>
+<description>${xml(tx(`Modelo ${e.parametros.modelo === "itm" ? "Longley-Rice (ITM)" : "calibrado contra Radio Mobile"}. ${resumenRed(e.parametros)}.`, `${e.parametros.modelo === "itm" ? "Longley-Rice (ITM) model" : "Model calibrated against Radio Mobile"}. ${resumenRed(e.parametros)}.`))}</description>
 <Style id="torre"><IconStyle><scale>1.2</scale><Icon><href>torre.png</href></Icon><hotSpot x="0.5" y="0" xunits="fraction" yunits="fraction"/></IconStyle><LabelStyle><scale>0.9</scale></LabelStyle></Style>
 <Style id="equipo"><IconStyle><scale>0.9</scale><Icon><href>equipo.png</href></Icon><hotSpot x="0.5" y="0" xunits="fraction" yunits="fraction"/></IconStyle><LabelStyle><scale>0.8</scale></LabelStyle></Style>
 <Style id="alcance-servicio"><LineStyle><color>${kmlColor("#FFB25B")}</color><width>2</width></LineStyle></Style>
@@ -333,21 +387,21 @@ export async function exportarKmz(e: Escenario, r: ResultadoSimulacion, antenas:
 <Style id="medicion"><LineStyle><color>${kmlColor("#1FC8F0")}</color><width>2.5</width></LineStyle><PolyStyle><color>${kmlColor("#1FC8F0", "33")}</color></PolyStyle></Style>
 <Style id="enlace-solido"><LineStyle><color>${kmlColor(ENLACES.solido.color)}</color><width>3</width></LineStyle></Style>
 <Style id="enlace-inestable"><LineStyle><color>${kmlColor(ENLACES.inestable.color)}</color><width>2.5</width></LineStyle></Style>
-<GroundOverlay><name>Cobertura (nivel de señal)</name><color>b4ffffff</color><Icon><href>cobertura.png</href></Icon>
+<GroundOverlay><name>${tx("Cobertura (nivel de señal)", "Coverage (signal level)")}</name><color>b4ffffff</color><Icon><href>cobertura.png</href></Icon>
 <LatLonBox><north>${caja.norte}</north><south>${caja.sur}</south><east>${caja.este}</east><west>${caja.oeste}</west></LatLonBox></GroundOverlay>
-<ScreenOverlay><name>Leyenda</name><Icon><href>leyenda.png</href></Icon><overlayXY x="0" y="0" xunits="fraction" yunits="fraction"/><screenXY x="10" y="40" xunits="pixels" yunits="pixels"/><size x="250" y="0" xunits="pixels" yunits="pixels"/></ScreenOverlay>
-<Folder><name>Nodos</name>
+<ScreenOverlay><name>${tx("Leyenda", "Legend")}</name><Icon><href>leyenda.png</href></Icon><overlayXY x="0" y="0" xunits="fraction" yunits="fraction"/><screenXY x="10" y="40" xunits="pixels" yunits="pixels"/><size x="250" y="0" xunits="pixels" yunits="pixels"/></ScreenOverlay>
+<Folder><name>${tx("Nodos", "Nodes")}</name>
 ${placemarks}
 </Folder>
-<Folder><name>Enlaces de la malla</name>
+<Folder><name>${tx("Enlaces de la malla", "Mesh links")}</name>
 ${lineas}
 </Folder>
-<Folder><name>Rango de alcance</name>
+<Folder><name>${tx("Rango de alcance", "Range")}</name>
 ${alcance}
 </Folder>${
     mediciones
       ? `
-<Folder><name>Mediciones</name>
+<Folder><name>${tx("Mediciones", "Measurements")}</name>
 ${mediciones}
 </Folder>`
       : ""

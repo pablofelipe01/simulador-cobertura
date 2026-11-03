@@ -3,6 +3,9 @@
 // artificial. Prohibido su uso, copia, modificación o distribución sin licencia escrita de los titulares (Ley 23 de
 // 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
 
+import { tx } from "@/lib/idioma";
+import { useIdioma } from "@/lib/use-idioma";
+
 // Torre en celosía pequeña para listas y botones (misma figura que el marcador del mapa).
 export function IconoTorre({ className = "h-5 w-5", baliza }: { className?: string; baliza?: string }) {
   return (
@@ -49,6 +52,7 @@ export function IconoPersona({ className = "h-5 w-5", relleno }: { className?: s
 
 // Gateway + Internet: el router donde entra el internet, con la nube «IA» (el gateway lleva la inteligencia artificial).
 export function IconoGateway({ className = "h-5 w-5" }: { className?: string }) {
+  useIdioma();
   return (
     <svg viewBox="0 0 34 30" className={className} aria-hidden="true">
       <g fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -59,7 +63,7 @@ export function IconoGateway({ className = "h-5 w-5" }: { className?: string }) 
       <circle cx="9.2" cy="22.5" r="1.2" fill="currentColor" />
       <circle cx="13.2" cy="22.5" r="1.2" fill="currentColor" />
       <path d="M23.2 10.6 H31 a3 3 0 0 0 .4-6 A4.2 4.2 0 0 0 23.6 3.4 a3.6 3.6 0 0 0-.4 7.2 Z" fill="#3EE6C8" stroke="#0F1F1C" strokeWidth=".8" />
-      <text x="27" y="9" textAnchor="middle" fontSize="5.2" fontWeight="800" fill="#0F1F1C" fontFamily="sans-serif">IA</text>
+      <text x="27" y="9" textAnchor="middle" fontSize="5.2" fontWeight="800" fill="#0F1F1C" fontFamily="sans-serif">{tx("IA", "AI")}</text>
     </svg>
   );
 }

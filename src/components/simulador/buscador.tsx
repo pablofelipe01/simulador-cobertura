@@ -10,8 +10,10 @@ import { MapPin, Search, X } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { buscarLugares, cargarReferencia, referenciaCargada, type Lugar } from "@/lib/geo/referencia";
+import { tx } from "@/lib/idioma";
 import { aGMS, leerPar } from "@/lib/radio/geo";
 import type { Antena } from "@/lib/radio/tipos";
+import { useIdioma } from "@/lib/use-idioma";
 
 export type Destino =
   | { tipo: "coordenada"; lat: number; lon: number; titulo: string }
@@ -35,6 +37,7 @@ export function leerCoordenadasLibres(texto: string): { lat: number; lon: number
 }
 
 export function Buscador({ antenas, onIr }: { antenas: Antena[]; onIr: (d: Destino) => void }) {
+  useIdioma();
   const [texto, setTexto] = useState("");
   const [abierto, setAbierto] = useState(false);
   const [activo, setActivo] = useState(0);
@@ -65,7 +68,16 @@ export function Buscador({ antenas, onIr }: { antenas: Antena[]; onIr: (d: Desti
     if (t.length < 2) return [];
     const salida: Destino[] = [];
     const c = leerCoordenadasLibres(t);
-    if (c) salida.push({ tipo: "coordenada", lat: c.lat, lon: c.lon, titulo: `${aGMS(c.lat, "lat")} · ${aGMS(c.lon, "lon")}${c.corregido ? " (longitud oeste)" : ""}` });
+    // El título se arma al mostrarlo, en el idioma de ese momento
+    if (c)
+      salida.push({
+        tipo: "coordenada",
+        lat: c.lat,
+        lon: c.lon,
+        get titulo() {
+          return `${aGMS(c.lat, "lat")} · ${aGMS(c.lon, "lon")}${c.corregido ? tx(" (longitud oeste)", " (west longitude)") : ""}`;
+        },
+      });
     const q = t.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
     for (const a of antenas) {
       const n = a.nombre.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
@@ -85,13 +97,13 @@ export function Buscador({ antenas, onIr }: { antenas: Antena[]; onIr: (d: Desti
   return (
     <div ref={caja} className="relative w-full md:max-w-xs" data-tour="buscador">
       <label htmlFor={`${idLista}-q`} className="sr-only">
-        Buscar coordenadas, municipio o nodo
+        {tx("Buscar coordenadas, municipio o nodo", "Search coordinates, municipality or node")}
       </label>
       <Search size={15} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-tenue" />
       <input
         id={`${idLista}-q`}
         className="campo py-1.5 pr-7 pl-8"
-        placeholder="Coordenadas, municipio o nodo…"
+        placeholder={tx("Coordenadas, municipio o nodo…", "Coordinates, municipality or node…")}
         value={texto}
         role="combobox"
         aria-expanded={abierto && resultados.length > 0}
@@ -118,14 +130,16 @@ export function Buscador({ antenas, onIr }: { antenas: Antena[]; onIr: (d: Desti
         }}
       />
       {texto && (
-        <button type="button" className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded p-1 text-tenue hover:bg-black/5" aria-label="Borrar búsqueda" onClick={() => setTexto("")}>
+        <button type="button" className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded p-1 text-tenue hover:bg-black/5" aria-label={tx("Borrar búsqueda", "Clear search")} onClick={() => setTexto("")}>
           <X size={14} />
         </button>
       )}
       {abierto && texto.trim().length >= 2 && (
         <ul id={idLista} role="listbox" className="absolute top-full right-0 left-0 z-40 mt-1.5 max-h-80 overflow-y-auto rounded-xl bg-white p-1 shadow-lg ring-1 ring-black/10">
           {resultados.length === 0 ? (
-            <li className="px-2.5 py-2 text-[13px] text-tenue">Sin resultados. Escriba un municipio o coordenadas como 4.5123, -73.1234.</li>
+            <li className="px-2.5 py-2 text-[13px] text-tenue">
+              {tx("Sin resultados. Escriba un municipio o coordenadas como 4.5123, -73.1234.", "No results. Type a municipality or coordinates such as 4.5123, -73.1234.")}
+            </li>
           ) : (
             resultados.map((d, i) => (
               <li
@@ -141,9 +155,15 @@ export function Buscador({ antenas, onIr }: { antenas: Antena[]; onIr: (d: Desti
               >
                 <MapPin size={15} className="mt-0.5 shrink-0 text-salvia-oscura" />
                 <span className="min-w-0">
-                  <span className="block truncate font-medium">{d.tipo === "coordenada" ? "Ir a la coordenada" : d.tipo === "nodo" ? d.antena.nombre : d.lugar.nombre}</span>
+                  <span className="block truncate font-medium">{d.tipo === "coordenada" ? tx("Ir a la coordenada", "Go to the coordinate") : d.tipo === "nodo" ? d.antena.nombre : d.lugar.nombre}</span>
                   <span className="block truncate text-[12px] text-tenue">
-                    {d.tipo === "coordenada" ? d.titulo : d.tipo === "nodo" ? ((d.antena.tipo ?? "antena") === "nodo" ? "Nodo del escenario" : "Nodo antena del escenario") : d.lugar.detalle}
+                    {d.tipo === "coordenada"
+                      ? d.titulo
+                      : d.tipo === "nodo"
+                        ? (d.antena.tipo ?? "antena") === "nodo"
+                          ? tx("Nodo del escenario", "Scenario node")
+                          : tx("Nodo antena del escenario", "Scenario antenna node")
+                        : d.lugar.detalle}
                   </span>
                 </span>
               </li>

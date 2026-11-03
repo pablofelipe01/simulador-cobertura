@@ -4,6 +4,7 @@
 // 1982, Decisión Andina 351 de 1993, Código Penal arts. 270 a 272). Ver LICENSE.
 
 // Estado de la aplicación: escenario (nodos + parámetros + mediciones), vista del mapa y preferencias.
+import { tx } from "@/lib/idioma";
 import { EQUIPOS, LIMITE_SALTOS_DEFECTO, LIMITE_SALTOS_MAXIMO, PRESETS, presetPorId, type EquipoId } from "@/lib/radio/constantes";
 import { PROTOCOLOS } from "@/lib/radio/protocolos";
 import { ENTORNOS } from "@/lib/radio/entorno";
@@ -118,18 +119,29 @@ export const VISTA_DEFECTO: Vista = {
   animarRed: true,
 };
 
-export const NOMBRE_TIPO: Record<TipoNodo, string> = { antena: "Nodo antena", nodo: "Nodo" };
+/** Nombre de cada tipo de nodo en el idioma de la pantalla (solo para mostrar). */
+export const NOMBRE_TIPO: Record<TipoNodo, string> = {
+  get antena() {
+    return tx("Nodo antena", "Antenna node");
+  },
+  get nodo() {
+    return tx("Nodo", "Node");
+  },
+};
 
 export function nuevoId(prefijo = "a"): string {
   return `${prefijo}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 }
 
-/** Valores por defecto según el tipo: el nodo antena va en mástil; el nodo de campo, en mano o en un poste bajo. */
+/**
+ * Valores por defecto según el tipo: el nodo antena va en mástil; el nodo de campo, en mano o en un poste bajo. El
+ * nombre por defecto va en el idioma de la pantalla al crearlo («Antena 1» o «Antenna 1»).
+ */
 export function nuevaAntena(lat: number, lon: number, existentes: Antena[], datos: Partial<Antena> = {}): Antena {
   const tipo: TipoNodo = datos.tipo ?? "antena";
   // Nodo antena = repetidor solar P1 con antena de 8 dBi; nodo de campo = billetera XIAO
   const equipo = tipo === "antena" ? EQUIPOS[0] : EQUIPOS[2];
-  const base = tipo === "antena" ? "Antena" : "Nodo";
+  const base = tipo === "antena" ? tx("Antena", "Antenna") : tx("Nodo", "Node");
   let n = existentes.filter((a) => (a.tipo ?? "antena") === tipo).length + 1;
   while (existentes.some((a) => a.nombre === `${base} ${n}`)) n++;
   const rol: Rol = tipo === "antena" ? "REPETIDOR" : "COMPANION";
@@ -152,13 +164,22 @@ export function nuevaAntena(lat: number, lon: number, existentes: Antena[], dato
 }
 
 export function escenarioVacio(): Escenario {
-  return { version: 1, nombre: "Escenario sin título", antenas: [], parametros: { ...PARAMETROS_DEFECTO }, mediciones: [] };
+  return { version: 1, nombre: tx("Escenario sin título", "Untitled scenario"), antenas: [], parametros: { ...PARAMETROS_DEFECTO }, mediciones: [] };
 }
 
-/** Escenario de demostración: un solo nodo antena llamado «Ejemplo» en un punto genérico de la llanura. */
+/**
+ * Escenario de demostración: un solo nodo antena llamado «Ejemplo» en un punto genérico de la llanura (en inglés,
+ * «Example»: el nombre se decide al crearlo).
+ */
 export function escenarioEjemplo(): Escenario {
-  const ejemplo = nuevaAntena(4.2, -73.37, [], { nombre: "Ejemplo", alturaM: 15, pasarela: true });
-  return { version: 1, nombre: "Demostración: nodo antena Ejemplo", antenas: [ejemplo], parametros: { ...PARAMETROS_DEFECTO }, mediciones: [] };
+  const ejemplo = nuevaAntena(4.2, -73.37, [], { nombre: tx("Ejemplo", "Example"), alturaM: 15, pasarela: true });
+  return {
+    version: 1,
+    nombre: tx("Demostración: nodo antena Ejemplo", "Demo: Example antenna node"),
+    antenas: [ejemplo],
+    parametros: { ...PARAMETROS_DEFECTO },
+    mediciones: [],
+  };
 }
 
 export type Accion =
@@ -254,7 +275,7 @@ export function reductor(e: Estado, a: Accion): Estado {
     case "duplicar": {
       const o = antenas.find((x) => x.id === a.id);
       if (!o) return e;
-      const copia = { ...o, id: nuevoId(), nombre: `${o.nombre} (copia)`, lat: o.lat + 0.004, lon: o.lon + 0.004, pasarela: false };
+      const copia = { ...o, id: nuevoId(), nombre: tx(`${o.nombre} (copia)`, `${o.nombre} (copy)`), lat: o.lat + 0.004, lon: o.lon + 0.004, pasarela: false };
       return { ...conAntenas(e, [...antenas, copia]), seleccion: copia.id };
     }
     case "seleccionar":
@@ -496,7 +517,7 @@ export function validarEscenario(x: unknown): Escenario | null {
     const tipo: TipoMedicion = raw.tipo === "linea" || raw.tipo === "area" ? raw.tipo : "trayecto";
     mediciones.push({
       id: typeof raw.id === "string" && raw.id ? raw.id : nuevoId("m"),
-      nombre: typeof raw.nombre === "string" && raw.nombre.trim() ? raw.nombre.trim().slice(0, 60) : `Medición ${mediciones.length + 1}`,
+      nombre: typeof raw.nombre === "string" && raw.nombre.trim() ? raw.nombre.trim().slice(0, 60) : tx(`Medición ${mediciones.length + 1}`, `Measurement ${mediciones.length + 1}`),
       tipo,
       puntos: puntos.slice(0, 500),
       visible: raw.visible !== false,
@@ -506,7 +527,7 @@ export function validarEscenario(x: unknown): Escenario | null {
   // Una sola área objetivo: la última que venga marcada
   const conObjetivo = mediciones.filter((m) => m.objetivo);
   for (const m of conObjetivo.slice(0, -1)) delete m.objetivo;
-  return { version: 1, nombre: typeof o.nombre === "string" && o.nombre.trim() ? o.nombre.trim().slice(0, 80) : "Escenario importado", antenas, parametros, mediciones };
+  return { version: 1, nombre: typeof o.nombre === "string" && o.nombre.trim() ? o.nombre.trim().slice(0, 80) : tx("Escenario importado", "Imported scenario"), antenas, parametros, mediciones };
 }
 
 /** Meta de un área objetivo leída de un archivo (o null si no es válida). */

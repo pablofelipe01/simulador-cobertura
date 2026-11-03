@@ -6,6 +6,7 @@
 // Piezas del modo «Sembrar la malla», como en Trama: el Gateway + Internet (donde entra el internet), los
 // repetidores (nodos en torres o lomas) y las personas (radio de mano con el celular). Por dentro siguen siendo
 // los nodos del simulador: el gateway es un nodo antena pasarela, el repetidor un nodo antena y la persona un nodo.
+import { tx } from "@/lib/idioma";
 import { EQUIPOS, type EquipoId } from "@/lib/radio/constantes";
 import { piezaDe, type Pieza } from "@/lib/radio/estado-red";
 import { desplazar } from "@/lib/radio/geo";
@@ -18,12 +19,36 @@ export { piezaDe };
 
 export const PIEZAS: Pieza[] = ["gateway", "repetidor", "persona"];
 
-export const NOMBRE_PIEZA: Record<Pieza, string> = { gateway: "Gateway + Internet", repetidor: "Repetidor", persona: "Persona" };
+/** Nombre de cada pieza en el idioma de la pantalla (solo para mostrar). */
+export const NOMBRE_PIEZA: Record<Pieza, string> = {
+  gateway: "Gateway + Internet",
+  get repetidor() {
+    return tx("Repetidor", "Repeater");
+  },
+  get persona() {
+    return tx("Persona", "Person");
+  },
+};
 
 export const AYUDA_PIEZA: Record<Pieza, string> = {
-  gateway: "Donde haya luz y señal —la cabecera, una finca—: es la única pieza con conexión a internet (el router va a su lado) y lleva la IA. Desde ahí sale la malla.",
-  repetidor: "Ubíquelos en las lomas para llegar lejos: pasan los mensajes de los demás y deben alcanzar al gateway o a otro repetidor conectado.",
-  persona: "Ubíquelas en el campo: cada una lleva un radio enlazado al celular para pagar, escribir por WhatsApp o consultar a la IA. Se conectan al repetidor más cercano; en rojo, no tienen cobertura.",
+  get gateway() {
+    return tx(
+      "Donde haya luz y señal —la cabecera, una finca—: es la única pieza con conexión a internet (el router va a su lado) y lleva la IA. Desde ahí sale la malla.",
+      "Where there is power and signal (the town center, a farm): it is the only piece connected to the internet (the router goes next to it) and it carries the AI. The mesh starts from there.",
+    );
+  },
+  get repetidor() {
+    return tx(
+      "Ubíquelos en las lomas para llegar lejos: pasan los mensajes de los demás y deben alcanzar al gateway o a otro repetidor conectado.",
+      "Place them on hilltops to reach far: they relay everyone else’s messages and must reach the gateway or another connected repeater.",
+    );
+  },
+  get persona() {
+    return tx(
+      "Ubíquelas en el campo: cada una lleva un radio enlazado al celular para pagar, escribir por WhatsApp o consultar a la IA. Se conectan al repetidor más cercano; en rojo, no tienen cobertura.",
+      "Place them in the field: each one carries a radio paired with their phone to pay, write on WhatsApp or ask the AI. They connect to the nearest repeater; in red, they have no coverage.",
+    );
+  },
 };
 
 /** Alturas que se ofrecen para los repetidores nuevos (m): el de Trama va en un tubo de hierro de 6 m. */
@@ -38,7 +63,10 @@ function equipo(id: EquipoId) {
   return { equipo: q.id, potenciaDbm: q.potenciaDbm, gananciaDbi: q.gananciaDbi, perdidaCableDb: q.perdidaCableDb };
 }
 
-/** Siguiente nombre libre: «Gateway», «Gateway 2»… o «Repetidor 1», «Repetidor 2»… */
+/**
+ * Siguiente nombre libre: «Gateway», «Gateway 2»… o «Repetidor 1», «Repetidor 2»… La base la da quien llama, en el
+ * idioma de la pantalla al crear el nodo («Repeater 1», «Person 1», «Support 1» en inglés).
+ */
 export function nombreLibre(base: string, existentes: Antena[], primeroSinNumero = false): string {
   const usados = new Set(existentes.map((a) => a.nombre));
   if (primeroSinNumero && !usados.has(base)) return base;
@@ -47,16 +75,16 @@ export function nombreLibre(base: string, existentes: Antena[], primeroSinNumero
   return `${base} ${n}`;
 }
 
-/** Datos de una pieza nueva (se completan con `nuevaAntena`). */
+/** Datos de una pieza nueva (se completan con `nuevaAntena`). El nombre va en el idioma de la pantalla al crearla. */
 export function plantillaPieza(pieza: Pieza, existentes: Antena[], alturaRepetidorM = ALTURA_REPETIDOR_DEFECTO): Partial<Antena> & { tipo: TipoNodo } {
   switch (pieza) {
     case "gateway":
       // La radio del gateway (pagos, WhatsApp y consultas a la IA) es un companion USB del mini PC: recibe, pero no retransmite
       return { tipo: "antena", nombre: nombreLibre("Gateway", existentes, true), alturaM: ALTURA_GATEWAY_M, ...equipo("t114-8dbi"), rol: "COMPANION", pasarela: true };
     case "repetidor":
-      return { tipo: "antena", nombre: nombreLibre("Repetidor", existentes), alturaM: alturaRepetidorM, ...equipo("p1-8dbi"), rol: "REPETIDOR", pasarela: false };
+      return { tipo: "antena", nombre: nombreLibre(tx("Repetidor", "Repeater"), existentes), alturaM: alturaRepetidorM, ...equipo("p1-8dbi"), rol: "REPETIDOR", pasarela: false };
     case "persona":
-      return { tipo: "nodo", nombre: nombreLibre("Persona", existentes), alturaM: ALTURA_PERSONA_M, ...equipo("xiao"), rol: "COMPANION", pasarela: false };
+      return { tipo: "nodo", nombre: nombreLibre(tx("Persona", "Person"), existentes), alturaM: ALTURA_PERSONA_M, ...equipo("xiao"), rol: "COMPANION", pasarela: false };
   }
 }
 
@@ -84,5 +112,11 @@ export function escenarioMalla(): Escenario {
   poner("persona", 5500, 205);
   poner("persona", 17500, 95);
   poner("persona", 31000, 72);
-  return { version: 1, nombre: "Ejemplo de malla: gateway, repetidor y personas", antenas: lista, parametros: { ...PARAMETROS_DEFECTO, radioKm: 15 }, mediciones: [] };
+  return {
+    version: 1,
+    nombre: tx("Ejemplo de malla: gateway, repetidor y personas", "Mesh example: gateway, repeater and people"),
+    antenas: lista,
+    parametros: { ...PARAMETROS_DEFECTO, radioKm: 15 },
+    mediciones: [],
+  };
 }
