@@ -9,6 +9,7 @@ Archivos simplificados para dibujar límites y nombres sin servicios externos (s
 | `lugares.json` | Puntos de etiqueta y cajas para el buscador | Derivado de los anteriores y de Natural Earth |
 | `hidrografia.json` | Ríos y lagos principales de la región | Natural Earth 1:10m · dominio público |
 | `paises.json` | Límites de países de la región | Natural Earth 1:10m · dominio público |
+| `src/lib/geo/rotulos.ts` | Ciudades principales (capitales de país y de departamento y otras grandes), océanos, mares y golfos, y los nombres en inglés que cambian | Coordenadas de las ciudades: GeoNames (geonames.org) · CC BY 4.0, redondeadas; las de Colombia verificadas dentro de su municipio |
 
 Simplificación con mapshaper (municipios al 10 %, departamentos al 12 %, precisión 0,0001°). Son de referencia
 visual: para límites oficiales consulte el Marco Geoestadístico Nacional del DANE.
