@@ -59,10 +59,10 @@ async function flujo(nombre, fn, { tamano = { width: 1440, height: 900 }, conMel
     await page.addInitScript(() => {
       window.__melkiPruebas = { voz: true };
     });
-  if (paneles)
-    await page.addInitScript(() => {
-      window.__simuladorPruebas = { paneles: true };
-    });
+  // Las pruebas de siempre arrancan con los paneles y la barra de arriba abiertos; las de v17 y v17.1, como el usuario
+  await page.addInitScript((abiertos) => {
+    window.__simuladorPruebas = abiertos ? { paneles: true, barra: true } : {};
+  }, paneles);
   let ok = true;
   let error = "";
   try {
@@ -2978,9 +2978,13 @@ await flujo(
     await page.waitForTimeout(1200);
     afirmar(!(await page.locator("[data-tour=panel-izquierdo]").isVisible()), "El panel izquierdo debería empezar oculto");
     afirmar(!(await page.getByRole("complementary", { name: "Resultados" }).isVisible()), "El panel de resultados debería empezar oculto");
-    // Con la simulación lista y el panel cerrado, su botón avisa con un puntico
+    // Con la simulación lista y el panel cerrado, su botón avisa con un puntico (y la flechita de la barra, oculta)
     await page.waitForFunction(() => document.querySelector("[data-tour=alternar-resultados]")?.hasAttribute("data-nuevo"), null, { timeout: 90000 });
+    await page.waitForFunction(() => document.querySelector("[data-tour=flecha-barra]")?.hasAttribute("data-nuevo"), null, { timeout: 5000 });
     await foto("ocultos");
+    await page.locator("[data-tour=flecha-barra]").click();
+    await page.locator("[data-tour=alternar-resultados]").waitFor({ state: "visible" });
+    afirmar(!(await page.locator("[data-tour=flecha-barra]").evaluate((b) => b.hasAttribute("data-nuevo"))), "Con la barra a la vista, el puntico queda solo en el botón de resultados");
     await page.locator("[data-tour=alternar-resultados]").click();
     await page.getByRole("heading", { name: /^(Factible|Factible con ajustes|No factible todavía)$/ }).first().waitFor({ timeout: 90000 });
     afirmar(!(await page.locator("[data-tour=alternar-resultados]").evaluate((b) => b.hasAttribute("data-nuevo"))), "Al abrir el panel se quita el puntico");
@@ -2999,6 +3003,215 @@ await flujo(
   },
   { paneles: false },
 );
+
+await flujo(
+  "barra-oculta",
+  async (page, foto) => {
+    // La barra de arriba empieza oculta y solo la flechita de la esquina la despliega
+    await page.locator("[data-tour=mapa]").waitFor();
+    const flecha = page.locator("[data-tour=flecha-barra]");
+    await flecha.waitFor();
+    await page.waitForTimeout(800);
+    const archivo = page.locator("[data-tour=archivo]");
+    afirmar(!(await archivo.isVisible()), "La barra debería empezar oculta");
+    afirmar((await flecha.getAttribute("aria-expanded")) === "false" && (await flecha.getAttribute("aria-label")) === "Mostrar la barra de herramientas", "La flechita debería ofrecer mostrar la barra");
+    const zona = await page.locator("main").boundingBox();
+    const f = await flecha.boundingBox();
+    const zoom = await page.locator(".maplibregl-ctrl-zoom-in").boundingBox();
+    afirmar(f && zona && Math.abs(f.y - zona.y) < 1 && zona.y < 1 && f.x + f.width > zona.x + zona.width - 45 && f.width <= 32 && f.height <= 22, `La flechita debería ir pequeña en la esquina de arriba a la derecha (${JSON.stringify(f)})`);
+    afirmar(zoom && f && zoom.y >= f.y + f.height, "Los controles del zoom quedan debajo de la flechita");
+    await foto("oculta");
+    // Pasar el ratón por el borde de arriba no la abre
+    for (const x of [40, 400, 800, 1200, 1400]) await page.mouse.move(x, 2);
+    await page.waitForTimeout(500);
+    afirmar(!(await archivo.isVisible()), "Pasar el ratón por arriba no debería desplegar la barra");
+    // Con la flechita se despliega…
+    await flecha.click();
+    await archivo.waitFor({ state: "visible" });
+    await page.getByRole("button", { name: /^Archivo/ }).waitFor();
+    afirmar((await flecha.getAttribute("aria-expanded")) === "true" && (await flecha.getAttribute("aria-label")) === "Ocultar la barra de herramientas", "La flechita debería ofrecer ocultar la barra");
+    const f2 = await flecha.boundingBox();
+    afirmar(f2 && f2.y >= 55, "Con la barra a la vista, la flechita queda justo debajo");
+    await page.waitForTimeout(400);
+    // …y sus menús se despliegan completos (sin recorte)
+    await page.getByRole("button", { name: /^Archivo/ }).click();
+    await page.getByRole("menuitem", { name: /Acerca del simulador y licencia/ }).waitFor({ state: "visible" });
+    await foto("visible");
+    await page.keyboard.press("Escape");
+    // …y con la misma flechita se oculta
+    await flecha.click();
+    await page.waitForTimeout(500);
+    afirmar(!(await archivo.isVisible()), "La flechita debería ocultar la barra");
+    // Melki explica dónde está, sin abrirla
+    const { chat, decir, ultimo } = await abrirMelki(page);
+    await decir("muestra la barra de arriba");
+    await chat.getByText(/flechita de la esquina superior derecha/).last().waitFor({ timeout: 10000 });
+    afirmar(!(await archivo.isVisible()), "Melki no debería desplegar la barra (solo la flechita)");
+    // Un tour que señala algo de la barra la muestra mientras dura y la vuelve a ocultar al terminar
+    await decir("hazme el tutorial básico");
+    await chat.getByRole("button", { name: /^Empezar «Tutorial básico»/ }).last().click({ timeout: 10000 });
+    const tour = page.getByRole("dialog", { name: "Tour: Tutorial básico" });
+    await tour.waitFor({ timeout: 10000 });
+    let vioArchivo = false;
+    for (let paso = 0; paso < 30; paso++) {
+      await page.waitForTimeout(300);
+      const t = await tour.locator("p.font-cond").first().innerText();
+      if (t === "¡Terminó el tour!") break;
+      if (t === "Guarde o exporte") {
+        await archivo.waitFor({ state: "visible", timeout: 5000 });
+        vioArchivo = true;
+        await foto("tour-archivo");
+      }
+      const hagalo = tour.getByRole("button", { name: "Hágalo por mí" });
+      const siguiente = tour.getByRole("button", { name: /^(Empezar|Siguiente|Terminar)$/ });
+      if (await hagalo.isVisible()) {
+        const pulsado = await hagalo.click({ timeout: 10000 }).then(() => true, () => false);
+        if (pulsado) await tour.getByText(/Listo, lo hice por usted\.|¡Bien hecho!|Listo: /).waitFor({ timeout: 90000 }).catch(() => {});
+      } else if (await siguiente.isVisible()) await siguiente.click();
+      await page.waitForFunction((x) => document.querySelector('[role=dialog][aria-label^="Tour:"] p.font-cond')?.textContent !== x, t, { timeout: 90000 });
+    }
+    afirmar(vioArchivo, "El paso «Guarde o exporte» debería mostrar la barra con Archivo");
+    await tour.getByRole("button", { name: "Cerrar" }).click();
+    await tour.waitFor({ state: "detached" });
+    await page.waitForTimeout(500);
+    afirmar(!(await archivo.isVisible()), "Al terminar el tour, la barra vuelve a ocultarse");
+    void ultimo;
+    // Al recargar, otra vez oculta
+    await page.reload();
+    await page.locator("[data-tour=flecha-barra]").waitFor();
+    await page.waitForTimeout(800);
+    afirmar(!(await page.locator("[data-tour=archivo]").isVisible()), "Al recargar, la barra debería volver a empezar oculta");
+  },
+  { paneles: false },
+);
+
+await flujo(
+  "barra-celular",
+  async (page, foto) => {
+    // En el celular también: la flechita en la esquina, sin tapar las herramientas del mapa, y la barra completa al tocarla
+    await page.locator("[data-tour=mapa]").waitFor();
+    const flecha = page.locator("[data-tour=flecha-barra]");
+    await flecha.waitFor();
+    await page.waitForTimeout(800);
+    const f = await flecha.boundingBox();
+    const h = await page.locator("[data-tour=herramientas]").boundingBox();
+    afirmar(f && h && (f.x >= h.x + h.width || f.y >= h.y + h.height), "La flechita no debería tapar las herramientas del mapa");
+    afirmar(f && f.x + f.width <= 390 && f.y < 1, `La flechita debería ir en la esquina de arriba (${JSON.stringify(f)})`);
+    await foto("oculta");
+    await flecha.click();
+    await page.getByRole("button", { name: /^Archivo/ }).waitFor({ state: "visible" });
+    const ancho = await page.evaluate(() => document.documentElement.scrollWidth);
+    afirmar(ancho <= 390, `La pantalla no debería desbordarse (${ancho} px)`);
+    await foto("visible");
+    await flecha.click();
+    await page.waitForTimeout(500);
+    afirmar(!(await page.locator("[data-tour=archivo]").isVisible()), "La flechita debería ocultar la barra en el celular");
+  },
+  { paneles: false, tamano: { width: 390, height: 844 } },
+);
+
+await flujo("nombres-mapa", async (page, foto) => {
+  await esperarSimulacion(page);
+  await page.waitForFunction(() => Boolean(window.__simuladorPruebas?.mapa), null, { timeout: 30000 });
+  /** Va a un zoom exacto y devuelve los nombres que quedaron en pantalla, con su caja. */
+  const ir = async (lon, lat, z) => {
+    await page.evaluate(([x, y, zz]) => window.__simuladorPruebas.mapa.jumpTo({ center: [x, y], zoom: zz }), [lon, lat, z]);
+    await page.waitForTimeout(450);
+    return page.evaluate(() => {
+      const mapa = document.querySelector("[data-tour=mapa]").getBoundingClientRect();
+      const marcadores = [...document.querySelectorAll(".maplibregl-marker:not(.etiqueta-ref)")].flatMap((e) => [e, ...e.querySelectorAll(":scope > *, :scope > * > span")]);
+      const tapas = [...document.querySelectorAll("[data-tapa-mapa], [data-tour=herramientas], [data-tour=capas], [data-tour=leyenda], .maplibregl-ctrl"), ...marcadores]
+        .filter((e) => getComputedStyle(e).visibility !== "hidden")
+        .map((e) => e.getBoundingClientRect())
+        .filter((r) => r.width > 0 && r.height > 0);
+      const nombres = [...document.querySelectorAll(".etiqueta-ref")].map((el) => {
+        const r = el.firstElementChild.getBoundingClientRect();
+        return { clase: [...el.classList].find((c) => c.startsWith("et-") && !c.startsWith("et-rango")).slice(3), texto: el.textContent, x0: r.left, y0: r.top, x1: r.right, y1: r.bottom, tam: Number.parseFloat(el.style.fontSize) };
+      });
+      const esri = window.__simuladorPruebas.mapa.getLayer("capa-etiquetas");
+      return { nombres, tapas, mapa: { x0: mapa.left, y0: mapa.top, x1: mapa.right, y1: mapa.bottom }, esri: { minzoom: esri.minzoom, visibilidad: window.__simuladorPruebas.mapa.getLayoutProperty("capa-etiquetas", "visibility") } };
+    });
+  };
+  const cruza = (a, b, t = 1) => a.x0 < b.x1 - t && b.x0 < a.x1 - t && a.y0 < b.y1 - t && b.y0 < a.y1 - t;
+  /** Ningún nombre repetido (los ríos, solo si quedan lejos), ninguno encima de otro ni de los controles, todos dentro del mapa. */
+  const revisar = (d, donde) => {
+    const n = d.nombres;
+    afirmar(n.length > 0, `${donde}: no hay nombres`);
+    for (let i = 0; i < n.length; i++) {
+      const a = n[i];
+      afirmar(a.x0 >= d.mapa.x0 - 1 && a.x1 <= d.mapa.x1 + 1 && a.y0 >= d.mapa.y0 - 1 && a.y1 <= d.mapa.y1 + 1, `${donde}: «${a.texto}» se sale del mapa`);
+      for (const tapa of d.tapas) afirmar(!cruza(a, { x0: tapa.left, y0: tapa.top, x1: tapa.right, y1: tapa.bottom }), `${donde}: «${a.texto}» queda debajo de un control`);
+      for (let j = i + 1; j < n.length; j++) {
+        const b = n[j];
+        afirmar(!cruza(a, b), `${donde}: «${a.texto}» y «${b.texto}» se tapan`);
+        const mismo = a.texto.toLocaleLowerCase("es") === b.texto.toLocaleLowerCase("es");
+        if (!mismo) continue;
+        const lejos = Math.hypot((a.x0 + a.x1 - b.x0 - b.x1) / 2, (a.y0 + a.y1 - b.y0 - b.y1) / 2);
+        afirmar(a.clase === b.clase ? a.clase === "rio" && lejos > 300 : !["ciudad", "municipio"].includes(a.clase) || !["ciudad", "municipio"].includes(b.clase), `${donde}: «${a.texto}» sale repetido (${a.clase}, ${b.clase}, a ${Math.round(lejos)} px)`);
+      }
+    }
+    return n;
+  };
+  // Con un nodo en el mapa, los nombres le dan paso (ninguno queda debajo del nodo, de su nombre ni de sus alcances)
+  let d = await ir(-74, 6, 4.6);
+  let n = revisar(d, "zoom 4,6 con el nodo");
+  afirmar(n.filter((x) => x.texto === "COLOMBIA").length === 1, "Colombia debería salir una vez aunque el nodo esté encima de su punto");
+  await foto("lejos-con-nodo");
+  // Sin nodos: lejos van los países, los mares, las ciudades principales y los ríos grandes, sin los nombres de Esri
+  await page.getByRole("button", { name: /^Archivo/ }).click();
+  await page.getByRole("menuitem", { name: /Nuevo escenario/ }).click();
+  await page.waitForFunction(() => document.querySelectorAll("[data-tour=lista-antenas] > li").length === 0, null, { timeout: 10000 });
+  d = await ir(-74, 6, 4.6);
+  n = revisar(d, "zoom 4,6");
+  const textos = n.map((x) => x.texto);
+  afirmar(d.esri.minzoom === 7.5 && d.esri.visibilidad === "visible", `Los nombres de Esri deberían quedar desde el zoom 7,5 (${JSON.stringify(d.esri)})`);
+  afirmar(textos.includes("COLOMBIA") && textos.includes("VENEZUELA") && textos.includes("Bogotá"), `Faltan países o Bogotá: ${textos.join(", ")}`);
+  afirmar(n.some((x) => x.clase === "oceano" || x.clase === "mar"), "Faltan los mares");
+  afirmar(n.filter((x) => x.texto === "COLOMBIA").length === 1, "Colombia debería salir una sola vez");
+  const tamPais4 = n.find((x) => x.texto === "COLOMBIA").tam;
+  await foto("lejos");
+  // Más cerca, departamentos y capitales; los nombres crecen con el zoom
+  d = await ir(-73.4, 4.6, 6.4);
+  n = revisar(d, "zoom 6,4");
+  afirmar(n.some((x) => x.clase === "departamento") && n.some((x) => x.clase === "ciudad"), "A este zoom deberían verse departamentos y ciudades");
+  const pais6 = n.find((x) => x.clase === "pais");
+  afirmar(!pais6 || pais6.tam > tamPais4, "Los nombres deberían crecer al acercarse");
+  afirmar(n.some((x) => x.clase === "rio" && /^Río /.test(x.texto)), "Los ríos deberían llamarse «Río …»");
+  await foto("departamentos");
+  // De cerca, con los nombres de Esri: los propios dejan solo los ríos (Esri escribe poblados y departamentos)
+  d = await ir(-72.97, 4.57, 9.2);
+  n = d.nombres;
+  revisar({ ...d, nombres: n.length ? n : [{ clase: "rio", texto: "x", x0: d.mapa.x0 + 1, y0: d.mapa.y0 + 80, x1: d.mapa.x0 + 2, y1: d.mapa.y0 + 81 }] }, "zoom 9,2");
+  afirmar(n.every((x) => ["rio", "lago"].includes(x.clase)), `Con los nombres de Esri no deberían repetirse departamentos ni municipios: ${n.map((x) => `${x.clase}:${x.texto}`).join(", ")}`);
+  // Sin los nombres de Esri, de cerca van los municipios (una vez cada uno)
+  await page.getByRole("button", { name: "Capas" }).click();
+  await page.getByRole("checkbox", { name: /Poblados y lugares/ }).uncheck({ force: true });
+  await page.keyboard.press("Escape");
+  d = await ir(-72.97, 4.57, 9.2);
+  n = revisar(d, "zoom 9,2 sin Esri");
+  afirmar(d.esri.visibilidad === "none", "Sin «Poblados y lugares», la capa de Esri se apaga");
+  afirmar(n.some((x) => x.clase === "municipio"), `Sin Esri deberían verse los municipios: ${n.map((x) => x.texto).join(", ")}`);
+  await foto("municipios");
+  // En inglés: los países y las aguas cambian de nombre
+  await page.evaluate(() => {
+    localStorage.setItem("simulador-cobertura-idioma", JSON.stringify({ idioma: "en", auto: true }));
+  });
+  await page.reload();
+  await page.waitForFunction(() => Boolean(window.__simuladorPruebas?.mapa), null, { timeout: 30000 });
+  d = await ir(-77, 6, 4.8);
+  n = revisar(d, "zoom 4,8 en inglés");
+  const en = n.map((x) => x.texto);
+  afirmar(en.includes("PANAMA") && en.includes("Panama City") && !en.includes("PANAMÁ") && en.some((x) => /^(Pacific Ocean|Caribbean Sea)$/.test(x)), `Los nombres en inglés: ${en.join(", ")}`);
+  afirmar(n.filter((x) => x.clase === "rio").every((x) => / River$|Canal$|^Río Grande/.test(x.texto)), `Los ríos en inglés: ${n.filter((x) => x.clase === "rio").map((x) => x.texto).join(", ")}`);
+  await foto("ingles");
+  // Un mapa base con nombres propios: los de las capas no se repiten encima
+  await page.getByRole("button", { name: "Layers" }).click();
+  await page.getByRole("radio", { name: /Streets \(OpenStreetMap\)/ }).check();
+  await page.getByText(/This base map has its own names/).waitFor();
+  await page.keyboard.press("Escape");
+  d = await ir(-74, 6, 5.5);
+  afirmar(d.nombres.length === 0 && d.esri.visibilidad === "none", `Sobre las calles no deberían pintarse nombres propios (${d.nombres.length})`);
+});
 
 await flujo("configuracion-idioma", async (page, foto) => {
   await esperarSimulacion(page);
