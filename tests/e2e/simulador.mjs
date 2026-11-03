@@ -27,10 +27,12 @@ const afirmar = (condicion, mensaje) => {
 
 // `hablar`: la voz de Melki encendida desde el principio (lo normal es que no hable: escucha, hace lo que se le pide y
 // responde por escrito); las pruebas de la voz, del eco y de la IA con voz la encienden así.
-async function flujo(nombre, fn, { tamano = { width: 1440, height: 900 }, conMelki = false, sembrar = false, hablar = false, preparar } = {}) {
+// `paneles`: desde la v17 los dos paneles empiezan ocultos; las pruebas de siempre los piden abiertos al arrancar
+// (`paneles: false` prueba cómo abre de verdad). `locale`: el idioma del navegador (de fábrica, español de Colombia).
+async function flujo(nombre, fn, { tamano = { width: 1440, height: 900 }, conMelki = false, sembrar = false, hablar = false, preparar, paneles = true, locale = "es-CO" } = {}) {
   // SOLO=flujo1,flujo2 corre solo esos flujos
   if (process.env.SOLO && !process.env.SOLO.split(",").includes(nombre)) return;
-  const context = await navegador.newContext({ viewport: tamano, locale: "es-CO", acceptDownloads: true });
+  const context = await navegador.newContext({ viewport: tamano, locale, acceptDownloads: true });
   await desviarTeselas(context);
   const page = await context.newPage();
   const avisos = [];
@@ -56,6 +58,10 @@ async function flujo(nombre, fn, { tamano = { width: 1440, height: 900 }, conMel
   if (hablar)
     await page.addInitScript(() => {
       window.__melkiPruebas = { voz: true };
+    });
+  if (paneles)
+    await page.addInitScript(() => {
+      window.__simuladorPruebas = { paneles: true };
     });
   let ok = true;
   let error = "";
@@ -2945,6 +2951,221 @@ await flujo(
     await foto("diseno");
   },
   { sembrar: true },
+);
+
+/* ───────────── v17: paneles ocultos, Configuración e inglés ───────────── */
+
+/** Melki abierto: su conversación, cómo escribirle y su último mensaje (sirve en los dos idiomas). */
+const abrirMelki = async (page) => {
+  await page.locator("[data-tour=melki]").click();
+  const chat = page.locator("[data-tour=melki-chat]");
+  await chat.waitFor();
+  const decir = async (t) => {
+    await page.locator("[data-tour=melki-entrada]").getByRole("textbox").fill(t);
+    await page.keyboard.press("Enter");
+  };
+  const ultimo = () => chat.locator("[data-mensaje]:not(.justify-end)").last();
+  return { chat, decir, ultimo };
+};
+/** Palabras del español que no deberían quedar en una respuesta en inglés (fuera de nombres propios). */
+const RASTRO_ESPANOL = /\b(de la|del|los|las|para|señor|listo|repetidor(es)?|personas|cobertura|señal|simulación|también|está|aquí|puse|quité)\b/i;
+
+await flujo(
+  "paneles-ocultos",
+  async (page, foto) => {
+    // Los dos paneles empiezan ocultos, aunque antes se hubieran dejado abiertos
+    await page.locator("[data-tour=mapa]").waitFor();
+    await page.waitForTimeout(1200);
+    afirmar(!(await page.locator("[data-tour=panel-izquierdo]").isVisible()), "El panel izquierdo debería empezar oculto");
+    afirmar(!(await page.getByRole("complementary", { name: "Resultados" }).isVisible()), "El panel de resultados debería empezar oculto");
+    // Con la simulación lista y el panel cerrado, su botón avisa con un puntico
+    await page.waitForFunction(() => document.querySelector("[data-tour=alternar-resultados]")?.hasAttribute("data-nuevo"), null, { timeout: 90000 });
+    await foto("ocultos");
+    await page.locator("[data-tour=alternar-resultados]").click();
+    await page.getByRole("heading", { name: /^(Factible|Factible con ajustes|No factible todavía)$/ }).first().waitFor({ timeout: 90000 });
+    afirmar(!(await page.locator("[data-tour=alternar-resultados]").evaluate((b) => b.hasAttribute("data-nuevo"))), "Al abrir el panel se quita el puntico");
+    await page.locator("[data-tour=alternar-panel]").click();
+    await page.locator("[data-tour=panel-izquierdo]").waitFor({ state: "visible" });
+    await foto("abiertos");
+    // Al volver a abrir la página, otra vez ocultos
+    await page.reload();
+    await page.locator("[data-tour=mapa]").waitFor();
+    await page.waitForTimeout(1200);
+    afirmar(!(await page.locator("[data-tour=panel-izquierdo]").isVisible()) && !(await page.getByRole("complementary", { name: "Resultados" }).isVisible()), "Al recargar, los paneles deberían volver a empezar ocultos");
+    // Melki los abre cuando se los piden
+    const { decir } = await abrirMelki(page);
+    await decir("muestra el panel de resultados");
+    await page.getByRole("complementary", { name: "Resultados" }).waitFor({ timeout: 10000 });
+  },
+  { paneles: false },
+);
+
+await flujo("configuracion-idioma", async (page, foto) => {
+  await esperarSimulacion(page);
+  // La tuerca, a la derecha de Pitch
+  const tuerca = page.locator("[data-tour=configuracion]");
+  const pitch = await page.locator("[data-tour=boton-pitch]").boundingBox();
+  const caja = await tuerca.boundingBox();
+  afirmar(caja && pitch && caja.x > pitch.x, "La tuerca de Configuración debería quedar a la derecha de Pitch");
+  await tuerca.click();
+  const dialogo = page.getByRole("dialog", { name: "Configuración" });
+  await dialogo.waitFor();
+  afirmar((await dialogo.getByRole("radio", { name: /Español/ }).getAttribute("aria-checked")) === "true", "Debería empezar en español");
+  await foto("configuracion");
+  await dialogo.getByRole("radio", { name: /English/ }).click();
+  // Todo cambia al instante, también lo que ya calculó el motor (sin volver a simular)
+  await page.getByRole("dialog", { name: "Settings" }).waitFor();
+  await page.getByRole("button", { name: /^File/ }).waitFor();
+  await page.getByRole("heading", { name: /^(Feasible|Feasible with adjustments|Not feasible yet)$/ }).first().waitFor({ timeout: 10000 });
+  afirmar((await page.evaluate(() => document.documentElement.lang)) === "en", "El documento debería quedar en inglés");
+  afirmar(/Coverage Simulator/.test(await page.title()), `El título de la pestaña: ${await page.title()}`);
+  await page.keyboard.press("Escape");
+  await foto("ingles");
+  // Se recuerda al volver
+  await page.reload();
+  await page.getByRole("button", { name: /^File/ }).waitFor();
+  await esperarSimulacionIngles(page);
+  // De vuelta al español
+  await page.locator("[data-tour=configuracion]").click();
+  await page.getByRole("dialog", { name: "Settings" }).getByRole("radio", { name: /Español/ }).click();
+  await page.getByRole("button", { name: /^Archivo/ }).waitFor();
+  await page.getByRole("heading", { name: /^(Factible|Factible con ajustes|No factible todavía)$/ }).first().waitFor({ timeout: 10000 });
+});
+
+/** Como esperarSimulacion, en inglés. */
+async function esperarSimulacionIngles(page) {
+  await page.waitForFunction(() => !document.querySelector("[role=progressbar]"), null, { timeout: 90000 });
+  await page.getByRole("heading", { name: /^(Feasible|Feasible with adjustments|Not feasible yet)$/ }).first().waitFor({ timeout: 90000 });
+}
+
+await flujo(
+  "navegador-ingles",
+  async (page, foto) => {
+    // La primera vez, el idioma del navegador: uno en inglés abre en inglés
+    await page.getByRole("button", { name: /^File/ }).waitFor({ timeout: 30000 });
+    await esperarSimulacionIngles(page);
+    afirmar((await page.evaluate(() => document.documentElement.lang)) === "en", "Debería abrir en inglés");
+    await page.locator("[data-tour=lista-antenas]").getByText("Example").waitFor();
+    await foto("primera-vez");
+  },
+  { locale: "en-US" },
+);
+
+await flujo("idioma-automatico", async (page, foto) => {
+  await esperarSimulacion(page);
+  const { chat, decir, ultimo } = await abrirMelki(page);
+  // Le escriben en inglés: todo pasa a inglés y responde en inglés
+  await decir("How much does the network cost?");
+  await page.getByRole("button", { name: /^File/ }).waitFor({ timeout: 10000 });
+  await chat.getByText(/COP [\d,]+/).first().waitFor({ timeout: 15000 });
+  const respuesta = await ultimo().innerText();
+  afirmar(!RASTRO_ESPANOL.test(respuesta.replace(/«[^»]*»|“[^”]*”/g, "")), `Respuesta con español: ${respuesta.slice(0, 300)}`);
+  await foto("a-ingles");
+  // Y si le escriben en español, vuelve al español
+  await decir("¿Cuántos repetidores hay en la red?");
+  await page.getByRole("button", { name: /^Archivo/ }).waitFor({ timeout: 10000 });
+  await foto("a-espanol");
+  // Con el cambio automático apagado, se queda en el idioma elegido
+  await page.locator("[data-tour=configuracion]").click();
+  await page.getByRole("dialog", { name: "Configuración" }).getByText("Cambiar de idioma automáticamente").click();
+  await page.keyboard.press("Escape");
+  await decir("What is LoRa?");
+  await page.waitForTimeout(1500);
+  afirmar(await page.getByRole("button", { name: /^Archivo/ }).isVisible(), "Con el cambio automático apagado no debería cambiar de idioma");
+});
+
+await flujo(
+  "melki-ingles",
+  async (page, foto) => {
+    await esperarSimulacionIngles(page);
+    const { chat, decir } = await abrirMelki(page);
+    /**
+     * Le escribe y espera, entre los mensajes de Melki que llegan después, uno que cumpla `re` (el aviso de la
+     * simulación puede llegar en medio); devuelve su texto, que no debe traer español fuera de los nombres.
+     */
+    const pedir = async (t, re, que, timeout = 20000) => {
+      const n = await chat.locator("[data-mensaje]").count();
+      await decir(t);
+      const h = await page.waitForFunction(
+        ({ n, src, flags }) => {
+          const r = new RegExp(src, flags);
+          const ms = [...document.querySelectorAll("[data-tour=melki-chat] [data-mensaje]")].slice(n).filter((m) => !m.classList.contains("justify-end"));
+          return ms.map((m) => m.innerText).find((x) => r.test(x)) ?? false;
+        },
+        { n, src: re.source, flags: re.flags },
+        { timeout },
+      );
+      const texto = (await h.jsonValue()).replace(/«[^»]*»|“[^”]*”/g, "");
+      afirmar(!RASTRO_ESPANOL.test(texto), `${que}: quedó español en «${texto.slice(0, 300)}»`);
+      return texto;
+    };
+    // Una orden: un repetidor al norte del ejemplo, con nombre en inglés
+    await pedir("add a repeater 5 km north of Example", /Repeater 1/, "Poner un repetidor");
+    await page.locator("[data-tour=lista-antenas]").getByText(/^Repeater 1$/).waitFor({ timeout: 15000 });
+    await pedir("raise Repeater 1 to 25 m", /25 m/, "Subir el repetidor");
+    // Preguntas
+    await pedir("What is LoRa?", /LoRa/, "¿Qué es LoRa?");
+    await pedir("how much does the network cost?", /COP/, "El costo", 30000);
+    // Un lugar
+    await pedir("take me to Villavicencio", /Villavicencio/, "Ir a un lugar", 30000);
+    // Los tours, en inglés
+    await pedir("give me a tour", /tour/i, "Los tours");
+    await foto("conversacion");
+    // Deshacer
+    await pedir("undo", /undone|undo/i, "Deshacer");
+  },
+  { preparar: (page) => page.addInitScript(() => localStorage.getItem("simulador-cobertura-idioma") || localStorage.setItem("simulador-cobertura-idioma", JSON.stringify({ idioma: "en", auto: true }))) },
+);
+
+// La voz en inglés: la británica serena (al estilo de JARVIS) y lo que dice, en inglés
+await flujo(
+  "voz-ingles",
+  async (page, foto) => {
+    await esperarSimulacionIngles(page);
+    const { decir } = await abrirMelki(page);
+    await decir("talk to me");
+    await page.waitForFunction(() => window.__voces.usadas.length > 0, null, { timeout: 15000 });
+    const usada = await page.evaluate(() => window.__voces.usadas.at(-1));
+    afirmar(/Ryan/.test(usada.voz) && usada.lang === "en-GB", `Debería hablar con la voz británica (Ryan): ${JSON.stringify(usada)}`);
+    afirmar(!/[ñáéíóú]|\b(señor|listo|ahora|respondo)\b/i.test(usada.texto), `Lo dicho debería estar en inglés: ${usada.texto}`);
+    await decir("simulate");
+    await page.waitForTimeout(2500);
+    const dichos = await page.evaluate(() => window.__voces.usadas.map((u) => u.texto).join(" | "));
+    afirmar(!/\b(señor|listo|simulación)\b/i.test(dichos), `Dijo algo en español: ${dichos.slice(0, 400)}`);
+    await foto("voz");
+  },
+  {
+    preparar: async (page) => {
+      await page.addInitScript(() => {
+        localStorage.setItem("simulador-cobertura-idioma", JSON.stringify({ idioma: "en", auto: true }));
+        const voces = [
+          { name: "Microsoft Gonzalo Online (Natural) - Spanish (Colombia)", lang: "es-CO", localService: false },
+          { name: "Microsoft Aria Online (Natural) - English (United States)", lang: "en-US", localService: false },
+          { name: "Microsoft Ryan Online (Natural) - English (United Kingdom)", lang: "en-GB", localService: false },
+          { name: "Microsoft Sonia Online (Natural) - English (United Kingdom)", lang: "en-GB", localService: false },
+        ];
+        window.__voces = { usadas: [] };
+        const sintesis = {
+          speaking: false,
+          pending: false,
+          getVoices: () => voces,
+          addEventListener() {},
+          removeEventListener() {},
+          speak(u) {
+            window.__voces.usadas.push({ voz: u.voice?.name ?? "", lang: u.lang, texto: u.text });
+            setTimeout(() => u.onend?.(), 30);
+          },
+          cancel() {},
+        };
+        Object.defineProperty(window, "speechSynthesis", { value: sintesis, configurable: true });
+        window.SpeechSynthesisUtterance = class {
+          constructor(text) {
+            this.text = text;
+          }
+        };
+      });
+    },
+  },
 );
 
 let fallos = 0;
