@@ -203,7 +203,8 @@ type OrdenSola =
   | { tipo: "duplicar"; id: string }
   | { tipo: "seleccionar"; id: string }
   /** Paneles a los lados del mapa: «pantalla limpia» los oculta para trabajar por voz con solo el mapa. */
-  | { tipo: "paneles"; izquierdo?: boolean; derecho?: boolean }
+  /** «barra»: pidieron mostrar (true) u ocultar (false) la barra de herramientas de arriba, que solo abre su flechita. */
+  | { tipo: "paneles"; izquierdo?: boolean; derecho?: boolean; barra?: boolean }
   /* Ajuste inteligente (cobertura–costo) y área objetivo */
   | { tipo: "ajustar"; aplicar: boolean; opcion: OpcionAjusteId; opciones: OpcionesAjuste; avisos: string[] }
   | { tipo: "aplicar-ajuste"; ajuste: Ajuste; indice: number; base: Escenario }
@@ -1473,6 +1474,9 @@ function equipoEnTexto(tn: string): EquipoId | null {
 export function interpretarPaneles(tn: string): Orden | null {
   const ocultar = /\b(oculta\w*|esconde\w*|quita\w*|cierra\w*|pliega\w*|recoge\w*|minimiza\w*|colapsa\w*|sin)\b/.test(tn);
   const mostrar = /\b(muestra\w*|mostrar|abre|abrir|despliega\w*|vuelve\w*|pon\w*|devuelve\w*|quiero ver|ver)\b/.test(tn);
+  // La barra de herramientas de arriba se despliega solo con su flechita: Melki no la abre, explica dónde está
+  if ((ocultar || mostrar) && /\b(barra (de herramientas |de botones |de menus? |de opciones )?(de arriba|superior|de encima)|menu de arriba|botones de arriba)\b/.test(tn))
+    return { tipo: "paneles", barra: !ocultar };
   if (/\b(pantalla limpia|limpia la pantalla|limpiar la pantalla|despeja\w* (la pantalla|el mapa)|solo el mapa|solamente el mapa|mapa (completo|a pantalla completa|grande)|pantalla completa|modo limpio|sin paneles)\b/.test(tn) && !/\b(muestra|abre|vuelve)\w* (los )?paneles\b/.test(tn))
     return { tipo: "paneles", izquierdo: false, derecho: false };
   const izquierdo = /\b(panel (izquierdo|de la izquierda|lateral|de herramientas)|barra (izquierda|de la izquierda|lateral|de herramientas)|herramientas de la izquierda)\b|\blas herramientas$/.test(tn);
@@ -3262,6 +3266,18 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
           : tx("Listo: «Simular al cambiar» quedó apagado. Cuando quiera ver el resultado, dígame «simula» o toque «Simular».", "Done: “Simulate on change” is off. When you want to see the result, tell me “simulate” or tap “Simulate”."),
       };
     case "paneles": {
+      if (o.barra !== undefined)
+        return {
+          texto: o.barra
+            ? tx(
+                "La barra de herramientas de arriba se despliega solo con la flechita de la esquina superior derecha del mapa: tóquela para verla y otra vez para ocultarla.",
+                "The toolbar at the top only opens with the little arrow in the top right corner of the map: tap it to see it, and again to hide it.",
+              )
+            : tx(
+                "La barra de arriba se oculta con la misma flechita de la esquina superior derecha del mapa; al abrir el simulador siempre empieza oculta.",
+                "The top bar hides with the same little arrow in the top right corner of the map; it always starts hidden when you open the simulator.",
+              ),
+        };
       const donde = api.paneles({ izquierdo: o.izquierdo, derecho: o.derecho });
       const ocultos = o.izquierdo === false || o.derecho === false;
       if (donde === "celular")
@@ -3278,13 +3294,13 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
       if (o.izquierdo === false && o.derecho === false)
         return {
           texto: tx(
-            "Listo: pantalla limpia, solo el mapa. Sigo trabajando igual; cuando quiera verlos, diga «muestra los paneles» o use los botones de la barra de arriba.",
-            "Done: a clean screen, just the map. I keep working the same way; when you want to see them, say “show the panels” or use the buttons in the top bar.",
+            "Listo: pantalla limpia, solo el mapa. Sigo trabajando igual; cuando quiera verlos, diga «muestra los paneles» o use los botones de la barra de arriba (la despliega la flechita de la esquina).",
+            "Done: a clean screen, just the map. I keep working the same way; when you want to see them, say “show the panels” or use the buttons in the top bar (the little arrow in the corner shows it).",
           ),
         };
       return {
         texto: ocultos
-          ? tx(`Listo, oculté ${cual}. Para volver a verlo, dígamelo o use el botón de la barra de arriba.`, `Done, I hid ${cual}. To see ${ambos ? "them" : "it"} again, tell me or use the button in the top bar.`)
+          ? tx(`Listo, oculté ${cual}. Para volver a verlo, dígamelo o use el botón de la barra de arriba (la despliega la flechita de la esquina).`, `Done, I hid ${cual}. To see ${ambos ? "them" : "it"} again, tell me or use the button in the top bar (the little arrow in the corner shows it).`)
           : tx(`Listo, ${ambos ? "ya están los paneles" : `ya está ${cual}`} a la vista.`, `Done, ${ambos ? "the panels are" : `${cual} is`} in view.`),
       };
     }

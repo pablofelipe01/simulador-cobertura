@@ -268,8 +268,13 @@ function MenuCapas({ estado, despachar }: { estado: Estado; despachar: Dispatch<
             <Interruptor etiqueta={tx("Departamentos y municipios", "Departments and municipalities")} detalle={tx("Límites y nombres (DANE)", "Boundaries and names (DANE)")} activo={v.refDivision} onCambio={(x) => cambiar({ refDivision: x })} />
             <Interruptor etiqueta={tx("Ríos y lagos principales", "Main rivers and lakes")} activo={v.refRios} onCambio={(x) => cambiar({ refRios: x })} />
             <Interruptor etiqueta={tx("Países", "Countries")} activo={v.refPaises} onCambio={(x) => cambiar({ refPaises: x })} />
-            <Interruptor etiqueta={tx("Poblados y lugares", "Towns and places")} detalle={tx("Nombres de Esri sobre el mapa", "Esri place names on the map")} activo={v.refNombres} onCambio={(x) => cambiar({ refNombres: x })} />
+            <Interruptor etiqueta={tx("Poblados y lugares", "Towns and places")} detalle={tx("Nombres de Esri al acercarse, sobre el satélite", "Esri place names when zoomed in, over the satellite")} activo={v.refNombres} onCambio={(x) => cambiar({ refNombres: x })} />
             <Interruptor etiqueta={tx("Vías", "Roads")} activo={v.refVias} onCambio={(x) => cambiar({ refVias: x })} />
+            {v.fondo !== "satelite" && (
+              <p className="mt-1 text-[12px] leading-snug text-tenue">
+                {tx("Este mapa base trae sus propios nombres: los de las capas se ven solo sobre el satélite, para no repetirlos.", "This base map has its own names: the layer names only show over the satellite, so they don't repeat.")}
+              </p>
+            )}
           </div>
           <div>
             {titulo(tx("Simulación", "Simulation"))}

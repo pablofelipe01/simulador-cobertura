@@ -1085,7 +1085,7 @@ export const TOURS: Tour[] = [
           return tx("Active el asistente", "Turn on the assistant");
         },
         get texto() {
-          return tx("Toque «Asistente Melki» en la barra de arriba (o escríbame «activa el asistente»). La primera vez el navegador le pide permiso para usar el micrófono: permítalo. Funciona mejor en Edge o Chrome.", "Tap “Melki Assistant” in the top bar (or write to me “turn on the assistant”). The first time, the browser asks your permission to use the microphone: allow it. It works best in Edge or Chrome.");
+          return tx("Toque «Asistente Melki» en la barra de arriba, que le dejo a la vista (o escríbame «activa el asistente»). La primera vez el navegador le pide permiso para usar el micrófono: permítalo. Funciona mejor en Edge o Chrome.", "Tap “Melki Assistant” in the top bar, which I leave in view for you (or write to me “turn on the assistant”). The first time, the browser asks your permission to use the microphone: allow it. It works best in Edge or Chrome.");
         },
         tarea: {
           hecho: () => elemento('[data-tour="manos-libres"][aria-pressed="true"]') !== null,

@@ -44,7 +44,7 @@ export function CoordenadasCursor({ mapa }: { mapa: MapaML | null }) {
   if (!p) return null;
   const lugar = textoUbicacion(p.lat, p.lon);
   return (
-    <div className="pointer-events-none absolute bottom-2 left-1/2 z-10 hidden max-w-[60%] -translate-x-1/2 truncate rounded-md bg-carbon/80 px-2.5 py-1 text-[12px] text-white tabular-nums md:block" aria-hidden="true">
+    <div className="pointer-events-none absolute bottom-2 left-1/2 z-10 hidden max-w-[60%] -translate-x-1/2 truncate rounded-md bg-carbon/80 px-2.5 py-1 text-[12px] text-white tabular-nums md:block" aria-hidden="true" data-tapa-mapa>
       {p.lat.toFixed(5)}, {p.lon.toFixed(5)} · {aGMS(p.lat, "lat")} {aGMS(p.lon, "lon")}
       {lugar ? ` · ${lugar}` : ""}
     </div>

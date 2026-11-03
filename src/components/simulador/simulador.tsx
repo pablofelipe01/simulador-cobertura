@@ -7,7 +7,7 @@
 
 // Pantalla principal del simulador: estado, motor de cálculo, mapa, paneles, regla, buscador y Melki.
 import type { Map as MapaML } from "maplibre-gl";
-import { PanelLeftClose, Play, RadioTower, Settings2, SlidersHorizontal, Sprout, Square, Waypoints } from "lucide-react";
+import { ChevronDown, ChevronUp, PanelLeftClose, Play, RadioTower, Settings2, SlidersHorizontal, Sprout, Square, Waypoints } from "lucide-react";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
 import { Melki } from "@/components/melki/melki";
@@ -85,6 +85,15 @@ if (typeof window !== "undefined") iniciarIdioma();
  * pruebas de extremo a extremo de siempre los piden abiertos al arrancar.
  */
 const panelesAlIniciar = () => typeof window !== "undefined" && (window as unknown as { __simuladorPruebas?: { paneles?: boolean } }).__simuladorPruebas?.paneles === true;
+
+/**
+ * La barra de herramientas de arriba también empieza oculta siempre: se despliega (y se vuelve a ocultar) solo con la
+ * flechita de la esquina. Los tours la muestran mientras señalan algo de ella. Las pruebas de siempre la piden abierta.
+ */
+const barraAlIniciar = () => typeof window !== "undefined" && (window as unknown as { __simuladorPruebas?: { barra?: boolean } }).__simuladorPruebas?.barra === true;
+
+/** Lo que los tours señalan en la barra de arriba (si un paso lo señala, la barra se muestra mientras dura el tour). */
+const OBJETIVOS_BARRA = new Set(["alternar-panel", "escenario", "archivo", "manos-libres", "ayuda", "boton-recorrido-red", "boton-pitch", "configuracion", "alternar-resultados"]);
 
 /** El título de la pestaña del navegador en el idioma actual. */
 const tituloPagina = () => tx("Simulador de cobertura · Red mesh LoRa 915 MHz", "Coverage Simulator · LoRa 915 MHz mesh network");
@@ -249,6 +258,20 @@ export function Simulador() {
   }
   // Panel izquierdo plegable (en el escritorio) y Melki manos libres
   const [panelIzquierdo, setPanelIzquierdo] = useState(panelesAlIniciar);
+  // Barra de arriba: oculta al abrir; abierta del todo (sin recorte, para que sus menús se desplieguen) al terminar de bajar
+  const [barraVisible, setBarraVisible] = useState(barraAlIniciar);
+  const [barraSinRecorte, setBarraSinRecorte] = useState(barraAlIniciar);
+  /** La abrió un tour (al terminar el tour se vuelve a ocultar). */
+  const barraPorTour = useRef(false);
+  useEffect(() => {
+    if (!barraVisible) return;
+    const espera = window.setTimeout(() => setBarraSinRecorte(true), 240);
+    return () => window.clearTimeout(espera);
+  }, [barraVisible]);
+  const ponerBarra = useCallback((si: boolean) => {
+    setBarraVisible(si);
+    if (!si) setBarraSinRecorte(false);
+  }, []);
   const [manosLibres, setManosLibres] = useState(false);
   const [acerca, setAcerca] = useState(false);
   // Autoría y licencia también en la consola del navegador (en el idioma de la pantalla al abrir)
@@ -1720,6 +1743,10 @@ export function Simulador() {
   const terminarTour = (otro?: boolean) => {
     setTour(null);
     setHoja(null);
+    if (barraPorTour.current) {
+      barraPorTour.current = false;
+      ponerBarra(false);
+    }
     devolverEscenario();
     if (modoAntesDelTour.current) despachar({ tipo: "modo", modo: modoAntesDelTour.current });
     modoAntesDelTour.current = null;
@@ -1775,7 +1802,14 @@ export function Simulador() {
 
   const nombres = useMemo(() => new Map(escenario.antenas.map((a) => [a.id, a.nombre])), [escenario.antenas]);
 
-  const prepararTour = useCallback((p: Preparacion) => {
+  const prepararTour = useCallback((p: Preparacion, objetivo?: string | string[] | null) => {
+    // Un paso que señala algo de la barra de arriba la muestra (vuelve a ocultarse al terminar el tour)
+    const primero = Array.isArray(objetivo) ? objetivo[0] : objetivo;
+    if (primero && OBJETIVOS_BARRA.has(primero))
+      setBarraVisible((v) => {
+        if (!v) barraPorTour.current = true;
+        return true;
+      });
     if (!p) return;
     if (p === "sembrar") {
       if (!esEscritorio()) setHoja("sembrar");
@@ -2092,6 +2126,14 @@ export function Simulador() {
 
   return (
     <div className="flex h-dvh flex-col">
+      <div
+        id="barra-superior"
+        className={`relative z-30 shrink-0 ${barraVisible ? "visible h-14" : "invisible h-0"} ${barraVisible && barraSinRecorte ? "" : "overflow-hidden"}`}
+        // Al ocultarse, deja de verse cuando termina de subir (y desde ese momento nada de ella se puede tocar)
+        style={{ transition: `height 200ms ease-out, visibility 0s linear ${barraVisible ? "0s" : "200ms"}` }}
+        inert={!barraVisible}
+        data-oculta={barraVisible ? undefined : ""}
+      >
       <BarraSuperior
         nombre={escenario.nombre}
         protocolo={PROTOCOLOS[presetPorId(escenario.parametros.preset).protocolo].nombre}
@@ -2134,6 +2176,7 @@ export function Simulador() {
         manosLibres={manosLibres}
         onManosLibres={() => setManosLibres((v) => !v)}
       />
+      </div>
 
       <div className="relative flex min-h-0 flex-1">
         <aside
@@ -2180,6 +2223,23 @@ export function Simulador() {
               if (!esEscritorio()) setHoja("sembrar");
             }}
           />
+          <button
+            type="button"
+            className="flecha-barra"
+            data-tapa-mapa
+            data-tour="flecha-barra"
+            data-nuevo={resultadoSinVer && !resultadosAbiertos && !barraVisible ? "" : undefined}
+            aria-controls="barra-superior"
+            aria-expanded={barraVisible}
+            aria-label={barraVisible ? tx("Ocultar la barra de herramientas", "Hide the toolbar") : tx("Mostrar la barra de herramientas", "Show the toolbar")}
+            title={barraVisible ? tx("Ocultar la barra de herramientas", "Hide the toolbar") : tx("Mostrar la barra de herramientas", "Show the toolbar")}
+            onClick={() => {
+              barraPorTour.current = false;
+              ponerBarra(!barraVisible);
+            }}
+          >
+            {barraVisible ? <ChevronUp size={15} strokeWidth={2.4} aria-hidden="true" /> : <ChevronDown size={15} strokeWidth={2.4} aria-hidden="true" />}
+          </button>
           <BarraMapa estado={estado} despachar={despachar} />
           <Regla mapa={mapa} estado={estado} despachar={despachar} onPerfil={abrirPerfilTerreno} onCentrar={encuadrarCaja} semilla={semillaRegla} />
           <CoordenadasCursor mapa={mapa} />

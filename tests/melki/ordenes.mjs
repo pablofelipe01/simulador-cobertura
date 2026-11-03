@@ -1405,6 +1405,18 @@ function crearApi(antenas) {
   caso("Ejecuta la pantalla limpia y lo cuenta", /pantalla limpia, solo el mapa/.test(rp.texto) && api.llamadas.some((l) => l[0] === "paneles" && l[1].izquierdo === false && l[1].derecho === false), rp.texto);
   api.pantalla = "celular";
   caso("En el celular explica los botones de abajo", /botones de abajo/.test(m.ejecutarOrden(pan("pantalla limpia"), api).texto));
+  api.pantalla = "escritorio";
+
+  // v17.1: la barra de herramientas de arriba solo se despliega con su flechita (Melki lo explica, no la abre)
+  const ctxBarra = () => ({ antenas: [], parametros: PARAMETROS, resultado: null, desactualizado: false, relieve: "teselas" });
+  const barra = pan("muestra la barra de arriba");
+  caso("«Muestra la barra de arriba» explica la flechita (no abre paneles)", barra?.tipo === "paneles" && barra.barra === true && barra.izquierdo === undefined && barra.derecho === undefined && /flechita de la esquina superior derecha/.test(m.ejecutarOrden(barra, api).texto));
+  caso("«Oculta la barra superior» y «abre la barra de herramientas de arriba»", pan("oculta la barra superior")?.barra === false && pan("abre la barra de herramientas de arriba")?.barra === true && pan("despliega el menú de arriba")?.barra === true);
+  caso("«Muestra la barra de herramientas» sigue siendo el panel de la izquierda", ((o) => o?.tipo === "paneles" && o.izquierdo === true && o.barra === undefined)(pan("muestra la barra de herramientas")));
+  const llamadasAntes = api.llamadas.length;
+  m.ejecutarOrden(barra, api);
+  caso("Explicar la barra no toca los paneles", !api.llamadas.slice(llamadasAntes).some((l) => l[0] === "paneles"));
+  caso("«¿Dónde está la barra de arriba?» y «no veo los botones» se explican", /flechita de la esquina superior derecha/.test(m.responder("¿dónde está la barra de arriba?", ctxBarra()).texto) && /flechita/.test(m.responder("no veo los botones", ctxBarra()).texto));
 
   // La mayor cobertura posible
   const pide = pan("dame la mayor cobertura posible");

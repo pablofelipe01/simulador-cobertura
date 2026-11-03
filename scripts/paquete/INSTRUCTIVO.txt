@@ -30,6 +30,11 @@ de "Pitch". La primera vez abre en el idioma del navegador y después
 recuerda el último que usó. Y la página abre con los paneles ocultos,
 para ver el mapa completo: las herramientas y los resultados se abren
 cuando usted quiera.
+En esta entrega, la barra de herramientas de arriba también empieza
+oculta (la despliega una flechita pequeña en la esquina superior
+derecha del mapa) y los nombres del mapa ya no se repiten al acercarse
+o alejarse: cada lugar sale una sola vez, con el tamaño que corresponde
+a la distancia.
 Melki tiene su propio modelo de inteligencia artificial, el
 "Modelo Melki": una red neuronal pequeña, hecha solo para este
 simulador, que entiende los pedidos dichos con sus palabras ("móntame
@@ -85,6 +90,13 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
 
 2. QUÉ PROBAR (unos 30 minutos)
 -------------------------------
+Antes de empezar: la barra de herramientas de arriba (Archivo, el
+buscador, Asistente Melki, Tours, Recorrido, Pitch y Configuración)
+empieza oculta. Tóquela con la flechita de la esquina superior derecha
+del mapa (encima del + y el −) para verla, y otra vez para ocultarla.
+Si llega un resultado nuevo con la barra oculta, la flechita lo avisa
+con un punto.
+
  a) Sembrar la malla (el modo con que abre; arriba del panel izquierdo
     se cambia a "Modo avanzado"):
       - Toque una pieza y luego el mapa: "Gateway + Internet" (torre de
@@ -616,9 +628,20 @@ OPCIÓN A · Versión HTML   ({{ZIP_HTML}})
     "Hey Melki, speak Spanish" para volver).
     La página abre con los paneles ocultos, para ver el mapa completo:
     las herramientas (izquierda) y los resultados (derecha) se abren
-    con sus botones de la barra de arriba o pidiéndoselo a Melki
-    ("muestra los resultados"). Cuando hay un resultado nuevo, el botón
-    de los resultados lo avisa con un punto.
+    con sus botones de la barra de arriba (que se despliega con la
+    flechita de la esquina) o pidiéndoselo a Melki ("muestra los
+    resultados"). Cuando hay un resultado nuevo, el botón de los
+    resultados lo avisa con un punto.
+ z) Los nombres del mapa: lejos se ven los países, los océanos y mares
+    y las ciudades principales; al acercarse, los departamentos y las
+    capitales, y de cerca los poblados (los de Esri, en "Capas" >
+    "Poblados y lugares") o, si los apaga, los municipios. Cada lugar
+    sale una sola vez, ningún nombre tapa a otro y el tamaño de la
+    letra cambia con la distancia. Los ríos llevan su nombre a lo largo
+    del cauce ("Río Meta"), más seguido a medida que se acerca. En
+    inglés los países y las aguas también cambian ("PANAMA", "Pacific
+    Ocean", "Meta River"). Los mapas base que ya traen nombres
+    (topográfico, OpenTopoMap y calles) usan los suyos.
 
 
 3. BUENO SABER

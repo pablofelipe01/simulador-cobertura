@@ -790,38 +790,86 @@ body {
   opacity: 0.8;
 }
 
-/* Nombres de referencia: países, departamentos, municipios y ríos.
-   Sobre el satélite van claros con sombra; sobre los mapas claros, oscuros con halo blanco. */
+/* Nombres de referencia: países, aguas, ciudades, departamentos, municipios y ríos (capas-referencia.ts).
+   El tamaño lo pone el gestor según el zoom; el peso, la cursiva y el espaciado deben ser los mismos con que mide
+   cada nombre para que no se encimen. Sobre el satélite van claros con sombra; sobre los mapas claros, oscuros con
+   halo blanco. */
 .etiqueta-ref {
   pointer-events: none;
   white-space: nowrap;
   font-family: var(--font-cond);
+  line-height: 1.2;
   color: #fff;
   text-shadow:
     0 0 2px #000,
     0 0 5px rgb(0 0 0 / 0.75);
 }
+.etiqueta-ref > span {
+  display: inline-block;
+  transform-origin: 50% 50%;
+}
 .etiqueta-ref.et-pais {
-  font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.14em;
-  text-transform: uppercase;
+}
+.etiqueta-ref.et-oceano,
+.etiqueta-ref.et-mar {
+  font-style: italic;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  color: #a9dcff;
+}
+.etiqueta-ref.et-mar {
+  letter-spacing: 0.16em;
+}
+.etiqueta-ref.et-golfo,
+.etiqueta-ref.et-lago {
+  font-style: italic;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: #bfe5ff;
+}
+.etiqueta-ref.et-ciudad {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.etiqueta-ref.et-ciudad > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.etiqueta-ref.et-ciudad > span::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 1.5px rgb(0 0 0 / 0.7);
+}
+.etiqueta-ref.et-ciudad.et-izq > span {
+  flex-direction: row-reverse;
+}
+.etiqueta-ref.et-ciudad.et-rango-1 {
+  font-weight: 700;
+}
+.etiqueta-ref.et-ciudad.et-rango-1 > span::before {
+  box-shadow:
+    0 0 0 1.5px rgb(0 0 0 / 0.75),
+    0 0 0 3px rgb(255 255 255 / 0.55);
 }
 .etiqueta-ref.et-departamento {
-  font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.07em;
-  text-transform: uppercase;
   color: #f1e6ff;
 }
 .etiqueta-ref.et-municipio {
-  font-size: 12px;
   font-weight: 500;
 }
 .etiqueta-ref.et-rio {
-  font-size: 11.5px;
   font-style: italic;
   font-weight: 500;
+  letter-spacing: 0.02em;
   color: #bfe5ff;
 }
 :root:not([data-fondo-mapa="satelite"]) .etiqueta-ref {
@@ -891,6 +939,76 @@ body {
 }
 .maplibregl-ctrl-attrib {
   font-family: var(--font-sans);
+}
+/* Los controles de la derecha bajan un poco: arriba, en la esquina, va la flechita de la barra */
+.maplibregl-ctrl-top-right {
+  top: 20px;
+}
+
+/* La flechita de la barra de herramientas de arriba: pequeña y translúcida, colgando del borde superior del mapa,
+   en la esquina derecha (sobre la columna de los controles del zoom). Es la única forma de desplegar la barra. */
+.flecha-barra {
+  position: absolute;
+  top: 0;
+  right: 10px;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  width: 29px;
+  height: 19px;
+  border-radius: 0 0 9px 9px;
+  color: #fff;
+  background: rgb(22 26 24 / 0.3);
+  box-shadow:
+    0 1px 3px rgb(0 0 0 / 0.25),
+    inset 0 -1px 0 rgb(255 255 255 / 0.18);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 0.72;
+  cursor: pointer;
+  transition:
+    opacity 0.15s,
+    background-color 0.15s,
+    height 0.15s;
+}
+.flecha-barra:hover,
+.flecha-barra:focus-visible {
+  opacity: 1;
+  height: 21px;
+  background: rgb(22 26 24 / 0.62);
+}
+.flecha-barra:focus-visible {
+  outline: 2px solid var(--color-melki);
+  outline-offset: 1px;
+}
+.flecha-barra svg {
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.45));
+}
+:root:not([data-fondo-mapa="satelite"]) .flecha-barra {
+  color: #2b302d;
+  background: rgb(255 255 255 / 0.5);
+  box-shadow:
+    0 1px 3px rgb(0 0 0 / 0.18),
+    inset 0 -1px 0 rgb(0 0 0 / 0.06);
+}
+:root:not([data-fondo-mapa="satelite"]) .flecha-barra:hover,
+:root:not([data-fondo-mapa="satelite"]) .flecha-barra:focus-visible {
+  background: rgb(255 255 255 / 0.85);
+}
+:root:not([data-fondo-mapa="satelite"]) .flecha-barra svg {
+  filter: none;
+}
+/* Resultado nuevo con la barra oculta: un puntico en la flecha (como en el botón del panel de resultados) */
+.flecha-barra[data-nuevo]::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  right: 1.5px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-melki);
+  box-shadow: 0 0 0 1.5px rgb(255 255 255 / 0.9);
 }
 
 /* ───────────── Melki ───────────── */

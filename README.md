@@ -205,6 +205,19 @@ ve la simulación detrás) y un botón para que hable en voz alta o no, a mano.
 - **Paneles ocultos al abrir** (v17): los dos paneles (herramientas y resultados) empiezan ocultos siempre, para
   ver el mapa completo; se abren con sus botones de la barra superior, pidiéndoselo a Melki o en los tours. Si hay un
   resultado nuevo con el panel cerrado, su botón lo avisa con un puntico
+- **Barra de arriba oculta** (v17.1): la barra de herramientas de arriba (Archivo, buscador, Asistente Melki, Tours,
+  Recorrido, Pitch y Configuración) también empieza oculta siempre; se despliega y se vuelve a ocultar solo con la
+  flechita translúcida de la esquina superior derecha del mapa (encima de los controles del zoom), sin abrirse al
+  pasar el ratón. Con la barra oculta, un resultado nuevo se avisa con un puntico en la flechita. Los tours que señalan
+  algo de la barra la muestran mientras duran y la vuelven a ocultar; a Melki se le puede preguntar dónde está
+- **Nombres del mapa sin repetirse** (v17.1): cada lugar sale una sola vez, ningún nombre tapa a otro ni a los
+  controles y el tamaño de la letra va con la distancia. Cada clase de nombre tiene su franja de zoom: lejos, los
+  países, los océanos y mares y las ciudades principales (capitales de país y de departamento, con su punto); luego
+  los departamentos; de cerca, los poblados de Esri («Poblados y lugares», desde el zoom 7,5, donde Esri ya no repite
+  países ni departamentos) o, sin ellos, los municipios (sin repetir el de una ciudad a la vista). Los ríos llevan su
+  nombre a lo largo del cauce («Río Meta»), un nombre por tramo y más seguido al acercarse. En inglés cambian los
+  países, las aguas y los ríos («PANAMA», «Panama City», «Pacific Ocean», «Meta River»). Los mapas base que ya traen
+  nombres (topográfico, OpenTopoMap y calles) usan los suyos
 - **IA local en este equipo** (v14; Ajustes de voz → «IA local en este equipo (Qwen3)»): un modelo de lenguaje
   abierto (Qwen3 de Alibaba; 4B recomendado, 1.7B liviano u 8B máximo) que corre en la tarjeta gráfica con WebGPU, sin
   instalar nada en el sistema y sin mandar nada a internet. Se descarga una sola vez (unos 2,3 GB el recomendado), solo
@@ -537,7 +550,9 @@ npm run dev          # http://localhost:3000
 src/
   app/                      layout, página y estilos globales
   components/simulador/     pantalla principal, mapa, paneles, regla, buscador, capas de referencia, exportación,
-                            configuracion.tsx (v17: la tuerca con el idioma y el cambio automático)
+                            configuracion.tsx (v17: la tuerca con el idioma y el cambio automático);
+                            capas-referencia.ts (v17.1: el gestor de nombres del mapa, por franjas de zoom, sin
+                            repetir ni encimar, con el tamaño según la distancia)
   components/melki/         asistente: avatar, cerebro local, órdenes, tours guiados (tours.ts + recorrido.tsx), voz y dictado
                             (dictado.ts: escucha seguida que se vuelve a encender sola, frases sin duplicados y con su
                             hora, micrófono abierto y nivel de la voz);
@@ -577,7 +592,9 @@ src/
                             se resuelven en la pantalla, los números y fechas del idioma, la preferencia y la detección
                             del idioma de lo que se escribe o se dice (use-idioma.ts: el idioma en los componentes)
   lib/geo/                  consultas locales: municipio de un punto, búsqueda de lugares, contorno de un municipio
-                            y reconocimiento de lugares dichos (fonetica.ts: cómo suena el español y cuánto se parecen)
+                            y reconocimiento de lugares dichos (fonetica.ts: cómo suena el español y cuánto se parecen);
+                            rotulos.ts (v17.1: las ciudades principales, los océanos, mares y golfos, y los nombres en
+                            inglés de países, ríos y lagos)
   lib/radio/                motor: modelo, relieve, perfil, cobertura, malla, factibilidad, worker;
                             estado-red (piezas y guía), siembra (repetidores automáticos), mensaje (viaje de un paquete
                             MeshCore o Meshtastic), protocolos (MeshCore, Meshtastic y la ficha del gateway

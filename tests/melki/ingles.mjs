@@ -457,6 +457,7 @@ const enIngles = (t) => !RASTRO.test(sinNombres(t));
     ["What can you do?", "capacidades", null],
     ["Thank you very much", "gracias", null],
     ["Hello", "saludo", /^Hello! I'm Melki/],
+    ["Where is the toolbar?", "barra", /little arrow in the top right corner/],
   ];
   const malas = [];
   for (const [q, tema, texto] of preguntas) {
@@ -478,7 +479,7 @@ const enIngles = (t) => !RASTRO.test(sinNombres(t));
 
 {
   m.fijarIdioma("en");
-  const ordenes = ["add a repeater 5 km north of the gateway", "raise Repeater 1 to 25 m", "simulate", "take me to Villavicencio", "show the roads", "use SF10", "move Person 1 2 km east", "delete Repeater 2", "set the frequency to 921.5 MHz", "90% reliability", "how much does the network cost?", "rename Repeater 1 to North Hill"];
+  const ordenes = ["add a repeater 5 km north of the gateway", "raise Repeater 1 to 25 m", "simulate", "take me to Villavicencio", "show the roads", "use SF10", "move Person 1 2 km east", "delete Repeater 2", "set the frequency to 921.5 MHz", "90% reliability", "how much does the network cost?", "rename Repeater 1 to North Hill", "show the toolbar", "hide the top bar"];
   const malas = [];
   for (const en of ordenes) {
     const api = crearApi(nodos());
@@ -492,6 +493,12 @@ const enIngles = (t) => !RASTRO.test(sinNombres(t));
     if (!enIngles(textos)) malas.push(`${en}: ${textos.slice(0, 160)}`);
   }
   caso(`Órdenes en inglés: Melki contesta en inglés (${ordenes.length})`, malas.length === 0, malas.join(" | "));
+  {
+    const api = crearApi(nodos());
+    const o = m.interpretarOrden(m.traducirPedido("show the toolbar", { nombres: [] }), api, null, contexto);
+    const r = o ? m.ejecutarOrden(o, api) : null;
+    caso("v17.1: «show the toolbar» explica la flechita, en inglés, sin abrir paneles", o?.tipo === "paneles" && o.barra === true && /little arrow in the top right corner/.test(r?.texto ?? "") && !api.llamadas.some((l) => l[0] === "paneles"), r?.texto);
+  }
   m.fijarIdioma("es");
   const api = crearApi(nodos());
   const r = m.ejecutarOrden(m.interpretarOrden("sube el Repetidor 1 a 25 m", api, null), api);

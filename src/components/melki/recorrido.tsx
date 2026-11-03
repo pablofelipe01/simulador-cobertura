@@ -28,6 +28,8 @@ function buscar(objetivo: string | string[] | null | undefined, mostrar = false)
   const nombres = Array.isArray(objetivo) ? objetivo : [objetivo];
   const candidatos = nombres.flatMap((n) => [...document.querySelectorAll<HTMLElement>(`[data-tour="${n}"]`)]);
   const el = candidatos.find((e) => {
+    // Lo que está en la barra de arriba oculta (o en otra parte inerte) no se ve
+    if (e.closest("[inert]")) return false;
     const r = e.getBoundingClientRect();
     return r.width > 0 && r.height > 0;
   });
@@ -50,7 +52,8 @@ const escribiendo = (e: KeyboardEvent) => {
 type Props = {
   tour: Tour;
   t: ApiTour;
-  preparar: (p: Preparacion) => void;
+  /** Deja lista la pantalla para el paso (abre el panel que toca; si el paso señala algo de la barra de arriba, la muestra). */
+  preparar: (p: Preparacion, objetivo?: string | string[] | null) => void;
   voz: boolean;
   /** Termina el tour; con «otro», Melki muestra el menú de tours. */
   onTerminar: (otro?: boolean) => void;
@@ -97,7 +100,7 @@ export function Recorrido({ tour, t, preparar, voz, onTerminar }: Props) {
     if (final) return;
     // La foto de partida se toma de una vez: lo que el usuario haga desde ahora cuenta
     base.current = t.foto();
-    preparar(paso.preparar ?? null);
+    preparar(paso.preparar ?? null, paso.objetivo);
     paso.asegurar?.(t);
     let cancelado = false;
     const espera = window.setTimeout(() => {
