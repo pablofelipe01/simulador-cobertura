@@ -2631,6 +2631,8 @@ await flujo(
     const silenciosAntes = estado.silencios;
     const audiosAntes = estado.audios;
     await page.waitForTimeout(800);
+    // (v17.3: con el equipo ocupado el audio llega más despacio; se espera hasta 3 s a que lleguen 3 trozos)
+    for (let k = 0; k < 22 && estado.audios - audiosAntes < 3; k++) await page.waitForTimeout(100);
     afirmar(estado.audios - audiosAntes >= 3 && estado.silencios === silenciosAntes, `Callada la IA, el micrófono debería mandar la voz (${estado.audios - audiosAntes} trozos, ${estado.silencios - silenciosAntes} en silencio)`);
     // La voz local no suena encima de la IA
     afirmar(!/Soy Melki con inteligencia artificial/.test(await page.evaluate(() => window.__voz.dicho.join(" "))), "La voz del equipo no debería repetir lo que dice la IA");
@@ -3447,6 +3449,79 @@ await flujo("idioma-automatico", async (page, foto) => {
   await decir("What is LoRa?");
   await page.waitForTimeout(1500);
   afirmar(await page.getByRole("button", { name: /^Archivo/ }).isVisible(), "Con el cambio automático apagado no debería cambiar de idioma");
+});
+
+// v17.3 · Melki entiende, ejecuta y contesta en los dos idiomas: órdenes cortas, mezcla con el español, los nombres de
+// los nodos en el otro idioma y, con el cambio automático apagado, entiende el inglés y contesta en el de la pantalla
+await flujo("bilingue", async (page, foto) => {
+  await esperarSimulacion(page);
+  const { chat, decir } = await abrirMelki(page);
+  const lista = page.locator("[data-tour=lista-antenas]");
+  /** Le escribe y espera, entre los mensajes de Melki que llegan después, uno que cumpla `re`; devuelve su texto. */
+  const pedir = async (t, re, timeout = 20000) => {
+    const n = await chat.locator("[data-mensaje]").count();
+    await decir(t);
+    const h = await page.waitForFunction(
+      ({ n, src, flags }) => {
+        const r = new RegExp(src, flags);
+        const ms = [...document.querySelectorAll("[data-tour=melki-chat] [data-mensaje]")].slice(n).filter((m) => !m.classList.contains("justify-end"));
+        return ms.map((m) => m.innerText).find((x) => r.test(x)) ?? false;
+      },
+      { n, src: re.source, flags: re.flags },
+      { timeout },
+    );
+    return h.jsonValue();
+  };
+  // Una orden corta en inglés con la pantalla en español: todo pasa a inglés y la hace
+  await pedir("Simulate", /I noticed you're writing in English/);
+  await page.getByRole("button", { name: /^File/ }).waitFor({ timeout: 10000 });
+  await esperarSimulacionIngles(page);
+  await foto("simulate");
+  // Una orden corta en español: vuelve al español
+  await pedir("simula", /Noté que me escribe en español/);
+  await page.getByRole("button", { name: /^Archivo/ }).waitFor({ timeout: 10000 });
+  await esperarSimulacion(page);
+  // Español con palabras del inglés: «pon un repeater…» pone un repetidor (no el gateway) y sigue en español
+  const antes = await nodosEnLista(page);
+  await decir("pon un repeater a 3 km al norte de Ejemplo");
+  await lista.getByText(/^Repetidor 1$/).waitFor({ timeout: 15000 });
+  afirmar((await nodosEnLista(page)) === antes + 1, "«pon un repeater…» debería poner un nodo más");
+  afirmar(await page.getByRole("button", { name: /^Archivo/ }).isVisible(), "Con una orden en español (aunque traiga «repeater») debería seguir en español");
+  // «roads off» no dice el idioma por sus palabras, pero solo se entiende en inglés: pasa a inglés y quita las vías
+  const vias = await pedir("roads off", /road/i);
+  afirmar(!RASTRO_ESPANOL.test(vias.replace(/«[^»]*»|“[^”]*”/g, "")), `La respuesta a «roads off» debería estar en inglés: ${vias.slice(0, 200)}`);
+  await page.getByRole("button", { name: /^File/ }).waitFor({ timeout: 10000 });
+  // Un nodo creado en inglés («Repeater N»)… y pedido después en español como «Repetidor N»
+  await pedir("add a repeater 2 km south of Example", /Repeater \d+/, 30000);
+  const nombreEn = (await lista.locator("> li").last().innerText()).match(/Repeater \d+/)?.[0];
+  afirmar(nombreEn, "Debería quedar un nodo con nombre en inglés");
+  await pedir("habla en español", /Desde ahora el simulador y yo estamos en español/);
+  const sube = await pedir(`sube el ${nombreEn.replace("Repeater", "Repetidor")} a 22 m`, /22 m/);
+  afirmar(sube.includes(nombreEn), `«sube el Repetidor N» debería subir «${nombreEn}»: ${sube.slice(0, 200)}`);
+  await foto("nombres");
+  // La charla no cambia el idioma: «gracias, Melki» son las gracias y todo sigue en español
+  await pedir("gracias melki", /Con gusto/);
+  afirmar(await page.getByRole("button", { name: /^Archivo/ }).isVisible(), "«gracias melki» no debería cambiar el idioma");
+  // «it» es el último nodo que se tocó: «move it 1 km east» mueve ese nodo (y todo pasa a inglés), «rename it…» lo renombra
+  const movido = await pedir("move it 1 km east", new RegExp(nombreEn), 30000);
+  await page.getByRole("button", { name: /^File/ }).waitFor({ timeout: 10000 });
+  afirmar(/\bmoved\b|\bmove\b/i.test(movido), `«move it 1 km east» debería mover «${nombreEn}»: ${movido.slice(0, 200)}`);
+  await pedir("awesome melki", /pleasure|welcome/i);
+  afirmar(await page.getByRole("button", { name: /^File/ }).isVisible(), "«awesome melki» no debería cambiar el idioma");
+  await pedir("please rename it to Loma Alta, thanks", /Loma Alta/);
+  await lista.getByText(/^Loma Alta$/).waitFor({ timeout: 10000 });
+  await foto("pronombres");
+  await pedir("habla en español", /Desde ahora el simulador y yo estamos en español/);
+  // Con el cambio automático apagado: entiende el inglés, lo hace y contesta en español (el idioma de la pantalla)
+  await page.locator("[data-tour=configuracion]").click();
+  await page.getByRole("dialog", { name: "Configuración" }).getByText("Cambiar de idioma automáticamente").click();
+  await page.keyboard.press("Escape");
+  const n0 = await nodosEnLista(page);
+  const hecho = await pedir("add a repeater 1 km east of Example", /Repetidor \d+/, 30000);
+  afirmar((await nodosEnLista(page)) === n0 + 1, "Con el cambio automático apagado debería hacer la orden en inglés");
+  afirmar(await page.getByRole("button", { name: /^Archivo/ }).isVisible(), "Con el cambio automático apagado no debería cambiar de idioma");
+  afirmar(/\b(Listo|puse|repetidor|Repetidor)\b/.test(hecho), `Con la pantalla en español debería contestar en español: ${hecho.slice(0, 200)}`);
+  await foto("sin-cambio-automatico");
 });
 
 await flujo(
