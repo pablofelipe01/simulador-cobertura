@@ -251,6 +251,32 @@ ve la simulación detrás) y un botón para que hable en voz alta o no, a mano.
   C) el diseño prueba también el gateway dentro del área
 - **Nombres enteros en reposo** (v17.2): con el mapa quieto ningún nombre queda medio transparente (tampoco en el zoom
   de entrada); solo se desvanecen un instante al acercar o alejar, cuando entran o salen de su franja de zoom
+- **Inglés y español con la misma facilidad** (v17.3): Melki entiende y ejecuta las órdenes y las preguntas en los dos
+  idiomas con cualquier pantalla, y contesta, escribe y habla en el idioma en que le hablen (todo el simulador pasa a
+  ese idioma, con el botón para volver; con el cambio automático apagado, entiende los dos y contesta en el de la
+  pantalla). Una orden corta también dice el idioma por su verbo («Simulate», «optimize it», «simula», «carga el
+  ejemplo»), y si las palabras no lo dicen, decide lo que solo se entiende en un idioma («roads off»); los préstamos que
+  se usan en los dos («ok», «zoom», «gateway», «LoRa», «hello») no cambian nada. El inglés natural: cortesía («would you
+  mind simulating?», «could you…»), contracciones, verbos de todos los días («stick/throw in a repeater», «kill Repeater
+  2», «hook up Person 2», «bump it up to 25 m», «fire off a simulation»), errores de tecleo («simualte», «netwrok»,
+  «repaeter») y de dictado («repeat her», «gate way», «mesh tastic», «s f nine»), números en palabras («a kilometer»,
+  «a couple», «a dozen», «10k people»), millas, pies (las alturas pasan a metros) y el inglés con la forma del español
+  («put one repeater 2 km at north of the gateway», «how much costs the network?», «charge the example»). En español
+  también entiende las palabras del inglés que se cuelan («pon un repeater…», «haz el stress test») y los nombres de
+  los nodos en el otro idioma («sube el Repetidor 2» cuando el mapa tiene «Repeater 2»); un nodo nuevo no repite el
+  número del otro idioma («Repeater 2» si ya hay un «Repetidor 1»). El Modelo Melki de cada idioma piensa lo que llega
+  en ese idioma, también con la pantalla en el otro, y lo aprendido va a la memoria de ese idioma. Medido con 798
+  órdenes en inglés natural (dos de ellas pruebas ciegas): todas dan la misma orden que en español y la respuesta sale
+  en inglés. También: «¿cuántos repetidores hay?» (y «how many repeaters are there?») dice los que hay en el mapa (si son
+  muchos, los primeros 15 y cuántos más), y con un nodo llamado «Ejemplo», «pon un repetidor al norte de Ejemplo» ya no
+  carga el ejemplo encima del mapa. El nodo dicho sin su nombre, como en español: «move it 2 km east» (el último que se
+  tocó, como «muévelo»), «delete that one» (el seleccionado, como «borra ese nodo»), «rename the last one…»; sacar un
+  nodo de la simulación y volverlo a meter («turn Repeater 1 off», «put it back in the simulation»). Los nombres nuevos
+  quedan como se dijeron («please rename it to North Tower, thanks» → «North Tower»; «renombra el Repetidor 1 como Main
+  Node»). La charla («gracias, Melki», «thanks Melki», «awesome») y las palabras de los dos idiomas («color», «red») no
+  cambian el idioma de la pantalla; «give me an example» no reemplaza el mapa con el ejemplo, «what happens if I move it
+  2 km east?» pregunta sin mover nada (como «¿qué pasa si lo muevo…?»), y las preguntas con algo más («how many people
+  are out of range?», «¿cuántas personas hay conectadas?») no se contestan con la lista de todos
 - **IA local en este equipo** (v14; Ajustes de voz → «IA local en este equipo (Qwen3)»): un modelo de lenguaje
   abierto (Qwen3 de Alibaba; 4B recomendado, 1.7B liviano u 8B máximo) que corre en la tarjeta gráfica con WebGPU, sin
   instalar nada en el sistema y sin mandar nada a internet. Se descarga una sola vez (unos 2,3 GB el recomendado), solo
@@ -617,15 +643,19 @@ src/
                             Melki en inglés (v17: ingles.ts, lo pedido en inglés en las palabras que el intérprete ya
                             entiende, con los nombres, lugares y coordenadas tal cual; idioma-melki.ts, cuándo cambiar
                             de idioma y el aviso con su botón para volver; numeros.ts también lee los números en
-                            palabras del inglés)
+                            palabras del inglés; v17.3: ingles.ts también pasa el español con palabras del inglés y los
+                            nombres de los nodos del otro idioma; ortografia-en.ts, los errores de tecleo y de dictado
+                            del inglés; melki.tsx, el idioma de cada mensaje y el Modelo Melki de ese idioma)
   datos/geo/                límites, nombres y ríos de referencia (ver LEEME.md: fuentes y licencias)
   datos/modelo/melki.json   los pesos del Modelo Melki (enteros de 8 bits en base64), su vocabulario, sus umbrales y su
                             evaluación; se carga aparte, cuando el navegador está desocupado (melki-en.json: el mismo
                             modelo para el inglés, que se carga solo si se usa el inglés)
   lib/autoria.ts            autoría, titulares y licencia (los usan «Acerca del simulador», Melki y la versión HTML)
+  lib/nombres-nodo.ts       v17.3: los nombres por defecto de los nodos en los dos idiomas («Repetidor 3» y «Repeater 3»)
   lib/idioma.ts             v17: el idioma (tx("español", "English")), los textos del motor en los dos idiomas y cómo
                             se resuelven en la pantalla, los números y fechas del idioma, la preferencia y la detección
-                            del idioma de lo que se escribe o se dice (use-idioma.ts: el idioma en los componentes)
+                            del idioma de lo que se escribe o se dice (use-idioma.ts: el idioma en los componentes;
+                            v17.3: idiomaProbable, el idioma de una orden corta por su verbo)
   lib/geo/                  consultas locales: municipio de un punto, búsqueda de lugares, contorno de un municipio
                             y reconocimiento de lugares dichos (fonetica.ts: cómo suena el español y cuánto se parecen);
                             rotulos.ts (v17.1: las ciudades principales, los océanos, mares y golfos, y los nombres en
