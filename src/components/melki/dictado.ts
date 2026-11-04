@@ -162,8 +162,10 @@ export function normalizarDictado(texto: string): string {
   t = t.replace(/(\d)\s+(?:punto|coma)\s+(\d)/gi, "$1.$2");
   t = t.replace(/\bmenos\s+(\d)/gi, "-$1");
   t = t.replace(/(\d)\s*grados?\b/gi, "$1°");
-  t = t.replace(/(\d)\s*minutos?\b/gi, "$1'");
-  t = t.replace(/(\d)\s*segundos?\b/gi, '$1"');
+  // v17.4 · Minutos y segundos solo en una coordenada («4 grados 30 minutos 44 segundos»): «15 mensajes en 10 segundos»
+  // es un tiempo
+  t = t.replace(/(\d°)\s*(\d{1,2}(?:[.,]\d+)?)\s*minutos?\b/gi, "$1$2'");
+  t = t.replace(/(\d')\s*(\d{1,2}(?:[.,]\d+)?)\s*segundos?\b/gi, '$1$2"');
   t = t.replace(/([°'])\s+(\d)/g, "$1$2");
   t = t.replace(/(\d)\s+(m|metros)\b/gi, "$1 m");
   return t;

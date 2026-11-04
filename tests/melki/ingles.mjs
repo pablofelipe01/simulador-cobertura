@@ -782,8 +782,12 @@ const enIngles = (t) => !RASTRO.test(sinNombres(t));
     .map((x) => [x, m.interpretarOrden(m.traducirPedido(x, { nombres: apiH.antenas().map((n) => n.nombre) }), apiH, null, contexto)?.tipo ?? null])
     .filter(([, t]) => t && t !== "coordenada-sola");
   const junto = m.traducirPedido("move Repeater 1 next to the gateway", { nombres: apiH.antenas().map((n) => n.nombre) });
+  const oJunto = m.interpretarOrden(junto, apiH, null, contexto);
   m.fijarIdioma("es");
-  caso("v17.3 · «what happens if I move it…?» pregunta (no mueve nada); «next to the gateway» es «cerca del gateway»", hipoteticas.length === 0 && /cerca del gateway/.test(junto) && !/luego/.test(junto), JSON.stringify([hipoteticas, junto]));
+  // v17.4 · «next to the gateway» acerca el Repetidor 1 al gateway (a 200 m), no mueve el gateway
+  const gJ = apiH.antenas().find((x) => x.id === "g");
+  const dJ = oJunto?.coord ? Math.hypot((oJunto.coord.lat - gJ.lat) * 111320, (oJunto.coord.lon - gJ.lon) * 111320 * Math.cos((gJ.lat * Math.PI) / 180)) : -1;
+  caso("v17.3 · «what happens if I move it…?» pregunta (no mueve nada); «next to the gateway» es junto al gateway", hipoteticas.length === 0 && /cerca del gateway|acerca .* al gateway/.test(junto) && !/luego/.test(junto) && oJunto?.tipo === "mover" && oJunto.id === "r1" && Math.abs(dJ - 200) < 5, JSON.stringify([hipoteticas, junto, oJunto, Math.round(dJ)]));
 
   // Palabras de los dos idiomas que no deciden el idioma, y el corrector del inglés no toca las palabras con tilde
   const pIncline = m.idiomaProbable("incline Repeater 1 5 degrees down");

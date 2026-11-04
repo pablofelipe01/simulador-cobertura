@@ -30,7 +30,16 @@ de "Pitch". La primera vez abre en el idioma del navegador y después
 recuerda el último que usó. Y la página abre con los paneles ocultos,
 para ver el mapa completo: las herramientas y los resultados se abren
 cuando usted quiera.
-En esta entrega: el "Lápiz" de la barra del mapa dibuja la malla a mano,
+En esta entrega: Melki le entiende aunque se le pronuncie mal, en
+inglés con acento o en español rápido. El reconocimiento de voz escribe
+otras palabras ("at a repeater" por "add a repeater", "por un
+repetidor" por "pon un repetidor") y Melki entiende lo que usted quiso
+decir, lo hace y le cuenta qué entendió; si duda, le pregunta, y si lo
+que entendió borra algo, le pregunta antes. También acerca un nodo a
+otro ("pon el Repetidor 1 cerca del gateway") y sube o baja la altura
+sobre la que ya tiene ("súbelo 5 m más"). En la entrega anterior Melki
+empezó a entender el inglés y el español por igual (sección 2, cc).
+Antes: el "Lápiz" de la barra del mapa dibuja la malla a mano,
 como en Paint (una figura cerrada es una zona; una línea, una franja a
 lo largo de una vía o un río), y Melki arma ahí la red óptima, que no
 es la de más antenas sino la del equilibrio entre la estabilidad de la
@@ -39,10 +48,9 @@ lo dice con números y le ofrece quitarla. Con la barra del Asistente
 Melki abierta, le habla sin decir su nombre y toma la orden enseguida
 (lo que no es una orden lo deja pasar); el micrófono está junto a su
 robot, y lo que el navegador no le entiende lo vuelve a oír en español
-y en inglés. Los nombres del mapa se ven enteros con el mapa quieto.
-En la entrega anterior la barra de arriba empezó oculta (la despliega
-una flechita en la esquina superior derecha del mapa) y los nombres del
-mapa dejaron de repetirse.
+y en inglés. Los nombres del mapa se ven enteros con el mapa quieto, y
+la barra de arriba empieza oculta (la despliega una flechita en la
+esquina superior derecha del mapa).
 Melki tiene su propio modelo de inteligencia artificial, el
 "Modelo Melki": una red neuronal pequeña, hecha solo para este
 simulador, que entiende los pedidos dichos con sus palabras ("móntame
@@ -708,6 +716,24 @@ con un punto.
     el idioma de la pantalla. Con el cambio automático apagado (en
     "Configuración"), le entiende los dos idiomas y le contesta en
     el de la pantalla.
+ dd) Aunque se le pronuncie mal: háblele en inglés con su acento, o en
+    español rápido. El reconocimiento de voz escribe otras palabras
+    ("at a repeater" por "add a repeater", "the lead" por "delete",
+    "repeat her" por "repeater", "Person to" por "Person 2"; en
+    español "por un repetidor" por "pon un repetidor", "sube lo" por
+    "súbelo"), y Melki entiende lo que usted quiso decir: lo hace y le
+    escribe "Le entendí: ..." (en inglés, "I understood: ...").
+    Pruebe, por ejemplo, escribir "at a repeater 5 km north of
+    Example" o "por un repetidor a 2 km al norte de Ejemplo". Si duda
+    entre dos cosas, le pregunta "¿Quiso decir...?" con botones, y si
+    lo que entendió borra o deshace algo ("ilumina el Repetidor 1" es
+    "elimina"), le pregunta "¿lo hago?" antes. La charla cercana no la
+    toma como orden ("el celular no tiene cobertura" no es "simular").
+    También: "pon el Repetidor 1 cerca del gateway" (lo deja a
+    200 m), "súbelo 5 m más", "bájale 3 metros al Repetidor 2", "sube
+    todos los repetidores 5 m" (sobre la altura que tienen) y, en
+    inglés, "raise it 5 m", "move Repeater 1 next to the gateway",
+    "why doesn't Person 2 have signal?" o "what does SF mean?".
 
 
 3. BUENO SABER

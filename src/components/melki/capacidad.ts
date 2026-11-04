@@ -72,7 +72,7 @@ function interpretarPoblar(texto: string, tn: string, api: Api): Orden | null {
   if (!cantidad && !/\b(personas?|usuari\w*|gente|billeteras?|habitantes?|familias?|zona|area|malla|red)\b/.test(tn)) return null;
   const pedido: PedidoPoblar = {};
   // Densidad: «1 por km²», «a densidad media», «zona dispersa»
-  const dens = texto.toLowerCase().match(/(\d+(?:[.,]\d+)?)\s*(?:personas?|usuari[oa]s?)?\s*(?:por|\/|x)\s*(?:km\s*2|km²|kil[oó]metro cuadrado)/);
+  const dens = texto.toLowerCase().match(/(\d+(?:[.,]\d+)?)\s*(?:personas?|usuari[oa]s?)?\s*(?:por|\/|x)\s*(?:km\s*2|km²|kil[oó]metro cuadrado|km cuadrado)/);
   if (dens) pedido.densidadKm2 = numero(dens[1]);
   else if (/\b(densidad|zona|poblacion)\b.*\b(dispers\w*|baja)\b|\bdispers[oa]s?\b/.test(tn)) pedido.densidadKm2 = 0.2;
   else if (/\b(densidad|zona|poblacion)\b.*\b(dens[oa]|alta)\b|\bmuy poblad\w*/.test(tn)) pedido.densidadKm2 = 5;
@@ -757,7 +757,7 @@ function interpretarTrama(texto: string, tn: string, api: Api): Orden | null {
   const us = tn.match(new RegExp(`${NUM}\\s*${GENTE}`));
   if (!us) return null;
   const usuarios = numero(`${us[1]}${us[2] ? " mil" : ""}`);
-  const area = texto.toLowerCase().match(/(\d{1,3}(?:\.\d{3})+|\d+(?:[.,]\d+)?)\s*(km\s*2|km²|kil[oó]metros? cuadrados?|hect[aá]reas?|ha\b)/);
+  const area = texto.toLowerCase().match(/(\d{1,3}(?:\.\d{3})+|\d+(?:[.,]\d+)?)\s*(km\s*2|km²|kil[oó]metros? cuadrados?|kms? cuadrados?|hect[aá]reas?|ha\b)/);
   const areaKm2 = area ? numero(area[1]) / (/^h/.test(area[2]) ? 100 : 1) : null;
   return { tipo: "trama-dimensionar", usuarios, areaKm2, terreno: terrenoEn(tn) ?? "sabana", sf, nodo };
 }
@@ -842,7 +842,7 @@ function interpretarOptimizar(tn: string): Orden | null {
     return { tipo: "aplicar-optimizacion", indice, combinada: /\btodo junto|todas|combinad\w*\b/.test(tn) };
   }
   const apoyo = /\b(gateways? de (apoyo|respaldo)|getways? de (apoyo|pollo|respaldo)|gateway (extra|adicional) para (la )?carga)\b/.test(tn);
-  const verbo = /\b(optimiz\w*|mejor\w*|arregl\w*|descongestion\w*|desatur\w*|recomiend\w*|propon\w*|sugi\w*|que hago|como hago|como logro|que necesito|que le falta)\b/.test(tn);
+  const verbo = /\b(optimiz(?!ations?\b|ed\b|ers?\b)\w*|mejor\w*|arregl\w*|descongestion\w*|desatur\w*|recomiend\w*|propon\w*|sugi\w*|que hago|como hago|como logro|que necesito|que le falta)\b/.test(tn);
   const carga = /\b(carga|cargad\w*|estres\w*|saturad\w*|sobrecargad\w*|congestion\w*|popularidad|hora pico|trafico|capacidad|aguant\w*|colaps\w*|revient\w*|no les? funciona|dificultades|usuarios|personas)\b/.test(tn);
   if (apoyo || (verbo && carga && !/\b(cobertura|factible|costo|barat\w*)\b/.test(tn))) {
     if (/^(que|como|para que|por que)\s+(es|son|significa)\b/.test(tn)) return null;

@@ -277,6 +277,43 @@ ve la simulación detrás) y un botón para que hable en voz alta o no, a mano.
   cambian el idioma de la pantalla; «give me an example» no reemplaza el mapa con el ejemplo, «what happens if I move it
   2 km east?» pregunta sin mover nada (como «¿qué pasa si lo muevo…?»), y las preguntas con algo más («how many people
   are out of range?», «¿cuántas personas hay conectadas?») no se contestan con la lista de todos
+- **Lo que se oye mal, en los dos idiomas** (v17.4): con una pronunciación floja o con acento (sobre todo el inglés de
+  quien habla español), el reconocimiento de voz no escribe palabras raras sino otras palabras que existen: «repeat her»
+  o «reporter» por «repeater», «get away» por «gateway», «Person to» por «Person 2», «2 km not of the gateway» por
+  «north», «at a repeater» por «add a repeater», «the lead» por «delete», «mood» por «move», «except the optimization»
+  por «accept»; en español, «sube lo» por «súbelo», «modo antena» por «nodo antena», «por un repetidor» por «pon un
+  repetidor», «ilumina» por «elimina», «geitwey» por «gateway». Melki corrige siempre lo que no se confunde con nada
+  (las unidades, los números junto a una medida, los rumbos después de una distancia, las piezas y el número de un nodo
+  que existe) y, si lo dicho tal cual no se entiende, prueba las versiones con lo dudoso cambiado y se queda con la que
+  entiende como una orden (o, si se le preguntaba algo, como una pregunta del simulador): la hace y dice qué entendió
+  («Le entendí: «pon un repetidor a 2 km al norte de Ejemplo»»); si dos versiones casi igual de probables dicen cosas
+  distintas, pregunta «¿Quiso decir…?» con botones, y si la que entendió borra, reemplaza o deshace algo, pregunta «¿lo
+  hago?» antes. No toca la charla (una conversación cercana no se vuelve una orden: «el celular no tiene cobertura» no
+  es «simular», ni «similar to the old one» es «simulate»), ni los nombres de los nodos, ni lo que va entre comillas; lo
+  que también es una palabra de la conversación («reporter», «a getaway», «every one», «to 100») solo se corrige dentro
+  de una orden («add a reporter…» sí; «raise Repeater 1 to 100 m» sigue siendo 100). Con la barra del Asistente abierta,
+  un pedido enredado que nombra algo del simulador ya no pasa callado (sin cambiar el idioma de la pantalla), y «so the
+  roads» (el «show» dicho con acento) muestra las vías; con miles de personas pobladas en el mapa sigue siendo rápido.
+  Los nombres de lugares partidos por el dictado se juntan («Kumar al» → Cumaral, «via vicencio» → Villavicencio).
+  Medido con frases dictadas con mala pronunciación que se escribieron a ciegas (sin ver el código), como las escribe el
+  reconocimiento: con la tercera tanda (218 frases en inglés y 166 en español, que no se usaron para afinar las reglas),
+  la v17.3 entendía el 24 % en inglés y el 63 % en español, y la v17.4 entiende el 72 % y el 83 %, ninguna peor que
+  antes; con las tres tandas juntas (764 y 527 frases), el 86 % y el 91 %, sin que la charla cercana se vuelva una
+  orden. Además de las reglas, compara por cómo suena cada palabra con el vocabulario de lo que Melki entiende (sacado
+  de sus propias reglas y de las órdenes de las pruebas: `npm run vocabulario:oido`), con el oído de quien habla español
+  (vocales que se confunden, b/v, d/t, s/sh, consonantes del final que se pierden): así entiende también errores que
+  nadie escribió en una regla («feel» por «fill», «coast» por «cost», «be twin» por «between», «maya» por «malla»). Lo
+  cambiado solo por cómo suena tiene que seguir pareciendo una orden de Melki, no contesta preguntas, y sin su nombre
+  solo cuenta si se nombra algo del simulador (pruebas: `tests/melki/oido.mjs` con `frases-pronunciacion.json`)
+- **«Cerca de…» y alturas relativas** (v17.4): «pon el Repetidor 1 cerca del gateway», «acerca la Persona 2 al Repetidor
+  2», «move Repeater 1 next to the gateway» o «bring Repeater 2 closer to the gateway» lo dejan a 200 m del nodo
+  nombrado, del lado por donde venía (o del lado más libre); «mueve el repetidor al gateway» mueve el repetidor (el
+  último que se tocó), no el gateway; «mueve el gateway a Cumaral» o «lleva el Repetidor 1 hasta Restrepo» lo llevan a
+  ese lugar. «Súbelo 5 m más», «bájale 3 metros al Repetidor 2», «sube todos los repetidores 5 m»,
+  «raise it 5 m», «make Repeater 1 3 m shorter» o «add 5 m to Repeater 2» cambian la altura sobre la que tiene (entre
+  0,5 y 300 m); «a 25 m» sigue siendo la altura. Las preguntas en inglés, como en español: «why doesn't Person 2 have
+  signal?», «what's wrong with Repeater 1?», «what does SF mean?», «how much does it cost?»; y en español, «¿cuál es la
+  cobertura?» o «¿cómo está la cobertura?»
 - **IA local en este equipo** (v14; Ajustes de voz → «IA local en este equipo (Qwen3)»): un modelo de lenguaje
   abierto (Qwen3 de Alibaba; 4B recomendado, 1.7B liviano u 8B máximo) que corre en la tarjeta gráfica con WebGPU, sin
   instalar nada en el sistema y sin mandar nada a internet. Se descarga una sola vez (unos 2,3 GB el recomendado), solo
@@ -598,6 +635,7 @@ npm run dev          # http://localhost:3000
 | `npm run check`        | Lint + tipos + pruebas del motor y de Melki + compilación                                     |
 | `npm run prueba:motor` | Pruebas del modelo de propagación (sin navegador)                                             |
 | `npm run prueba:melki` | Pruebas de las órdenes de Melki (sin navegador)                                               |
+| `npm run vocabulario:oido` | v17.4: rearma el vocabulario de lo oído (`src/components/melki/vocabulario-oido.ts`)      |
 | `npm run e2e`          | Pruebas de extremo a extremo con Playwright (Edge, o `CHROME_PATH`); teselas sintéticas       |
 | `npm run html`         | Versión HTML que se abre con doble clic (`dist/html/SIMULADOR-HTML/SIMULADOR.html`)           |
 | `npm run paquete`      | Paquetes de avance para probar sin instalar (`-- --destino "<carpeta>"`)                      |
@@ -645,7 +683,9 @@ src/
                             de idioma y el aviso con su botón para volver; numeros.ts también lee los números en
                             palabras del inglés; v17.3: ingles.ts también pasa el español con palabras del inglés y los
                             nombres de los nodos del otro idioma; ortografia-en.ts, los errores de tecleo y de dictado
-                            del inglés; melki.tsx, el idioma de cada mensaje y el Modelo Melki de ese idioma)
+                            del inglés; melki.tsx, el idioma de cada mensaje y el Modelo Melki de ese idioma; v17.4:
+                            oido.ts, lo que se oyó mal en los dos idiomas: las correcciones seguras, las versiones de lo
+                            dicho y cuál usar, con «¿quiso decir…?» y «¿lo hago?»)
   datos/geo/                límites, nombres y ríos de referencia (ver LEEME.md: fuentes y licencias)
   datos/modelo/melki.json   los pesos del Modelo Melki (enteros de 8 bits en base64), su vocabulario, sus umbrales y su
                             evaluación; se carga aparte, cuando el navegador está desocupado (melki-en.json: el mismo

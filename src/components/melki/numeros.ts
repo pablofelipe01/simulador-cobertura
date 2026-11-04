@@ -166,6 +166,12 @@ export function numerosEnPalabras(texto: string): string {
   let i = 0;
   while (i < ts.length) {
     const t = ts[i];
+    // v17.4 · «50 por ciento» (el número ya en cifras, como lo escribe el reconocimiento) → «50 %», no «50 por 100»
+    if (/^\d+(?:[.,]\d+)?$/.test(t.clave) && !t.despues && ts[i + 1]?.clave === "por" && ts[i + 2]?.clave === "ciento" && !ts[i + 1].despues) {
+      salida.push(`${t.antes}${t.palabra} %${ts[i + 2].despues}`);
+      i += 3;
+      continue;
+    }
     const puedeEmpezar = esPalabraNumero(t.clave) || (esEntero(t.clave) && ts[i + 1] && /^(mil|millon|millones)$/.test(ts[i + 1].clave));
     if (!puedeEmpezar) {
       salida.push(`${t.antes}${t.palabra}${t.despues}`);

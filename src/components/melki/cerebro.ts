@@ -804,7 +804,7 @@ const TEMAS: Tema[] = [
   },
   {
     id: "estado",
-    claves: ["como esta", "como va", "como quedo", "resumen", "resultado", "resultados", "estado de la red", "diagnostico", "cobertura total"],
+    claves: ["como esta", "como va", "como quedo", "resumen", "resultado", "resultados", "estado de la red", "diagnostico", "cobertura total", "cual es la cobertura", "cuanta cobertura", "que tanta cobertura", "como esta la cobertura", "cobertura de la red", "que porcentaje cubre", "cuanto cubre la red"],
     clavesEn: ["how is it", "how is it doing", "coverage", "how much coverage", "network coverage", "coverage of the network", "how did it turn out", "how did it go", "summary", "result", "results", "network status", "status of the network", "state of the network", "diagnosis", "total coverage", "how is the network", "how is the network doing", "how is the mesh"],
     responder: resumenRed,
   },
@@ -1676,7 +1676,7 @@ const KIT_ES: Kit = {
   fueraDeTema: FUERA_DE_TEMA,
   sobreIaVoz: SOBRE_IA_VOZ,
   delSimuladorEstricto: /\b(red|malla|nodo|antena|gateway|repetidor\w*|cobertura|senal|simul\w*|trama|meshcore|lora|pagos?|radio mobile|itm|longley|propagacion|enlace)\b/,
-  sobreNodo: /alcance|ruta|llega|cubre|salto|area|como esta/,
+  sobreNodo: /alcance|ruta|llega|cubre|salto|area|como esta|senal|conect|desconect|cobertura|por que/,
   pideAccion: PIDE_ACCION,
   delSimulador: DEL_SIMULADOR,
   saludo: /\b(hola|buenas|buenos dias|saludos)\b/,
