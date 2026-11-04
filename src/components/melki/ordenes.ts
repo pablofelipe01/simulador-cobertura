@@ -28,7 +28,8 @@ import type { ResultadoEstres, LimitePunto } from "@/lib/radio/estres";
 import type { CifraPitch, DatosPitch, MapaPitch } from "@/lib/negocio/pitch";
 import type { PropuestaOptimizar, ResultadoOptimizar } from "@/lib/radio/optimizar";
 import { PROTOCOLOS } from "@/lib/radio/protocolos";
-import { analizarRed, capacidadPara, costoGatewayInstalado, repetidoresEnPresupuesto, sfTrama, textoAnalisis } from "@/lib/radio/analista";
+import { analizarRed, capacidadPara, costoGatewayInstalado, costoRepetidorInstalado, repetidoresEnPresupuesto, sfTrama, textoAnalisis } from "@/lib/radio/analista";
+import { analizarOptimo, cumpleSinNodo, sobraNodo, type ZonaOptimo } from "@/lib/radio/optimo";
 import { costoRedTrama, DEPARTAMENTOS_TRAMA, pesosTrama, type CostoRed, type NodoUsuario, type SfTrama, type TerrenoTrama } from "@/lib/radio/trama";
 
 import type { EscalaSenal, ModoApp, Vista } from "../simulador/estado";
@@ -138,7 +139,7 @@ type OrdenSola =
   | { tipo: "senal"; coord: Coordenada }
   | { tipo: "donde"; ref: Referencia }
   | { tipo: "listar" }
-  | { tipo: "herramienta"; herramienta: "regla" | "inspeccionar" | "agregar" }
+  | { tipo: "herramienta"; herramienta: "regla" | "inspeccionar" | "agregar" | "lapiz" | "mover" }
   | { tipo: "ejemplo" }
   | { tipo: "nuevo"; confirmado?: boolean }
   | { tipo: "exportar"; formato: "kmz" | "json" | "csv" }
@@ -191,6 +192,10 @@ type OrdenSola =
   | { tipo: "red-municipio"; sostenible: boolean }
   /** «¿Cuánto cuesta la red?»: la inversión y la operación de la red del mapa con los precios de Trama. */
   | { tipo: "costo-red" }
+  /** v17.2 · «¿Necesito más antenas?», «¿sobran antenas?»: el criterio de óptimo sobre la red simulada. */
+  | { tipo: "optimo" }
+  /** La persona deja el nodo que Melki cuestionó; con `ultima`, Melki no vuelve a preguntar. */
+  | { tipo: "dejar-nodo"; nombres: string[]; ultima?: boolean }
   /** La opción económica de un diseño: quitar esos repetidores y medir de nuevo la cobertura del área. */
   | { tipo: "usar-economica"; ids: string[]; nombres: string[]; area: Poligono; margenDb: number; respaldo: boolean; clases: string; metaPct: number; ahorroCop: number }
   | { tipo: "eliminar-varios"; ids: string[]; descripcion: string }
@@ -270,7 +275,7 @@ export type Api = {
   perfil(a: Antena, b: Antena | { lat: number; lon: number }, informe?: boolean): void;
   vista(cambios: CambiosVista): void;
   senal(lat: number, lon: number): void;
-  herramienta(h: "regla" | "inspeccionar" | "agregar"): void;
+  herramienta(h: "regla" | "inspeccionar" | "agregar" | "lapiz" | "mover"): void;
   ejemplo(): void;
   nuevo(): void;
   exportar(f: "kmz" | "json" | "csv"): boolean;
@@ -1082,6 +1087,207 @@ function disenoDeZona(z: Extract<ZonaDiseno, { puntos: Poligono }>, sostenible =
   };
 }
 
+/**
+ * v17.2 · El lápiz de malla: la zona dibujada en el mapa (cerrada, o la franja a lo largo de un trazo abierto) con el
+ * criterio de equilibrio, el punto entre la estabilidad de la señal y el costo: señal media o mejor en el 95 % de lo
+ * dibujado, enlaces sólidos, sin repetidores que casi no aporten (el freno de rendimiento) y sin los que sobran (la poda),
+ * con su costo y su viabilidad.
+ */
+export function disenoDibujado(puntos: Poligono, trazo: "zona" | "franja", anchoM?: number): Orden {
+  const etiqueta =
+    trazo === "zona"
+      ? tx("Zona dibujada", "Drawn zone")
+      : tx(`Franja dibujada (${fn((anchoM ?? 0) / 1000)} km de ancho)`, `Drawn strip (${fn((anchoM ?? 0) / 1000)} km wide)`);
+  return disenoDeZona({ puntos, nombre: trazo === "zona" ? tx("en la zona que dibujó", "in the zone you drew") : tx("a lo largo del trazo que dibujó", "along the line you drew"), etiqueta });
+}
+
+/* ───────────── Criterio de óptimo (v17.2): ni una antena de más ───────────── */
+
+/** La señal pedida, en palabras, por su margen. */
+function clasesDeMargen(margenDb: number): string {
+  if (margenDb >= 45) return tx("señal buena", "good signal");
+  if (margenDb >= 37) return tx("señal estable o mejor", "stable or better signal");
+  if (margenDb >= 30) return tx("señal media o mejor", "fair or better signal");
+  return tx("servicio", "service");
+}
+
+/** «“R1”», «“R1” y “R2”», «“R1”, “R2” y “R3”» (en inglés con comillas inglesas y «and»). */
+function listaNombres(nombres: string[]): string {
+  const q = nombres.map((x) => tx(`«${x}»`, `“${x}”`));
+  return q.length <= 1 ? (q[0] ?? "") : `${q.slice(0, -1).join(", ")} ${tx("y", "and")} ${q[q.length - 1]}`;
+}
+
+/** Dónde se mide el óptimo: el área objetivo con su meta o, sin ella, el área de estudio. */
+function zonaOptimo(api: Api): { zona: ZonaOptimo; nombre: string | null } {
+  const ao = api.areaObjetivo();
+  return ao && ao.puntos.length >= 3 ? { zona: { poligono: ao.puntos, metaPct: ao.metaPct, margenDb: ao.margenDb, respaldo: ao.respaldo }, nombre: ao.nombre } : { zona: null, nombre: null };
+}
+
+const PRINCIPIO_OPTIMO = () =>
+  tx(
+    "Óptimo no es la red con más antenas: es el punto entre la estabilidad de la señal y el costo, la meta con la menor cantidad de equipos.",
+    "Optimal isn't the network with the most antennas: it's the balance point between signal stability and cost, the target with the fewest devices.",
+  );
+
+/**
+ * La respuesta a «¿necesito más antenas?» / «¿sobran antenas?» con la simulación al día: la cobertura frente a la meta,
+ * lo que aporta cada nodo y los repetidores que se pueden quitar juntos sin bajar de ella (con lo que se ahorra).
+ */
+function respuestaOptimo(r: ResultadoSimulacion | null, api: Api): Respuesta {
+  if (!r) return { texto: tx("No pude simular la red para revisarla. Intente de nuevo en un momento.", "I couldn't simulate the network to review it. Please try again in a moment.") };
+  const antenas = api.antenas();
+  const { zona, nombre } = zonaOptimo(api);
+  const o = analizarOptimo(r, antenas, zona);
+  const clase = clasesDeMargen(o.margenDb);
+  const nombreDe = (id: string) => antenas.find((a) => a.id === id)?.nombre ?? id;
+  const gw = antenas.find((a) => a.pasarela && a.activa) ?? antenas.find((a) => a.activa);
+  const { logistica } = gw ? logisticaEn(api, gw.lat, gw.lon) : { logistica: 1 };
+  const porRepetidor = costoRepetidorInstalado(logistica);
+  const reps = o.aportes.filter((x) => !x.gateway);
+  const sobran = o.sobran.ids;
+  const cuales = listaNombres(sobran.map(nombreDe));
+  const uno = sobran.length === 1;
+  const partes = [PRINCIPIO_OPTIMO()];
+  const acciones: AccionRespuesta[] = [];
+  const quitar = (): AccionRespuesta => ({
+    texto: uno ? tx(`Quitar «${nombreDe(sobran[0])}»`, `Remove “${nombreDe(sobran[0])}”`) : tx(`Quitar los ${sobran.length} que sobran`, `Remove the ${sobran.length} extra ones`),
+    accion: "orden",
+    orden: { tipo: "eliminar-varios", ids: sobran, descripcion: uno ? tx("el repetidor que sobraba", "the repeater that wasn't needed") : tx("los repetidores que sobraban", "the repeaters that weren't needed") },
+  });
+  const dejar = (): AccionRespuesta => ({ texto: uno ? tx("Dejarlo", "Keep it") : tx("Dejarlos", "Keep them"), accion: "orden", orden: { tipo: "dejar-nodo", nombres: sobran.map(nombreDe) } });
+  if (zona && o.metaPct !== null) {
+    partes.push(
+      o.respaldo
+        ? tx(`Con respaldo (dos nodos por punto), la red da ${clase} en el ${fp(o.utilPct)} % del área objetivo «${nombre}» (meta: ${fp(o.metaPct)} %).`, `With backup (two nodes per point), the network gives ${clase} in ${fp(o.utilPct)}% of the target area “${nombre}” (target: ${fp(o.metaPct)}%).`)
+        : tx(`La red da ${clase} en el ${fp(o.utilPct)} % del área objetivo «${nombre}» (meta: ${fp(o.metaPct)} %).`, `The network gives ${clase} in ${fp(o.utilPct)}% of the target area “${nombre}” (target: ${fp(o.metaPct)}%).`),
+    );
+    if (o.respaldo)
+      partes.push(
+        tx(
+          "Pidió respaldo: que las coberturas se crucen es justamente la idea, así que no le quito ningún nodo por repetir señal.",
+          "You asked for backup: overlapping coverage is exactly the idea, so I won't remove any node for repeating signal.",
+        ),
+      );
+    if (o.cumple && o.respaldo)
+      partes.push(
+        tx(
+          `No necesita más antenas: con respaldo ya cumple la meta. Otra antena solo subiría el costo, unos ${pesosTrama(porRepetidor)} por repetidor instalado.`,
+          `You don't need more antennas: with backup the target is already met. Another antenna would only raise the cost, about ${pesosTrama(porRepetidor)} per installed repeater.`,
+        ),
+      );
+    else if (o.cumple) {
+      if (sobran.length) {
+        partes.push(
+          tx(
+            `No necesita más antenas: ya cumple la meta. Es más, ${uno ? `le sobra ${cuales}` : `le sobran ${sobran.length}: ${cuales}`}. Lo que ${uno ? "cubre" : "cubren"} ya lo cubren otros nodos y nadie depende de ${uno ? "él" : "ellos"} para llegar al gateway; sin ${uno ? "él" : "ellos"} la red sigue en el ${fp(o.sobran.utilSinEllosPct)} % y se ahorra unos ${pesosTrama(sobran.length * porRepetidor)}.`,
+            `You don't need more antennas: the target is already met. In fact, ${uno ? `${cuales} isn't needed` : `${sobran.length} aren't needed: ${cuales}`}. What ${uno ? "it covers" : "they cover"} is already covered by other nodes and nobody depends on ${uno ? "it" : "them"} to reach the gateway; without ${uno ? "it" : "them"} the network stays at ${fp(o.sobran.utilSinEllosPct)}% and you save about ${pesosTrama(sobran.length * porRepetidor)}.`,
+          ),
+        );
+        acciones.push(quitar(), dejar());
+      } else if (reps.length) {
+        const menor = [...reps].sort((a, b) => a.unicaPct - b.unicaPct)[0];
+        partes.push(
+          tx(
+            `No necesita más antenas: ya cumple la meta y cada nodo aporta lo suyo (el que menos, «${menor.nombre}», suma por sí solo el ${fp(menor.unicaPct)} % del área). Otra antena solo subiría el costo, unos ${pesosTrama(porRepetidor)} por repetidor instalado, sin una mejora de estabilidad que se note.`,
+            `You don't need more antennas: the target is met and every node does its share (the smallest, “${menor.nombre}”, adds ${fp(menor.unicaPct)}% of the area on its own). Another antenna would only raise the cost, about ${pesosTrama(porRepetidor)} per installed repeater, with no noticeable stability gain.`,
+          ),
+        );
+      } else
+        partes.push(
+          tx(
+            `No necesita repetidores: el gateway solo ya cumple la meta. Cada repetidor de más costaría unos ${pesosTrama(porRepetidor)} sin mejorar lo que se necesita.`,
+            `You don't need repeaters: the gateway alone already meets the target. Each extra repeater would cost about ${pesosTrama(porRepetidor)} without improving what's needed.`,
+          ),
+        );
+    } else {
+      const mover = sobran.length ? tx(` Antes de comprar otra: ${cuales} casi no ${uno ? "aporta donde está" : "aportan donde están"}; ${uno ? "moverlo" : "moverlos"} hacia los huecos rinde más que sumar equipos.`, ` Before buying another one: ${cuales} ${uno ? "barely adds anything where it is" : "barely add anything where they are"}; moving ${uno ? "it" : "them"} toward the gaps pays off more than adding devices.`) : "";
+      partes.push(
+        tx(
+          `Sí le falta: la meta es el ${fp(o.metaPct)} % y la red da el ${fp(o.utilPct)} %. Pero la respuesta no es poner antenas a ojo.${mover} Le propongo el ajuste: busca alturas, sitios y antenas de apoyo con la mejor relación entre cobertura y costo.`,
+          `Yes, it falls short: the target is ${fp(o.metaPct)}% and the network gives ${fp(o.utilPct)}%. But the answer isn't to add antennas by eye.${mover} I suggest the adjustment: it looks for heights, sites and support antennas with the best coverage-to-cost ratio.`,
+        ),
+      );
+      acciones.push({ texto: tx("Ajústamelo", "Adjust it for me"), accion: "orden", orden: { tipo: "ajustar", aplicar: false, opcion: "recomendada", opciones: {}, avisos: [] } });
+    }
+  } else {
+    partes.push(
+      tx(
+        `Sin un área objetivo, la red se mide contra la factibilidad: ${clase} en el ${fp(META_UTIL_ESTUDIO_PCT)} % del área de estudio (la zona alrededor de los nodos, que crece con cada antena); hoy da el ${fp(o.utilPct)} %.`,
+        `Without a target area, the network is measured against feasibility: ${clase} in ${fp(META_UTIL_ESTUDIO_PCT)}% of the study area (the zone around the nodes, which grows with every antenna); today it gives ${fp(o.utilPct)}%.`,
+      ),
+    );
+    if (sobran.length) {
+      const solape = Math.min(...sobran.map((id) => o.aportes.find((x) => x.id === id)?.solapePct ?? 100));
+      partes.push(
+        tx(
+          `Lo que sí veo: ${cuales} ${uno ? "repite" : "repiten"} lo que ya cubren otros nodos (al menos el ${fp(solape)} % de su cobertura) y nadie depende de ${uno ? "él" : "ellos"} para llegar al gateway. ${uno ? "Quitarlo" : "Quitarlos"} ahorra unos ${pesosTrama(sobran.length * porRepetidor)}.`,
+          `What I do see: ${cuales} ${uno ? "repeats" : "repeat"} what other nodes already cover (at least ${fp(solape)}% of ${uno ? "its" : "their"} coverage) and nobody depends on ${uno ? "it" : "them"} to reach the gateway. Removing ${uno ? "it" : "them"} saves about ${pesosTrama(sobran.length * porRepetidor)}.`,
+        ),
+      );
+      acciones.push(quitar(), dejar());
+    } else partes.push(tx("Ningún nodo está de más: cada uno cubre algo que los otros no.", "No node is extra: each one covers something the others don't."));
+    partes.push(
+      tx(
+        "Para decirle si le faltan antenas, márqueme la zona que quiere cubrir: con el lápiz de malla le armo ahí la red óptima, o con la regla (Área) la mido contra su meta.",
+        "To tell you whether antennas are missing, mark the zone you want to cover: with the mesh pencil I build the optimal network there, or with the ruler (Area) I measure it against its target.",
+      ),
+    );
+    acciones.push({ texto: tx("Activar el lápiz", "Turn on the pencil"), accion: "orden", orden: { tipo: "herramienta", herramienta: "lapiz" } });
+  }
+  return { texto: partes.join(" "), acciones };
+}
+
+/**
+ * v17.2 · Melki cuestiona el repetidor que la persona acaba de poner si casi no suma (ver `sobraNodo`): cuánto aporta,
+ * que nadie depende de él, si la red ya cumple sin él y lo que cuesta; ofrece quitarlo o dejarlo. Null si sí hace falta.
+ * Con `ultima`, «Dejarlo» le dice que no vuelve a preguntar.
+ */
+export function cuestionarNodo(r: ResultadoSimulacion, id: string, api: Api, ultima = false): Respuesta | null {
+  const antenas = api.antenas();
+  const a = antenas.find((x) => x.id === id);
+  if (!a) return null;
+  const { zona, nombre } = zonaOptimo(api);
+  const o = analizarOptimo(r, antenas, zona);
+  const x = sobraNodo(o, id);
+  if (!x) return null;
+  const clase = clasesDeMargen(o.margenDb);
+  const { logistica } = logisticaEn(api, a.lat, a.lon);
+  const costo = pesosTrama(costoRepetidorInstalado(logistica));
+  const cuanto = zona
+    ? x.propiaKm2 <= 0
+      ? tx(`no cubre nada dentro del área objetivo «${nombre}»`, `it doesn't cover anything inside the target area “${nombre}”`)
+      : tx(`por sí solo suma apenas el ${fp(x.unicaPct)} % del área objetivo con ${clase}`, `on its own it adds just ${fp(x.unicaPct)}% of the target area with ${clase}`)
+    : tx(`el ${fp(x.solapePct)} % de lo que cubre ya lo cubren otros nodos con ${clase}`, `${fp(x.solapePct)}% of what it covers is already covered by other nodes with ${clase}`);
+  // Con área objetivo: o la red cumple su meta sin él, o no llega a la meta ni con él y lo suyo ya lo cubren otros (ver
+  // `sobraNodo`); nunca se dice que cumple sin él si no es así
+  const meta =
+    zona && o.metaPct !== null
+      ? cumpleSinNodo(o, x)
+        ? tx(` La red ya cumple su meta sin él: ${clase} en el ${fp(Math.max(0, o.utilPct - x.unicaPct))} % del área (meta: ${fp(o.metaPct)} %).`, ` The network already meets its target without it: ${clase} in ${fp(Math.max(0, o.utilPct - x.unicaPct))}% of the area (target: ${fp(o.metaPct)}%).`)
+        : tx(
+            ` La red todavía no llega a su meta (${fp(o.utilPct)} % de ${fp(o.metaPct)} %), pero lo que falta no está donde lo puso: el ${fp(x.solapePct)} % de lo que cubre ya lo cubren otros nodos.`,
+            ` The network doesn't reach its target yet (${fp(o.utilPct)}% of ${fp(o.metaPct)}%), but what's missing isn't where you put it: ${fp(x.solapePct)}% of what it covers is already covered by other nodes.`,
+          )
+      : "";
+  return {
+    texto: tx(
+      `¿Seguro que necesita «${a.nombre}»? Revisé la red con él: ${cuanto}, y nadie depende de él para llegar al gateway.${meta} Instalarlo cuesta unos ${costo}. Óptimo no es poner más antenas sino el punto entre la estabilidad de la señal y el costo. ¿Lo quito?`,
+      `Are you sure you need “${a.nombre}”? I checked the network with it: ${cuanto}, and nobody depends on it to reach the gateway.${meta} Installing it costs about ${costo}. Optimal isn't adding more antennas but the balance point between signal stability and cost. Shall I remove it?`,
+    ),
+    acciones: [
+      { texto: tx("Quitarlo", "Remove it"), accion: "orden", orden: { tipo: "eliminar", id } },
+      { texto: tx("Dejarlo", "Keep it"), accion: "orden", orden: { tipo: "dejar-nodo", nombres: [a.nombre], ultima } },
+    ],
+  };
+}
+
+/** Cómo se usa el lápiz de malla (al activarlo por orden y en la ayuda). */
+export const TEXTO_LAPIZ = () =>
+  tx(
+    "Activé el lápiz de malla: dibuje sobre el mapa como en Paint, manteniendo presionado. Si cierra la figura, la tomo como una zona; si traza una línea (una vía, un río), como una franja a lo largo de ella, del ancho que elija en la barra (1 km si no). Al soltar armo ahí la malla óptima: señal media o mejor en el 95 % con la menor cantidad de equipos, enlaces sólidos y su costo. Mientras dibuja, la rueda del ratón acerca y aleja el mapa (en el celular, con dos dedos); Esc, la X o «suelta el lápiz» lo sueltan.",
+    "I turned on the mesh pencil: draw on the map as in Paint, holding the button down. If you close the shape, I take it as a zone; if you trace a line (a road, a river), as a strip along it, as wide as you choose in the bar (1 km otherwise). When you let go I build the optimal mesh there: fair or better signal in 95% with the fewest devices, solid links and its cost. While drawing, the mouse wheel zooms the map in and out (on a phone, use two fingers); Esc, the X or “put the pencil down” releases it.",
+  );
+
 /* ───────────── Diseño de la malla por área ───────────── */
 
 const UMBRALES_SENAL: [RegExp, number][] = [
@@ -1724,6 +1930,49 @@ function lugarPendiente(tn: string, api: Api, p: Extract<NonNullable<Pendiente>,
   return { tipo: "pedir-lugar", dicho: p.dicho, original: p.original, sugerencias: d.opciones.map((c) => c.lugar) };
 }
 
+/**
+ * v17.2 · Pedir el lápiz de malla: «activa el lápiz», «el pincel», «dame el lapicito», «quiero dibujar la malla», «la
+ * dibujo yo». Nombrarlo de pasada no basta («pásame el lápiz» a alguien cercano no es una orden para Melki).
+ */
+export const LAPIZ = new RegExp(
+  [
+    String.raw`^(el |la |un |mi )?(lapiz|lapicito|pincel)( de (la )?malla)?$`,
+    String.raw`\blapiz de (la )?malla\b`,
+    String.raw`\b(activa\w*|activar|enciende\w*|encender|prende\w*|prender|usa|usar|usemos|abre|abrir|dame|damelo|pon|ponme|saca|sacame|toma|coge|agarra|selecciona\w*|elige|escoge|cambia a|cambiar a|modo|herramienta( de)?|quiero( usar)?|necesito)( el| un| mi)? (lapiz|lapicito|pincel)\b`,
+    String.raw`\b(dibuj\w*|traz\w*)\b.{0,24}\bcon (el |un |mi )?(lapiz|lapicito|pincel)\b|\bcon (el |un |mi )?(lapiz|lapicito|pincel)\b.{0,24}\b(dibuj\w*|traz\w*)\b`,
+    String.raw`\b(quiero|voy a|dejame|deja que|puedo|necesito|me gustaria) (yo )?(dibujar|trazar) (yo )?(la |una |mi |el )?(malla|red|zona|franja)\b`,
+    String.raw`\b(quiero|voy a|dejame|puedo|me gustaria) (yo )?dibujar( yo)?$`,
+    String.raw`\b(la |lo )?dibujo yo\b`,
+    String.raw`\bdibujar (la malla |la red |la zona )?(a mano|a mano alzada)\b`,
+  ].join("|"),
+);
+/** v17.2 · Soltar el lápiz de malla por orden: «suelta el lápiz», «desactiva el pincel», «ya no quiero dibujar». */
+export const SOLTAR_LAPIZ =
+  /\b(suelta\w*|soltar|quita\w*|quitar|desactiva\w*|desactivar|apaga\w*|apagar|cierra\w*|cerrar|guarda\w*|guardar|deja|dejar|termina\w*|terminar|sal de|salir de)( el| del| mi)? (lapiz|lapicito|pincel)\b|\b(ya )?no (quiero|voy a) dibujar\b|\b(deja|dejar|para|parar|termina|terminar) de dibujar\b/;
+/** Un pedido de armar o ajustar la red («ármame una malla en Cumaral con menos repetidores», «ajústala con menos torres»). */
+const ARMAR_O_AJUSTAR = /\b(constru\w*|hazme|hagamos|arma|armame|armamela|armala|armalo|armar|arme|armemos|disena\w*|disenar|crea|creame|crear|planifica\w*|montame|monta|montar|levantame|levanta|propon\w*|ajust\w*|reajust\w*|optimiz\w*)\b/;
+/**
+ * v17.2 · Preguntas del criterio de óptimo: «¿necesito más antenas?», «¿me faltan repetidores?», «¿sobran antenas?»,
+ * «¿son demasiadas torres?», «¿por qué no pongo más?», «¿la red es óptima?», «¿puedo quitar repetidores?».
+ */
+export const PREGUNTA_OPTIMO = new RegExp(
+  [
+    String.raw`\b(necesito|necesitamos|necesita|hacen falta|hace falta|faltan|falta|me faltan|nos faltan|le faltan|requiero|requiere|debo poner|deberia poner|tengo que poner|hay que poner|conviene poner|vale la pena poner|pongo|ponemos|agrego|agregamos|le pongo|le agrego|le meto|meto) mas (antenas?|repetidor\w*|nodos?( antena)?|torres?)\b`,
+    String.raw`\b(sobran?|estan de mas|esta de mas|hay de mas|son demasiad[oa]s|demasiad[oa]s|son muchas|son muchos|tantas|tantos) (antenas|repetidor\w*|nodos|torres)\b`,
+    String.raw`\b(me|nos|le) (faltan|hacen falta|sobran) (antenas|repetidor\w*|nodos|torres)\b|^(faltan|hacen falta) (antenas|repetidores|nodos|torres)$`,
+    String.raw`\b(antenas|repetidor\w*|nodos|torres) (de mas|que sobran|sobrantes|que no se necesitan|innecesari[oa]s)\b`,
+    String.raw`\bpor ?que no (pongo|ponemos|agrego|agregamos|le pongo|meto|instalo|instalamos) mas\b`,
+    String.raw`\b(la red|la malla|mi red|mi malla|esta red|esta malla) (es|esta|quedo|queda|ya es|ya esta|si es|si esta) (optima|optimo|bien dimensionad[ao]|sobredimensionad[ao]|subdimensionad[ao])\b`,
+    String.raw`\b(es|esta) (optima|sobredimensionad[ao]) (la|mi|esta) (red|malla)\b`,
+    String.raw`\b(puedo|podemos|se puede|se pueden|podria|podriamos) (quitar|eliminar|sacar|retirar)( algun[oa]s?| un[oa]s| antenas| repetidores| nodos| torres)? (de )?(las |los |mis |esas |esos )?(antenas|repetidores|nodos|torres)\b`,
+    String.raw`\b(con menos|ahorrar\w*) (antenas|repetidor\w*|torres)\b`,
+  ].join("|"),
+);
+/** Frases que nombran la red o el área de la red (no un sitio nuevo): «en el área objetivo», «en mi red». */
+const ZONAS_DE_LA_RED = /\ben (el area( objetivo)?|la zona|la red|mi red|esta red|la malla|mi malla|el mapa|total|general)\b/g;
+/** «¿Cómo funciona…?», «¿qué es…?», «¿para qué sirve…?»: una pregunta, no una orden. */
+const PREGUNTA_COMO = /^(que es|que hace|como funciona|como se usa|como uso|como usar|para que sirve|para que es|explica\w*|que significa)\b/;
+
 function interpretarOrdenBase(dicho: string, api: Api, pendiente: Pendiente, contexto: ContextoOrden = {}): Orden | null {
   // «Cinco millas», «un kilómetro y medio», «noventa y cinco por ciento»: en cifras para todos los intérpretes
   const texto = medidasEnCifras(dicho);
@@ -1772,6 +2021,16 @@ function interpretarOrdenBase(dicho: string, api: Api, pendiente: Pendiente, con
   if (nombreEsc) return { tipo: "nombre-escenario", nombre: nombreEsc[1].trim() };
   const recep = texto.match(/(?:ganancia del? receptor|receptor (?:con|de))\D{0,14}(\d{1,2}(?:[.,]\d+)?)\s*dbi\b/i);
   if (recep) return { tipo: "parametros", cambios: { gananciaRxDbi: num(recep[1]) }, descripcion: tx(`la ganancia del receptor a ${recep[1]} dBi`, `the receiver gain to ${recep[1].replace(",", ".")} dBi`) };
+
+  // v17.2 · El lápiz de malla («activa el lápiz», «quiero dibujar la malla»); «¿cómo funciona el lápiz?» lo explica Melki
+  // y «suelta el lápiz» lo suelta (vuelve a mover el mapa)
+  if (SOLTAR_LAPIZ.test(tn) && !/\bregla\b/.test(tn) && !PREGUNTA_COMO.test(tn)) return { tipo: "herramienta", herramienta: "mover" };
+  if (LAPIZ.test(tn) && !/\bregla\b/.test(tn) && !PREGUNTA_COMO.test(tn)) return { tipo: "herramienta", herramienta: "lapiz" };
+  // v17.2 · El criterio de óptimo: «¿necesito más antenas?», «¿sobran repetidores?», «¿por qué no pongo más?» (sin un
+  // sitio dicho: «necesito más antenas en Cumaral» o con una coordenada es otro pedido; «ármame una malla… con menos
+  // repetidores» o «ajústala con menos torres» es armar o ajustar la red)
+  if (PREGUNTA_OPTIMO.test(tn) && !ARMAR_O_AJUSTAR.test(tn) && !coord && !/\b(antenas?|repetidor\w*|nodos?|torres?|mas)\b.*\b(en|cerca de|hacia|alrededor de|al norte|al sur|al este|al oeste)\b/.test(tn.replace(ZONAS_DE_LA_RED, " ")))
+    return { tipo: "optimo" };
 
   // Agente: cobertura del área medida, diseño por área, órdenes en lote y vista del mapa
   if (/\b(cuanto|que porcentaje|que %|como (queda|esta|va)|que tanto)\b.*\b(cubr\w*|cobertura|senal)\b.*\b(area|zona|poligono)\b/.test(tn)) {
@@ -2782,7 +3041,11 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
               )
             : o.herramienta === "inspeccionar"
               ? tx("Activé «Medir señal»: haga clic en el mapa para ver el margen desde cada nodo.", "I turned on “Measure signal”: click on the map to see the margin from each node.")
-              : tx("Haga clic en el mapa donde va el nodo.", "Click on the map where the node goes."),
+              : o.herramienta === "lapiz"
+                ? TEXTO_LAPIZ()
+                : o.herramienta === "mover"
+                  ? tx("Listo, solté el lápiz: el mapa vuelve a moverse con el ratón.", "Done, I put the pencil down: the map moves with the mouse again.")
+                  : tx("Haga clic en el mapa donde va el nodo.", "Click on the map where the node goes."),
       };
     case "ejemplo":
       api.ejemplo();
@@ -3105,6 +3368,29 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
           .filter(Boolean)
           .join("\n"),
         acciones: [{ texto: tx("Optimizar el costo (misma cobertura)", "Optimize the cost (same coverage)"), accion: "orden", orden: { tipo: "ajustar", aplicar: false, opcion: "recomendada", opciones: {}, avisos: [] } }],
+      };
+    }
+    case "optimo": {
+      if (!antenas.some((a) => a.activa && (a.tipo ?? "antena") === "antena"))
+        return {
+          texto: tx(
+            "Todavía no hay red que revisar. Ponga el gateway y sus repetidores, o pídame que la diseñe («ármame la malla en todo el municipio de …», o dibújela con el lápiz de malla), y le digo si le falta o le sobra algo.",
+            "There's no network to review yet. Place the gateway and its repeaters, or ask me to design it (“build me the mesh in the whole municipality of …”, or draw it with the mesh pencil), and I'll tell you whether something is missing or extra.",
+          ),
+          acciones: [{ texto: tx("Activar el lápiz", "Turn on the pencil"), accion: "orden", orden: { tipo: "herramienta", herramienta: "lapiz" } }],
+        };
+      return {
+        texto: tx("Reviso cuánto aporta cada nodo con la simulación de la red…", "I'm checking how much each node contributes with the network simulation…"),
+        luego: api.esperarResultado().then((r) => respuestaOptimo(r, api)),
+      };
+    }
+    case "dejar-nodo": {
+      const cuales = listaNombres(o.nombres);
+      return {
+        texto: tx(
+          `Listo, ${o.nombres.length === 1 ? `${cuales} se queda: sirve de refuerzo donde ya hay señal` : `${cuales} se quedan: sirven de refuerzo donde ya hay señal`}.${o.ultima ? " No le vuelvo a preguntar por las antenas que ponga; si quiere que revise si falta o sobra algo, pregúnteme «¿sobran antenas?»." : ""}`,
+          `Done, ${cuales} ${o.nombres.length === 1 ? "stays: it reinforces where there's already signal" : "stay: they reinforce where there's already signal"}.${o.ultima ? " I won't ask about the antennas you place again; if you want me to check whether something is missing or extra, ask me “are there too many antennas?”." : ""}`,
+        ),
       };
     }
     case "disenar":

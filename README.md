@@ -218,6 +218,39 @@ ve la simulación detrás) y un botón para que hable en voz alta o no, a mano.
   nombre a lo largo del cauce («Río Meta»), un nombre por tramo y más seguido al acercarse. En inglés cambian los
   países, las aguas y los ríos («PANAMA», «Panama City», «Pacific Ocean», «Meta River»). Los mapas base que ya traen
   nombres (topográfico, OpenTopoMap y calles) usan los suyos
+- **Asistente sin su nombre** (v17.2): con la barra del Asistente Melki abierta, toma cualquier orden sin decir
+  «Melki» y más rápido (espera menos de medio segundo al final de la frase); lo que no es una orden lo deja pasar en
+  silencio («No lo tomé como orden», un momento en la barra), como una conversación cercana, un saludo o un «chao» a
+  otra persona, y tampoco lo manda a la IA. El nombre solo hace falta en reposo, con la barra cerrada.
+  Habla solo si la voz está activada; si no, toma la orden y responde por escrito. El micrófono queda a la vista junto al
+  robot de Melki: un toque lo enciende o lo apaga. «Tomar las órdenes sin decir mi nombre» se apaga en los Ajustes de voz
+- **Doble oído gratuito** (v17.2; Ajustes de voz → «Doble oído: español e inglés»): en el computador, lo que el
+  reconocimiento del navegador no entiende lo vuelve a oír Whisper (whisper-base de OpenAI, abierto, con transformers.js)
+  dentro de la página, primero en el idioma de la pantalla y después en el otro, y Melki cambia de idioma solo si se le
+  habló en el otro. Se descarga una sola vez (unos 80 MB) al abrir el asistente y queda guardado en el navegador; el
+  audio no sale del equipo
+- **Lápiz de malla** (v17.2; barra del mapa → «Lápiz»): se dibuja a mano alzada sobre el mapa, como con el lápiz de
+  Paint. Una figura cerrada es una zona; un trazo abierto (una vía, un río, una cerca) es una franja a lo largo de la
+  línea, del ancho elegido (0,5, 1, 2 o 5 km); lo detecta solo (una U o una V, aunque deje las puntas cerca, es un trazo
+  abierto). Al soltar, Melki arma ahí la opción más óptima, la de
+  equilibrio: señal media o mejor (≥ 30 dB) en el 95 % de lo dibujado, enlaces sólidos, sin repetidores que casi no
+  aporten (el freno de rendimiento) ni los que sobran (la poda), con su costo y su análisis; se deshace con un clic.
+  Mientras se dibuja el mapa no se mueve (la rueda del ratón acerca y aleja; en el celular, dos dedos); Esc o la X
+  sueltan el lápiz. También se pide de palabra («activa el lápiz», «quiero dibujar la malla», «turn on the pencil») y se
+  suelta igual («suelta el lápiz», «put the pencil down»)
+- **Criterio de óptimo** (v17.2): óptimo no es la red con más antenas sino el punto entre la estabilidad de la señal y
+  el costo. Si la persona pone un repetidor que casi no suma (la red ya cumple su meta sin él, o lo que cubre ya lo
+  cubren otros y no es él quien la deja en la meta) y nadie depende de él para llegar al gateway, Melki lo cuestiona con
+  números —lo que aporta, lo que
+  cuesta— y ofrece «Quitarlo» o «Dejarlo» (tras dos «Dejarlo» no vuelve a preguntar). «¿Necesito más antenas?»,
+  «¿sobran antenas?», «¿por qué no pongo más?» o «¿la red es óptima?» (también en inglés) revisan la red nodo por nodo
+  con la simulación: frente a la meta del área objetivo, lo que aporta cada nodo y los repetidores que se pueden quitar
+  juntos sin bajar de ella ni dejar a otro nodo sin salida al gateway, con lo que se ahorra; si falta, propone el ajuste
+  en vez de antenas a ojo. Con respaldo pedido, que las coberturas se crucen es la idea (la meta se mide con dos nodos
+  por punto, como en el panel). En las áreas cóncavas (una franja curva, un municipio en forma de
+  C) el diseño prueba también el gateway dentro del área
+- **Nombres enteros en reposo** (v17.2): con el mapa quieto ningún nombre queda medio transparente (tampoco en el zoom
+  de entrada); solo se desvanecen un instante al acercar o alejar, cuando entran o salen de su franja de zoom
 - **IA local en este equipo** (v14; Ajustes de voz → «IA local en este equipo (Qwen3)»): un modelo de lenguaje
   abierto (Qwen3 de Alibaba; 4B recomendado, 1.7B liviano u 8B máximo) que corre en la tarjeta gráfica con WebGPU, sin
   instalar nada en el sistema y sin mandar nada a internet. Se descarga una sola vez (unos 2,3 GB el recomendado), solo
@@ -552,10 +585,12 @@ src/
   components/simulador/     pantalla principal, mapa, paneles, regla, buscador, capas de referencia, exportación,
                             configuracion.tsx (v17: la tuerca con el idioma y el cambio automático);
                             capas-referencia.ts (v17.1: el gestor de nombres del mapa, por franjas de zoom, sin
-                            repetir ni encimar, con el tamaño según la distancia)
+                            repetir ni encimar, con el tamaño según la distancia; v17.2: enteros con el mapa quieto);
+                            lapiz.tsx (v17.2: el lápiz de malla, la capa que recibe el trazo encima del mapa)
   components/melki/         asistente: avatar, cerebro local, órdenes, tours guiados (tours.ts + recorrido.tsx), voz y dictado
                             (dictado.ts: escucha seguida que se vuelve a encender sola, frases sin duplicados y con su
-                            hora, micrófono abierto y nivel de la voz);
+                            hora, micrófono abierto y nivel de la voz; v17.2: el doble oído, Whisper en la página que
+                            vuelve a oír en español y en inglés lo que el navegador no entendió);
                             Asistente Melki (manos-libres.ts: llamado, controles, frases de mayordomo, resumen para la
                             voz y eco; numeros.ts: números en palabras → cifras; hud-voz.tsx: la barra del asistente);
                             la voz humana (habla.ts: cómo dice Melki las respuestas, al estilo de JARVIS; voz.ts: la
@@ -604,6 +639,8 @@ src/
                             poblar (personas al azar), trama (equipos,
                             precios, capacidad y dimensionamiento del documento de Trama),
                             alcance-plano (alcance de referencia), area (áreas objetivo y cobertura dentro de ellas),
+                            trazo (v17.2: el trazo del lápiz como zona o como franja, sin cruces),
+                            optimo (v17.2: el criterio de óptimo, lo que aporta cada nodo y los que sobran),
                             diseno (diseño de la malla por área, con la poda, el freno y la opción económica),
                             analista (v14: veredicto, costo por km², capacidad, presupuesto y recomendaciones acotadas),
                             ajuste (ajuste inteligente cobertura–costo),

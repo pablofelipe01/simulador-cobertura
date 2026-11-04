@@ -9,7 +9,8 @@
 // aviso del resultado cuando termina la simulación, voz, dictado, el Asistente Melki por voz (tipo Jarvis: escucha
 // todo el tiempo, se activa con «Hola Melki», ejecuta y contesta en voz alta con trato de mayordomo; al activarse deja
 // el mapa libre y sugiere los paneles cuando hacen falta) y menú de tours guiados (también en la primera visita).
-// Escucha avisos de la ventana: «melki:abrir», «melki:tours» y «melki:pedir» (los usan los tours y la barra superior).
+// Escucha avisos de la ventana: «melki:abrir», «melki:tours», «melki:pedir» (los usan los tours y la barra superior) y
+// «melki:orden» (una orden ya armada: la malla del lápiz).
 import { AudioLines, BrainCircuit, Compass, Cpu, Ear, Globe, KeyRound, LoaderCircle, Mic, Play, Send, Settings2, ShieldCheck, Sparkles, Square, Trash2, Volume2, VolumeX, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 
@@ -18,7 +19,7 @@ import type { Escenario, ResultadoSimulacion } from "@/lib/radio/tipos";
 import { nombresParaVoz, type Lugar } from "@/lib/geo/referencia";
 import { armarPitch, pedidoPitch, type PedidoPitch } from "@/lib/negocio/pitch";
 import { armarRecorrido, pedidoRecorrido, resumenRecorrido, type ParadaRecorrido, type PedidoRecorrido } from "@/lib/negocio/recorrido-red";
-import { decimalLocal, elegirIdioma, idioma, numeroLocal, pedidoDeIdioma, tx } from "@/lib/idioma";
+import { cambioAutomatico, decimalLocal, elegirIdioma, idioma, numeroLocal, pedidoDeIdioma, tx, type Idioma } from "@/lib/idioma";
 import { useIdioma } from "@/lib/use-idioma";
 
 import { abrirMicrofonoIA, ReproductorIA, type MicrofonoIA } from "./audio-ia";
@@ -67,7 +68,7 @@ import {
   type EstadoManosLibres,
   type Trato,
 } from "./manos-libres";
-import { menuTours, pedidoDeTour, responder, responderTema, respuestaFueraDeTema, sugerencias, type AccionMelki, type AccionRespuesta, type ContextoMelki, type Respuesta } from "./cerebro";
+import { menuTours, pedidoDeTour, responder, responderTema, respuestaFueraDeTema, sugerencias, TEMAS_DE_CHARLA, type AccionMelki, type AccionRespuesta, type ContextoMelki, type Respuesta } from "./cerebro";
 import { entender, type Decision, type Opcion, type Recuerdo } from "./modelo/entender";
 import { INTENCION } from "./modelo/intenciones";
 import { cargarModeloMelki, guardarPreferenciaModelo, leerMemoria, leerPreferenciaModelo, modeloMelki, olvidarMemoria, recordar, type PreferenciaModelo } from "./modelo/memoria";
@@ -78,15 +79,18 @@ import {
   hayMicrofono,
   hayReconocimientoNavegador,
   iniciarDictado,
+  prepararDobleOido,
+  puedeGuardarAudio,
   reconocedorDescargado,
   clavePalabras,
   quitarTartamudeo,
+  transcribirEnIdiomas,
   type ControlDictado,
   type Dictado,
   type EstadoDictado,
   type ModoDictado,
 } from "./dictado";
-import { accionAjuste, dividirEnPasos, ejecutarOrden, interpretarOrden, textoCoberturaUtil, textoRed, type Api, type ContextoOrden, type LlegadaMelki, type Orden, type Pendiente, type ResultadoOrden } from "./ordenes";
+import { accionAjuste, cuestionarNodo, dividirEnPasos, ejecutarOrden, interpretarOrden, textoCoberturaUtil, textoRed, type Api, type ContextoOrden, type LlegadaMelki, type Orden, type Pendiente, type ResultadoOrden } from "./ordenes";
 import type { IdTour } from "./tours";
 import { hablaNatural } from "./habla";
 import { alCargarVoces, callar, fijarGeneroVoz, fijarRitmoVoz, fijarVozPreferida, hablar, puntajeVoz, sonando, vocesEspanol, vozDisponible, type GeneroVoz } from "./voz";
@@ -133,8 +137,13 @@ const f1 = (x: number, d = 1) => decimalLocal(x, d);
  * femenina) y la voz.
  */
 /** `voz`: la voz escogida para el español; `vozEn`: la escogida para el inglés (`null`: la más natural de ese idioma). */
-type PreferenciasManos = { seguir: boolean; completo: boolean; sonido: boolean; ocultar: boolean; siempre: boolean; pasiva: boolean; trato: Trato; genero: GeneroVoz; voz: string | null; vozEn: string | null; audifonos: boolean };
-const MANOS_DEFECTO: PreferenciasManos = { seguir: true, completo: false, sonido: true, ocultar: true, siempre: false, pasiva: true, trato: "senor", genero: "masculina", voz: null, vozEn: null, audifonos: false };
+/**
+ * `sinNombre` (v17.2): con la barra del asistente abierta toma cualquier orden sin que lo llamen por su nombre (solo en
+ * reposo, con la barra cerrada, hace falta «Hola Melki»). `dobleOido` (v17.2): lo que el navegador no entiende se vuelve a
+ * oír con Whisper en la página, en español y en inglés (en el computador; se descarga una vez).
+ */
+type PreferenciasManos = { seguir: boolean; completo: boolean; sonido: boolean; ocultar: boolean; siempre: boolean; pasiva: boolean; trato: Trato; genero: GeneroVoz; voz: string | null; vozEn: string | null; audifonos: boolean; sinNombre: boolean; dobleOido: boolean };
+const MANOS_DEFECTO: PreferenciasManos = { seguir: true, completo: false, sonido: true, ocultar: true, siempre: false, pasiva: true, trato: "senor", genero: "masculina", voz: null, vozEn: null, audifonos: false, sinNombre: true, dobleOido: true };
 /** La hora del equipo, para saludar según el momento del día (fuera del componente: no se lee al dibujar). */
 const horaLocal = () => new Date().getHours();
 /**
@@ -142,6 +151,14 @@ const horaLocal = () => new Date().getHours();
  * después (lo que tarda en apagarse el sonido en la sala). Con audífonos se le puede hablar encima.
  */
 const COLA_ECO_MS = 450;
+/**
+ * Cuánto espera tras la frase confirmada antes de hacer el pedido (v17.2: antes 0,7 s) y cuánto si la frase quedó a
+ * medias («ubícame en…»; antes 1,8 s). Si el micrófono sigue oyendo su voz, espera un poco más.
+ */
+const ESPERA_FIN_MS = 400;
+const ESPERA_A_MEDIAS_MS = 1100;
+/** Sin su nombre, «sí», «no», «la segunda» o «repite» solo valen este rato después de un mensaje de Melki. */
+const VENTANA_CONTROL_MS = 30000;
 
 type Lado = "izquierdo" | "derecho";
 type Paneles = { izquierdo: boolean; derecho: boolean };
@@ -416,6 +433,17 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   const [escuchado, setEscuchado] = useState("");
   const [subtitulo, setSubtitulo] = useState("");
   const [avisoVoz, setAvisoVoz] = useState<string | null>(null);
+  /** «No lo tomé como orden: …» un momento en la barra (lo que se dijo sin su nombre y no era una orden). */
+  const [avisoPaso, setAvisoPaso] = useState<string | null>(null);
+  const pasoTemporizador = useRef(0);
+  /** El doble oído (Whisper en la página): sin preparar, descargándose, listo o con error. */
+  type EstadoOido = { estado: "no" | "cargando" | "listo" | "error"; detalle?: string };
+  const [oido, setOido] = useState<EstadoOido>({ estado: "no" });
+  const oidoRef = useRef<EstadoOido>({ estado: "no" });
+  const fijarOido = (o: EstadoOido) => {
+    oidoRef.current = o;
+    setOido(o);
+  };
   const [motorVoz, setMotorVoz] = useState("");
   const [manos, setManos] = useState<PreferenciasManos>(() => ({ ...MANOS_DEFECTO, ...leerPreferencias().manos }));
   /** El panel que Melki acaba de sugerir (brilla en su barra). */
@@ -513,6 +541,11 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   const captura = useRef<string[] | null>(null);
   /** Órdenes que siguen calculando (sembrado, diseño, prueba de estrés…). */
   const trabajos = useRef(0);
+  /**
+   * v17.2 · Criterio de óptimo: el repetidor que la persona acaba de poner (a mano o pidiéndoselo a Melki) espera la
+   * simulación que lo incluya; si casi no suma, Melki lo cuestiona una vez. Tras dos «Dejarlo», no vuelve a preguntar.
+   */
+  const optimo = useRef({ vistos: null as Set<string> | null, revisar: null as string | null, revisados: new Set<string>(), dejados: 0 });
   /** Hay algo en curso (un cálculo largo, la IA local, varios pasos): Melki muestra que está pensando. */
   const [ocupado, setOcupado] = useState(false);
   const empezarTrabajo = () => {
@@ -588,6 +621,16 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     /** Con parlantes: la escucha está en pausa porque suena su voz, y cuándo sonó por última vez. */
     pausada: false,
     ultimaVozSonando: 0,
+    /** Sin su nombre no toma pedidos hasta esta hora (acaba de oírse a sí mismo y cortó el bucle). */
+    sordoHasta: 0,
+    /** Cuándo dejó Melki su último mensaje (con botones o no): «sí», «no» o «la segunda» sin su nombre valen poco después. */
+    ultimoMensaje: 0,
+    ultimaPregunta: 0,
+    /** Desde cuándo y hasta cuándo se oyó el pedido que se está armando (para volver a oírlo con el doble oído). */
+    comandoDesde: 0,
+    comandoHasta: 0,
+    /** Cada vez que el doble oído vuelve a oír una frase: si la barra se cierra o llega otra, la anterior ya no cuenta. */
+    turnoOido: 0,
   });
   const actual = useRef({ abierto, vozActiva, api, mensajes, manos, usados, paneles, contexto, iaPref, iaLocal, modeloPref, memoriaModelo });
   useEffect(() => {
@@ -620,7 +663,9 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     setMemoriaModelo(leerMemoria(lengua));
   }
   /** Las frases del asistente con el trato elegido. */
-  const fr = () => frases(actual.current.manos.trato, horaLocal());
+  const fr = () => frases(actual.current.manos.trato, horaLocal(), sinNombre());
+  /** Con la barra abierta toma las órdenes sin su nombre (v17.2; se puede apagar en Ajustes de voz). */
+  const sinNombre = () => actual.current.manos.sinNombre !== false;
   // La voz escogida para el idioma de la pantalla (cada idioma recuerda la suya)
   useEffect(() => {
     fijarVozPreferida(lengua === "en" ? manos.vozEn : manos.voz);
@@ -820,8 +865,9 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
         if (clave && bucle) {
           m.ultimaRespuesta.hora = ahora;
           window.clearTimeout(m.pensando);
-          fijarEstadoVoz("esperando");
-          setEscuchado("");
+          // Sin su nombre, un rato no toma pedidos (lo que oyó era su propia voz)
+          m.sordoHasta = ahora + 6000;
+          esperarNombre();
           return;
         }
         m.ultimaRespuesta = { clave, hora: ahora, disculpa };
@@ -850,6 +896,8 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     const nota = tomarNota();
     setMensajes((m) => [...m, { id: siguiente.current++, de: "melki", texto: r.texto, acciones: r.acciones, nota }]);
     if (!actual.current.abierto) setNoLeido(true);
+    ml.current.ultimoMensaje = reloj();
+    if (r.acciones?.some((a) => a.accion !== "deshacer")) ml.current.ultimaPregunta = reloj();
     if (callada) {
       const m = ml.current;
       m.ultimoCompleto = r.texto;
@@ -870,11 +918,18 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     setEstadoVoz(e);
   };
 
-  /** Después de hablar (o de oír solo su nombre) se queda atento unos segundos; luego vuelve a esperar su nombre. */
+  /**
+   * Después de hablar (o de oír solo su nombre) se queda atento unos segundos; luego vuelve a esperar su nombre. Con
+   * «sin nombre» (lo normal desde la v17.2) se queda atento mientras la barra esté abierta.
+   */
   const quedarAtento = () => {
     const m = ml.current;
     window.clearTimeout(m.atento);
     if (!m.activo || !m.despierto) return;
+    if (sinNombre()) {
+      fijarEstadoVoz("atento");
+      return;
+    }
     if (!actual.current.manos.seguir) {
       fijarEstadoVoz("esperando");
       return;
@@ -886,6 +941,14 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
         setEscuchado("");
       }
     }, 9000);
+  };
+
+  /** Vuelve a esperar su nombre (sin él no hace nada); con «sin nombre», sigue atento a cualquier orden. */
+  const esperarNombre = () => {
+    const m = ml.current;
+    setEscuchado("");
+    if (sinNombre() && m.activo && m.despierto) quedarAtento();
+    else fijarEstadoVoz("esperando");
   };
 
   /**
@@ -929,8 +992,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       m.conVoz = false;
       if (m.trasHablar === "esperando") {
         m.trasHablar = "atento";
-        fijarEstadoVoz("esperando");
-        setEscuchado("");
+        esperarNombre();
       } else quedarAtento();
       return;
     }
@@ -1075,7 +1137,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       }
       return;
     }
-    procesarFrase(nuevo);
+    procesarFrase(nuevo, inicio);
   };
 
   /** Lo que se va oyendo de la frase en curso: despierta con su nombre y muestra el pedido mientras se dice. */
@@ -1091,10 +1153,16 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
         m.pendienteDespertar = { via: "parcial", resto: a.resto };
         onManosLibres(true);
       }
-    } else if (m.estado === "atento" || m.comando) {
+    } else if (m.estado === "atento" || m.comando || (sinNombre() && m.despierto && m.estado === "hablando" && !m.conVoz)) {
+      setAvisoPaso(null);
+      // Con la barra abierta, si habla mientras está escrita una respuesta, se le atiende ya (lo que faltaba no importa)
+      if (m.estado === "hablando") {
+        m.cola = [];
+        fijarEstadoVoz("atento");
+      }
       setEscuchado(`${m.comando ? `${m.comando} ` : ""}${parcial}`.trim());
       // Sigue hablando: no se corta el pedido (cuando llegue lo que falta, se espera la pausa normal)
-      if (m.comando) esperarFin(1800);
+      if (m.comando) esperarFin(ESPERA_A_MEDIAS_MS);
     } else if (m.estado === "esperando" && detectarActivacion(parcial).activado) {
       // Ya se oyó su nombre: responde enseguida, sin esperar a que termine la frase
       if (actual.current.manos.sonido) tono(true);
@@ -1132,12 +1200,12 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
 
   /**
    * Hace el pedido cuando termina de hablar: tras una pausa (más larga si la frase quedó a medias) y, si el micrófono
-   * todavía oye su voz, un poco después (hasta 1,5 s más), para no cortarle la frase.
+   * todavía oye su voz, un poco después (hasta 1 s más), para no cortarle la frase.
    */
   const esperarFin = (ms: number) => {
     const m = ml.current;
     window.clearTimeout(m.espera);
-    m.limiteEspera = reloj() + ms + 1500;
+    m.limiteEspera = reloj() + ms + 1000;
     const revisar = () => {
       const x = ml.current;
       if (vozRef.current.sigueHablando() && reloj() < x.limiteEspera) {
@@ -1149,7 +1217,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     m.espera = window.setTimeout(revisar, ms);
   };
 
-  const procesarFrase = (frase: string) => {
+  const procesarFrase = (frase: string, inicio = 0) => {
     const m = ml.current;
     const a = detectarActivacion(frase);
     // En reposo solo cuenta su nombre: «Hey Melki» lo despierta y lo que siga es el pedido
@@ -1163,7 +1231,10 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       if (a.activado && controlDeVoz(a.resto)?.tipo === "apagar") onManosLibres(false);
       return;
     }
-    if (m.estado === "esperando" || m.estado === "preparando") {
+    // Con la barra abierta y «sin nombre», lo que diga es el pedido aunque no lo llame (salvo justo después de oírse a sí
+    // mismo); sin esa opción, espera su nombre
+    const atiendeSinNombre = sinNombre() && m.despierto && !(reloj() < m.sordoHasta && !a.activado);
+    if ((m.estado === "esperando" || m.estado === "preparando") && !atiendeSinNombre) {
       if (!a.activado) {
         // Sin su nombre no hace nada (por si alguien habla cerca)
         if (m.estado === "esperando") setEscuchado("");
@@ -1176,7 +1247,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
         encolarVoz(fr().llamado(m.llamados++, a.ingles), true, "atento", false);
         return;
       }
-      acumular(a.resto, true);
+      acumular(a.resto, true, inicio);
       return;
     }
     // Atento: lo que diga es el pedido (si repite su nombre, se quita). Solo su nombre: contesta como un mayordomo
@@ -1187,13 +1258,18 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       encolarVoz(fr().llamado(m.llamados++, a.ingles), true, "atento", false);
       return;
     }
-    acumular(a.activado ? a.resto : frase, a.activado);
+    // Recién oída su propia voz: sin su nombre no se toma como pedido
+    if (!a.activado && reloj() < m.sordoHasta) return;
+    acumular(a.activado ? a.resto : frase, a.activado, inicio);
   };
 
   /** Junta lo que se dice seguido (una pausa corta no corta el pedido) y lo ejecuta. */
-  const acumular = (t: string, conNombre = false) => {
+  const acumular = (t: string, conNombre = false, inicio = 0) => {
     const m = ml.current;
     if (conNombre) m.comandoConNombre = true;
+    // Desde cuándo se oye el pedido (para volver a oírlo con el doble oído si no se entiende)
+    if (!m.comando) m.comandoDesde = inicio || reloj() - 2500;
+    m.comandoHasta = reloj();
     // Si habla encima de los subtítulos, lo que faltaba por mostrar ya no importa
     if (m.estado === "hablando") m.cola = [];
     m.comando = m.comando ? `${m.comando} ${t}` : t;
@@ -1203,7 +1279,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     fijarEstadoVoz("atento");
     // Si la frase quedó a medias («ubícame en…», «arma una red de…»), espera un poco más a que termine
     const aMedias = (idioma() === "en" ? COLGANDO_EN : COLGANDO).test(m.comando.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[.,;:!?¿¡]+$/g, "").trim());
-    esperarFin(aMedias ? 1800 : 700);
+    esperarFin(aMedias ? ESPERA_A_MEDIAS_MS : ESPERA_FIN_MS);
   };
 
   const ejecutarVoz = () => {
@@ -1226,7 +1302,18 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     // Sin su nombre, justo después de que habló y con sus mismas palabras: puede ser su propia voz que se coló
     m.pedidoConNombre = conNombre;
     m.pedidoDudoso = !conNombre && ahora - m.hablandoHasta < 6000 && m.recientes.some((r) => ahora - r.hasta < 15000 && parteDeLoDicho(dicho, r.texto) >= 0.5);
-    const c = controlDeVoz(dicho);
+    // Sin su nombre, «sí», «no», «gracias», «la segunda» o «repite» solo cuentan poco después de que Melki dijo algo (así
+    // una conversación cercana no le usa los botones); «para» y «deja de escuchar» valen siempre
+    const sueltoSinNombre = !conNombre && sinNombre() && ahora - m.ultimoMensaje > VENTANA_CONTROL_MS && ahora - m.hablandoHasta > VENTANA_CONTROL_MS;
+    const c0 = controlDeVoz(dicho);
+    // «Chao», «hasta luego» o «bye» sin su nombre pueden ser para otra persona: cuentan como los demás (poco después de
+    // que Melki habló); «deja de escuchar» o «apaga el asistente» valen siempre
+    const valeSiempre = c0 !== null && (["callar", "microfono", "ayuda"].includes(c0.tipo) || (c0.tipo === "apagar" && !c0.despedida));
+    const c = c0 && sueltoSinNombre && !valeSiempre ? null : c0;
+    if (c0 && !c) {
+      quedarAtento();
+      return;
+    }
     if (c) {
       if (c.tipo === "callar") return callarYa();
       if (c.tipo === "repetir") {
@@ -1293,6 +1380,17 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       }
     }
     const texto = limpiarComando(dicho);
+    // Sin su nombre (con la barra abierta) solo cuenta una orden o una pregunta del simulador: lo demás (una conversación
+    // cercana, un saludo a otra persona, la hora) pasa sin interrumpir, y tampoco va a la IA. Lo que no se entendió, el
+    // doble oído lo vuelve a oír en español y en inglés (Whisper, en el navegador)
+    const entiende = entiendeDicho(texto);
+    if (!conNombre && sinNombre() && entiende !== "si") {
+      if (entiende === "no" && dobleOidoListo()) {
+        void oirDeNuevo(texto, m.comandoDesde, m.comandoHasta, conNombre);
+        return;
+      }
+      return pasarSinOrden(texto);
+    }
     // Con la IA lista, el pedido lo atiende ella (conversa, ejecuta y explica). Si se lo dicen en el otro idioma (o le
     // piden cambiarlo), primero cambia el idioma de todo el simulador (el aviso queda escrito: la que habla es la IA)
     if (iaDisponible() && !pedidoPitch(texto, pitchAbierto.current) && !pedidoRecorrido(texto, recorridoAbierto.current)) {
@@ -1305,12 +1403,175 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       void iaRef.current.iniciarIA(texto);
       return;
     }
+    // Con su nombre: si el simulador no lo entendió, el doble oído vuelve a oír esa misma frase; si tampoco, Melki pide
+    // que se lo repitan
+    if (entiende === "no" && dobleOidoListo()) {
+      void oirDeNuevo(texto, m.comandoDesde, m.comandoHasta, conNombre);
+      return;
+    }
+    pedirPorVoz(texto);
+  };
+
+  /** El pedido por voz va al mismo cerebro y las mismas órdenes que lo escrito. */
+  const pedirPorVoz = (texto: string) => {
+    const m = ml.current;
     fijarEstadoVoz("pensando");
     setEscuchado(texto);
     // Si nada responde (no debería pasar), vuelve a escuchar
     window.clearTimeout(m.pensando);
     m.pensando = window.setTimeout(() => ml.current.estado === "pensando" && quedarAtento(), 15000);
     vozRef.current.preguntar(texto, true, false, true);
+  };
+
+  /**
+   * ¿Melki entiende lo dicho? «si»: una orden (o la primera de varias), una pregunta o un tema del simulador, lo que
+   * entiende el Modelo Melki, un pedido de idioma o la respuesta a «¿quiso decir…?» (en inglés también con las palabras de
+   * Melki). «fuera»: se entendió, pero no es del simulador (un saludo, la charla, la hora, el clima). «no»: no se entendió.
+   */
+  const entiendeDicho = (texto: string): "si" | "fuera" | "no" => {
+    const t = texto.trim();
+    if (!t) return "no";
+    const traducido = enPalabrasDeMelki(t);
+    if (aclaracion.current && reloj() < aclaracion.current.hasta) return "si";
+    if (pedidoDeIdioma(t) || entiendeFrase(t) || (traducido !== t && entiendeFrase(traducido))) return "si";
+    const pasos = dividirEnPasos(traducido);
+    if (pasos.length > 1 && entiendeFrase(pasos[0])) return "si";
+    const ctx = contextoMelki(true);
+    const r1 = responder(t, ctx);
+    const r2 = traducido !== t ? responder(traducido, ctx) : null;
+    const sirve = (r: Respuesta | null) => r !== null && !r.noEntendido && !r.fueraDeTema;
+    if (sirve(r1) || sirve(r2)) return "si";
+    let fuera = Boolean(r1.fueraDeTema || r2?.fueraDeTema);
+    const mm = actual.current.modeloPref.activo ? modeloMelki() : null;
+    if (mm) {
+      try {
+        const d = entender(mm, t, { api: actual.current.api, memoria: actual.current.memoriaModelo, verificar: entiendeFrase, textoRanuras: traducido });
+        if (d.tipo === "hacer") return "si";
+        // Lo que el Modelo Melki ve como charla («buenos días, don Pedro»: ¿saludar?) o fuera del simulador tampoco es una
+        // orden; lo demás que entiende (un tema, una confirmación o una aclaración del simulador) sí cuenta
+        const deCharla = (o: Opcion) => o.tema !== undefined && TEMAS_DE_CHARLA.has(o.tema);
+        if (d.tipo === "fuera" || (d.tipo === "tema" && deCharla(d.opcion)) || (d.tipo === "aclarar" && d.opciones.length > 0 && d.opciones.every(deCharla))) fuera = true;
+        else if (!fuera && (d.tipo === "tema" || d.tipo === "confirmar" || d.tipo === "aclarar" || d.tipo === "falta")) return "si";
+      } catch {
+        // Sin el modelo: lo deciden las reglas
+      }
+    }
+    return fuera ? "fuera" : "no";
+  };
+
+  /* ───────────── Doble oído (v17.2): español e inglés ───────────── */
+
+  /** ¿Puede volver a oír lo que no se entendió? (Whisper cargado y el micrófono guardando el audio). */
+  const dobleOidoListo = () => actual.current.manos.dobleOido !== false && oidoRef.current.estado === "listo" && Boolean(ml.current.sesion?.audio);
+
+  /** Prepara el doble oído en segundo plano (la primera vez se descarga, unos 80 MB; después funciona sin internet). */
+  const prepararOido = () => {
+    const o = oidoRef.current;
+    if (o.estado === "cargando" || o.estado === "listo" || !esEscritorio() || !puedeGuardarAudio()) return;
+    const primera = o.estado === "no";
+    fijarOido({ estado: "cargando" });
+    prepararDobleOido((detalle) => fijarOido({ estado: "cargando", detalle }))
+      .then(() => {
+        fijarOido({ estado: "listo" });
+        // Solo la primera vez que queda listo en esta sesión, y si el asistente está abierto
+        if (primera && ml.current.activo && ml.current.despierto)
+          agregarMelki(
+            {
+              texto: tx(
+                "Mi doble oído quedó listo: si el navegador no me entiende una frase, la vuelvo a oír en español y en inglés, y cambio de idioma solo si me habla en el otro.",
+                "My second ear is ready: if the browser doesn't understand a phrase, I listen to it again in Spanish and in English, and I switch languages on my own if you speak the other one.",
+              ),
+            },
+            true,
+          );
+      })
+      .catch((e: unknown) => fijarOido({ estado: "error", detalle: e instanceof Error ? e.message : String(e) }));
+  };
+
+  /** Lo que dice el ajuste del doble oído según su estado. */
+  const textoDobleOido = () => {
+    const o = oido;
+    if (manos.dobleOido === false) return tx("Apagado: entiendo solo el idioma de la pantalla (cámbielo diciendo «speak English» o «habla en español»).", "Off: I understand only the screen language (change it by saying “habla en español” or “speak English”).");
+    if (o.estado === "listo") return tx("Listo en este equipo: si el navegador no me entiende, vuelvo a oír la frase en español y en inglés, y cambio de idioma solo.", "Ready on this device: if the browser doesn't understand me, I listen to the phrase again in Spanish and in English, and switch languages on my own.");
+    if (o.estado === "cargando") return o.detalle ?? tx("Preparando el doble oído…", "Preparing the second ear…");
+    if (o.estado === "error") return tx(`No pude prepararlo (${o.detalle ?? "sin detalle"}). La primera vez necesita internet; lo intento de nuevo al activarme.`, `I couldn't prepare it (${o.detalle ?? "no details"}). The first time it needs internet; I'll try again when I'm activated.`);
+    return tx("Al activarme bajo, una sola vez, un reconocedor gratuito (Whisper, unos 80 MB) que queda en este equipo: lo que el navegador no entiende lo vuelvo a oír en español y en inglés.", "When I'm activated I download, only once, a free recognizer (Whisper, about 80 MB) that stays on this device: whatever the browser doesn't understand, I listen to again in Spanish and in English.");
+  };
+
+  /** ¿Se entiende como orden o pregunta lo que el doble oído oyó en el otro idioma (pasado a las palabras de Melki)? */
+  const entiendeEnOtro = (t: string, lengua: Idioma): boolean => {
+    if (pedidoDeIdioma(t)) return true;
+    if (lengua === "en") {
+      const tr = traducirPedido(t, { nombres: nombresNodos() });
+      if (entiendeFrase(tr) || entiendeFrase(dividirEnPasos(tr)[0] ?? "")) return true;
+      const r = responder(tr, contextoMelki(true));
+      return !r.noEntendido && !r.fueraDeTema;
+    }
+    // Del inglés al español: el intérprete entiende el español tal cual
+    return entiendeFrase(t) || entiendeFrase(dividirEnPasos(t)[0] ?? "");
+  };
+
+  /**
+   * El doble oído: lo que el navegador oyó y no se entiende se vuelve a oír con Whisper, primero en el idioma de la
+   * pantalla y, si así tampoco se entiende, en el otro (si en el otro sí, todo el simulador cambia a ese idioma, como
+   * cuando se le escribe en él). Primero el mismo idioma: Whisper obligado a otro idioma suele traducir lo que oyó, y una
+   * traducción no debe cambiar el idioma de la pantalla. Si la barra se cierra (o llega otra frase) mientras tanto, esta
+   * ya no cuenta: no se hace con la barra cerrada ni deja a Melki «pensando».
+   */
+  const oirDeNuevo = async (texto: string, desde: number, hasta: number, conNombre: boolean) => {
+    const m = ml.current;
+    const audio = m.sesion?.audio?.(desde - 800, hasta + 200) ?? null;
+    if (!audio || audio.length < 16000 * 0.5) return sinEntenderPorVoz(texto, conNombre);
+    const turno = ++m.turnoOido;
+    fijarEstadoVoz("pensando");
+    setEscuchado(texto);
+    setAvisoPaso(tx("Lo vuelvo a oír en español y en inglés…", "Listening to it again in Spanish and in English…"));
+    const ahora = idioma();
+    const otro: Idioma = ahora === "en" ? "es" : "en";
+    // ¿Sigue siendo el turno de esta frase, con la barra abierta?
+    const sigue = () => ml.current.activo && ml.current.despierto && ml.current.turnoOido === turno;
+    const soltar = () => {
+      if (ml.current.turnoOido === turno) setAvisoPaso(null);
+    };
+    const plazo = <T,>(p: Promise<T>) => Promise.race([p, new Promise<never>((_, mal) => window.setTimeout(() => mal(new Error("tiempo")), 9000))]);
+    try {
+      const [t1] = await plazo(transcribirEnIdiomas(audio, [ahora === "en" ? "english" : "spanish"]));
+      if (!sigue()) return soltar();
+      const x1 = limpiarComando(t1 ?? "");
+      if (x1 && x1 !== texto && entiendeDicho(x1) === "si") {
+        setAvisoPaso(null);
+        return pedirPorVoz(x1);
+      }
+      const [t2] = await plazo(transcribirEnIdiomas(audio, [otro === "en" ? "english" : "spanish"]));
+      if (!sigue()) return soltar();
+      const x2 = limpiarComando(t2 ?? "");
+      if (x2 && entiendeEnOtro(x2, otro)) {
+        setAvisoPaso(null);
+        // Con el cambio automático, todo el simulador pasa al otro idioma; sin él, la orden se hace sin cambiarlo
+        return pedirPorVoz(cambioAutomatico() || pedidoDeIdioma(x2) ? x2 : otro === "en" ? traducirPedido(x2, { nombres: nombresNodos() }) : x2);
+      }
+    } catch {
+      // Whisper falló o tardó demasiado: sigue como si no hubiera doble oído
+    }
+    if (!sigue()) return soltar();
+    setAvisoPaso(null);
+    sinEntenderPorVoz(texto, conNombre);
+  };
+
+  /** Lo que no se entendió: sin su nombre pasa sin interrumpir; con su nombre, se disculpa y pide que se lo repita. */
+  const sinEntenderPorVoz = (texto: string, conNombre: boolean) => {
+    if (!conNombre && sinNombre()) return pasarSinOrden(texto);
+    pedirPorVoz(texto);
+  };
+
+  /** Sin su nombre y sin entenderse como orden: no interrumpe (lo muestra un momento en la barra y sigue atento). */
+  const pasarSinOrden = (texto: string) => {
+    const corto = texto.length > 60 ? `${texto.slice(0, 57)}…` : texto;
+    setAvisoPaso(tx(`No lo tomé como orden: «${corto}»`, `I didn't take that as an order: “${corto}”`));
+    window.clearTimeout(pasoTemporizador.current);
+    pasoTemporizador.current = window.setTimeout(() => setAvisoPaso(null), 2600);
+    setEscuchado("");
+    quedarAtento();
   };
 
   /** Cuánto entiende el simulador lo dicho: una orden con todo vale más que una pregunta por el lugar. */
@@ -1381,12 +1642,15 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
           },
         },
         c,
-        { continuo: true },
+        // Con el doble oído, el micrófono guarda los últimos segundos de audio para volver a oír lo que no se entendió
+        { continuo: true, grabar: actual.current.manos.dobleOido !== false },
       );
       if (c.cancelado) s.cancelar();
       else {
         m.sesion = s;
         m.pausada = false;
+        // El doble oído se prepara al atender (con la barra abierta), no en reposo: en reposo solo cuenta su nombre
+        if (s.audio && actual.current.manos.dobleOido !== false && m.despierto) prepararOido();
         setMotorVoz(s.motor === "navegador" ? tx("con el navegador", "with the browser") : tx("en este equipo", "on this device"));
       }
     } catch (e) {
@@ -1446,13 +1710,15 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
 
   const listoParaEscuchar = () => {
     const m = ml.current;
-    fijarEstadoVoz("esperando");
-    // Al saludar vuelve a esperar su nombre (no toma como pedido lo que se diga cerca)
+    // Con «sin nombre» toma las órdenes desde que aparece la barra (mientras saluda también); sin esa opción, al saludar
+    // vuelve a esperar su nombre (no toma como pedido lo que se diga cerca)
+    const despues = sinNombre() ? "atento" : "esperando";
+    fijarEstadoVoz(despues);
     const texto = fr().bienvenida(!m.saludado);
     m.saludado = true;
     setMensajes((x) => [...x, { id: siguiente.current++, de: "melki", texto }]);
     if (!actual.current.abierto) setNoLeido(true);
-    encolarVoz(texto, true, "esperando", false);
+    encolarVoz(texto, true, despues, false);
   };
 
   /** ¿Puede quedarse escuchando su nombre en reposo? */
@@ -1506,6 +1772,8 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     setAvisoVoz(null);
     setEscuchado("");
     setSubtitulo("");
+    // Desde el reposo, la escucha ya guarda el audio: el doble oído se prepara ahora, al atender
+    if (m.sesion?.audio && actual.current.manos.dobleOido !== false) prepararOido();
   };
 
   const iniciarManosLibres = () => {
@@ -1756,6 +2024,37 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     [suscribir], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
+  // v17.2 · Un repetidor nuevo, uno solo (los diseños, siembras, ejemplos y escenarios cargados ponen varios a la vez o
+  // los pone Melki mientras calcula): queda pendiente de revisar con la próxima simulación que lo incluya
+  useEffect(() => {
+    const o = optimo.current;
+    const ids = new Set(contexto.antenas.map((a) => a.id));
+    if (!o.vistos) {
+      o.vistos = ids;
+      return;
+    }
+    const nuevos = contexto.antenas.filter((a) => !o.vistos!.has(a.id));
+    o.vistos = ids;
+    if (o.revisar && !ids.has(o.revisar)) o.revisar = null;
+    if (nuevos.length !== 1 || trabajos.current > 0) return;
+    const a = nuevos[0];
+    if ((a.tipo ?? "antena") === "antena" && !a.pasarela && a.activa && !o.revisados.has(a.id)) o.revisar = a.id;
+  }, [contexto.antenas]);
+  useEffect(
+    () =>
+      suscribir((r) => {
+        const o = optimo.current;
+        const id = o.revisar;
+        if (!id || !r.antenas.some((x) => x.id === id)) return;
+        o.revisar = null;
+        if (o.revisados.has(id) || o.dejados >= 2 || trabajos.current > 0) return;
+        o.revisados.add(id);
+        const res = cuestionarNodo(r, id, actual.current.api, o.dejados >= 1);
+        if (res) agregarMelki(res);
+      }),
+    [suscribir], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
   const deshacer = (e: Escenario | null | undefined, clave?: string) => {
     if (!e) {
       agregarMelki({ texto: tx("No tengo cambios recientes para deshacer.", "I have no recent changes to undo.") });
@@ -1816,6 +2115,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
 
   const ejecutar = (orden: Orden) => {
     setLlegada(null);
+    if (orden.tipo === "dejar-nodo") optimo.current.dejados++;
     const res = ejecutarOrden(orden, api);
     const narrada = mostrarLlegada(res);
     pendiente.current = res.pendiente ?? null;
@@ -3319,9 +3619,9 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   };
 
   // Avisos de los tours y de la barra superior
-  const avisos = useRef({ preguntar, mostrarTours, cerrarOferta, oferta });
+  const avisos = useRef({ preguntar, mostrarTours, cerrarOferta, oferta, ejecutar });
   useEffect(() => {
-    avisos.current = { preguntar, mostrarTours, cerrarOferta, oferta };
+    avisos.current = { preguntar, mostrarTours, cerrarOferta, oferta, ejecutar };
   });
   // Lo que llama el reconocimiento de voz siempre usa la versión de ahora (con el escenario de ahora)
   const vozRef = useRef({ oirFrase, oirParcial, oirNivel, sigueHablando, ejecutarVoz, preguntar, pulsarAccion, arrancarEscucha, reanudar, listoParaEscuchar, bloqueoVoz, desbloquearVoz, iniciarPasiva, apagarTodo, puntosComprension, escucharDeNuevo });
@@ -3431,6 +3731,15 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       if (texto) avisos.current.preguntar(texto);
       setNoLeido(false);
     };
+    // Una orden ya armada (v17.2: la malla del lápiz): queda en la conversación como lo que pidió la persona
+    const ordenar = (e: Event) => {
+      const d = (e as CustomEvent<{ orden: Orden; texto: string }>).detail;
+      if (!d?.orden) return;
+      abrir();
+      setMensajes((x) => [...x, { id: siguiente.current++, de: "usuario", texto: d.texto }]);
+      avisos.current.ejecutar(d.orden);
+      setNoLeido(false);
+    };
     const cambio = () => {
       ultimoDeshacer.current = null;
       pendiente.current = null;
@@ -3440,11 +3749,13 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     window.addEventListener("melki:abrir", abrir);
     window.addEventListener("melki:tours", tours);
     window.addEventListener("melki:pedir", pedir);
+    window.addEventListener("melki:orden", ordenar);
     window.addEventListener("melki:escenario-cambiado", cambio);
     return () => {
       window.removeEventListener("melki:abrir", abrir);
       window.removeEventListener("melki:tours", tours);
       window.removeEventListener("melki:pedir", pedir);
+      window.removeEventListener("melki:orden", ordenar);
       window.removeEventListener("melki:escenario-cambiado", cambio);
     };
   }, []);
@@ -3462,7 +3773,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       estado={modoIA ? estadoIA : estadoVoz}
       escuchado={modoIA ? oidoIA : escuchado}
       subtitulo={modoIA ? subIA : subtitulo}
-      aviso={modoIA ? (avisoIA ?? avisoVoz) : (avisoVoz ?? avisoFallo)}
+      aviso={modoIA ? (avisoIA ?? avisoVoz) : (avisoVoz ?? avisoPaso ?? avisoFallo)}
       motor={modoIA ? tx("con IA (Gemini Live)", "with AI (Gemini Live)") : motorVoz}
       ia={modoIA}
       paneles={escritorio ? paneles : null}
@@ -4018,6 +4329,35 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
               )}
               <div className="space-y-1" role="group" aria-label={tx("Opciones del Asistente Melki", "Melki Assistant options")}>
                 <Interruptor
+                  activo={manos.sinNombre !== false}
+                  onCambiar={(v) => {
+                    fijarManos({ sinNombre: v });
+                    const m = ml.current;
+                    // Con la barra abierta: si se apaga, vuelve a esperar su nombre; si se enciende, queda atento ya
+                    if (m.activo && m.despierto && m.estado !== "hablando" && m.estado !== "pensando") fijarEstadoVoz(v ? "atento" : "esperando");
+                  }}
+                  titulo={tx("Tomar las órdenes sin decir mi nombre", "Take orders without saying my name")}
+                  detalle={tx(
+                    "Con mi barra abierta hago lo que me diga sin que me llame; lo que no sea una orden lo dejo pasar. Con la barra cerrada (en reposo) espero «Hola Melki».",
+                    "With my bar open I do what you say without you calling me; anything that isn't an order I let pass. With the bar closed (on standby) I wait for “Hey Melki”.",
+                  )}
+                />
+                {esEscritorio() && hayReconocimientoNavegador() && puedeGuardarAudio() && (
+                  <Interruptor
+                    activo={manos.dobleOido !== false}
+                    onCambiar={(v) => {
+                      fijarManos({ dobleOido: v });
+                      // La escucha vuelve a empezar para guardar (o dejar de guardar) el audio de los últimos segundos
+                      actual.current.manos = { ...actual.current.manos, dobleOido: v };
+                      const m = ml.current;
+                      if (m.activo && m.sesion && Boolean(m.sesion.audio) !== v) void arrancarEscucha(modoEscucha());
+                      if (v) prepararOido();
+                    }}
+                    titulo={tx("Doble oído: español e inglés", "Second ear: Spanish and English")}
+                    detalle={textoDobleOido()}
+                  />
+                )}
+                <Interruptor
                   activo={manos.pasiva}
                   onCambiar={(v) => {
                     fijarManos({ pasiva: v });
@@ -4046,7 +4386,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
                     if (v && permiso !== "granted") void permitirMicrofono();
                   }}
                   titulo={tx("Activarme al abrir el simulador", "Activate me when the simulator opens")}
-                  detalle={`${tx("Al entrar le saludo («", "When you open it I greet you (“")}${frases(manos.trato).bienvenida(true).split(/(?<=\.) /).slice(0, 2).join(" ")}${tx("») y quedo atento a «Hola Melki», sin tocar nada.", "”) and listen for “Hey Melki”, without you touching anything.")}`}
+                  detalle={`${tx("Al entrar le saludo («", "When you open it I greet you (“")}${frases(manos.trato, undefined, manos.sinNombre !== false).bienvenida(true).split(/(?<=\.) /).slice(0, 2).join(" ")}${manos.sinNombre !== false ? tx("») y le escucho enseguida, sin tocar nada.", "”) and I'm listening right away, without you touching anything.") : tx("») y quedo atento a «Hola Melki», sin tocar nada.", "”) and listen for “Hey Melki”, without you touching anything.")}`}
                 />
                 {vozActiva && (
                   <Interruptor
@@ -4060,7 +4400,9 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
                     }
                   />
                 )}
-                <Interruptor activo={manos.seguir} onCambiar={(v) => fijarManos({ seguir: v })} titulo={tx("Seguir la conversación", "Follow the conversation")} detalle={tx("Después de responder me quedo atento unos segundos: no hace falta repetir mi nombre.", "After answering I stay alert for a few seconds: there's no need to repeat my name.")} />
+                {manos.sinNombre === false && (
+                  <Interruptor activo={manos.seguir} onCambiar={(v) => fijarManos({ seguir: v })} titulo={tx("Seguir la conversación", "Follow the conversation")} detalle={tx("Después de responder me quedo atento unos segundos: no hace falta repetir mi nombre.", "After answering I stay alert for a few seconds: there's no need to repeat my name.")} />
+                )}
                 {vozActiva && (
                   <Interruptor activo={manos.completo} onCambiar={(v) => fijarManos({ completo: v })} titulo={tx("Leer las respuestas completas", "Read full answers")} detalle={tx("Si está apagado, digo lo principal y dejo el detalle escrito (diga «más detalle» para oírlo).", "When off, I say the main point and leave the details in writing (say “more detail” to hear them).")} />
                 )}
@@ -4270,6 +4612,26 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
         </div>
       )}
 
+      <div className="flex items-end gap-2">
+      {(hayReconocimientoNavegador() || hayMicrofono()) && (
+        <button
+          type="button"
+          onClick={() => onManosLibres(!manosLibres)}
+          className={`microfono-melki pointer-events-auto relative mb-1 grid h-11 w-11 place-items-center rounded-full shadow-lg ring-2 transition-transform hover:scale-105 ${manosLibres ? "bg-carbon text-white ring-melki" : "bg-white text-carbon ring-melki/60"}`}
+          aria-pressed={manosLibres}
+          aria-label={manosLibres ? tx("Dejar de escuchar a Melki", "Stop Melki listening") : tx("Hablarle a Melki", "Talk to Melki")}
+          title={
+            manosLibres
+              ? tx("Le escucho: dígame su orden. Toque para dejar de escuchar.", "I'm listening: tell me your order. Tap to stop listening.")
+              : tx("Hablarle a Melki: un toque y le escucho (con mi barra abierta no hace falta llamarme)", "Talk to Melki: one tap and I'm listening (with my bar open you don't need to call me)")
+          }
+          data-tour="melki-microfono"
+          data-tapa-mapa
+        >
+          {manosLibres && <span className="microfono-pulso absolute inset-0 rounded-full" aria-hidden="true" />}
+          <Mic size={20} aria-hidden="true" />
+        </button>
+      )}
       <button
         type="button"
         onClick={() => {
@@ -4300,6 +4662,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
           </span>
         )}
       </button>
+      </div>
     </div>
     </>
   );

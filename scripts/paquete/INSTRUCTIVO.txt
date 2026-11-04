@@ -30,11 +30,19 @@ de "Pitch". La primera vez abre en el idioma del navegador y después
 recuerda el último que usó. Y la página abre con los paneles ocultos,
 para ver el mapa completo: las herramientas y los resultados se abren
 cuando usted quiera.
-En esta entrega, la barra de herramientas de arriba también empieza
-oculta (la despliega una flechita pequeña en la esquina superior
-derecha del mapa) y los nombres del mapa ya no se repiten al acercarse
-o alejarse: cada lugar sale una sola vez, con el tamaño que corresponde
-a la distancia.
+En esta entrega: el "Lápiz" de la barra del mapa dibuja la malla a mano,
+como en Paint (una figura cerrada es una zona; una línea, una franja a
+lo largo de una vía o un río), y Melki arma ahí la red óptima, que no
+es la de más antenas sino la del equilibrio entre la estabilidad de la
+señal y el costo; si usted pone una antena que no hace falta, Melki se
+lo dice con números y le ofrece quitarla. Con la barra del Asistente
+Melki abierta, le habla sin decir su nombre y toma la orden enseguida
+(lo que no es una orden lo deja pasar); el micrófono está junto a su
+robot, y lo que el navegador no le entiende lo vuelve a oír en español
+y en inglés. Los nombres del mapa se ven enteros con el mapa quieto.
+En la entrega anterior la barra de arriba empezó oculta (la despliega
+una flechita en la esquina superior derecha del mapa) y los nombres del
+mapa dejaron de repetirse.
 Melki tiene su propio modelo de inteligencia artificial, el
 "Modelo Melki": una red neuronal pequeña, hecha solo para este
 simulador, que entiende los pedidos dichos con sus palabras ("móntame
@@ -368,20 +376,31 @@ con un punto.
     la barra de arriba (o el ícono de ondas en la conversación) y
     permita el micrófono. Saluda "Hola, señor. Bienvenido", deja el
     mapa libre (oculta el panel de herramientas y el de resultados) y
-    escucha todo el tiempo; se activa con su nombre (también si el
-    micrófono entiende "Melky" o "Melqui"):
-        "Hola Melki, pon el gateway en Cumaral"
-        "Oye Melki, puebla la zona con doscientas cincuenta personas"
-        "Hey Melki, ¿cuántas personas aguanta el Repetidor 1?"
-        "Hola Melki, ¿cómo dejo la mayor cobertura posible?"
-        "Oye Melki, pantalla limpia"
+    escucha todo el tiempo. Con su barra abierta no hace falta decir
+    su nombre: diga la orden y la toma enseguida (lo que no es una
+    orden lo deja pasar en silencio; la barra muestra un momento "No lo
+    tomé como orden"). También se activa con el micrófono que está
+    junto a su robot (abajo a la derecha): un toque y escucha, otro y
+    se apaga. Pruebe:
+        "Pon el gateway en Cumaral"
+        "Puebla la zona con doscientas cincuenta personas"
+        "¿Cuántas personas aguanta el Repetidor 1?"
+        "¿Necesito más antenas?"
+        "Pantalla limpia"
     Lo hace y le deja la respuesta escrita, sin hablar (lo principal
-    en su barra y todo en la conversación), y se queda atento unos
-    segundos: siga hablando sin repetir su nombre. También entiende
-    "para", "repite", "más detalle", "sí, hazlo" o "la segunda" (los
-    botones de su respuesta), "deshaz" y "deja de escuchar". Si solo
-    dice "Hola Melki", contesta "Hola, mi señor. Le escucho; estoy
-    atento y presto a seguir sus órdenes". Sin su nombre no hace nada.
+    en su barra y todo en la conversación); habla solo si usted activó
+    la voz. También entiende "para", "repite", "más detalle", "sí,
+    hazlo" o "la segunda" (los botones de su respuesta), "deshaz" y
+    "deja de escuchar". Si solo dice "Hola Melki", contesta "Hola, mi
+    señor. Le escucho; estoy atento y presto a seguir sus órdenes". Con
+    la barra cerrada (en reposo) sí necesita su nombre (también si el
+    micrófono entiende "Melky" o "Melqui"). En Ajustes de voz, "Tomar
+    las órdenes sin decir mi nombre" vuelve a pedir el nombre siempre.
+    Doble oído (en el computador): lo que el navegador no le entienda
+    lo vuelve a oír en español y en inglés con un reconocedor gratuito
+    (Whisper) que se descarga una sola vez, unos 80 MB, al activarlo, y
+    queda en este equipo; si le habla en inglés, cambia a inglés solo.
+    Se apaga en Ajustes de voz: "Doble oído: español e inglés".
     Cuando un resultado se ve mejor en un panel, pregunta si se lo
     muestra ("sí" lo abre); la barra sobre el mapa muestra lo que
     entiende, lo que responde y los botones "Mostrar resultados",
@@ -449,7 +468,8 @@ con un punto.
     vez y sigue intentando: al volver, vuelve a escuchar sin tocar nada.
     Las respuestas largas las dice por partes, sin cortarse.
     Consejos: Edge o Chrome actualizados, el micrófono cerca o
-    audífonos, y hablar de corrido justo después de "Melki".
+    audífonos, y hablar de corrido (en reposo, justo después de
+    "Melki").
  p) Pantalla limpia: el botón junto a "Modo avanzado" oculta el panel
     de la izquierda y el de la barra de arriba lo devuelve; el de la
     derecha oculta los Resultados. O dígale a Melki "pantalla limpia" y
@@ -641,7 +661,31 @@ con un punto.
     del cauce ("Río Meta"), más seguido a medida que se acerca. En
     inglés los países y las aguas también cambian ("PANAMA", "Pacific
     Ocean", "Meta River"). Los mapas base que ya traen nombres
-    (topográfico, OpenTopoMap y calles) usan los suyos.
+    (topográfico, OpenTopoMap y calles) usan los suyos. Con el mapa
+    quieto se ven enteros (solo se desvanecen un instante al acercar o
+    alejar).
+ aa) Lápiz de malla (barra del mapa, junto a la Regla): toque "Lápiz"
+    y dibuje sobre el mapa manteniendo presionado, como en Paint. Si
+    cierra la figura, Melki la toma como una zona; si traza una línea
+    (una vía, un río, una cerca), como una franja a lo largo de ella,
+    del ancho que elija en la barra (0,5, 1, 2 o 5 km). Al soltar arma
+    ahí la opción más óptima: señal media o mejor en el 95 % de lo
+    dibujado, con enlaces sólidos, sin repetidores que casi no aporten,
+    con su costo y su análisis ("Deshacer" la quita). Mientras dibuja,
+    el mapa no se mueve (la rueda del ratón acerca y aleja; en el
+    celular, con dos dedos); Esc o la X sueltan el lápiz. También:
+    "activa el lápiz" o "quiero dibujar la malla", y "suelta el lápiz"
+    para soltarlo. Una U o una V, aunque deje las puntas cerca, es una
+    línea (una franja), no una zona.
+ bb) Ni una antena de más: óptimo no es poner más antenas sino el punto
+    entre la estabilidad de la señal y el costo. Ponga un repetidor
+    pegado a otro: cuando termina la simulación, Melki le pregunta
+    "¿Seguro que necesita...?", con lo que aporta y lo que cuesta, y le
+    ofrece "Quitarlo" o "Dejarlo". Pregúntele "¿necesito más antenas?",
+    "¿sobran antenas?" o "¿por qué no pongo más?": revisa la red nodo
+    por nodo frente a la meta del área objetivo y le dice cuáles sobran
+    y cuánto se ahorra, o, si falta cobertura, le propone el ajuste en
+    vez de poner antenas a ojo.
 
 
 3. BUENO SABER
@@ -685,6 +729,10 @@ con un punto.
   navegador). Con manos
   libres en el modo "Con el navegador", el audio del micrófono va a
   Edge o Chrome mientras está activo; en "Privado" no sale del equipo.
+  El doble oído (Whisper) corre dentro de la página: se descarga una sola
+  vez, unos 80 MB, al activar el Asistente Melki en el computador, queda
+  guardado en el navegador y el audio que vuelve a oír no sale del
+  equipo (se apaga en Ajustes de voz).
 - Conversar con IA: la capa gratuita de Google no cobra (tiene límites
   por día). Si algún día se pasa a la de pago, cuesta unos US$0,005
   por minuto de audio que entra y US$0,018 por minuto de voz del
@@ -705,6 +753,9 @@ con un punto.
   los nodos que ya existían no se traducen (los nuevos salen en el
   idioma de la pantalla: "Repeater 1" en inglés, "Repetidor 1" en
   español) y Melki entiende los dos.
+- El lápiz de malla y la revisión "¿sobran antenas?" usan la última
+  simulación de este equipo: con el relieve "Plano" o sin internet dan
+  resultados de planeación, igual que el resto del simulador.
 - La demostración es genérica: no contiene datos de ningún cliente.
 
 

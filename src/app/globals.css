@@ -807,6 +807,8 @@ body {
 .etiqueta-ref > span {
   display: inline-block;
   transform-origin: 50% 50%;
+  /* Al quedar quieto el mapa, lo que venía desvaneciéndose se completa suave, sin saltos */
+  transition: opacity 180ms ease-out;
 }
 .etiqueta-ref.et-pais {
   font-weight: 700;
@@ -943,6 +945,28 @@ body {
 /* Los controles de la derecha bajan un poco: arriba, en la esquina, va la flechita de la barra */
 .maplibregl-ctrl-top-right {
   top: 20px;
+}
+
+/* v17.2: el micrófono junto al robot de Melki; mientras escucha, un aro que late */
+.microfono-pulso {
+  animation: microfono-late 1.6s ease-out infinite;
+}
+@keyframes microfono-late {
+  0% {
+    box-shadow: 0 0 0 0 rgb(224 122 63 / 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 11px rgb(224 122 63 / 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(224 122 63 / 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .microfono-pulso {
+    animation: none;
+    box-shadow: 0 0 0 3px rgb(224 122 63 / 0.45);
+  }
 }
 
 /* La flechita de la barra de herramientas de arriba: pequeña y translúcida, colgando del borde superior del mapa,

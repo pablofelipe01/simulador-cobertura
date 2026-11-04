@@ -13,7 +13,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const entrada = `
-export { interpretarOrden, ejecutarOrden, extraerCoordenadas, extraerVariasCoordenadas, dividirEnPasos, leerNumero, areaEnTexto } from "./src/components/melki/ordenes";
+export { interpretarOrden, ejecutarOrden, extraerCoordenadas, extraerVariasCoordenadas, dividirEnPasos, leerNumero, areaEnTexto, cuestionarNodo, disenoDibujado } from "./src/components/melki/ordenes";
+export { simular } from "./src/lib/radio/simulacion";
+export { poligonoRectangulo } from "./src/lib/radio/area";
+export { desplazar } from "./src/lib/radio/geo";
 export { responder, noEntendiOrden, respuestaNoEntendi, horaHablada } from "./src/components/melki/cerebro";
 export { areaM2, poligonoCirculo, recortarPoligono } from "./src/lib/radio/area";
 export { claveFonetica, parecidoFonetico } from "./src/lib/geo/fonetica";
@@ -1442,7 +1445,7 @@ function crearApi(antenas) {
   caso("«¿Qué puedes hacer?» menciona el Asistente Melki", /Asistente Melki/.test(m.responder("¿qué puedes hacer?", c).texto));
   caso("«¿Qué es el Asistente Melki?» explica el trato, los paneles y la activación al abrir", ((r) => /mayordomo/.test(r.texto) && /oculto el panel de herramientas y el de resultados/.test(r.texto) && /al abrir el simulador/.test(r.texto) && r.acciones?.some((a) => a.accion === "manos-libres"))(m.responder("¿qué es el asistente Melki?", c)));
   const tv = m.TOURS.find((x) => x.id === "voz");
-  caso("Tour «Asistente Melki por voz»: activa, llama por el nombre, el mapa libre con sugerencias y la mayor cobertura", tv && tv.nombre === "Asistente Melki por voz" && tv.pasos.some((p) => p.objetivo === "manos-libres" && p.tarea) && tv.pasos.some((p) => [].concat(p.objetivo).includes("hud-sugerencias")) && tv.pasos.some((p) => /mayor cobertura posible/.test(p.texto)));
+  caso("Tour «Asistente Melki por voz»: activa, llama por el nombre, el mapa libre con sugerencias y la mayor cobertura", tv && tv.nombre === "Asistente Melki por voz" && tv.pasos.some((p) => p.objetivo === "melki-microfono" && p.tarea) && tv.pasos.some((p) => [].concat(p.objetivo).includes("hud-sugerencias")) && tv.pasos.some((p) => /mayor cobertura posible/.test(p.texto)));
   caso("«Hazme el tour de manos libres» → tour voz", m.pedidoDeTour("hazme el tour de manos libres")?.acciones?.[0]?.tour === "voz" && m.pedidoDeTour("guíame para hablar con Melki y dictarle")?.acciones?.[0]?.tour === "melki");
   caso("La ayuda por voz trae ejemplos y los controles", /Hola Melki/.test(m.AYUDA_VOZ) && /sí, hazlo/.test(m.AYUDA_VOZ) && /pantalla limpia/.test(m.AYUDA_VOZ) && /mayor cobertura posible/.test(m.AYUDA_VOZ));
 }
@@ -1535,7 +1538,11 @@ function crearApi(antenas) {
   const ctl = (f) => m.controlDeVoz(f)?.tipo ?? null;
   caso("«Apaga el micrófono» apaga del todo; «deja de escuchar» vuelve al reposo", ctl("apaga el micrófono") === "microfono" && ctl("no me escuches más") === "microfono" && ctl("deja de escucharme del todo") === "microfono" && ctl("deja de escuchar") === "apagar" && ctl("apaga el asistente") === "apagar");
   const fz = m.frases("senor");
-  caso("Las frases del reposo y del micrófono", /Quedo en reposo: cuando me necesite, diga «Hola Melki»/.test(fz.reposo) && /Apago el micrófono/.test(fz.microfono) && /aunque esta barra esté cerrada/.test(fz.bienvenida(true)));
+  caso("Las frases del reposo y del micrófono", /Quedo en reposo: cuando me necesite, diga «Hola Melki»/.test(fz.reposo) && /Apago el micrófono/.test(fz.microfono) && /con la barra cerrada, diga «Hola Melki»/.test(fz.bienvenida(true)));
+  // v17.2: con la barra abierta toma las órdenes sin su nombre; sin esa opción, el saludo de antes
+  const fsn = m.frases("senor", undefined, false);
+  caso("v17.2: el saludo dice que con la barra abierta no hace falta llamarlo (y sin la opción, el de antes)", /Mientras esta barra esté abierta, dígame lo que necesite sin llamarme/.test(fz.bienvenida(true)) && /dígame su pedido/.test(fz.yaEscucho) && /aunque esta barra esté cerrada/.test(fsn.bienvenida(true)) && /diga «Hola Melki» y su pedido/.test(fsn.yaEscucho), fz.bienvenida(true));
+  caso("v17.2: la ayuda por voz dice que con la barra abierta no hace falta su nombre y que entiende inglés con el doble oído", /sin llamarme/.test(m.AYUDA_VOZ) && /Lo que no sea una orden lo dejo pasar/.test(m.AYUDA_VOZ) && /doble oído/.test(m.AYUDA_VOZ));
   caso("La ayuda por voz cuenta el reposo y el micrófono", /reposo/.test(m.AYUDA_VOZ) && /apaga el micrófono/.test(m.AYUDA_VOZ));
   caso("«¿Qué es el Asistente Melki?» cuenta el reposo tipo Siri y la barra que se mueve", ((r) => /como Siri/.test(r.texto) && /se arrastra/.test(r.texto) && /fuera del simulador|se sale del simulador/.test(r.texto))(m.responder("¿qué es el asistente Melki?", cR)));
 }
@@ -2366,6 +2373,108 @@ function crearApi(antenas) {
   caso("v16: Melki sabe de LoRa, de la lluvia y de la energía solar de noche", /^LoRa es la forma de radio/.test(m.responder("¿qué es lora?", cM16).texto) && /^Sí funciona con lluvia/.test(m.responder("¿funciona cuando llueve?", cM16).texto) && /de noche funciona con ellas/.test(m.responder("¿qué pasa de noche con los paneles solares?", cM16).texto) && /de noche funciona con ellas/.test(m.responder("¿cuánto dura la batería de un repetidor?", cM16).texto), m.responder("¿qué es lora?", cM16).texto.slice(0, 60));
   caso("v16: dice la hora y la fecha como una persona, y responde el saludo del día", /^(Son las|Es la) \d{1,2}:\d{2} de la (madrugada|mañana|tarde|noche), señor\.$/.test(m.responder("¿qué hora es?", cM16).texto) && /^Hoy es \p{L}+, \d{1,2} de \p{L}+ de \d{4}, señor\.$/u.test(m.responder("¿qué día es hoy?", cM16).texto) && /^Buenas tardes, señor\. Es un gusto saludarle\./.test(m.responder("buenas tardes melki", cM16).texto) && m.horaHablada(new Date(2026, 9, 31, 15, 5)) === "Son las 3:05 de la tarde" && m.horaHablada(new Date(2026, 9, 31, 13, 0)) === "Es la 1:00 de la tarde", m.responder("¿qué hora es?", cM16).texto);
   caso("v16: «gracias Melki, buen trabajo» se agradece (no se toma por otra pregunta); «¿quién es el Inge?» es la autoría", /^Muchas gracias, señor/.test(m.responder("gracias melki, buen trabajo", cM16).texto) && m.responder("¿quién es el inge?", cM16).tema === "autoria", m.responder("gracias melki, buen trabajo", cM16).texto);
+}
+
+// ─── v17.2: el lápiz de malla y el criterio de óptimo (ni una antena de más) ───
+{
+  const red = () => {
+    const c0 = { lat: 4.2, lon: -73.37 };
+    const R = (id, km, rb) => base(id, id, m.desplazar(c0.lat, c0.lon, km * 1000, rb).lat, m.desplazar(c0.lat, c0.lon, km * 1000, rb).lon, { alturaM: 15, equipo: "personalizado", rol: "REPETIDOR" });
+    return [base("g", "Gateway", c0.lat, c0.lon, { pasarela: true, alturaM: 12, equipo: "personalizado", rol: "REPETIDOR" }), R("Este", 7, 90), R("Oeste", 7, 270), R("Pegado", 0.4, 45)];
+  };
+  const o = (f, antenas = red()) => m.interpretarOrden(f, crearApi(antenas), null);
+  // El lápiz
+  caso(
+    "v17.2: «activa el lápiz», «quiero dibujar la malla», «el pincel» y «la dibujo yo» arman el lápiz de malla",
+    ["activa el lápiz", "quiero dibujar la malla", "el pincel", "la dibujo yo", "dame el lapicito", "quiero dibujar"].every((f) => o(f)?.tipo === "herramienta" && o(f)?.herramienta === "lapiz"),
+    ["activa el lápiz", "quiero dibujar la malla", "el pincel", "la dibujo yo", "dame el lapicito", "quiero dibujar"].map((f) => `${f}: ${o(f)?.tipo}/${o(f)?.herramienta}`).join(" · "),
+  );
+  const apiL = crearApi(red());
+  const rL = m.ejecutarOrden({ tipo: "herramienta", herramienta: "lapiz" }, apiL);
+  caso("v17.2: al armar el lápiz explica cómo dibujar (zona cerrada o franja) y el criterio óptimo", apiL.llamadas.some((x) => x[0] === "herramienta" && x[1] === "lapiz") && /Si cierra la figura, la tomo como una zona/.test(rL.texto) && /franja/.test(rL.texto) && /95 %/.test(rL.texto), rL.texto.slice(0, 90));
+  caso("v17.2: «¿cómo funciona el lápiz?» lo explica (no lo arma); con la regla sigue siendo la regla; pintar colores no es el lápiz", o("¿cómo funciona el lápiz?") === null && /El lápiz de malla está en la barra del mapa/.test(m.responder("¿cómo funciona el lápiz?", { antenas: red(), resultado: null, desactualizado: false }).texto) && o("quiero dibujar un área con la regla")?.herramienta !== "lapiz" && o("pinta solo con umbral de -100 dBm")?.tipo === "vista", `${JSON.stringify(o("¿cómo funciona el lápiz?"))} · ${o("pinta solo con umbral de -100 dBm")?.tipo}`);
+  const dz = m.disenoDibujado([[-73.4, 4.2], [-73.3, 4.2], [-73.3, 4.3]], "zona");
+  const df = m.disenoDibujado([[-73.4, 4.2], [-73.3, 4.2], [-73.3, 4.3]], "franja", 2000);
+  caso("v17.2: lo dibujado se diseña con el criterio de equilibrio (señal media o mejor en el 95 %, sostenible, hasta 60 repetidores)", dz.tipo === "disenar" && dz.margenDb === 30 && dz.porcentaje === 95 && dz.sostenible === true && dz.maxRepetidores === 60 && dz.area.forma === "poligono" && dz.area.dibujar === true && /Zona dibujada/.test(dz.area.etiqueta) && /Franja dibujada \(2 km de ancho\)/.test(df.area.etiqueta), `${dz.area.etiqueta} · ${df.area.etiqueta}`);
+
+  // Las preguntas del criterio de óptimo
+  const preguntas = ["¿necesito más antenas?", "¿me faltan repetidores?", "¿sobran antenas?", "¿son demasiados repetidores?", "¿por qué no pongo más antenas?", "¿la red es óptima?", "¿puedo quitar algunos repetidores?", "¿hay repetidores de más?", "¿debo poner más torres?"];
+  caso("v17.2: «¿necesito más antenas?», «¿sobran antenas?», «¿por qué no pongo más?»… revisan la red con el criterio de óptimo", preguntas.every((f) => o(f)?.tipo === "optimo"), preguntas.filter((f) => o(f)?.tipo !== "optimo").join(" | "));
+  caso(
+    "v17.2: lo que no es esa pregunta no se confunde (un nodo dicho, un sitio o una coordenada)",
+    o("¿puedo quitar el repetidor Este?")?.tipo !== "optimo" && o("necesito más antenas en Villavicencio")?.tipo !== "optimo" && o("pon otra antena en 4.3, -73.2")?.tipo !== "optimo" && o("¿qué es una red óptima?") === null,
+    `${o("¿puedo quitar el repetidor Este?")?.tipo} · ${o("necesito más antenas en Villavicencio")?.tipo} · ${o("pon otra antena en 4.3, -73.2")?.tipo}`,
+  );
+  caso("v17.2: «¿qué es una red óptima?» lo explica: óptimo no es más antenas sino estabilidad y costo", /Óptimo no es la red con más antenas/.test(m.responder("¿qué es una red óptima?", { antenas: red(), resultado: null, desactualizado: false }).texto));
+  // Soltar el lápiz por orden; nombrarlo de pasada no lo arma; armar o ajustar la red con menos equipos no es la pregunta
+  const sueltan = ["desactiva el lápiz", "suelta el lápiz", "quita el pincel", "apaga el lápiz", "guarda el lápiz", "ya no quiero dibujar", "deja de dibujar"];
+  caso(
+    "v17.2: «suelta el lápiz», «desactiva el pincel», «ya no quiero dibujar»… lo sueltan (el mapa vuelve a moverse)",
+    sueltan.every((f) => o(f)?.tipo === "herramienta" && o(f)?.herramienta === "mover") && /solté el lápiz/.test(m.ejecutarOrden({ tipo: "herramienta", herramienta: "mover" }, crearApi(red())).texto),
+    sueltan.filter((f) => o(f)?.herramienta !== "mover").map((f) => `${f}: ${o(f)?.tipo}/${o(f)?.herramienta}`).join(" · "),
+  );
+  caso(
+    "v17.2: nombrarlo de pasada no arma el lápiz («pásame el lápiz que se me cayó»); dibujar con él sí («con el lápiz dibujo la franja»)",
+    ["pásame el lápiz que se me cayó", "¿dónde dejé el lápiz?"].every((f) => o(f)?.herramienta !== "lapiz") && o("con el lápiz dibujo la franja")?.herramienta === "lapiz" && o("lápiz de malla")?.herramienta === "lapiz",
+  );
+  caso(
+    "v17.2: «ármame una malla… con menos repetidores» y «ajústala con menos repetidores» son armar y ajustar la red, no la pregunta del óptimo",
+    o("ármame una malla en Villavicencio con menos repetidores")?.tipo !== "optimo" && o("ajústala con menos repetidores")?.tipo === "ajustar" && o("¿se puede con menos antenas?")?.tipo === "optimo",
+    `${o("ármame una malla en Villavicencio con menos repetidores")?.tipo} · ${o("ajústala con menos repetidores")?.tipo}`,
+  );
+  // Sin su nombre, la charla pasa en silencio: el saludo, «¿cómo estás?», la hora y la fecha van marcados como fuera del
+  // simulador (por escrito, o con su nombre, contesta igual); las despedidas sin su nombre cuentan solo poco después
+  const cC = { antenas: red(), resultado: null, desactualizado: false };
+  const charla = ["hola", "buenos días", "¿cómo estás?", "¿qué hora es?", "¿qué día es hoy?", "me encanta", "¿me escuchas?"];
+  caso(
+    "v17.2: la charla («hola», «buenos días», «¿qué hora es?»…) queda marcada como fuera del simulador y se contesta igual; las preguntas del simulador no",
+    charla.every((f) => m.responder(f, cC).fueraDeTema === true && m.responder(f, cC).texto.length > 0) && !m.responder("¿cuánto cuesta la red?", cC).fueraDeTema && !m.responder("¿cómo funciona el lápiz?", cC).fueraDeTema,
+    charla.filter((f) => !m.responder(f, cC).fueraDeTema).join(" · "),
+  );
+  caso(
+    "v17.2: «chao», «hasta luego» o «bye» son despedidas (sin su nombre pueden ser para otra persona); «deja de escuchar» no",
+    ["chao", "hasta luego", "bye", "goodbye"].every((f) => m.controlDeVoz(f)?.tipo === "apagar" && m.controlDeVoz(f)?.despedida === true) && m.controlDeVoz("deja de escuchar")?.tipo === "apagar" && !m.controlDeVoz("deja de escuchar")?.despedida && !m.controlDeVoz("stop listening")?.despedida,
+  );
+
+  // Con la simulación (terreno plano): un área objetivo de 30 × 6 km con meta del 95 %
+  const antenas = red();
+  const ctx = { cargarTesela: async () => null, hgt: { lista: [], tamano: 0 } };
+  const poli = m.poligonoRectangulo(4.2, -73.37, 30000, 6000);
+  const objetivo = { nombre: "Franja de prueba", puntos: poli, metaPct: 95, margenDb: 30 };
+  const r = await m.simular(1, antenas, { ...PARAMETROS, radioKm: 12, resolucion: "rapida", alturaRxM: 1.5 }, { tipo: "plano" }, ctx, objetivo);
+  const apiO = crearApi(antenas);
+  apiO.objetivo = objetivo;
+  apiO.resultadoFalso = r;
+  const res = m.ejecutarOrden({ tipo: "optimo" }, apiO);
+  const fin = await res.luego;
+  const quitar = fin.acciones?.find((x) => x.orden?.tipo === "eliminar-varios");
+  caso(
+    "v17.2: con la meta cumplida dice que no necesita más antenas y que le sobra el repetidor pegado al gateway (con lo que ahorra)",
+    /^Óptimo no es la red con más antenas/.test(fin.texto) && /del área objetivo «Franja de prueba» \(meta: 95 %\)/.test(fin.texto) && /No necesita más antenas: ya cumple la meta\. Es más, le sobra «Pegado»/.test(fin.texto) && /se ahorra unos \$/.test(fin.texto) && quitar?.orden.ids.join() === "Pegado" && fin.acciones.some((x) => x.orden?.tipo === "dejar-nodo"),
+    fin.texto,
+  );
+  const pregunta = m.cuestionarNodo(r, "Pegado", apiO);
+  caso(
+    "v17.2: al poner un repetidor que casi no suma, Melki lo cuestiona con números y ofrece quitarlo o dejarlo",
+    /^¿Seguro que necesita «Pegado»\? Revisé la red con él: por sí solo suma apenas el 0 % del área objetivo con señal media o mejor, y nadie depende de él para llegar al gateway\. La red ya cumple su meta sin él/.test(pregunta?.texto ?? "") && /Instalarlo cuesta unos \$/.test(pregunta.texto) && /Óptimo no es poner más antenas sino el punto entre la estabilidad de la señal y el costo\. ¿Lo quito\?$/.test(pregunta.texto) && pregunta.acciones[0].orden.tipo === "eliminar" && pregunta.acciones[0].orden.id === "Pegado" && pregunta.acciones[1].orden.tipo === "dejar-nodo",
+    pregunta?.texto,
+  );
+  caso("v17.2: el repetidor que sí aporta (el de un extremo) no se cuestiona", m.cuestionarNodo(r, "Este", apiO) === null && m.cuestionarNodo(r, "g", apiO) === null);
+  const deja = m.ejecutarOrden({ tipo: "dejar-nodo", nombres: ["Pegado"], ultima: true }, apiO);
+  caso("v17.2: «Dejarlo» lo deja y, la segunda vez, dice que no vuelve a preguntar", /^Listo, «Pegado» se queda/.test(deja.texto) && /No le vuelvo a preguntar/.test(deja.texto), deja.texto);
+  // Sin área objetivo: sobra el que repite lo que otros ya cubren; sugiere marcar la zona
+  const apiS = crearApi(antenas);
+  apiS.resultadoFalso = await m.simular(2, antenas, { ...PARAMETROS, radioKm: 12, resolucion: "rapida", alturaRxM: 1.5 }, { tipo: "plano" }, ctx);
+  const sinArea = await m.ejecutarOrden({ tipo: "optimo" }, apiS).luego;
+  caso("v17.2: sin área objetivo se mide contra la factibilidad (60 % del área de estudio), señala el que repite cobertura y ofrece el lápiz", /Sin un área objetivo, la red se mide contra la factibilidad: señal media o mejor en el 60 % del área de estudio/.test(sinArea.texto) && /«Pegado» repite lo que ya cubren otros nodos/.test(sinArea.texto) && sinArea.acciones.some((x) => x.orden?.herramienta === "lapiz"), sinArea.texto);
+  // Meta sin cumplir: no se trata de poner antenas a ojo, sino del ajuste
+  const apiF2 = crearApi(antenas.filter((x) => x.id === "g"));
+  apiF2.objetivo = objetivo;
+  apiF2.resultadoFalso = await m.simular(3, antenas.filter((x) => x.id === "g"), { ...PARAMETROS, radioKm: 12, resolucion: "rapida", alturaRxM: 1.5 }, { tipo: "plano" }, ctx, objetivo);
+  const falta = await m.ejecutarOrden({ tipo: "optimo" }, apiF2).luego;
+  caso("v17.2: si no llega a la meta lo dice y propone el ajuste (no antenas a ojo)", /Sí le falta: la meta es el 95 %/.test(falta.texto) && /no es poner antenas a ojo/.test(falta.texto) && falta.acciones.some((x) => x.orden?.tipo === "ajustar"), falta.texto);
+  const vacia = m.ejecutarOrden({ tipo: "optimo" }, crearApi([]));
+  caso("v17.2: sin red, explica que no hay qué revisar y ofrece el lápiz", /Todavía no hay red que revisar/.test(vacia.texto) && !vacia.luego, vacia.texto);
 }
 
 console.log(fallos ? `\n✗ ${fallos} prueba(s) fallaron` : "\n✓ Melki verificado");

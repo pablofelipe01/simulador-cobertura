@@ -311,6 +311,76 @@ await flujo("regla", async (page, foto) => {
   await foto("area");
 });
 
+// v17.2 · Lápiz de malla: se dibuja a mano alzada (como en Paint) y Melki arma ahí la malla óptima, el equilibrio entre
+// la señal y el costo. Una figura cerrada es una zona; una línea, una franja del ancho elegido. Mientras se dibuja el
+// mapa no se mueve ni se ponen nodos; un toque no es un dibujo; Esc y la X sueltan el lápiz.
+await flujo("lapiz-malla", async (page, foto) => {
+  await esperarSimulacion(page);
+  await page.waitForFunction(() => Boolean(window.__simuladorPruebas?.mapa), null, { timeout: 30000 });
+  const nodos = await nodosEnLista(page);
+  const lapiz = page.getByRole("radio", { name: /Lápiz/ });
+  const mover = page.getByRole("radio", { name: /Mover/ });
+  await lapiz.click();
+  const ayuda = page.locator("[data-tour=lapiz-ayuda]");
+  await ayuda.waitFor();
+  afirmar(/Cierre la figura para una zona o trace una línea para una franja de/.test(await ayuda.innerText()), `La ayuda del lápiz debería explicar la zona y la franja: ${await ayuda.innerText()}`);
+  afirmar((await ayuda.getByRole("button", { name: "1 km" }).getAttribute("aria-pressed")) === "true", "La franja empieza en 1 km");
+  await page.locator("[data-lapiz]").waitFor({ state: "attached" });
+  await foto("armado");
+  // Esc y la X sueltan el lápiz
+  await page.keyboard.press("Escape");
+  await page.locator("[data-lapiz]").waitFor({ state: "detached", timeout: 5000 });
+  afirmar((await mover.getAttribute("aria-checked")) === "true", "Esc vuelve a «Mover»");
+  await lapiz.click();
+  await ayuda.getByRole("button", { name: "Soltar el lápiz" }).click();
+  await page.locator("[data-lapiz]").waitFor({ state: "detached", timeout: 5000 });
+  await lapiz.click();
+  // Un toque no es un dibujo: lo explica y no pone nada
+  const c = await mapaCentro(page);
+  await page.mouse.click(c.x + 150, c.y + 90);
+  await page.getByText(/Mantenga presionado y arrastre para dibujar/).waitFor({ timeout: 5000 });
+  afirmar((await nodosEnLista(page)) === nodos, "Con el lápiz, un clic no pone nodos");
+  // Una figura cerrada: el mapa no se mueve mientras se dibuja
+  const centroAntes = await page.evaluate(() => window.__simuladorPruebas.mapa.getCenter().toArray());
+  const R = 105;
+  await page.mouse.move(c.x + R, c.y);
+  await page.mouse.down();
+  for (let k = 1; k <= 44; k++) {
+    const t = (2 * Math.PI * k) / 42;
+    await page.mouse.move(c.x + R * Math.cos(t), c.y + 0.8 * R * Math.sin(t));
+  }
+  const centroDibujando = await page.evaluate(() => window.__simuladorPruebas.mapa.getCenter().toArray());
+  afirmar(Math.abs(centroDibujando[0] - centroAntes[0]) < 1e-9 && Math.abs(centroDibujando[1] - centroAntes[1]) < 1e-9, `El mapa no debería moverse mientras se dibuja (${centroAntes} → ${centroDibujando})`);
+  await foto("dibujando");
+  await page.mouse.up();
+  // Melki arma la malla ahí (señal media o mejor en el 95 %, con su costo) y el lápiz se suelta
+  await page.locator("[data-lapiz]").waitFor({ state: "detached", timeout: 5000 });
+  afirmar((await mover.getAttribute("aria-checked")) === "true", "Al terminar vuelve a «Mover»");
+  const chat = page.getByRole("region", { name: "Conversación con Melki" });
+  await chat.getByText(/^Lápiz de malla: arme la malla óptima en la zona que dibujé \(\d/).waitFor({ timeout: 10000 });
+  await chat.getByText(/^(Listo: la malla cubre|Llegué al)/).first().waitFor({ timeout: 300000 });
+  const final = await chat.locator("[data-mensaje]").filter({ hasText: /Listo: la malla cubre|Llegué al/ }).last().innerText();
+  afirmar(/señal media o mejor/.test(final) && /95 %/.test(final), `El diseño de la zona: ${final.slice(0, 240)}`);
+  await page.waitForFunction(() => /Área objetivo · Zona dibujada/.test(JSON.stringify(localStorage)), null, { timeout: 15000 });
+  // La zona dibujada queda como área objetivo (cerca del gateway puede bastar con él: óptimo no es poner más antenas)
+  await page.locator("aside[aria-label=Resultados]").getByText(/«Área objetivo · Zona dibujada»/).first().waitFor({ timeout: 60000 });
+  await foto("zona");
+  // Una línea: la franja del ancho elegido (2 km) a lo largo del trazo
+  await page.getByRole("button", { name: "Cerrar conversación" }).click();
+  await lapiz.click();
+  await ayuda.getByRole("button", { name: "2 km" }).click();
+  afirmar((await ayuda.getByRole("button", { name: "2 km" }).getAttribute("aria-pressed")) === "true", "Debería quedar la franja de 2 km");
+  const c2 = await mapaCentro(page);
+  await page.mouse.move(c2.x - 190, c2.y + 110);
+  await page.mouse.down();
+  for (let k = 1; k <= 30; k++) await page.mouse.move(c2.x - 190 + (380 * k) / 30, c2.y + 110 - 70 * Math.sin((Math.PI * k) / 30));
+  await page.mouse.up();
+  await chat.getByText(/^Lápiz de malla: arme la malla óptima a lo largo del trazo que dibujé \(.+, franja de 2 km de ancho\)\.$/).waitFor({ timeout: 10000 });
+  await page.waitForFunction(() => /Área objetivo · Franja dibujada \(2 km de ancho\)/.test(JSON.stringify(localStorage)), null, { timeout: 15000 });
+  await chat.getByText(/^(Listo: la malla cubre|Llegué al)/).nth(1).waitFor({ timeout: 300000 });
+  await foto("franja");
+});
+
 await flujo("buscador", async (page, foto) => {
   await esperarSimulacion(page);
   const q = page.getByPlaceholder("Coordenadas, municipio o nodo…");
@@ -1418,14 +1488,16 @@ await flujo(
       await page.waitForTimeout(900);
     };
 
-    // Activar: saluda como un mayordomo, deja el mapa libre (oculta los dos paneles) y espera su nombre
+    // Activar: saluda como un mayordomo, deja el mapa libre (oculta los dos paneles) y queda atento (v17.2: con la barra
+    // abierta no hace falta su nombre)
     const resultados = page.locator("aside[aria-label=Resultados]");
     const sinProgreso = () => page.waitForFunction(() => !document.querySelector("[role=progressbar]"), null, { timeout: 90000 });
     await page.getByRole("button", { name: "Activar el Asistente Melki" }).first().click();
     await hud.waitFor();
-    await esperarEstado(/^esperando$/);
+    await esperarEstado(/^atento$/);
     await callado();
     afirmar(/(?:Hola|Buenos días|Buenas tardes|Buenas noches), señor\. Bienvenido\./.test(await dicho()) && /presto a seguir sus órdenes/.test(await dicho()), `No saludó en voz alta: ${await dicho()}`);
+    afirmar(/Mientras esta barra esté abierta, dígame lo que necesite sin llamarme/.test(await dicho()), `El saludo debería decir que no hace falta llamarlo: ${await dicho()}`);
     afirmar((await page.getByRole("button", { name: "Apagar el Asistente Melki" }).first().getAttribute("aria-pressed")) === "true", "El botón de la barra debería quedar encendido");
     await panel.waitFor({ state: "hidden", timeout: 5000 });
     await resultados.waitFor({ state: "hidden", timeout: 5000 });
@@ -1434,11 +1506,25 @@ await flujo(
       afirmar(await hud.getByRole("button", { name: s }).isVisible(), `Falta la sugerencia «${s}» en la barra`);
     await foto("activo");
 
-    // Sin su nombre no hace nada
+    // v17.2: con la barra abierta toma la orden sin su nombre; lo que no es una orden lo deja pasar en silencio
     const nodos = await nodosEnLista(page);
     await decir("inscribe un nodo antena en 4.3, -73.4");
-    await page.waitForTimeout(1500);
-    afirmar((await nodosEnLista(page)) === nodos && (await estadoHud()) === "esperando", "Sin «Melki» no debería hacer nada");
+    await page.waitForFunction((n) => document.querySelectorAll("[data-tour=lista-antenas] > li").length === n + 1, nodos, { timeout: 20000 });
+    await page.waitForFunction(() => /[Ii]nscribí el nodo antena/.test(window.__voz.dicho.join(" ")), null, { timeout: 20000 });
+    await sinProgreso();
+    await esperarEstado(/^atento$/);
+    await callado();
+    const antesCharla = await page.evaluate(() => window.__voz.dicho.length);
+    await decir("uy qué calor tan berraco hace hoy");
+    await hud.getByText(/No lo tomé como orden/).waitFor({ timeout: 10000 });
+    await page.waitForTimeout(1200);
+    afirmar((await page.evaluate(() => window.__voz.dicho.length)) === antesCharla && (await nodosEnLista(page)) === nodos + 1 && (await estadoHud()) === "atento", "Lo que no es una orden debería pasar en silencio");
+    // …ni el saludo a otra persona (sin su nombre, la charla tampoco se contesta)
+    await decir("buenos días, don Pedro");
+    await hud.getByText(/No lo tomé como orden: «buenos días/i).waitFor({ timeout: 10000 });
+    await page.waitForTimeout(1200);
+    afirmar((await page.evaluate(() => window.__voz.dicho.length)) === antesCharla && (await estadoHud()) === "atento", "El saludo a otra persona debería pasar en silencio");
+    await foto("sin-nombre");
 
     // Solo su nombre: contesta como un mayordomo y queda atento (también «Hello Melky», como lo escribe el reconocimiento)
     await decir("Hola Melki");
@@ -1451,7 +1537,7 @@ await flujo(
 
     // Con su nombre y los números en palabras: lo hace, lo dice y, con el panel oculto, ofrece mostrar las herramientas
     await decir("Hola Melki, inscribe un nodo antena en cuatro punto dos cinco, menos setenta y tres punto tres cero");
-    await page.waitForFunction((n) => document.querySelectorAll("[data-tour=lista-antenas] > li").length === n + 1, nodos, { timeout: 20000 });
+    await page.waitForFunction((n) => document.querySelectorAll("[data-tour=lista-antenas] > li").length === n + 2, nodos, { timeout: 20000 });
     await page.waitForFunction(() => /[Ii]nscribí el nodo antena/.test(window.__voz.dicho.join(" ")), null, { timeout: 20000 });
     await page.waitForFunction(() => /le muestro el panel de herramientas, señor\?/.test(window.__voz.dicho.join(" ")), null, { timeout: 20000 });
     await foto("orden-por-voz");
@@ -1469,7 +1555,7 @@ await flujo(
     await esperarEstado(/^(atento|esperando)$/);
     await callado();
     await page.waitForFunction(() => Boolean(window.__voz.activo), null, { timeout: 3000 });
-    afirmar((await nodosEnLista(page)) === nodos + 1, "No debería tomar como pedido lo que se oyó mientras hablaba");
+    afirmar((await nodosEnLista(page)) === nodos + 2, "No debería tomar como pedido lo que se oyó mientras hablaba");
     afirmar(/Le dejé el detalle escrito/.test(await dicho()), "La respuesta larga debería ir resumida en voz");
 
     // Seguir la conversación sin repetir el nombre: «más detalle» y «sí, hazlo» (el botón «Ver los tours guiados»)
@@ -1543,7 +1629,7 @@ await flujo(
     await page.getByRole("button", { name: "Activar el Asistente Melki" }).first().click();
     const hud = page.locator("[data-tour=hud-voz]");
     await hud.waitFor();
-    await page.waitForFunction(() => document.querySelector("[data-tour=hud-voz]")?.getAttribute("data-estado") === "esperando", null, { timeout: 20000 });
+    await page.waitForFunction(() => document.querySelector("[data-tour=hud-voz]")?.getAttribute("data-estado") === "atento", null, { timeout: 20000 });
     const ancho = await page.evaluate(() => document.documentElement.scrollWidth);
     afirmar(ancho <= 390, `La página no debe desbordarse a lo ancho (${ancho})`);
     const b = await hud.boundingBox();
@@ -1555,6 +1641,35 @@ await flujo(
     await hud.waitFor({ state: "detached" });
   },
   { tamano: { width: 390, height: 844 }, hablar: true, preparar: (page) => page.addInitScript(manosLibresDeMentira) },
+);
+
+// v17.2 · El micrófono junto al robot de Melki: un toque y escucha (con la barra abierta, las órdenes van sin su nombre y
+// enseguida); el mismo botón lo apaga
+await flujo(
+  "microfono-melki",
+  async (page, foto) => {
+    await esperarSimulacion(page);
+    const mic = page.locator("[data-tour=melki-microfono]");
+    await mic.waitFor();
+    afirmar((await mic.getAttribute("aria-pressed")) === "false" && (await mic.getAttribute("aria-label")) === "Hablarle a Melki", "El micrófono empieza apagado");
+    await mic.click();
+    const hud = page.locator("[data-tour=hud-voz]");
+    await hud.waitFor({ timeout: 10000 });
+    await page.waitForFunction(() => document.querySelector("[data-tour=hud-voz]")?.getAttribute("data-estado") === "atento", null, { timeout: 20000 });
+    afirmar((await mic.getAttribute("aria-pressed")) === "true" && (await mic.locator(".microfono-pulso").count()) === 1, "Encendido, el micrófono queda marcado y late");
+    // Una orden sin su nombre, enseguida
+    const nodos = await nodosEnLista(page);
+    const t0 = Date.now();
+    afirmar(await page.evaluate(() => window.__voz.decir("inscribe un nodo antena en 4.3, -73.4")), "El micrófono debería estar escuchando");
+    await page.waitForFunction((n) => document.querySelectorAll("[data-tour=lista-antenas] > li").length === n + 1, nodos, { timeout: 15000 });
+    const ms = Date.now() - t0;
+    afirmar(ms < 6000, `La orden debería tomarse enseguida (${ms} ms)`);
+    await foto("encendido");
+    await mic.click();
+    await hud.waitFor({ state: "detached", timeout: 10000 });
+    afirmar((await mic.getAttribute("aria-pressed")) === "false", "El mismo botón lo apaga");
+  },
+  { preparar: (page) => page.addInitScript(manosLibresDeMentira) },
 );
 
 // Escucha en reposo, como Siri: con el micrófono ya permitido, Melki oye su nombre sin tocar el botón; la barra se mueve
@@ -1963,7 +2078,7 @@ await flujo(
   async (page, foto) => {
     const hud = page.locator("[data-tour=hud-voz]");
     await hud.waitFor({ timeout: 30000 });
-    await page.waitForFunction(() => document.querySelector("[data-tour=hud-voz]")?.getAttribute("data-estado") === "esperando", null, { timeout: 20000 });
+    await page.waitForFunction(() => document.querySelector("[data-tour=hud-voz]")?.getAttribute("data-estado") === "atento", null, { timeout: 20000 });
     afirmar((await page.getByRole("button", { name: "Apagar el Asistente Melki" }).first().getAttribute("aria-pressed")) === "true", "Debería activarse solo al abrir");
     const oirme = hud.getByRole("button", { name: "Toque aquí para oír mi voz" });
     await oirme.waitFor({ timeout: 10000 });
@@ -3110,6 +3225,41 @@ await flujo(
   { paneles: false, tamano: { width: 390, height: 844 } },
 );
 
+// v17.2 · Criterio de óptimo: óptimo no es poner más antenas sino el punto entre la estabilidad de la señal y el costo.
+// Un repetidor pegado al gateway casi no suma: Melki lo cuestiona con números y ofrece quitarlo; «¿sobran antenas?»
+// revisa la red nodo por nodo.
+await flujo("optimo-melki", async (page, foto) => {
+  await esperarSimulacion(page);
+  await page.waitForFunction(() => Boolean(window.__simuladorPruebas?.mapa), null, { timeout: 30000 });
+  const nodos = await nodosEnLista(page);
+  await page.getByRole("radio", { name: /Agregar/ }).click();
+  const p = await page.evaluate(() => {
+    const m = window.__simuladorPruebas.mapa;
+    const q = m.project([-73.37, 4.2]);
+    const b = m.getContainer().getBoundingClientRect();
+    return { x: b.left + q.x, y: b.top + q.y };
+  });
+  await page.mouse.click(p.x + 24, p.y + 20);
+  await page.waitForFunction((n) => document.querySelectorAll("[data-tour=lista-antenas] > li").length === n + 1, nodos, { timeout: 10000 });
+  await page.getByRole("button", { name: /^Abrir a Melki/ }).click();
+  const chat = page.getByRole("region", { name: "Conversación con Melki" });
+  const pregunta = chat.locator("[data-mensaje]").filter({ hasText: /¿Seguro que necesita «/ });
+  await pregunta.first().waitFor({ timeout: 120000 });
+  const texto = await pregunta.first().innerText();
+  afirmar(/ya lo cubren otros nodos con señal media o mejor, y nadie depende de él para llegar al gateway\. Instalarlo cuesta unos \$/.test(texto) && /Óptimo no es poner más antenas sino el punto entre la estabilidad de la señal y el costo\. ¿Lo quito\?/.test(texto), `La pregunta: ${texto.slice(0, 400)}`);
+  await foto("cuestiona");
+  await chat.getByRole("button", { name: "Quitarlo" }).last().click();
+  await page.waitForFunction((n) => document.querySelectorAll("[data-tour=lista-antenas] > li").length === n, nodos, { timeout: 10000 });
+  await chat.getByText(/^Eliminé «/).last().waitFor({ timeout: 10000 });
+  // «¿Sobran antenas?»: el criterio de óptimo sobre la red simulada
+  await chat.getByRole("textbox").fill("¿sobran antenas?");
+  await chat.getByRole("textbox").press("Enter");
+  await chat.getByText(/^Óptimo no es la red con más antenas/).waitFor({ timeout: 60000 });
+  const revision = await chat.locator("[data-mensaje]").filter({ hasText: /^Óptimo no es la red con más antenas/ }).last().innerText();
+  afirmar(/Sin un área objetivo, la red se mide contra la factibilidad/.test(revision) && /lápiz de malla/.test(revision), `La revisión: ${revision.slice(0, 400)}`);
+  await foto("revisa");
+});
+
 await flujo("nombres-mapa", async (page, foto) => {
   await esperarSimulacion(page);
   await page.waitForFunction(() => Boolean(window.__simuladorPruebas?.mapa), null, { timeout: 30000 });
@@ -3174,6 +3324,11 @@ await flujo("nombres-mapa", async (page, foto) => {
   afirmar(n.filter((x) => x.texto === "COLOMBIA").length === 1, "Colombia debería salir una sola vez");
   const tamPais4 = n.find((x) => x.texto === "COLOMBIA").tam;
   await foto("lejos");
+  // v17.2: quieto (sin acercar ni alejar) ningún nombre queda medio transparente, tampoco en el zoom de entrada (5,5)
+  await ir(-74, 4.6, 5.5);
+  await page.waitForTimeout(350);
+  const opacidades = await page.evaluate(() => [...document.querySelectorAll(".etiqueta-ref")].map((e) => [e.textContent, getComputedStyle(e.firstElementChild).opacity]));
+  afirmar(opacidades.length > 0 && opacidades.every(([, o]) => o === "1"), `En reposo todos los nombres deberían verse enteros: ${opacidades.filter(([, o]) => o !== "1").map(([t, o]) => `${t} ${o}`).join(", ")}`);
   // Más cerca, departamentos y capitales; los nombres crecen con el zoom
   d = await ir(-73.4, 4.6, 6.4);
   n = revisar(d, "zoom 6,4");

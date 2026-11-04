@@ -214,7 +214,7 @@ const PASOS_PANTALLA: Paso[] = [
   { objetivo: "buscador", get titulo() { return tx("Buscar un lugar", "Find a place"); }, get texto() { return tx("Escriba un municipio, un departamento, el nombre de un nodo o unas coordenadas para ir directo al sitio.", "Type a municipality, a department, a node name or some coordinates to go straight to the spot."); } },
   { objetivo: "agregar", get titulo() { return tx("Agregar nodos", "Add nodes"); }, get texto() { return tx("Elija nodo antena (infraestructura que genera cobertura) o nodo de campo, y ubíquelo con un clic en el mapa o por coordenadas, en grados decimales o en grados, minutos y segundos.", "Choose antenna node (infrastructure that provides coverage) or field node, and place it with a click on the map or by coordinates, in decimal degrees or in degrees, minutes and seconds."); }, preparar: "antenas" },
   { objetivo: "lista-antenas", get titulo() { return tx("Sus nodos", "Your nodes"); }, get texto() { return tx("Haga clic en un nodo para editar su tipo, altura, equipo, rol y si es pasarela. También puede ponerle una antena direccional (Yagi, panel, sectorial o parabólica) y apuntarla, y abrir el informe de radioenlace hacia otro nodo. El ojo lo saca de la simulación sin borrarlo.", "Click a node to edit its type, height, equipment, role and whether it's the gateway. You can also give it a directional antenna (Yagi, panel, sector or dish) and aim it, and open the radio link report toward another node. The eye icon takes it out of the simulation without deleting it."); }, preparar: "antenas" },
-  { objetivo: "herramientas", get titulo() { return tx("Herramientas del mapa", "Map tools"); }, get texto() { return tx("Mover para navegar y arrastrar nodos, Agregar para ubicarlos, Medir señal para consultar cualquier punto y Regla para medir distancias, trayectos y áreas como en Google Earth.", "Pan to navigate and drag nodes, Add to place them, Measure signal to check any point and Ruler to measure distances, paths and areas as in Google Earth."); }, preparar: "mapa" },
+  { objetivo: "herramientas", get titulo() { return tx("Herramientas del mapa", "Map tools"); }, get texto() { return tx("Mover para navegar y arrastrar nodos, Agregar para ubicarlos, Medir señal para consultar cualquier punto, Regla para medir distancias, trayectos y áreas como en Google Earth, y Lápiz para dibujar a mano dónde va la malla: yo la armo ahí con el mejor equilibrio entre la señal y el costo.", "Pan to navigate and drag nodes, Add to place them, Measure signal to check any point, Ruler to measure distances, paths and areas as in Google Earth, and Pencil to draw by hand where the mesh goes: I build it there with the best balance between signal and cost."); }, preparar: "mapa" },
   { objetivo: "modos", get titulo() { return tx("Tres maneras de ver la cobertura", "Three ways to see the coverage"); }, get texto() { return tx("Señal muestra el nivel del mejor nodo antena; Mejor antena, cuál atiende cada zona; Respaldo, cuántos nodos antena llegan a cada punto.", "Signal shows the level from the best antenna node; Best antenna, which one serves each area; Backup, how many antenna nodes reach each point."); }, preparar: "mapa" },
   { objetivo: "capas", get titulo() { return tx("Capas", "Layers"); }, get texto() { return tx("Cambie el mapa base (OpenTopoMap muestra quebradas y ríos pequeños con su nombre), active límites, ríos, poblados y vías, el rango de alcance y los anillos de distancia. Al final, en «Escala de la señal», elija dBm, µV o dBµV/m y colores por clases, arcoíris o umbral, como en Radio Mobile.", "Change the base map (OpenTopoMap shows streams and small rivers with their names), turn on boundaries, rivers, towns and roads, the range and the distance rings. At the bottom, in “Signal scale”, choose dBm, µV or dBµV/m and colors by class, rainbow or threshold, as in Radio Mobile."); }, preparar: "mapa" },
   { objetivo: "tab-parametros", get titulo() { return tx("Parámetros", "Parameters"); }, get texto() { return tx("Aquí están el ajuste de radio MeshCore (SF11 de Trama por defecto), la frecuencia (las 4 de Trama), el límite de saltos, el receptor y el entorno (vegetación o edificios), el radio de estudio y la fuente del relieve.", "Here you have the MeshCore radio preset (Trama's SF11 by default), the frequency (Trama's 4), the hop limit, the receiver and the environment (vegetation or buildings), the study radius and the terrain source."); }, preparar: "parametros" },
@@ -1065,7 +1065,7 @@ export const TOURS: Tour[] = [
       return tx("Asistente Melki por voz", "Melki Assistant by voice");
     },
     get detalle() {
-      return tx("Hablarme sin tocar nada: «Hola Melki» y su pedido, conversar, el mapa libre con mis sugerencias y la mayor cobertura posible.", "Talk to me without touching anything: “Hey Melki” and your request, conversing, the clear map with my suggestions and the greatest possible coverage.");
+      return tx("Hablarme sin tocar nada: con mi barra abierta, su pedido sin llamarme; conversar, el mapa libre con mis sugerencias y la mayor cobertura posible.", "Talk to me without touching anything: with my bar open, your request without calling me; conversing, the clear map with my suggestions and the greatest possible coverage.");
     },
     minutos: 3,
     modo: "sembrar",
@@ -1076,41 +1076,41 @@ export const TOURS: Tour[] = [
           return tx("El Asistente Melki", "The Melki Assistant");
         },
         get texto() {
-          return tx("Puedo escucharle todo el tiempo, como un asistente de voz: usted me llama por mi nombre y me da la orden, yo la hago y le dejo la respuesta escrita, a su servicio (no hablo en voz alta, salvo que me diga «háblame»). Así puede trabajar con las manos libres y solo el mapa. Estamos en un escenario de práctica.", "I can listen to you all the time, like a voice assistant: you call me by my name and give me the order, I carry it out and leave you the answer in writing, at your service (I don't speak out loud unless you tell me “talk to me”). That way you can work hands-free, with just the map. We're in a practice scenario.");
+          return tx("Puedo escucharle todo el tiempo, como un asistente de voz: con mi barra abierta usted me da la orden directamente, sin llamarme, yo la hago enseguida y le dejo la respuesta escrita, a su servicio (no hablo en voz alta, salvo que me diga «háblame»). Así puede trabajar con las manos libres y solo el mapa. Estamos en un escenario de práctica.", "I can listen to you all the time, like a voice assistant: with my bar open you give me the order directly, without calling me, I carry it out right away and leave you the answer in writing, at your service (I don't speak out loud unless you tell me “talk to me”). That way you can work hands-free, with just the map. We're in a practice scenario.");
         },
       },
       {
-        objetivo: "manos-libres",
+        objetivo: "melki-microfono",
         get titulo() {
           return tx("Active el asistente", "Turn on the assistant");
         },
         get texto() {
-          return tx("Toque «Asistente Melki» en la barra de arriba, que le dejo a la vista (o escríbame «activa el asistente»). La primera vez el navegador le pide permiso para usar el micrófono: permítalo. Funciona mejor en Edge o Chrome.", "Tap “Melki Assistant” in the top bar, which I leave in view for you (or write to me “turn on the assistant”). The first time, the browser asks your permission to use the microphone: allow it. It works best in Edge or Chrome.");
+          return tx("Toque el micrófono junto a mi robot, abajo a la derecha (o escríbame «activa el asistente»). La primera vez el navegador le pide permiso para usar el micrófono: permítalo. Funciona mejor en Edge o Chrome.", "Tap the microphone next to my robot, at the bottom right (or write to me “turn on the assistant”). The first time, the browser asks your permission to use the microphone: allow it. It works best in Edge or Chrome.");
         },
         tarea: {
-          hecho: () => elemento('[data-tour="manos-libres"][aria-pressed="true"]') !== null,
-          hacer: () => elemento('[data-tour="manos-libres"][aria-pressed="false"]')?.click(),
+          hecho: () => elemento('[data-tour="melki-microfono"][aria-pressed="true"]') !== null,
+          hacer: () => elemento('[data-tour="melki-microfono"][aria-pressed="false"]')?.click(),
           get aviso() {
             return tx("¡Listo! Ya le escucho.", "Done! I'm listening.");
           },
         },
       },
       {
-        objetivo: ["hud-voz", "manos-libres"],
+        objetivo: ["hud-voz", "melki-microfono"],
         get titulo() {
-          return tx("Llámeme por mi nombre", "Call me by my name");
+          return tx("Dígame su pedido", "Tell me your request");
         },
         get texto() {
-          return tx("Diga «Hola Melki» y su pedido, de corrido: «Hola Melki, ¿cómo está la red?» o «Oye Melki, conecta a los que faltan». También entiendo «Hey Melki» y «Hello Melki», y si solo dice «Hola Melki» le contesto «Hola, mi señor. Le escucho». Sin mi nombre no hago nada, por si alguien habla cerca. En esta barra ve lo que le entiendo y lo que le contesto.", "Say “Hey Melki” and your request, in one go: “Hey Melki, how is the network doing?” or “Hello Melki, connect the missing ones”. I also understand “Hola Melki” and “Oye Melki”, and if you only say “Hey Melki” I answer “Hello, sir. I'm listening”. Without my name I do nothing, in case someone is talking nearby. In this bar you see what I understand and what I answer.");
+          return tx("Con mi barra abierta, dígame su pedido directamente, de corrido: «¿cómo está la red?» o «conecta a los que faltan»; lo hago enseguida. Lo que no sea una orden ni una pregunta del simulador lo dejo pasar, por si alguien habla cerca. Con la barra cerrada, en reposo, diga «Hola Melki» y su pedido (también entiendo «Hey Melki» y «Hello Melki»). En esta barra ve lo que le entiendo y lo que le contesto.", "With my bar open, tell me your request directly, in one go: “how is the network doing?” or “connect the missing ones”; I do it right away. Anything that isn't an order or a question about the simulator I let pass, in case someone is talking nearby. With the bar closed, on standby, say “Hey Melki” and your request (I also understand “Hello Melki” and “Hola Melki”). In this bar you see what I understand and what I answer.");
         },
       },
       {
-        objetivo: ["hud-voz", "manos-libres"],
+        objetivo: ["hud-voz", "melki-microfono"],
         get titulo() {
-          return tx("Converse sin repetir mi nombre", "Converse without repeating my name");
+          return tx("Converse conmigo", "Converse with me");
         },
         get texto() {
-          return tx("Después de responder me quedo atento unos segundos: siga hablando sin decir «Melki». Para usar mis botones diga «sí, hazlo» o «la segunda»; «repite» y «más detalle» para ver todo; «para» quita lo que estoy mostrando y «deshaz» revierte lo último. Los números y las coordenadas se pueden decir en palabras.", "After answering I stay alert for a few seconds: keep talking without saying “Melki”. To use my buttons say “yes, do it” or “the second one”; “repeat” and “more detail” to see everything; “stop” removes what I'm showing and “undo” reverts the last thing. Numbers and coordinates can be said in words.");
+          return tx("Siga hablando cuando quiera, sin decir «Melki». Para usar mis botones diga «sí, hazlo» o «la segunda»; «repite» y «más detalle» para ver todo; «para» quita lo que estoy mostrando y «deshaz» revierte lo último. Los números y las coordenadas se pueden decir en palabras.", "Keep talking whenever you like, without saying “Melki”. To use my buttons say “yes, do it” or “the second one”; “repeat” and “more detail” to see everything; “stop” removes what I'm showing and “undo” reverts the last thing. Numbers and coordinates can be said in words.");
         },
       },
       {
@@ -1123,7 +1123,7 @@ export const TOURS: Tour[] = [
         },
       },
       {
-        objetivo: ["hud-voz", "manos-libres"],
+        objetivo: ["hud-voz", "melki-microfono"],
         get titulo() {
           return tx("La mayor cobertura posible", "The greatest possible coverage");
         },
@@ -1132,17 +1132,17 @@ export const TOURS: Tour[] = [
         },
       },
       {
-        objetivo: ["hud-voz", "manos-libres"],
+        objetivo: ["hud-voz", "melki-microfono"],
         get titulo() {
           return tx("Para terminar", "To finish");
         },
         get texto() {
-          return tx("Diga «Melki, deja de escuchar» o toque la X de esta barra: quedo en reposo, atento solo a mi nombre, y con «Hey Melki» vuelvo sin tocar nada; «apaga el micrófono» me apaga del todo. La barra se arrastra a donde no estorbe y se achica sola mientras espero. En Ajustes de voz elige cómo le hablo, la voz, si le escucho siempre en reposo y si me activo solo al abrir el simulador. Consejos: hable de corrido justo después de mi nombre, con el micrófono cerca; con parlantes a todo volumen, baje un poco el volumen o use audífonos para que no me oiga a mí mismo.", "Say “Melki, stop listening” or tap the X on this bar: I go on standby, alert only to my name, and with “Hey Melki” I come back without you touching anything; “turn off the microphone” switches me off completely. The bar can be dragged to wherever it's not in the way and it shrinks by itself while I wait. In Voice settings you choose how I address you, the voice, whether I always listen on standby and whether I turn on by myself when the simulator opens. Tips: speak in one go right after my name, with the microphone close; with speakers at full volume, turn the volume down a little or use headphones so I don't hear myself.");
+          return tx("Diga «Melki, deja de escuchar» o toque la X de esta barra: quedo en reposo, atento solo a mi nombre, y con «Hey Melki» vuelvo sin tocar nada; «apaga el micrófono» me apaga del todo. La barra se arrastra a donde no estorbe y se achica sola mientras espero. En Ajustes de voz elige cómo le hablo, la voz, si le escucho siempre en reposo y si me activo solo al abrir el simulador. Consejos: hable de corrido, con el micrófono cerca; con parlantes a todo volumen, baje un poco el volumen o use audífonos para que no me oiga a mí mismo.", "Say “Melki, stop listening” or tap the X on this bar: I go on standby, alert only to my name, and with “Hey Melki” I come back without you touching anything; “turn off the microphone” switches me off completely. The bar can be dragged to wherever it's not in the way and it shrinks by itself while I wait. In Voice settings you choose how I address you, the voice, whether I always listen on standby and whether I turn on by myself when the simulator opens. Tips: speak in one go, with the microphone close; with speakers at full volume, turn the volume down a little or use headphones so I don't hear myself.");
         },
       },
     ],
     get final() {
-      return tx("Ya sabe trabajar conmigo por voz: llamarme por mi nombre, conversar sin repetirlo, usar mis botones con «sí, hazlo», trabajar con el mapa libre y pedirme la mayor cobertura posible. A su servicio.", "Now you know how to work with me by voice: call me by my name, converse without repeating it, use my buttons with “yes, do it”, work with a clear map and ask me for the greatest possible coverage. At your service.");
+      return tx("Ya sabe trabajar conmigo por voz: darme las órdenes con mi barra abierta sin llamarme, conversar, usar mis botones con «sí, hazlo», trabajar con el mapa libre y pedirme la mayor cobertura posible. A su servicio.", "Now you know how to work with me by voice: give me orders with my bar open without calling me, converse, use my buttons with “yes, do it”, work with a clear map and ask me for the greatest possible coverage. At your service.");
     },
   },
 ];
