@@ -5,6 +5,7 @@
 
 // Estado de la aplicación: escenario (nodos + parámetros + mediciones), vista del mapa y preferencias.
 import { tx } from "@/lib/idioma";
+import { nombreOcupado } from "@/lib/nombres-nodo";
 import { EQUIPOS, LIMITE_SALTOS_DEFECTO, LIMITE_SALTOS_MAXIMO, PRESETS, presetPorId, type EquipoId } from "@/lib/radio/constantes";
 import { PROTOCOLOS } from "@/lib/radio/protocolos";
 import { ENTORNOS } from "@/lib/radio/entorno";
@@ -146,7 +147,9 @@ export function nuevaAntena(lat: number, lon: number, existentes: Antena[], dato
   const equipo = tipo === "antena" ? EQUIPOS[0] : EQUIPOS[2];
   const base = tipo === "antena" ? tx("Antena", "Antenna") : tx("Nodo", "Node");
   let n = existentes.filter((a) => (a.tipo ?? "antena") === tipo).length + 1;
-  while (existentes.some((a) => a.nombre === `${base} ${n}`)) n++;
+  // v17.3 · Tampoco el número del otro idioma («Antenna 2» no, si ya hay una «Antena 2»)
+  const usados = new Set(existentes.map((a) => a.nombre));
+  while (nombreOcupado(`${base} ${n}`, usados)) n++;
   const rol: Rol = tipo === "antena" ? "REPETIDOR" : "COMPANION";
   return {
     id: nuevoId(),

@@ -28,6 +28,7 @@ import { PROTOCOLOS } from "@/lib/radio/protocolos";
 import { metrosPorGrado } from "@/lib/radio/geo";
 import { MotorCobertura } from "@/lib/radio/cliente";
 import { estadoRed, type EstadoRed } from "@/lib/radio/estado-red";
+import { nombreOcupado } from "@/lib/nombres-nodo";
 import { simularMensaje, type ViajeMensaje } from "@/lib/radio/mensaje";
 import type { Diseno, PedidoDiseno } from "@/lib/radio/diseno";
 import type { DestinoSiembra, Siembra } from "@/lib/radio/siembra";
@@ -228,7 +229,8 @@ function personasEnLote(puntos: { lat: number; lon: number }[], existentes: Ante
   const base = tx("Persona", "Person");
   let k = 1;
   return puntos.map((q) => {
-    while (usados.has(`${base} ${k}`)) k++;
+    // v17.3 · Tampoco el número del otro idioma («Person 3» no, si ya hay una «Persona 3»)
+    while (nombreOcupado(`${base} ${k}`, usados)) k++;
     const nombre = `${base} ${k}`;
     usados.add(nombre);
     return { ...nuevaPieza("persona", q.lat, q.lon, []), nombre, poblada: true, ...(zona ? { zona } : {}) };

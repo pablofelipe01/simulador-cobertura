@@ -13,6 +13,7 @@ import { idioma, tx } from "@/lib/idioma";
 
 import { CODIGO_TRABAJADOR } from "./dictado-trabajador";
 import { numerosEnPalabras, numerosEnPalabrasEn } from "./numeros";
+import { corregirIngles } from "./ortografia-en";
 
 export type ModoDictado = "navegador" | "privado";
 export type EstadoDictado = "preparando" | "escuchando" | "transcribiendo" | "inactivo";
@@ -136,19 +137,11 @@ export function corregirPalabras(texto: string): string {
     .replace(/\b(ub[ií]came|ll[eé]vame|mu[eé]strame)(en|a|al)\b/gi, "$1 $2");
 }
 
-/** Lo mismo en inglés: «gate way» → «gateway», «mesh core» → «MeshCore», «star link» → «Starlink»… */
-function corregirPalabrasIngles(texto: string): string {
-  return texto
-    .replace(/\b(gate\s+way|gait\s*way|gateaway|get\s*way)\b/gi, "gateway")
-    .replace(/\b(mesh|mash|mush)\s*(core|chore|cor)\b/gi, "MeshCore")
-    .replace(/\bmesh\s*tastic\b/gi, "Meshtastic")
-    .replace(/\b(star\s+link|starling)\b/gi, "Starlink")
-    .replace(/\b(whats\s+app|what's\s+app)\b/gi, "WhatsApp")
-    .replace(/\blow\s+ra\b|\blaura\b(?=\s+(network|mesh|radio|signal))/gi, "LoRa")
-    .replace(/\b(?:s\s+f|ess\s+eff)\s*(\d{1,2})\b/gi, "SF$1")
-    .replace(/\b(hectors|hectars|hecktares)\b/gi, "hectares")
-    .replace(/\b(repeat her|repeat er|re peter|repeter)\b/gi, "repeater");
-}
+/**
+ * Lo mismo en inglés: «gate way» → «gateway», «mesh core» → «MeshCore», «repeat her» → «repeater», «s f 10» → «SF10» y
+ * los errores de tecleo de las palabras del simulador (v17.3: ortografia-en.ts, lo mismo que usa el traductor).
+ */
+const corregirPalabrasIngles = (texto: string): string => corregirIngles(texto);
 
 /** Ajusta lo dictado en inglés para las órdenes: «minus 73» → «-73», «4 degrees» → «4°». */
 function normalizarDictadoIngles(texto: string): string {

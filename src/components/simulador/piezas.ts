@@ -7,6 +7,7 @@
 // repetidores (nodos en torres o lomas) y las personas (radio de mano con el celular). Por dentro siguen siendo
 // los nodos del simulador: el gateway es un nodo antena pasarela, el repetidor un nodo antena y la persona un nodo.
 import { tx } from "@/lib/idioma";
+import { nombreOcupado } from "@/lib/nombres-nodo";
 import { EQUIPOS, type EquipoId } from "@/lib/radio/constantes";
 import { piezaDe, type Pieza } from "@/lib/radio/estado-red";
 import { desplazar } from "@/lib/radio/geo";
@@ -71,7 +72,8 @@ export function nombreLibre(base: string, existentes: Antena[], primeroSinNumero
   const usados = new Set(existentes.map((a) => a.nombre));
   if (primeroSinNumero && !usados.has(base)) return base;
   let n = primeroSinNumero ? 2 : 1;
-  while (usados.has(`${base} ${n}`)) n++;
+  // v17.3 · Tampoco el número del otro idioma («Repeater 1» no, si ya hay un «Repetidor 1»)
+  while (nombreOcupado(`${base} ${n}`, usados)) n++;
   return `${base} ${n}`;
 }
 

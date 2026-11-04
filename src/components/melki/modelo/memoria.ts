@@ -6,8 +6,8 @@
 // El Modelo Melki en el navegador: se carga una sola vez (sus pesos vienen aparte, para no demorar el arranque), se
 // puede apagar en Ajustes, y recuerda en este navegador las frases que la persona le aclaró (nada sale del equipo).
 // Hay un modelo por idioma: el de español (src/datos/modelo/melki.json) y el de inglés (melki-en.json, que se baja
-// solo si la pantalla está en inglés). Los dos entienden las mismas intenciones; lo aprendido se guarda por idioma,
-// porque cada modelo recuerda las frases como las ve él.
+// solo si se usa el inglés: la pantalla en inglés o, v17.3, un mensaje en inglés). Los dos entienden las mismas
+// intenciones; lo aprendido se guarda por idioma, porque cada modelo recuerda las frases como las ve él.
 import { idioma, type Idioma } from "@/lib/idioma";
 import type { Recuerdo } from "./entender";
 import { cargarModelo, type Modelo, type ModeloJson } from "./modelo";

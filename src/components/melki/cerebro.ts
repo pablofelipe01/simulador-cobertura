@@ -109,6 +109,8 @@ export type ContextoMelki = {
   vista?: string | null;
   /** El Modelo Melki: si está activo, cómo le fue en su prueba y cuántas frases aprendió de la persona. */
   modeloMelki?: { activo: boolean; frases?: number; aciertos?: number; ciega?: number; aprendidas: number; intenciones?: number };
+  /** v17.3 · El idioma en que vino el mensaje, si ya se sabe (la respuesta sale en el idioma de la pantalla). */
+  lengua?: Idioma;
 };
 
 /** «señor», «señora» o nada, según el trato elegido (por defecto, señor). En inglés, «sir» o «ma'am». */
@@ -226,8 +228,12 @@ export function normalizarIngles(t: string): string {
 
 /** ¿Lo que escribió está claramente en español? (con la pantalla en inglés, se entiende con las reglas de siempre). */
 const pareceEspanol = (t: string) => detectarIdioma(t).idioma === "es";
-/** ¿Se entiende como inglés? Con la pantalla en inglés, salvo que esté claramente en español. */
-const entenderEnIngles = (t: string) => idioma() === "en" && !pareceEspanol(t);
+/**
+ * ¿Se entiende como inglés? Con la pantalla en inglés, salvo que esté claramente en español; con la pantalla en español,
+ * si está claramente en inglés (v17.3: Melki entiende los dos idiomas siempre). `lengua`: el idioma en que ya se sabe que
+ * vino el mensaje (por sus palabras o porque solo así se entiende).
+ */
+const entenderEnIngles = (t: string, lengua?: Idioma) => ((lengua ?? idioma()) === "en" ? !pareceEspanol(t) : detectarIdioma(t).idioma === "en");
 
 /** «Son las 3:05 de la tarde», como lo diría una persona (con la hora del equipo). En inglés, «It's 3:05 in the afternoon». */
 export function horaHablada(d: Date): string {
@@ -331,7 +337,7 @@ const TEMAS: Tema[] = [
   {
     id: "saludo",
     claves: ["hola", "buenos dias", "buenas tardes", "buenas noches", "buenas", "hey", "saludos", "que tal"],
-    clavesEn: ["hello", "hi", "hey", "hi there", "hello there", "greetings", "good morning", "good afternoon", "good evening", "howdy", "hola"],
+    clavesEn: ["hello", "hi", "hey", "hi there", "hello there", "greetings", "good morning", "good afternoon", "good evening", "howdy", "hola", "hi melki", "hello melki", "hey melki", "hey there melki", "hola melki"],
     responder: () => ({
       texto: tx("¡Hola! Soy Melki. Siembro con usted la red de Trama, que lleva pagos, mensajes de WhatsApp y consultas a la inteligencia artificial a donde no hay señal (gateway, repetidores y gente), simulo su cobertura sobre el relieve real, pueblo la zona con personas y pruebo cuánto tráfico aguanta cada frecuencia. Pídamelo con sus palabras o le muestro el simulador paso a paso.", "Hello! I'm Melki. Together with you I seed Trama's network, which carries payments, WhatsApp messages and questions to artificial intelligence to places with no signal (gateway, repeaters and people); I simulate its coverage over the real terrain, populate the area with people and test how much traffic each frequency can handle. Ask me in your own words, or I'll show you the simulator step by step."),
       acciones: [{ texto: tx("Ver los tours guiados", "See the tours"), accion: "tours" }],
@@ -368,7 +374,7 @@ const TEMAS: Tema[] = [
   {
     id: "capacidades",
     claves: ["que puedes hacer", "que sabes hacer", "que haces", "comandos", "ordenes", "en que me ayudas", "como me ayudas", "que me puedes ayudar"],
-    clavesEn: ["what can you do", "what do you know how to do", "what do you do", "commands", "orders", "how can you help", "how can you help me", "what can you help me with", "what can i ask", "what can i ask you", "what can i say", "what can i tell you", "capabilities", "your capabilities", "what are you capable of", "what are your abilities"],
+    clavesEn: ["what can you do", "what do you know how to do", "what do you do", "commands", "orders", "how can you help", "how can you help me", "what can you help me with", "what can i ask", "what can i ask you", "what can i say", "what can i tell you", "capabilities", "your capabilities", "what are you capable of", "what are your abilities", "what are you able to do", "what else can you do", "what all can you do", "what do you know how to do", "what can you do for me"],
     responder: () => ({
       texto: [
         tx("Manejo el simulador con sus palabras; puede pedirme varias cosas en un mismo mensaje y todo se puede deshacer. Por ejemplo:", "I run the simulator with your words; you can ask me for several things in one message, and everything can be undone. For example:"),
@@ -744,7 +750,7 @@ const TEMAS: Tema[] = [
       const pct = (x?: number) => (x ? tx(`${(100 * x).toFixed(1).replace(".", ",")} %`, `${(100 * x).toFixed(1)}%`) : "");
       return {
         texto: [
-          tx(`Tengo mi propio modelo: el Modelo Melki, una red neuronal pequeña hecha solo para este simulador.${mm?.frases ? ` Aprendió de ${mm.frases.toLocaleString("es-CO")} frases` : " Aprendió de unas cien mil frases"} de cómo se piden las cosas aquí (diseñar la red, poner piezas, probar la carga, mover el mapa, preguntar…), con errores de tecleo, sin tildes y como las escribe el dictado. Corre en el procesador de este equipo en menos de un milisegundo: sin internet, sin tarjeta gráfica y sin descargar nada aparte.`, `I have my own model: the Melki Model, a small neural network built just for this simulator.${mm?.frases ? ` It learned from ${numeroLocal(mm.frases)} Spanish phrases` : " It learned from about a hundred thousand Spanish phrases"} of how things are asked for here (designing the network, placing pieces, testing the load, moving the map, asking questions…), with typos, without accents and the way dictation writes them. It runs on this computer's processor in under a millisecond: no internet, no graphics card and nothing extra to download.`),
+          tx(`Tengo mi propio modelo: el Modelo Melki, una red neuronal pequeña hecha solo para este simulador.${mm?.frases ? ` Aprendió de ${mm.frases.toLocaleString("es-CO")} frases` : " Aprendió de unas cien mil frases"} de cómo se piden las cosas aquí (diseñar la red, poner piezas, probar la carga, mover el mapa, preguntar…), con errores de tecleo, sin tildes y como las escribe el dictado. Tengo uno en español y otro en inglés, y cada mensaje lo entiendo con el del idioma en que me hablan. Corre en el procesador de este equipo en menos de un milisegundo: sin internet, sin tarjeta gráfica y sin descargar nada aparte.`, `I have my own model: the Melki Model, a small neural network built just for this simulator.${mm?.frases ? ` It learned from ${numeroLocal(mm.frases)} English phrases` : " It learned from about a hundred thousand English phrases"} of how things are asked for here (designing the network, placing pieces, testing the load, moving the map, asking questions…), with typos, without apostrophes and the way dictation writes them. I have one in English and another in Spanish, and I understand each message with the one for the language you speak to me in. It runs on this computer's processor in under a millisecond: no internet, no graphics card and nothing extra to download.`),
           tx("Lo uso cuando mis reglas no entienden un pedido: el modelo dice qué se pide, yo saco los datos de sus palabras (la medida, el lugar, el nodo, la plata) y armo la orden, que mi intérprete verifica antes de hacerla. Nunca inventa una cifra ni un lugar. Si no estoy seguro, le pregunto con botones; lo que borra algo siempre se lo confirmo; y lo que no es del simulador, se lo digo.", "I use it when my rules don't understand a request: the model says what is being asked for, I take the data from your words (the measurement, the place, the node, the money) and build the order, which my interpreter checks before carrying it out. It never makes up a figure or a place. If I'm not sure, I ask you with buttons; anything that deletes something, I always confirm with you; and anything outside the simulator, I tell you so."),
           tx(`${mm?.aciertos ? `En su prueba con frases escritas a mano que nunca vio acertó ${pct(mm.ciega ?? mm.aciertos)}. ` : ""}Aprendo de usted: cuando me aclara con un botón, recuerdo esa forma de decirlo en este navegador, y si deshace algo que entendí así, no lo vuelvo a entender de esa manera.${mm?.aprendidas ? ` Llevo ${mm.aprendidas === 1 ? "1 frase aprendida" : `${mm.aprendidas} frases aprendidas`}.` : ""}${mm && !mm.activo ? " Ahora está apagado (se enciende en Ajustes)." : ""}`, `${mm?.aciertos ? `In its test with hand-written phrases it had never seen, it got ${pct(mm.ciega ?? mm.aciertos)} right. ` : ""}I learn from you: when you clarify something with a button, I remember that way of saying it in this browser, and if you undo something I understood that way, I won't understand it like that again.${mm?.aprendidas ? ` I've learned ${mm.aprendidas === 1 ? "1 phrase" : `${mm.aprendidas} phrases`} from you so far.` : ""}${mm && !mm.activo ? " It's switched off right now (you turn it on in Settings)." : ""}`),
         ].join("\n"),
@@ -1439,9 +1445,9 @@ const TEMA_TOUR_EN: [IdTour, RegExp][] = [
 ];
 
 /** Si la frase pide un tour, responde con ese tour (o con el menú si no dice cuál). */
-export function pedidoDeTour(pregunta: string): Respuesta | null {
+export function pedidoDeTour(pregunta: string, lengua?: Idioma): Respuesta | null {
   let tema: IdTour | null;
-  if (entenderEnIngles(pregunta)) {
+  if (entenderEnIngles(pregunta, lengua)) {
     const t = ` ${normalizarIngles(pregunta)} `;
     if (!PIDE_TOUR_EN.test(t)) return null;
     tema = TEMA_TOUR_EN.find(([, re]) => re.test(t))?.[0] ?? (/\btutorials?\b/.test(t) ? "basico" : null);
@@ -1520,12 +1526,13 @@ export function responderTema(id: string, c: ContextoMelki): Respuesta | null {
 }
 
 /**
- * Responde una pregunta o una charla. Con la pantalla en español, como siempre. Con la pantalla en inglés, entiende la
- * pregunta en inglés (y si está claramente en español, en español); si en inglés no la entiende y trae palabras del
- * español («gracias», «hola Melki»), la intenta en español. La respuesta sale en el idioma de la pantalla.
+ * Responde una pregunta o una charla. Con la pantalla en español, como siempre (y si está claramente en inglés, o se sabe
+ * que vino en inglés, la entiende en inglés). Con la pantalla en inglés, entiende la pregunta en inglés (y si está
+ * claramente en español, en español); si en inglés no la entiende y trae palabras del español («gracias», «hola Melki»),
+ * la intenta en español. La respuesta sale en el idioma de la pantalla.
  */
 export function responder(pregunta: string, c: ContextoMelki): Respuesta {
-  if (!entenderEnIngles(pregunta)) return responderCon(pregunta, c, KIT_ES);
+  if (!entenderEnIngles(pregunta, c.lengua)) return responderCon(pregunta, c, KIT_ES);
   const r = responderCon(pregunta, c, KIT_EN);
   if (!r.noEntendido || detectarIdioma(pregunta).es === 0) return r;
   const enEspanol = responderCon(pregunta, c, KIT_ES);
@@ -1578,6 +1585,9 @@ function responderCon(pregunta: string, c: ContextoMelki, kit: Kit): Respuesta {
   const especifica = sobreAntena(t, c, kit.ingles);
   const palabras = new Set(t.trim().split(" "));
   let mejor: { tema: Tema; puntos: number } | null = null;
+  // v17.3 · «Gracias, Melki», «thanks Melki», «LoRa, Melki»: su nombre es a quién se le habla; empatado, gana lo otro
+  const gana = (puntos: number, antes: { tema: Tema; puntos: number } | null) =>
+    puntos > (antes?.puntos ?? 0) || (antes !== null && puntos > 0 && puntos === antes.puntos && antes.tema.id === "quien");
   const saludoLargo = palabras.size > 4;
   for (const tema of TEMAS) {
     // En frases largas el saludo no compite: importa lo que se pide después del «hola»
@@ -1590,7 +1600,7 @@ function responderCon(pregunta: string, c: ContextoMelki, kit: Kit): Respuesta {
       } else if (palabras.has(k)) puntos += 2;
       else if (k.length >= 5 && [...palabras].some((p) => p.length >= 5 && (p.startsWith(k.slice(0, 5)) || k.startsWith(p.slice(0, 5))))) puntos += 1;
     }
-    if (puntos > (mejor?.puntos ?? 0)) mejor = { tema, puntos };
+    if (gana(puntos, mejor)) mejor = { tema, puntos };
   }
   if (especifica && (!mejor || ["saludo", "gracias", "malla", "altura"].includes(mejor.tema.id) || kit.sobreNodo.test(t))) return especifica;
   // Un pedido de acción que no se entendió no se responde con un tema tomado al azar
@@ -1696,8 +1706,8 @@ const KIT_EN: Kit = {
 };
 
 /** Respuesta cuando el mensaje parece una orden que no se pudo interpretar: en vez de un tema al azar, ejemplos útiles. */
-export function noEntendiOrden(pregunta: string): Respuesta | null {
-  if (entenderEnIngles(pregunta)) {
+export function noEntendiOrden(pregunta: string, lengua?: Idioma): Respuesta | null {
+  if (entenderEnIngles(pregunta, lengua)) {
     if (!PIDE_ACCION_EN.test(` ${normalizarIngles(pregunta)} `)) return null;
   } else {
     const t = ` ${normalizar(pregunta)} `;

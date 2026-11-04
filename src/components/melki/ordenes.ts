@@ -138,7 +138,7 @@ type OrdenSola =
   | { tipo: "perfil"; a: string; b: Referencia }
   | { tipo: "senal"; coord: Coordenada }
   | { tipo: "donde"; ref: Referencia }
-  | { tipo: "listar" }
+  | { tipo: "listar"; filtro?: "repetidores" | "personas" | "gateways" }
   | { tipo: "herramienta"; herramienta: "regla" | "inspeccionar" | "agregar" | "lapiz" | "mover" }
   | { tipo: "ejemplo" }
   | { tipo: "nuevo"; confirmado?: boolean }
@@ -490,6 +490,12 @@ export function extraerVariasCoordenadas(texto: string): Coordenada[] {
 }
 
 /* ───────────── Nodos y datos en el texto ───────────── */
+
+/** v17.3 · Una lista larga: los primeros y cuántos más («…, Persona 15 y 285 más»), para no llenar el chat con cientos de nombres. */
+function listaCorta(items: string[], separador: string, max = 15): string {
+  if (items.length <= max) return items.join(separador);
+  return `${items.slice(0, max).join(separador)}${tx(` y ${items.length - max} más`, ` and ${items.length - max} more`)}`;
+}
 
 function buscarNodo(tn: string, antenas: Antena[], seleccion: string | null, excluir?: string): Antena | null {
   const candidatos = [...antenas].filter((a) => a.id !== excluir).sort((a, b) => b.nombre.length - a.nombre.length);
@@ -2015,7 +2021,10 @@ function interpretarOrdenBase(dicho: string, api: Api, pendiente: Pendiente, con
 
   if (/\b(borra|borrar|elimina|eliminar|quita|quitar)\b.*\b(medicion|mediciones|regla|medidas)\b/.test(tn)) return { tipo: "borrar-mediciones" };
   if (/\b(nuevo escenario|escenario nuevo|empezar de cero|empieza de cero|empecemos de cero|empezamos de cero|desde cero|borra todo|borrar todo|limpia todo|limpiar todo|limpia el mapa|quita todo|vacia el mapa|vaciar el mapa|vacia todo)\b/.test(tn)) return { tipo: "nuevo" };
-  if (/\b(carga\w*|muestra\w*|abre|abrir|ver|pon)\b.*\b(ejemplo|demostracion|demo)\b/.test(tn)) return /\b(malla|sembr\w*|siembra|trama|gateway|repetidor\w*|personas?|gente)\b/.test(tn) ? { tipo: "ejemplo-malla" } : { tipo: "ejemplo" };
+  // v17.3 · Si el mapa tiene un nodo «Ejemplo», «pon un repetidor al norte de Ejemplo» habla de ese nodo: solo «carga el
+  // ejemplo», «pon el ejemplo de malla»… cargan el ejemplo (que reemplaza lo que hay en el mapa)
+  const ejemploEsNodo = antenas.some((a) => /\b(ejemplo|example)\b/.test(n(a.nombre))) && !/\b(carga\w*|muestra\w*|abre|abrir|ver|pon)\s+(?:me\s+)?(?:el |un |otro |los )?(ejemplo|demostracion|demo)\b/.test(tn);
+  if (!ejemploEsNodo && /\b(carga\w*|muestra\w*|abre|abrir|ver|pon)\b.*\b(ejemplo|demostracion|demo)\b/.test(tn)) return /\b(malla|sembr\w*|siembra|trama|gateway|repetidor\w*|personas?|gente)\b/.test(tn) ? { tipo: "ejemplo-malla" } : { tipo: "ejemplo" };
 
   const nombreEsc = texto.match(/(?:(?:ll[aá]ma|nombra|renombra|ponle (?:de )?nombre|nombre)\s+(?:al|el)\s+escenario|escenario\s+(?:se llama|llamado))\s*(?:como|a|:)?\s*["“«]?([^"”»]{2,60}?)["”»]?\s*$/i);
   if (nombreEsc) return { tipo: "nombre-escenario", nombre: nombreEsc[1].trim() };
@@ -2095,7 +2104,9 @@ function interpretarOrdenBase(dicho: string, api: Api, pendiente: Pendiente, con
     if (/^(selecciona\w*|elige|escoge|abre|muestrame|ver|enfoca\w*)\b/.test(tn) && !/\b(perfil|informe|senal|distancia)\b/.test(tn)) return { tipo: "seleccionar", id: nodo.id };
     if (/\b(mueve|mover|muevela|muevelo|muevete|muevele|muevanlo|muevanla|traslad\w*|reubic\w*|desplaz\w*|cambia la ubicacion|cambiar la ubicacion|cambia las coordenadas|cambiar las coordenadas)\b/.test(tn))
       return { tipo: "mover", id: nodo.id, coord: coord ?? undefined };
-    const ren = texto.match(/(?:renombr\w*|c[aá]mbi\w* (?:el )?nombre(?: de)?|ll[aá]mal[ao])\b.*?\b(?:a|por|como)\s+["“«]?([^"”»,.;]{2,40})["”»]?\s*$/i);
+    // v17.3 · «renómbralo a Loma Alta» (con tilde) y sin la cortesía del final («… a Loma Alta, por favor»: el nombre es «Loma Alta»)
+    const sinCortesia = texto.replace(/(?:[\s,]+(?:por favor|porfa|porfavor|gracias|muchas gracias|please|thanks|thank you))+[\s.!]*$/i, "");
+    const ren = sinCortesia.match(/(?:ren[oó]mbr\w*|c[aá]mbi\w* (?:el )?nombre(?: de)?|ll[aá]mal[ao])\b.*?\b(?:a|por|como)\s+["“«]?([^"”»,.;]{2,40})["”»]?\s*$/i);
     if (ren) return { tipo: "renombrar", id: nodo.id, nombre: ren[1].trim() };
     if (/\b(como pasarela|sea (la )?pasarela|es la pasarela|hazla pasarela|hazlo pasarela|marca\w* .*pasarela|pon\w* .*pasarela)\b/.test(tn) && !/\b(quita|ya no|no es)\b/.test(tn))
       return { tipo: "editar", id: nodo.id, cambios: { pasarela: true }, descripcion: tx("ahora es pasarela", "now the gateway") };
@@ -2288,6 +2299,12 @@ function interpretarOrdenBase(dicho: string, api: Api, pendiente: Pendiente, con
 
   if (/\b(simula|simular|simulalo|simulala|calcula|calcular|recalcula\w*|corre la simulacion|ejecuta la simulacion|actualiza la simulacion|haz la simulacion|realiza la simulacion)\b/.test(tn)) return { tipo: "simular" };
   if (/\b(que|cuales|cuantos|cuantas) (antenas|nodos)\b|\blista\w* (de )?(las |los )?(antenas|nodos)\b|\b(mis|las|los) (antenas|nodos)\b.*\b(hay|tengo)\b/.test(tn)) return { tipo: "listar" };
+  // v17.3 · «¿Cuántos repetidores hay?», «¿qué personas tengo?», «¿cuántos gateways hay en el mapa?» (no «¿cuántos necesito…?»)
+  const cuantos = tn.match(/\b(?:cuantos|cuantas|que|cuales) (repetidores|personas|usuarios|billeteras|gateways|pasarelas)\b/);
+  if (cuantos && /\b(hay|tengo|tenemos|van|quedan|quedaron|tiene la (?:red|malla)|en el mapa|en la (?:red|malla)|puse|pusiste)\b/.test(tn) && !/\b(necesito|necesitamos|necesita|hacen falta|hace falta|se necesitan|requiere\w*|aguanta\w*|soporta\w*|caben|cubrir|sobran|faltan|sin (?:senal|servicio|cobertura)|no tienen|no les)\b/.test(tn) &&
+    // v17.3 · Con algo más es otra pregunta («… con señal», «… conectadas», «… en rojo», «… por repetidor», «… tengo que mover»)
+    !/\b(con|sin|conectad\w*|desconectad\w*|conexion|senal|cobertura|alcance|rango|cada|rojo|roja|rojos|rojas|amarill\w*|verde\w*|naranja\w*|mover|mueva|muevo|mueve|subir|bajar|cambiar|quitar|eliminar|activ\w*|inactiv\w*|apagad\w*|encendid\w*|prendid\w*|fuera|caid\w*|fall\w*|problema\w*|atiende\w*|sirve\w*|cubre\w*|alcanza\w*|llega\w*|debo|deberia\w*|deben|tengo que|hay que|toca|conviene|recomiend\w*|sugier\w*)\b|\bpor (?!ahora\b|el momento\b|ahorita\b)|\ben (?!el mapa\b|la red\b|la malla\b|total\b|el escenario\b)/.test(tn))
+    return { tipo: "listar", filtro: /repetidores/.test(cuantos[1]) ? "repetidores" : /gateways|pasarelas/.test(cuantos[1]) ? "gateways" : "personas" };
   if (/\b(regla|medir distancias?|medir areas?|tomar medidas|medidas)\b/.test(tn)) return { tipo: "herramienta", herramienta: "regla" };
   if (/\b(exporta\w*|descarga\w*|guarda\w*|genera\w*)\b/.test(tn)) {
     if (/\b(kmz|kml|google earth)\b/.test(tn)) return { tipo: "exportar", formato: "kmz" };
@@ -3020,14 +3037,32 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
           texto: tx("Aún no hay nodos. Escríbame, por ejemplo: «inscribe un nodo antena en 4.5123, -73.1234».", "There are no nodes yet. Tell me, for example: “add an antenna node at 4.5123, -73.1234”."),
           acciones: [{ texto: tx("Cargar el ejemplo", "Load the example"), accion: "ejemplo" }],
         };
+      // v17.3 · Solo los repetidores, las personas o los gateways
+      if (o.filtro) {
+        const cuales = antenas.filter((a) =>
+          o.filtro === "gateways" ? a.pasarela : o.filtro === "repetidores" ? !a.pasarela && (a.tipo ?? "antena") !== "nodo" && a.rol === "REPETIDOR" : (a.tipo ?? "antena") === "nodo",
+        );
+        const [uno, varios, unoEn, variosEn] =
+          o.filtro === "gateways" ? ["gateway", "gateways", "gateway", "gateways"] : o.filtro === "repetidores" ? ["repetidor", "repetidores", "repeater", "repeaters"] : ["persona", "personas", "person", "people"];
+        if (!cuales.length) return { texto: tx(`No hay ${varios} en el mapa (hay ${antenas.length} ${antenas.length === 1 ? "nodo" : "nodos"} en total).`, `There are no ${variosEn} on the map (there ${antenas.length === 1 ? "is 1 node" : `are ${antenas.length} nodes`} in total).`) };
+        const lista = listaCorta(cuales.map((a) => `${a.nombre} (${fn(a.alturaM)} m)`), ", ");
+        return {
+          texto: tx(
+            `Hay ${cuales.length} ${cuales.length === 1 ? uno : varios}: ${lista}.`,
+            `There ${cuales.length === 1 ? `is 1 ${unoEn}` : `are ${cuales.length} ${variosEn}`}: ${lista}.`,
+          ),
+        };
+      }
       return {
         texto: tx(
-          `Hay ${antenas.length} ${antenas.length === 1 ? "nodo" : "nodos"}: ${antenas
-            .map((a) => `${a.nombre} (${(a.tipo ?? "antena") === "nodo" ? "nodo" : "nodo antena"}, ${fn(a.alturaM)} m, ${aDecimal(a.lat)}, ${aDecimal(a.lon)}${a.pasarela ? ", pasarela" : ""}${a.activa ? "" : ", excluido"})`)
-            .join("; ")}.`,
-          `There ${antenas.length === 1 ? "is 1 node" : `are ${antenas.length} nodes`}: ${antenas
-            .map((a) => `${a.nombre} (${(a.tipo ?? "antena") === "nodo" ? "node" : "antenna node"}, ${fn(a.alturaM)} m, ${aDecimal(a.lat)}, ${aDecimal(a.lon)}${a.pasarela ? ", gateway" : ""}${a.activa ? "" : ", excluded"})`)
-            .join("; ")}.`,
+          `Hay ${antenas.length} ${antenas.length === 1 ? "nodo" : "nodos"}: ${listaCorta(
+            antenas.map((a) => `${a.nombre} (${(a.tipo ?? "antena") === "nodo" ? "nodo" : "nodo antena"}, ${fn(a.alturaM)} m, ${aDecimal(a.lat)}, ${aDecimal(a.lon)}${a.pasarela ? ", pasarela" : ""}${a.activa ? "" : ", excluido"})`),
+            "; ",
+          )}.`,
+          `There ${antenas.length === 1 ? "is 1 node" : `are ${antenas.length} nodes`}: ${listaCorta(
+            antenas.map((a) => `${a.nombre} (${(a.tipo ?? "antena") === "nodo" ? "node" : "antenna node"}, ${fn(a.alturaM)} m, ${aDecimal(a.lat)}, ${aDecimal(a.lon)}${a.pasarela ? ", gateway" : ""}${a.activa ? "" : ", excluded"})`),
+            "; ",
+          )}.`,
         ),
       };
     case "herramienta":

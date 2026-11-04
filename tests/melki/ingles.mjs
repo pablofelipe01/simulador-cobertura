@@ -18,7 +18,11 @@ const repo = path.resolve(aqui, "..", "..");
 const entrada = `
 export * from "./src/lib/idioma";
 export { interpretarOrden } from "./src/components/melki/ordenes";
-export { traducirPedido } from "./src/components/melki/ingles";
+export { traducirPedido, espanolDeMezcla } from "./src/components/melki/ingles";
+export { corregirIngles } from "./src/components/melki/ortografia-en";
+export { nombreLibre } from "./src/components/simulador/piezas";
+export { nombreEnElOtroIdioma } from "./src/lib/nombres-nodo";
+export { cargarReferencia, buscarLugares, reconocerLugares } from "./src/lib/geo/referencia";
 export { cambioDeIdioma, sinNombres, avisoCambio } from "./src/components/melki/idioma-melki";
 export { estadoRed } from "./src/lib/radio/estado-red";
 export { numerosEnPalabrasEn, numeroDePalabrasEn } from "./src/components/melki/numeros";
@@ -520,6 +524,285 @@ const enIngles = (t) => !RASTRO.test(sinNombres(t));
   caso("Las cifras de la IA en inglés: «11,226» y «1,234.5»", JSON.stringify(m.numerosDe("11,226 ha and 1,234.5 m")) === JSON.stringify([11226, 1234.5]), JSON.stringify(m.numerosDe("11,226 ha and 1,234.5 m")));
   m.fijarIdioma("es");
   caso("Español sin cambios: herramientas, instrucciones y avisos de la IA", m.herramientasIA() === m.HERRAMIENTAS_IA && !/\bEnglish\b/.test(m.instruccionesMelki("senor")) && m.textoTarjetaChat() === m.TEXTO_TARJETA_CHAT);
+}
+
+/* ───────────── 9. v17.3 · El inglés con la misma facilidad que el español ───────────── */
+
+{
+  await m.cargarReferencia();
+  /** El simulador de mentira con los lugares de verdad (municipios, departamentos y países, con su fonética). */
+  const apiReal = () => {
+    const a = crearApi(nodos());
+    a.buscarLugar = (t) => m.buscarLugares(t, 6);
+    a.reconocerLugar = (t) => m.reconocerLugares(t, { max: 6, departamento: "Meta" });
+    return a;
+  };
+  const sinDicho = (o) => (o ? JSON.stringify(JSON.parse(orden(o)), (k, v) => (k === "dicho" ? undefined : v)) : "null");
+
+  // El inglés natural: cortesía, contracciones, errores de tecleo y de dictado, números en palabras, millas y pies, el
+  // inglés con la forma del español y frases de dos pruebas ciegas
+  const frases = JSON.parse(readFileSync(path.join(aqui, "frases-ingles.json"), "utf8"));
+  const malos = [];
+  for (const [en, es] of frases) {
+    m.fijarIdioma("es");
+    const o1 = m.interpretarOrden(es, apiReal(), null, contexto);
+    m.fijarIdioma("en");
+    const a2 = apiReal();
+    const tr = m.traducirPedido(en, { nombres: a2.antenas().map((x) => x.nombre) });
+    const o2 = m.interpretarOrden(tr, a2, null, contexto);
+    if (!o1 || sinDicho(o1) !== sinDicho(o2)) malos.push(`«${en}» → «${tr}» (esperado «${es}»)`);
+  }
+  m.fijarIdioma("es");
+  caso(`v17.3 · Inglés natural: ${frases.length} pedidos dan la misma orden que en español`, malos.length === 0, malos.slice(0, 6).join(" | "));
+
+  // Lo que se escribió en inglés, Melki lo contesta en inglés (con la pantalla ya en inglés)
+  const rastros = [];
+  for (const [en] of frases) {
+    m.fijarIdioma("en");
+    const a = apiReal();
+    const o = m.interpretarOrden(m.traducirPedido(en, { nombres: a.antenas().map((x) => x.nombre) }), a, null, contexto);
+    if (!o || o.tipo === "coordenada-sola") continue;
+    const r = await m.ejecutarOrden(o, a);
+    const textos = [r?.texto ?? "", r?.voz ?? "", ...(r?.acciones ?? []).map((x) => x.texto)].join(" ").replace(/Restrepo|Puerto López|Bogotá, D\. C\.|Bogotá|Cerro Azul|Loma Alta|\(Meta\)|Cundinamarca/g, "");
+    if (!enIngles(textos)) rastros.push(`${en}: ${textos.slice(0, 120)}`);
+  }
+  m.fijarIdioma("es");
+  caso(`v17.3 · Esas ${frases.length} órdenes, contestadas en inglés`, rastros.length === 0, rastros.slice(0, 4).join(" | "));
+
+  // El idioma de una orden corta: el verbo con que empieza; los préstamos no deciden
+  const P = (t) => m.idiomaProbable(t);
+  const cortas = [
+    ["Simulate", "en"], ["Optimize", "en"], ["optimise it", "en"], ["load the example", "en"], ["apply the optimization", "en"], ["set SF to 10", "en"], ["use SF10", null], ["Undo", "en"], ["accept the optimization", "en"], ["What is LoRa?", "en"],
+    ["simula", "es"], ["optimiza", "es"], ["carga el ejemplo", "es"], ["usa SF10", "es"], ["deshaz", "es"], ["simule", "es"],
+    ["ok", null], ["zoom", null], ["reset", null], ["stop", null], ["test", null], ["gateway", null], ["LoRa", null], ["hello", null], ["hola", null], ["gracias", null], ["thanks", null], ["Cumaral", null], ["SF10", null], ["MeshCore", null], ["check", null], ["play", null],
+  ];
+  const malasCortas = cortas.filter(([t, e]) => P(t) !== e).map(([t, e]) => `${t} → ${P(t)} (esperado ${e})`);
+  caso(`v17.3 · El idioma de una orden corta (${cortas.length}): «Simulate» es inglés, «simula» español, «ok», «zoom» o «gateway» no deciden`, malasCortas.length === 0, malasCortas.join("; "));
+  const nombres = ["Gateway", "Repetidor 1", "Persona 1"];
+  m.fijarCambioAutomatico(true);
+  m.fijarIdioma("es");
+  const a1 = m.cambioDeIdioma("Simulate", nombres)?.idioma, a2 = m.cambioDeIdioma("Optimize the network", nombres)?.idioma, a3 = m.cambioDeIdioma("zoom", nombres), a4 = m.cambioDeIdioma("ok", nombres), a5 = m.cambioDeIdioma("Repetidor 1", nombres);
+  m.fijarIdioma("en");
+  const b1 = m.cambioDeIdioma("simula", nombres)?.idioma, b2 = m.cambioDeIdioma("carga el ejemplo", nombres)?.idioma, b3 = m.cambioDeIdioma("Hola", nombres), b4 = m.cambioDeIdioma("gracias", nombres);
+  m.fijarIdioma("es");
+  caso("v17.3 · Cambio automático también con órdenes cortas («Simulate», «simula»), no con préstamos ni nombres", a1 === "en" && a2 === "en" && a3 === null && a4 === null && a5 === null && b1 === "es" && b2 === "es" && b3 === null && b4 === null, JSON.stringify([a1, a2, a3, a4, a5, b1, b2, b3, b4]));
+
+  // El español con palabras del inglés y los nombres de los nodos en el otro idioma
+  const mezcla = [
+    ["pon un repeater a 2 km al norte del gateway", "pon un repetidor a 2 km al norte del gateway"],
+    ["haz el stress test", "haz la prueba de estrés"],
+    ["agrega 3 repeaters", "agrega 3 repetidores"],
+    ["ármame una red de 4 km in Villavicencio", "ármame una red de 4 km en Villavicencio"],
+    ["muestra los results", "muestra los resultados"],
+    // Con «usted»: el verbo del «tú» que entiende el intérprete
+    ["Simule", "Simula"],
+    ["ponga el gateway en Cumaral", "pon el gateway en Cumaral"],
+    ["súbalo a 20 m", "súbelo a 20 m"],
+    ["Use SF10", "Usa SF10"],
+    ["Melki, muéstreme los resultados", "Melki, muéstrame los resultados"],
+  ];
+  const malasMezcla = mezcla.filter(([a, b]) => m.espanolDeMezcla(a, { nombres }) !== b).map(([a, b]) => `${a} → ${m.espanolDeMezcla(a, { nombres })} (esperado ${b})`);
+  const ingleses = ["Gateway", "Repeater 1", "Person 1"];
+  const alias = m.espanolDeMezcla("sube el Repetidor 1 a 20 m", { nombres: ingleses }) === "sube el Repeater 1 a 20 m" && m.espanolDeMezcla("elimina la Persona 1", { nombres: ingleses }) === "elimina la Person 1" && m.espanolDeMezcla("mueve el repeater 1 2 km al norte", { nombres }) === "mueve el Repetidor 1 2 km al norte";
+  const igual = ["pon el gateway en Cumaral", "sube la torre 2 metros más", "¿cuánto cuesta la red?", "simula"].every((t) => m.espanolDeMezcla(t, { nombres: [...nombres, "Torre 2"] }) === t);
+  const apiM = crearApi(nodos());
+  const om = m.interpretarOrden(m.espanolDeMezcla("pon un repeater a 2 km al norte del gateway", { nombres: apiM.antenas().map((x) => x.nombre) }), apiM, null, contexto);
+  // Los nombres por defecto no repiten número entre los dos idiomas
+  const hay = [{ nombre: "Repetidor 1" }, { nombre: "Persona 1" }, { nombre: "Person 2" }];
+  caso("v17.3 · Un nodo nuevo no repite el número del otro idioma («Repeater 2» si ya hay un «Repetidor 1»)", m.nombreLibre("Repeater", hay) === "Repeater 2" && m.nombreLibre("Repetidor", hay) === "Repetidor 2" && m.nombreLibre("Persona", hay) === "Persona 3" && m.nombreEnElOtroIdioma("Tower 4") === "Torre 4" && m.nombreEnElOtroIdioma("Loma Alta") === null, `${m.nombreLibre("Repeater", hay)} ${m.nombreLibre("Persona", hay)}`);
+  // Un nodo llamado «Ejemplo»: «pon un repetidor al norte de Ejemplo» no carga el ejemplo (que borraría el mapa)
+  const apiE = crearApi(nodos());
+  const oe1 = m.interpretarOrden("pon un repetidor a 3 km al norte de Ejemplo", apiE, null, contexto);
+  const oe2 = m.interpretarOrden("carga el ejemplo", apiE, null, contexto);
+  const oe3 = m.interpretarOrden("pon el ejemplo de malla", apiE, null, contexto);
+  caso("v17.3 · Con un nodo «Ejemplo» en el mapa, «pon un repetidor al norte de Ejemplo» no carga el ejemplo", oe1?.tipo === "pieza" && oe1.pieza === "repetidor" && oe2?.tipo === "ejemplo" && oe3?.tipo === "ejemplo-malla", JSON.stringify([oe1?.tipo, oe2?.tipo, oe3?.tipo]));
+  caso("v17.3 · El español con palabras del inglés («pon un repeater…», «haz el stress test») y los nombres en el otro idioma", malasMezcla.length === 0 && alias && igual && om?.tipo === "pieza" && om.pieza === "repetidor", `${malasMezcla.join("; ")} ${alias} ${igual} ${JSON.stringify(om)}`);
+
+  // Errores de tecleo y de dictado en inglés, sin tocar palabras que existen
+  const corrige = [
+    ["simualte the netwrok", "simulate the network"], ["add a repeat her 2 km north of the gate way", "add a repeater 2 km north of the gateway"], ["delte Repeater 2", "delete Repeater 2"], ["expotr the KMZ", "export the KMZ"],
+    ["use mesh tastic", "use Meshtastic"], ["use s f 10", "use SF10"], ["Optmize", "Optimize"], ["shwo the roads", "show the roads"],
+  ];
+  const quedan = ["remote", "expert", "eight", "weight", "rise", "reads", "altitude", "lease", "tress", "rods", "antena", "loads", "minuets", "crate"];
+  const malasOrto = [...corrige.filter(([a, b]) => m.corregirIngles(a) !== b).map(([a, b]) => `${a} → ${m.corregirIngles(a)} (esperado ${b})`), ...quedan.filter((p) => m.corregirIngles(p) !== p).map((p) => `${p} → ${m.corregirIngles(p)}`)];
+  const respetaNombre = m.corregirIngles("move Rods 1 north", ["Rods 1"]) === "move Rods 1 north" && m.corregirIngles('call it "Netwrok"') === 'call it "Netwrok"';
+  caso("v17.3 · Errores de tecleo y de dictado del inglés (sin tocar las palabras que existen ni los nombres)", malasOrto.length === 0 && respetaNombre, malasOrto.join("; "));
+
+  // Números en palabras y medidas del inglés
+  const N = m.numerosEnPalabrasEn;
+  const numeros = [["add a repeater a kilometer north", "add a repeater 1 kilometer north"], ["a couple of repeaters", "2 repeaters"], ["a dozen people", "12 people"], ["10k people", "10000 people"], ["move it a quarter mile east", "move it 0.25 mile east"], ["three quarters of a mile", "0.75 mile"]];
+  const malasNum = numeros.filter(([a, b]) => N(a) !== b).map(([a, b]) => `${a} → ${N(a)} (esperado ${b})`);
+  m.fijarIdioma("en");
+  const apiP = crearApi(nodos());
+  const pies = m.interpretarOrden(m.traducirPedido("raise Repeater 1 to 80 feet", { nombres: apiP.antenas().map((x) => x.nombre) }), apiP, null, contexto);
+  m.fijarIdioma("es");
+  caso("v17.3 · Números en palabras del inglés («a kilometer», «a couple», «a dozen», «10k») y alturas en pies (80 ft → 24,4 m)", malasNum.length === 0 && pies?.tipo === "editar" && pies.cambios?.alturaM === 24.4, `${malasNum.join("; ")} ${JSON.stringify(pies)}`);
+
+  // «¿Cuántos repetidores hay?» en los dos idiomas: la lista de los que hay (no cómo se diseña)
+  const apiL = crearApi(nodos());
+  const ol = m.interpretarOrden("¿cuántos repetidores hay?", apiL, null, contexto);
+  const rl = ol ? m.ejecutarOrden(ol, apiL) : null;
+  m.fijarIdioma("en");
+  const ol2 = m.interpretarOrden(m.traducirPedido("how many repeaters are there?", { nombres: apiL.antenas().map((x) => x.nombre) }), apiL, null, contexto);
+  const rl2 = ol2 ? m.ejecutarOrden(ol2, apiL) : null;
+  m.fijarIdioma("es");
+  const necesito = m.interpretarOrden("¿cuántos repetidores necesito para cubrir Cumaral?", crearApi(nodos()), null, contexto);
+  caso("v17.3 · «¿Cuántos repetidores hay?» / «how many repeaters are there?»: los que hay en el mapa", ol?.tipo === "listar" && ol.filtro === "repetidores" && /^Hay 2 repetidores: Repetidor 1 \(15 m\), Repetidor 2 \(15 m\)\.$/.test(rl?.texto ?? "") && ol2?.filtro === "repetidores" && /^There are 2 repeaters:/.test(rl2?.texto ?? "") && necesito?.tipo !== "listar", `${rl?.texto} | ${rl2?.texto} | ${necesito?.tipo}`);
+
+  // El cerebro entiende los dos idiomas con cualquier pantalla (y contesta en el de la pantalla)
+  const ctx = { antenas: nodos(), parametros: PARAMETROS, resultado: null, desactualizado: false, relieve: "plano", modo: "sembrar", trato: "senor", porVoz: false, vista: "Cumaral (Meta)", modeloMelki: { activo: true, aprendidas: 0 } };
+  m.fijarIdioma("es");
+  const c1 = m.responder("What is LoRa?", ctx);
+  m.fijarIdioma("en");
+  const c2 = m.responder("¿qué es lora?", { ...ctx, lengua: "es" });
+  const c3 = m.responder("hi Melki", ctx);
+  m.fijarIdioma("es");
+  caso("v17.3 · El cerebro entiende inglés con la pantalla en español (y al revés) y contesta en el de la pantalla", c1.tema === "lora" && /^LoRa es la forma de radio/.test(c1.texto) && c2.tema === "lora" && /^LoRa is the long-range/.test(c2.texto) && c3.tema === "saludo", `${c1.tema} ${c2.tema} ${c3.tema}`);
+
+  // La voz: despedidas, «continue» y lo dicho en inglés con la pantalla en español (el doble oído)
+  const v = m.controlDeVoz;
+  caso("v17.3 · Mandos de voz: «thanks, bye», «gracias, chao», «see ya», «continue»", v("thanks, bye")?.despedida === true && v("gracias, chao")?.despedida === true && v("see ya")?.despedida === true && v("continue")?.tipo === "detalle" && m.limpiarComando("um so add five hundred people please", "en") === "Add 500 people", JSON.stringify([v("thanks, bye"), v("gracias, chao"), v("see ya"), v("continue"), m.limpiarComando("um so add five hundred people please", "en")]));
+
+  // «it» es el último nodo que se tocó (como «muévelo»); «that one», el seleccionado si hay uno (como «mueve ese nodo»)
+  const apiS = crearApi(nodos());
+  apiS.seleccion = () => "r2";
+  const nomS = apiS.antenas().map((x) => x.nombre);
+  m.fijarIdioma("en");
+  const oIt = m.interpretarOrden(m.traducirPedido("move it 1 km north", { nombres: nomS }), apiS, null, contexto);
+  const oEse = m.interpretarOrden(m.traducirPedido("move that one 1 km north", { nombres: nomS }), apiS, null, contexto);
+  const oUlt = m.interpretarOrden(m.traducirPedido("delete the last one", { nombres: nomS }), apiS, null, contexto);
+  const tSimula = m.traducirPedido("simulate it", { nombres: nomS });
+  const tOptimiza = m.traducirPedido("optimize it", { nombres: nomS });
+  const tVoz = m.traducirPedido("turn it off", { nombres: nomS });
+  m.fijarIdioma("es");
+  caso(
+    "v17.3 · «it», «that one» y «the last one»: el último nodo tocado, el seleccionado y el último puesto (y «simulate it» sigue igual)",
+    oIt?.tipo === "mover" && oIt.id === "r1" && oEse?.tipo === "mover" && oEse.id === "r2" && oUlt?.tipo === "eliminar" && oUlt.id === "t2" && tSimula === "simula" && tOptimiza === "optimiza la red" && !/ese equipo/.test(tVoz),
+    JSON.stringify([oIt?.id, oEse?.id, oUlt?.id, tSimula, tOptimiza, tVoz]),
+  );
+
+  // Los nombres nuevos quedan como se dijeron: con cortesía, con «call X …», hacia un rumbo, y escritos en español
+  const nombreDe = (txt, lengua) => {
+    const a = crearApi(nodos());
+    const nombres = a.antenas().map((x) => x.nombre);
+    m.fijarIdioma(lengua);
+    const frase = lengua === "en" ? m.traducirPedido(txt, { nombres }) : m.espanolDeMezcla(txt, { nombres });
+    const o = m.interpretarOrden(frase, a, null, contexto);
+    m.fijarIdioma("es");
+    return o?.tipo === "renombrar" ? `${o.id}:${o.nombre}` : `(${o?.tipo ?? "nada"}) ${frase}`;
+  };
+  const nombresNuevos = [
+    ["please rename Repeater 1 to North Tower", "en", "r1:North Tower"],
+    ["rename Repeater 1 to North Tower please", "en", "r1:North Tower"],
+    ["can you rename Repeater 1 to Hill Tower?", "en", "r1:Hill Tower"],
+    ["call Repeater 1 Hill Tower", "en", "r1:Hill Tower"],
+    ["change Repeater 1's name to Hill Tower", "en", "r1:Hill Tower"],
+    ["please call it Hill Tower, thanks", "en", "r1:Hill Tower"],
+    ["rename Repeater 1 to North", "en", "r1:North"],
+    ["renombra el Repetidor 1 como North Tower", "es", "r1:North Tower"],
+    ["renombra el Repetidor 1 como Main Node", "es", "r1:Main Node"],
+    ["renombra Repetidor 1 a Torre Norte por favor", "es", "r1:Torre Norte"],
+    ["renómbralo a Loma Alta", "es", "r1:Loma Alta"],
+  ];
+  const malosNombres = nombresNuevos.map(([txt, l, esperado]) => [txt, nombreDe(txt, l), esperado]).filter(([, r, e]) => r !== e);
+  const mezclaLlamado = m.espanolDeMezcla("agrega un repetidor llamado Repeater Hill en 4.5, -73.1", { nombres: nodos().map((x) => x.nombre) });
+  caso(
+    "v17.3 · Los nombres nuevos no se traducen ni se llevan la cortesía («North Tower», no «North torre» ni «… please»)",
+    malosNombres.length === 0 && /llamado Repeater Hill en/.test(mezclaLlamado),
+    `${malosNombres.map((x) => x.join(" → ")).join("; ")} | ${mezclaLlamado}`,
+  );
+
+  // Preguntas con algo más no son la pregunta corta («how many people are out of range?» no es la lista de todos)
+  const tr = (x) => {
+    m.fijarIdioma("en");
+    const r = m.traducirPedido(x, { nombres: nodos().map((n) => n.nombre) });
+    m.fijarIdioma("es");
+    return r;
+  };
+  const noSon = [
+    ["do I need an extra repeater?", "¿sobran antenas?"],
+    ["how much does an extra repeater cost?", "¿sobran antenas?"],
+    ["should I buy a spare repeater?", "¿sobran antenas?"],
+    ["what is the optimal height for this repeater?", "¿la red es óptima?"],
+    ["how many people are out of range?", "¿cuántas personas hay?"],
+    ["how many people are connected?", "¿cuántas personas hay?"],
+    ["how many people does Repeater 1 serve?", "¿cuántas personas hay?"],
+    ["how many repeaters should I add?", "¿cuántos repetidores hay?"],
+    ["how many people are in Cumaral?", "¿cuántas personas hay?"],
+  ].filter(([x, mal]) => tr(x) === mal);
+  const siSon = [
+    ["how many repeaters do we have?", "¿cuántos repetidores hay?"],
+    ["how many repeaters are on the map right now?", "¿cuántos repetidores hay?"],
+    ["is this network optimal?", "¿la red es óptima?"],
+    ["are there too many repeaters?", "¿sobran antenas?"],
+    ["do I need all these repeaters?", "¿sobran antenas?"],
+  ].filter(([x, bien]) => tr(x) !== bien);
+  caso("v17.3 · Las preguntas cortas en inglés no se tragan las largas («do I need an extra repeater?» no es «¿sobran antenas?»)", noSon.length === 0 && siSon.length === 0, JSON.stringify([noSon, siSon.map(([x]) => `${x} → ${tr(x)}`)]));
+
+  // En español, «¿cuántas personas hay conectadas?» tampoco es la lista; y la lista larga se corta
+  const apiLq = crearApi(nodos());
+  const listan = [
+    "¿cuántas personas hay con señal?",
+    "¿cuántas personas hay conectadas?",
+    "¿cuántas personas tengo sin conexión?",
+    "¿cuántas personas quedan por conectar?",
+    "¿qué repetidores hay en rojo?",
+    "¿cuántos usuarios hay por repetidor?",
+    "¿qué repetidores tengo que mover?",
+  ].filter((x) => m.interpretarOrden(x, apiLq, null, contexto)?.tipo === "listar");
+  const muchas = [...nodos(), ...Array.from({ length: 40 }, (_, k) => base(`px${k}`, `Persona ${k + 3}`, 4.2 + k / 1000, -73.3, { tipo: "nodo", rol: "COMPANION" }))];
+  const apiMuchas = crearApi(muchas);
+  const oM = m.interpretarOrden("¿cuántas personas hay?", apiMuchas, null, contexto);
+  const rM = oM ? m.ejecutarOrden(oM, apiMuchas) : null;
+  caso(
+    "v17.3 · «¿cuántas personas hay conectadas?» no es la lista de todas; con 42 personas, la lista dice 15 «y 27 más»",
+    listan.length === 0 && oM?.tipo === "listar" && /^Hay 42 personas: .* y 27 más\.$/.test(rM?.texto ?? "") && (rM?.texto.match(/\(15 m\)/g) ?? []).length === 15,
+    `${listan.join("; ")} | ${rM?.texto.slice(0, 80)}…${rM?.texto.slice(-30)}`,
+  );
+
+  // Lo que no debe hacer: cargar el ejemplo sin pedirlo, mover un nodo a «22 dBm», tragarse «just the map»
+  const tEj = tr("give me an example");
+  const tCarga = tr("load the example");
+  const apiD = crearApi(nodos());
+  m.fijarIdioma("en");
+  const oDbm = m.interpretarOrden(m.traducirPedido("set Repeater 1 to 22 dBm", { nombres: apiD.antenas().map((x) => x.nombre) }), apiD, null, contexto);
+  const oSf = m.interpretarOrden(m.traducirPedido("set Repeater 1 to SF10", { nombres: apiD.antenas().map((x) => x.nombre) }), apiD, null, contexto);
+  m.fijarIdioma("es");
+  const tMapa = tr("just the map");
+  caso(
+    "v17.3 · «give me an example» no carga el ejemplo; «set Repeater 1 to 22 dBm» no lo mueve; «just the map» es la pantalla limpia",
+    tEj !== "carga el ejemplo" && tCarga === "carga el ejemplo" && oDbm?.tipo !== "mover" && oSf?.tipo !== "mover" && tMapa === "pantalla limpia",
+    JSON.stringify([tEj, tCarga, oDbm?.tipo, oSf?.tipo, tMapa]),
+  );
+
+  // Una pregunta («what happens if I move it…?») no es la orden, como «¿qué pasa si lo muevo…?»; «next to» es «cerca de»
+  const apiH = crearApi(nodos());
+  m.fijarIdioma("en");
+  const hipoteticas = ["what happens if I move it 2 km east?", "what if I add a repeater 2 km north of the gateway?", "would it help to raise Repeater 1 to 30 m?"]
+    .map((x) => [x, m.interpretarOrden(m.traducirPedido(x, { nombres: apiH.antenas().map((n) => n.nombre) }), apiH, null, contexto)?.tipo ?? null])
+    .filter(([, t]) => t && t !== "coordenada-sola");
+  const junto = m.traducirPedido("move Repeater 1 next to the gateway", { nombres: apiH.antenas().map((n) => n.nombre) });
+  m.fijarIdioma("es");
+  caso("v17.3 · «what happens if I move it…?» pregunta (no mueve nada); «next to the gateway» es «cerca del gateway»", hipoteticas.length === 0 && /cerca del gateway/.test(junto) && !/luego/.test(junto), JSON.stringify([hipoteticas, junto]));
+
+  // Palabras de los dos idiomas que no deciden el idioma, y el corrector del inglés no toca las palabras con tilde
+  const pIncline = m.idiomaProbable("incline Repeater 1 5 degrees down");
+  const pHas = m.idiomaProbable("has simulado");
+  const conTilde = m.corregirIngles("conectó El Cantón y mírenme");
+  caso(
+    "v17.3 · «incline…» no es español, «has simulado» no es inglés; «conectó», «El Cantón» quedan iguales",
+    pIncline !== "es" && pHas !== "en" && conTilde === "conectó El Cantón y mírenme",
+    JSON.stringify([pIncline, pHas, conTilde]),
+  );
+
+  // «Gracias, Melki» y «thanks Melki» son las gracias (no «¿quién eres?»); «Melki» solo sigue siendo quién es
+  m.fijarIdioma("es");
+  const g1 = m.responder("gracias melki", ctx);
+  const g3 = m.responder("melki", ctx);
+  m.fijarIdioma("en");
+  const g2 = m.responder("thanks melki", ctx);
+  m.fijarIdioma("es");
+  caso("v17.3 · «gracias, Melki» / «thanks Melki»: las gracias; «Melki» solo: quién es", g1.tema === "gracias" && g2.tema === "gracias" && g3.tema === "quien", JSON.stringify([g1.tema, g2.tema, g3.tema]));
 }
 
 console.log(fallos ? `\n${fallos} prueba(s) fallaron` : "\nTodas las pruebas del inglés pasaron");

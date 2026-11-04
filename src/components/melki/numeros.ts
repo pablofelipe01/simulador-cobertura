@@ -422,6 +422,14 @@ export function numerosEnPalabrasEn(texto: string): string {
   r = r.replace(/\b(\d+) and a half\b/gi, (_m, n: string) => String(Number(n) + 0.5));
   // «one and a half» quedó como «one and a half»
   r = r.replace(/\bone and a half\b/gi, "1.5");
+  // v17.3 · «a quarter mile», «three quarters of a mile», «a kilometer north», «a couple of repeaters», «a dozen people»,
+  // «10k people» (miles de personas, hectáreas, pagos…)
+  r = r.replace(/\b(?:3|three) quarters of an? (mile|kilometer|kilometre|km)\b/gi, "0.75 $1");
+  r = r.replace(/\ba quarter(?: of an?)? (mile|kilometer|kilometre|km)\b/gi, "0.25 $1");
+  r = r.replace(/\b(?:a|an|one) (mile|kilometer|kilometre|km|meter|metre|hectare|acre|foot|yard|block)\b/gi, "1 $1");
+  r = r.replace(/\ba couple(?: of)?\b(?= \w)/gi, "2");
+  r = r.replace(/\b(?:a|one) dozen\b/gi, "12");
+  r = r.replace(/\b(\d+(?:\.\d+)?) ?k\b(?= (?:people|persons|users|hectares|ha|payments|messages|families|wallets|pesos|households)\b)/gi, (_m, n: string) => String(Math.round(Number(n) * 1000)));
   // «-73 . 37»: nada; «4,5» en inglés no es decimal: se deja
   return r;
 }

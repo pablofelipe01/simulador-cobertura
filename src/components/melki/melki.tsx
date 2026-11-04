@@ -19,7 +19,7 @@ import type { Escenario, ResultadoSimulacion } from "@/lib/radio/tipos";
 import { nombresParaVoz, type Lugar } from "@/lib/geo/referencia";
 import { armarPitch, pedidoPitch, type PedidoPitch } from "@/lib/negocio/pitch";
 import { armarRecorrido, pedidoRecorrido, resumenRecorrido, type ParadaRecorrido, type PedidoRecorrido } from "@/lib/negocio/recorrido-red";
-import { cambioAutomatico, decimalLocal, elegirIdioma, idioma, numeroLocal, pedidoDeIdioma, tx, type Idioma } from "@/lib/idioma";
+import { cambioAutomatico, decimalLocal, detectarIdioma, elegirIdioma, idioma, idiomaProbable, numeroLocal, pedidoDeIdioma, tx, type Idioma } from "@/lib/idioma";
 import { useIdioma } from "@/lib/use-idioma";
 
 import { abrirMicrofonoIA, ReproductorIA, type MicrofonoIA } from "./audio-ia";
@@ -48,8 +48,8 @@ import {
 import { cifrasInventadas, ESQUEMA_PENSAR, leerPensamiento, mensajesPensar } from "./pensar";
 import { medidasEnCifras } from "./medidas";
 import { numerosEnPalabras, numerosEnPalabrasEn } from "./numeros";
-import { traducirPedido } from "./ingles";
-import { avisoCambio, cambioDeIdioma } from "./idioma-melki";
+import { espanolDeMezcla, traducirPedido } from "./ingles";
+import { avisoCambio, cambioDeIdioma, sinNombres } from "./idioma-melki";
 import { PresentacionPitch, type ControlPitch, type Narrador } from "./presentacion";
 import { RecorridoRed, type ControlRecorrido } from "./recorrido-red";
 import { LlegadaRobot, type NarradorLlegada, type OpcionesNarrar } from "./llegada";
@@ -71,7 +71,7 @@ import {
 import { menuTours, pedidoDeTour, responder, responderTema, respuestaFueraDeTema, sugerencias, TEMAS_DE_CHARLA, type AccionMelki, type AccionRespuesta, type ContextoMelki, type Respuesta } from "./cerebro";
 import { entender, type Decision, type Opcion, type Recuerdo } from "./modelo/entender";
 import { INTENCION } from "./modelo/intenciones";
-import { cargarModeloMelki, guardarPreferenciaModelo, leerMemoria, leerPreferenciaModelo, modeloMelki, olvidarMemoria, recordar, type PreferenciaModelo } from "./modelo/memoria";
+import { cargarModeloMelki, guardarPreferenciaModelo, idiomaDelModelo, leerMemoria, leerPreferenciaModelo, modeloMelki, olvidarMemoria, recordar, type PreferenciaModelo } from "./modelo/memoria";
 import {
   borrarReconocedor,
   componerTexto,
@@ -97,6 +97,9 @@ import { alCargarVoces, callar, fijarGeneroVoz, fijarRitmoVoz, fijarVozPreferida
 
 /** «nota»: una línea pequeña sobre la respuesta (cómo entendió el Modelo Melki lo que se pidió). */
 type Mensaje = { id: number; de: "melki" | "usuario"; texto: string; acciones?: AccionRespuesta[]; voz?: boolean; nota?: string };
+
+/** v17.3 · La charla con Melki («hola», «gracias», «¿quién eres?»): no dice en qué idioma se le habla. */
+const CHARLA = new Set([...TEMAS_DE_CHARLA, "quien"]);
 
 /* Lo que Melki entiende fuera del intérprete (también para verificar las órdenes que arma el Modelo Melki) */
 const ACTIVAR_ASISTENTE = /\b(activa|enciende|prende|pon|inicia|abre|llama)\w* (el |al )?(modo )?(manos libres|jarvis|escucha|asistente( melki| de voz| por voz)?)\b|^escuchame$|^modo jarvis$|^(el )?asistente melki$|\bquiero hablarte\b/;
@@ -662,6 +665,11 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     setLenguaMemoria(lengua);
     setMemoriaModelo(leerMemoria(lengua));
   }
+  /** v17.3 · El idioma de la memoria ya cargada: justo al cambiar de idioma, todavía es la del idioma anterior. */
+  const lenguaMemoriaCargada = useRef(lenguaMemoria);
+  useEffect(() => {
+    lenguaMemoriaCargada.current = lenguaMemoria;
+  });
   /** Las frases del asistente con el trato elegido. */
   const fr = () => frases(actual.current.manos.trato, horaLocal(), sinNombre());
   /** Con la barra abierta toma las órdenes sin su nombre (v17.2; se puede apagar en Ajustes de voz). */
@@ -1431,21 +1439,21 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   const entiendeDicho = (texto: string): "si" | "fuera" | "no" => {
     const t = texto.trim();
     if (!t) return "no";
-    const traducido = enPalabrasDeMelki(t);
+    const lengua = idiomaDelMensaje(t);
+    const traducido = enPalabrasDeMelki(t, lengua);
     if (aclaracion.current && reloj() < aclaracion.current.hasta) return "si";
     if (pedidoDeIdioma(t) || entiendeFrase(t) || (traducido !== t && entiendeFrase(traducido))) return "si";
     const pasos = dividirEnPasos(traducido);
     if (pasos.length > 1 && entiendeFrase(pasos[0])) return "si";
-    const ctx = contextoMelki(true);
-    const r1 = responder(t, ctx);
-    const r2 = traducido !== t ? responder(traducido, ctx) : null;
+    const r1 = responder(t, contextoMelki(true, lengua));
+    const r2 = traducido !== t ? responder(traducido, contextoMelki(true, "es")) : null;
     const sirve = (r: Respuesta | null) => r !== null && !r.noEntendido && !r.fueraDeTema;
     if (sirve(r1) || sirve(r2)) return "si";
     let fuera = Boolean(r1.fueraDeTema || r2?.fueraDeTema);
-    const mm = actual.current.modeloPref.activo ? modeloMelki() : null;
+    const mm = actual.current.modeloPref.activo ? modeloMelki(lengua) : null;
     if (mm) {
       try {
-        const d = entender(mm, t, { api: actual.current.api, memoria: actual.current.memoriaModelo, verificar: entiendeFrase, textoRanuras: traducido });
+        const d = entender(mm, t, { api: actual.current.api, memoria: memoriaEn(lengua), verificar: entiendeFrase, textoRanuras: traducido });
         if (d.tipo === "hacer") return "si";
         // Lo que el Modelo Melki ve como charla («buenos días, don Pedro»: ¿saludar?) o fuera del simulador tampoco es una
         // orden; lo demás que entiende (un tema, una confirmación o una aclaración del simulador) sí cuenta
@@ -1491,24 +1499,11 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
   /** Lo que dice el ajuste del doble oído según su estado. */
   const textoDobleOido = () => {
     const o = oido;
-    if (manos.dobleOido === false) return tx("Apagado: entiendo solo el idioma de la pantalla (cámbielo diciendo «speak English» o «habla en español»).", "Off: I understand only the screen language (change it by saying “habla en español” or “speak English”).");
+    if (manos.dobleOido === false) return tx("Apagado: por voz le oigo solo en el idioma de la pantalla (cámbielo diciendo «speak English» o «habla en español»); por escrito le entiendo los dos.", "Off: by voice I hear only the screen language (change it by saying “habla en español” or “speak English”); in writing I understand both.");
     if (o.estado === "listo") return tx("Listo en este equipo: si el navegador no me entiende, vuelvo a oír la frase en español y en inglés, y cambio de idioma solo.", "Ready on this device: if the browser doesn't understand me, I listen to the phrase again in Spanish and in English, and switch languages on my own.");
     if (o.estado === "cargando") return o.detalle ?? tx("Preparando el doble oído…", "Preparing the second ear…");
     if (o.estado === "error") return tx(`No pude prepararlo (${o.detalle ?? "sin detalle"}). La primera vez necesita internet; lo intento de nuevo al activarme.`, `I couldn't prepare it (${o.detalle ?? "no details"}). The first time it needs internet; I'll try again when I'm activated.`);
     return tx("Al activarme bajo, una sola vez, un reconocedor gratuito (Whisper, unos 80 MB) que queda en este equipo: lo que el navegador no entiende lo vuelvo a oír en español y en inglés.", "When I'm activated I download, only once, a free recognizer (Whisper, about 80 MB) that stays on this device: whatever the browser doesn't understand, I listen to again in Spanish and in English.");
-  };
-
-  /** ¿Se entiende como orden o pregunta lo que el doble oído oyó en el otro idioma (pasado a las palabras de Melki)? */
-  const entiendeEnOtro = (t: string, lengua: Idioma): boolean => {
-    if (pedidoDeIdioma(t)) return true;
-    if (lengua === "en") {
-      const tr = traducirPedido(t, { nombres: nombresNodos() });
-      if (entiendeFrase(tr) || entiendeFrase(dividirEnPasos(tr)[0] ?? "")) return true;
-      const r = responder(tr, contextoMelki(true));
-      return !r.noEntendido && !r.fueraDeTema;
-    }
-    // Del inglés al español: el intérprete entiende el español tal cual
-    return entiendeFrase(t) || entiendeFrase(dividirEnPasos(t)[0] ?? "");
   };
 
   /**
@@ -1537,18 +1532,21 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     try {
       const [t1] = await plazo(transcribirEnIdiomas(audio, [ahora === "en" ? "english" : "spanish"]));
       if (!sigue()) return soltar();
-      const x1 = limpiarComando(t1 ?? "");
+      const x1 = limpiarComando(t1 ?? "", ahora);
       if (x1 && x1 !== texto && entiendeDicho(x1) === "si") {
         setAvisoPaso(null);
         return pedirPorVoz(x1);
       }
       const [t2] = await plazo(transcribirEnIdiomas(audio, [otro === "en" ? "english" : "spanish"]));
       if (!sigue()) return soltar();
-      const x2 = limpiarComando(t2 ?? "");
-      if (x2 && entiendeEnOtro(x2, otro)) {
+      const x2 = limpiarComando(t2 ?? "", otro);
+      // Al español, solo una orden (como en la v17.2): Whisper a veces traduce lo dicho, y un tema suelto cambiaría el idioma
+      // de toda la pantalla sin que nadie lo pidiera
+      if (x2 && (otro === "es" ? nivelEnIdioma(x2, otro) === 2 : entiendeEnIdioma(x2, otro))) {
         setAvisoPaso(null);
-        // Con el cambio automático, todo el simulador pasa al otro idioma; sin él, la orden se hace sin cambiarlo
-        return pedirPorVoz(cambioAutomatico() || pedidoDeIdioma(x2) ? x2 : otro === "en" ? traducirPedido(x2, { nombres: nombresNodos() }) : x2);
+        // Con el cambio automático, todo el simulador pasa al otro idioma; sin él, la orden se hace sin cambiarlo (Melki la
+        // entiende en el idioma en que vino y contesta en el de la pantalla)
+        return pedirPorVoz(x2);
       }
     } catch {
       // Whisper falló o tardó demasiado: sigue como si no hubiera doble oído
@@ -2205,8 +2203,61 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
 
   /** Los nombres de los nodos del mapa (pasan tal cual al traducir y no cuentan para saber el idioma). */
   const nombresNodos = () => actual.current.api.antenas().map((a) => a.nombre);
-  /** Lo pedido en inglés, dicho con las palabras del español que entiende el intérprete (en español queda tal cual). */
-  const enPalabrasDeMelki = (t: string) => (idioma() === "en" ? traducirPedido(t, { nombres: nombresNodos() }) : t);
+  /**
+   * Lo pedido, dicho con las palabras del español que entiende el intérprete: lo que vino en inglés, traducido; lo que vino
+   * en español, con las palabras del inglés que se colaron («pon un repeater…») y los nombres de los nodos a la forma del
+   * mapa (v17.3). `lengua`: el idioma en que vino (por defecto, el que se nota en el mensaje).
+   */
+  const enPalabrasDeMelki = (t: string, lengua: Idioma = idiomaDelMensaje(t)) =>
+    lengua === "en" ? traducirPedido(t, { nombres: nombresNodos() }) : espanolDeMezcla(t, { nombres: nombresNodos() });
+
+  /**
+   * ¿Qué tanto entiende Melki el mensaje tomándolo en ese idioma? 2: una orden (o un tour, o un pedido de idioma); 1: un tema
+   * del simulador; 0: nada. La charla no cuenta: un «hello», un «gracias, Melki» o un «¿quién eres?» no dicen en qué idioma
+   * se le habla.
+   */
+  const nivelEnIdioma = (t: string, lengua: Idioma): 0 | 1 | 2 => {
+    if (pedidoDeIdioma(t)) return 2;
+    const frase = lengua === "en" ? traducirPedido(t, { nombres: nombresNodos() }) : espanolDeMezcla(t, { nombres: nombresNodos() });
+    if (entiendeFrase(frase) || entiendeFrase(dividirEnPasos(frase)[0] ?? "")) return 2;
+    if (pedidoDeTour(t, lengua) || pedidoDeTour(frase, "es")) return 2;
+    const delSimulador = (r: Respuesta) => !r.noEntendido && !r.fueraDeTema && !CHARLA.has(r.tema ?? "");
+    const r = responder(frase, { ...contextoMelki(true), lengua: "es" });
+    const r2 = lengua === "en" ? responder(t, { ...contextoMelki(true), lengua }) : r;
+    return delSimulador(r) || delSimulador(r2) ? 1 : 0;
+  };
+  /** ¿Melki entiende el mensaje tomándolo en ese idioma? (una orden o un tema del simulador) */
+  const entiendeEnIdioma = (t: string, lengua: Idioma): boolean => nivelEnIdioma(t, lengua) > 0;
+
+  /**
+   * v17.3 · El idioma en que vino un mensaje: el que dicen sus palabras (también en una orden corta: «Simulate», «simula»);
+   * si no lo dicen (palabras sueltas, nombres, números), el de la pantalla, salvo que solo se entienda como orden en el otro
+   * idioma («roads off» con la pantalla en español) o que sus palabras sean solo del otro idioma y allí sean un tema del
+   * simulador («coverage»). Una palabra de los dos («color», «red») no cambia nada, y la charla («thanks, Melki») se
+   * entiende en su idioma pero no cambia la pantalla (`paraCambiar`).
+   */
+  const idiomaDelMensaje = (t: string, paraCambiar = false): Idioma => {
+    const ahora = idioma();
+    const sin = sinNombres(t, nombresNodos());
+    const d = idiomaProbable(sin);
+    if (d) return d;
+    const otro: Idioma = ahora === "en" ? "es" : "en";
+    const cuenta = detectarIdioma(sin);
+    // Con palabras solo de este idioma («red», «escúchame, Melki»), es este: nada del otro idioma lo decide
+    if (cuenta[ahora] > 0 && cuenta[otro] === 0) return ahora;
+    const soloDelOtro = cuenta[otro] > 0 && cuenta[ahora] === 0;
+    const nOtro = nivelEnIdioma(t, otro);
+    if (nOtro === 0 && (paraCambiar || !soloDelOtro)) return ahora;
+    const nAhora = nivelEnIdioma(t, ahora);
+    // Una orden en el otro idioma gana a un tema (o a nada) en este: «roads off» es quitar las vías, no hablar de ellas
+    if (nOtro === 2) return nAhora < 2 ? otro : ahora;
+    if (nAhora > 0 || !soloDelOtro) return ahora;
+    // Un tema del simulador dicho solo con palabras del otro idioma («coverage»); o, para entenderlo, la charla («thanks»)
+    return nOtro === 1 || !paraCambiar ? otro : ahora;
+  };
+
+  /** Lo aprendido de la persona en un idioma (la del idioma de la pantalla ya está cargada; recién cambiado, se lee). */
+  const memoriaEn = (lengua: Idioma) => (lengua === lenguaMemoriaCargada.current ? actual.current.memoriaModelo : leerMemoria(lengua));
 
   /**
    * Si le escriben o le hablan en el otro idioma (con el cambio automático encendido) o le piden cambiarlo («speak
@@ -2221,7 +2272,12 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       agregarMelki({ texto: tx(`Ya estamos en español${s}.`, `We're already in English${s}.`) });
       return true;
     }
-    const c = cambioDeIdioma(texto, nombresNodos());
+    // Por sus palabras (o un pedido); si no lo dicen, porque solo se entiende en el otro idioma (v17.3)
+    let c = cambioDeIdioma(texto, nombresNodos());
+    if (!c && !pide && cambioAutomatico() && !idiomaProbable(sinNombres(texto, nombresNodos()))) {
+      const lengua = idiomaDelMensaje(texto, true);
+      if (lengua !== idioma()) c = { idioma: lengua, pedido: false };
+    }
     if (!c) return false;
     const antes = idioma();
     elegirIdioma(c.idioma);
@@ -2245,7 +2301,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     notaModelo.current = null;
     if (delUsuario && !deIA && cambiarIdiomaSiToca(pregunta, deVoz)) return;
     // La respuesta a «¿quiso decir…?» del Modelo Melki: «la primera», «sí», «ninguna» (en inglés: «the first one», «yes», «none»)
-    if (responderAclaracion(enPalabrasDeMelki(pregunta))) return;
+    if (responderAclaracion(pregunta)) return;
     atender(pregunta, deVoz);
   };
 
@@ -2258,7 +2314,9 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
    */
   const atender = (entrada: string, deVoz = false, desdeModelo = false) => {
     const dicho = entrada;
-    const pregunta = desdeModelo ? entrada : enPalabrasDeMelki(entrada);
+    // v17.3 · El idioma en que vino (lo que arma el Modelo Melki ya viene con las palabras del español)
+    const lengua: Idioma = desdeModelo ? "es" : idiomaDelMensaje(entrada);
+    const pregunta = desdeModelo ? entrada : enPalabrasDeMelki(entrada, lengua);
     const traducido = pregunta !== dicho;
     // El recorrido de la red: «explícame la red», «hazme un recorrido por la red», «¿por qué la red quedó así?»,
     // y mientras está abierto «siguiente», «ve al gateway», «termina el recorrido»…
@@ -2357,7 +2415,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       return;
     }
     // «Enséñame a medir», «hazme un tour»: se ofrece el tour antes de tomarlo como orden (salvo que traiga coordenadas o números)
-    const tour = /\d/.test(dicho) ? null : (pedidoDeTour(dicho) ?? (traducido ? pedidoDeTour(pregunta) : null));
+    const tour = /\d/.test(dicho) ? null : (pedidoDeTour(dicho, lengua) ?? (traducido ? pedidoDeTour(pregunta, "es") : null));
     if (tour) {
       agregarMelki(tour);
       return;
@@ -2377,7 +2435,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     // «Métele un repetidor a 2 millas al norte del gateway» llega como una coordenada sola: el Modelo Melki puede
     // entender qué se quería hacer con ella
     if (entera?.tipo === "coordenada-sola" && !desdeModelo && actual.current.modeloPref.activo) {
-      void pensarConModelo(dicho, deVoz, null, entera, pregunta);
+      void pensarConModelo(dicho, deVoz, null, entera, pregunta, lengua);
       return;
     }
     if (entera) {
@@ -2386,9 +2444,9 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     }
     // Sin orden: el cerebro responde (por voz, si no entendió, pide que se lo repita). En inglés lee lo dicho y, si no lo
     // entiende, lo traducido
-    let r = responder(dicho, contextoMelki(deVoz));
+    let r = responder(dicho, contextoMelki(deVoz, lengua));
     if (traducido && r.noEntendido) {
-      const otra = responder(pregunta, contextoMelki(deVoz));
+      const otra = responder(pregunta, contextoMelki(deVoz, "es"));
       if (!otra.noEntendido) r = otra;
     }
     // Un tema elegido con pocas palabras clave: si el Modelo Melki está muy seguro de que se pregunta otro, gana el modelo
@@ -2398,8 +2456,8 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     // Repetidor 3 un km al norte», «¿cuántas personas quedaron sin señal?»). Los saludos y las gracias no se cambian.
     const debil = r.tema && !["saludo", "gracias", "quien", "capacidades"].includes(r.tema) ? (r.puntos ?? 99) : 99;
     if (!r.noEntendido && debil < 5 && !desdeModelo && actual.current.modeloPref.activo) {
-      const m = modeloMelki();
-      const d = m ? entender(m, dicho, { api: actual.current.api, memoria: actual.current.memoriaModelo, verificar: entiendeFrase, textoRanuras: pregunta }) : null;
+      const m = modeloMelki(lengua);
+      const d = m ? entender(m, dicho, { api: actual.current.api, memoria: memoriaEn(lengua), verificar: entiendeFrase, textoRanuras: pregunta }) : null;
       const otroTema = d?.tipo === "tema" && d.opcion.tema !== r.tema && d.opcion.p >= 0.9;
       const unNodo = d?.tipo === "hacer" && d.opcion.id === "info-nodo" && d.opcion.p >= 0.9 && debil < 4;
       const unaOrden = d?.tipo === "hacer" && d.opcion.p >= 0.95 && debil < 4;
@@ -2410,18 +2468,19 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     }
     // Lo que ni el intérprete ni el cerebro entendieron lo piensa el Modelo Melki (y si tampoco, la IA local)
     if (r.noEntendido && !desdeModelo && actual.current.modeloPref.activo) {
-      void pensarConModelo(dicho, deVoz, r, undefined, pregunta);
+      void pensarConModelo(dicho, deVoz, r, undefined, pregunta, lengua);
       return;
     }
     seguirSinEntender(dicho, r);
   };
 
   /** El contexto del cerebro de ahora (con el trato, la vista y el Modelo Melki). */
-  const contextoMelki = (deVoz = false): ContextoMelki => {
+  const contextoMelki = (deVoz = false, lengua?: Idioma): ContextoMelki => {
     const a = actual.current.api;
     const c = a.centroMapa();
     return {
       ...actual.current.contexto,
+      lengua,
       trato: actual.current.manos.trato,
       porVoz: deVoz,
       vista: c ? a.ubicacion(c.lat, c.lon) : null,
@@ -2461,13 +2520,14 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
    * contesta el tema, pregunta «¿quiso decir…?» o dice que está fuera del simulador. Si no sabe, todo sigue como antes
    * (`orden`: la que había entendido el intérprete, como una coordenada sola).
    */
-  const pensarConModelo = async (pregunta: string, deVoz: boolean, sinEntender: Respuesta | null, orden?: Orden, textoRanuras?: string) => {
+  const pensarConModelo = async (pregunta: string, deVoz: boolean, sinEntender: Respuesta | null, orden?: Orden, textoRanuras?: string, lengua: Idioma = idioma()) => {
     trabajos.current++;
     let hecho = false;
     try {
-      const m = modeloMelki() ?? (await cargarModeloMelki());
+      // El modelo del idioma en que vino el mensaje (v17.3: aunque la pantalla esté en el otro)
+      const m = modeloMelki(lengua) ?? (await cargarModeloMelki(lengua));
       // Los datos del pedido (nodos, distancias, lugares) se sacan de lo que entiende el intérprete (en inglés, lo traducido)
-      const d = entender(m, pregunta, { api: actual.current.api, memoria: actual.current.memoriaModelo, verificar: entiendeFrase, textoRanuras });
+      const d = entender(m, pregunta, { api: actual.current.api, memoria: memoriaEn(lengua), verificar: entiendeFrase, textoRanuras });
       hecho = actuarModelo(d, pregunta, deVoz);
     } catch {
       hecho = false;
@@ -2553,11 +2613,16 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     }
   };
 
-  /** Lo que la persona aclaró: el Modelo Melki lo recuerda en este navegador. */
+  /**
+   * Lo que la persona aclaró: el Modelo Melki lo recuerda en este navegador, en la memoria del idioma en que lo dijo (v17.3:
+   * lo dicho en inglés con la pantalla en español lo aprende el modelo en inglés).
+   */
   const aprenderModelo = (frase: string, intencion: string, signo: 1 | -1) => {
-    const m = modeloMelki();
+    const lengua = idiomaDelMensaje(frase);
+    const m = modeloMelki(lengua);
     if (!m || !actual.current.modeloPref.activo) return;
-    setMemoriaModelo(recordar(m, frase, intencion, signo));
+    const memoria = recordar(m, frase, intencion, signo);
+    if (idiomaDelModelo(m) === idioma()) setMemoriaModelo(memoria);
   };
 
   /** «La primera», «sí», «ninguna»… después de «¿quiso decir…?» (por voz o escrito). */
@@ -2565,7 +2630,12 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     const a = aclaracion.current;
     aclaracion.current = null;
     if (!a || reloj() > a.hasta) return false;
-    const t = sinTildesMinusculas(respuesta).replace(/[¿?¡!.,]/g, "").replace(/\b(melki|por favor|porfa)\b/g, "").trim();
+    // En los dos idiomas (v17.3): «la primera», «sí», «ninguna» o «the first one», «yes», «none» (en las palabras de Melki)
+    const limpiar = (x: string) => sinTildesMinusculas(x).replace(/[¿?¡!.,]/g, "").replace(/\b(melki|por favor|porfa)\b/g, "").trim();
+    const propia = limpiar(respuesta);
+    const traducida = limpiar(traducirPedido(respuesta, { nombres: nombresNodos() }));
+    const reconocida = (x: string) => /^(no|nop|ninguna|ninguno|ninguna de esas|ninguna de las anteriores|cancela|cancelar|nada|olvidalo|dejalo|mejor no|si|sí|dale|hazlo|hagale|esa|ese|eso|correcto|exacto|claro|ok|okey|listo|de una)$/.test(x) || /^((la|el|opcion) )?(primera|primero|1|uno|de arriba|segunda|segundo|2|dos|tercera|tercero|3|tres)( opcion)?$/.test(x);
+    const t = reconocida(propia) || !reconocida(traducida) ? propia : traducida;
     if (/^(no|nop|ninguna|ninguno|ninguna de esas|ninguna de las anteriores|cancela|cancelar|nada|olvidalo|dejalo|mejor no)$/.test(t)) {
       agregarMelki({ texto: tx("Listo, no hago nada. Dígamelo con otras palabras o pregúnteme «¿qué puedes hacer?».", "Very well, I won't do anything. Tell me in other words, or ask me “What can you do?”") });
       return true;
