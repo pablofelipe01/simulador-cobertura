@@ -1480,7 +1480,11 @@ await flujo(
     const estadoHud = () => hud.getAttribute("data-estado");
     const esperarEstado = (re, timeout = 20000) =>
       page.waitForFunction((s) => new RegExp(s).test(document.querySelector("[data-tour=hud-voz]")?.getAttribute("data-estado") ?? ""), re.source, { timeout });
-    const decir = async (texto) => afirmar(await page.evaluate((x) => window.__voz.decir(x), texto), `El micrófono no estaba escuchando al decir «${texto}»`);
+    // (como una persona, espera a que el micrófono vuelva a escuchar: con el equipo cargado tarda un poco más en volver)
+    const decir = async (texto) => {
+      await page.waitForFunction(() => Boolean(window.__voz?.activo), null, { timeout: 4000 }).catch(() => {});
+      afirmar(await page.evaluate((x) => window.__voz.decir(x), texto), `El micrófono no estaba escuchando al decir «${texto}»`);
+    };
     const dicho = () => page.evaluate(() => window.__voz.dicho.join(" | "));
     // Como una persona: deja una pausa después de que Melki termina de hablar (lo que llega enseguida se toma como eco)
     const callado = async () => {
@@ -1680,7 +1684,11 @@ await flujo(
     await esperarSimulacion(page);
     const hud = page.locator("[data-tour=hud-voz]");
     const panel = page.locator("[data-tour=panel-izquierdo]");
-    const decir = async (texto) => afirmar(await page.evaluate((x) => window.__voz.decir(x), texto), `El micrófono no estaba escuchando al decir «${texto}»`);
+    // (como una persona, espera a que el micrófono vuelva a escuchar: con el equipo cargado tarda un poco más en volver)
+    const decir = async (texto) => {
+      await page.waitForFunction(() => Boolean(window.__voz?.activo), null, { timeout: 4000 }).catch(() => {});
+      afirmar(await page.evaluate((x) => window.__voz.decir(x), texto), `El micrófono no estaba escuchando al decir «${texto}»`);
+    };
     const dicho = () => page.evaluate(() => window.__voz.dicho.join(" | "));
     const callado = async () => {
       await page.waitForFunction(() => !window.speechSynthesis.speaking, null, { timeout: 20000 });
@@ -1762,7 +1770,11 @@ await flujo(
   async (page, foto) => {
     await esperarSimulacion(page);
     const hud = page.locator("[data-tour=hud-voz]");
-    const decir = async (texto) => afirmar(await page.evaluate((x) => window.__voz.decir(x), texto), `El micrófono no estaba escuchando al decir «${texto}»`);
+    // (como una persona, espera a que el micrófono vuelva a escuchar: con el equipo cargado tarda un poco más en volver)
+    const decir = async (texto) => {
+      await page.waitForFunction(() => Boolean(window.__voz?.activo), null, { timeout: 4000 }).catch(() => {});
+      afirmar(await page.evaluate((x) => window.__voz.decir(x), texto), `El micrófono no estaba escuchando al decir «${texto}»`);
+    };
     const oido = async (re, timeout = 20000) => {
       try {
         await page.waitForFunction((r) => new RegExp(r).test(window.__voz.dicho.join(" ")), re.source, { timeout });
@@ -2132,7 +2144,11 @@ await flujo(
   async (page, foto) => {
     await esperarSimulacion(page);
     const hud = page.locator("[data-tour=hud-voz]");
-    const decir = async (texto) => afirmar(await page.evaluate((x) => window.__voz.decir(x), texto), `El micrófono no estaba escuchando al decir «${texto}»`);
+    // (como una persona, espera a que el micrófono vuelva a escuchar: con el equipo cargado tarda un poco más en volver)
+    const decir = async (texto) => {
+      await page.waitForFunction(() => Boolean(window.__voz?.activo), null, { timeout: 4000 }).catch(() => {});
+      afirmar(await page.evaluate((x) => window.__voz.decir(x), texto), `El micrófono no estaba escuchando al decir «${texto}»`);
+    };
     const dichos = () => page.evaluate(() => window.__voz.dicho.length);
     const lo = () => page.evaluate(() => window.__voz.dicho.join(" | ").slice(0, 200));
     // ¿Escucha mientras muestra la respuesta? (se mide cada 50 ms mientras la barra responde)
@@ -3614,6 +3630,144 @@ await flujo(
           }
         };
       });
+    },
+  },
+);
+
+// v17.4 · Lo oído mal: el reconocimiento de voz escribe otras palabras que existen («por un repetidor…», «sube lo…»,
+// «at a repeater…», «the lead…»). Melki hace la versión que sí es una orden, dice qué entendió y, si borra algo, pregunta
+// antes; la charla sigue pasando en silencio.
+/** Le escribe a Melki y espera, entre sus mensajes que llegan después, uno que cumpla `re`; devuelve su texto. */
+const pedirA = (page, chat, decir) => async (t, re, timeout = 20000) => {
+  const n = await chat.locator("[data-mensaje]").count();
+  await decir(t);
+  const h = await page.waitForFunction(
+    ({ n, src, flags }) => {
+      const r = new RegExp(src, flags);
+      const ms = [...document.querySelectorAll("[data-tour=melki-chat] [data-mensaje]")].slice(n).filter((m) => !m.classList.contains("justify-end"));
+      return ms.map((m) => m.innerText).find((x) => r.test(x)) ?? false;
+    },
+    { n, src: re.source, flags: re.flags },
+    { timeout },
+  );
+  return h.jsonValue();
+};
+/** La barra del Asistente Melki con el micrófono de mentira: activarla, decirle algo y esperar a que calle. */
+const asistenteDeMentira = (page) => {
+  const hud = page.locator("[data-tour=hud-voz]");
+  const esperarEstado = (re, timeout = 20000) =>
+    page.waitForFunction((s) => new RegExp(s).test(document.querySelector("[data-tour=hud-voz]")?.getAttribute("data-estado") ?? ""), re.source, { timeout });
+  // (como una persona, espera a que el micrófono vuelva a escuchar: con el equipo cargado tarda un poco más en volver)
+  const decir = async (texto) => {
+    await page.waitForFunction(() => Boolean(window.__voz?.activo), null, { timeout: 4000 }).catch(() => {});
+    afirmar(await page.evaluate((x) => window.__voz.decir(x), texto), `El micrófono no estaba escuchando al decir «${texto}»`);
+  };
+  // Como una persona: deja una pausa después de que Melki termina de hablar y habla cuando el micrófono escucha
+  const callado = async () => {
+    await page.waitForFunction(() => !window.speechSynthesis.speaking, null, { timeout: 20000 });
+    await page.waitForTimeout(900);
+    await page.waitForFunction(() => Boolean(window.__voz.activo), null, { timeout: 15000 });
+  };
+  const sinProgreso = () => page.waitForFunction(() => !document.querySelector("[role=progressbar]"), null, { timeout: 90000 });
+  const dichos = () => page.evaluate(() => window.__voz.dicho.length);
+  return { hud, esperarEstado, decir, callado, sinProgreso, dichos };
+};
+
+await flujo(
+  "melki-oido",
+  async (page, foto) => {
+    await esperarSimulacion(page);
+    const { chat, decir } = await abrirMelki(page);
+    const pedir = pedirA(page, chat, decir);
+    const lista = page.locator("[data-tour=lista-antenas]");
+    const n0 = await nodosEnLista(page);
+    // «Por un repetidor…» es «pon un repetidor…»: lo hace y dice qué entendió
+    await pedir("por un repetidor a 2 km al norte de Ejemplo", /Le entendí: «pon un repetidor a 2 km al norte de Ejemplo»/, 30000);
+    await lista.getByText(/^Repetidor 1$/).waitFor({ timeout: 15000 });
+    afirmar((await nodosEnLista(page)) === n0 + 1, "«por un repetidor…» debería poner un repetidor");
+    // «Sube lo a 20 m» es «súbelo a 20 m» (el último nodo que se tocó)
+    const sube = await pedir("sube lo a 20 m", /Le entendí: «[Ss]ubelo a 20 m»/);
+    afirmar(/Repetidor 1/.test(sube) && /20 m/.test(sube), `«sube lo a 20 m» debería subir el Repetidor 1 a 20 m: ${sube.slice(0, 200)}`);
+    // Lo que borra, salido de una palabra mal oída, se pregunta antes
+    await pedir("ilumina el repetidor 1", /Como eso borra o reemplaza algo, ¿lo hago\?/);
+    afirmar((await nodosEnLista(page)) === n0 + 1, "Antes de confirmar no debería borrar nada");
+    await foto("confirmar");
+    await chat.getByRole("button", { name: "Sí, hazlo" }).last().click();
+    await lista.getByText(/^Repetidor 1$/).waitFor({ state: "detached", timeout: 15000 });
+    afirmar((await nodosEnLista(page)) === n0, "Al confirmar debería quitar el Repetidor 1");
+  },
+);
+
+await flujo(
+  "melki-oido-voz",
+  async (page, foto) => {
+    await esperarSimulacion(page);
+    const { hud, esperarEstado, decir, callado, sinProgreso, dichos } = asistenteDeMentira(page);
+    await page.getByRole("button", { name: "Activar el Asistente Melki" }).first().click();
+    await hud.waitFor();
+    await esperarEstado(/^atento$/);
+    await callado();
+    // Sin su nombre (con la barra abierta): «por un repetidor…» no se deja pasar callado, es «pon un repetidor…»
+    const n0 = await nodosEnLista(page);
+    await decir("por un repetidor a 3 km al sur de Ejemplo");
+    await page.waitForFunction((n) => document.querySelectorAll("[data-tour=lista-antenas] > li").length === n + 1, n0, { timeout: 20000 });
+    await sinProgreso();
+    await esperarEstado(/^(atento|esperando)$/);
+    await callado();
+    await foto("orden");
+    // La charla sigue pasando en silencio
+    const antes = await dichos();
+    await decir("pásame el café");
+    await hud.getByText(/No lo tomé como orden/).waitFor({ timeout: 10000 });
+    await page.waitForTimeout(1200);
+    afirmar((await dichos()) === antes && (await nodosEnLista(page)) === n0 + 1, "La charla debería pasar en silencio");
+  },
+  { hablar: true, preparar: (page) => page.addInitScript(manosLibresDeMentira) },
+);
+
+await flujo(
+  "melki-oido-ingles",
+  async (page, foto) => {
+    await esperarSimulacionIngles(page);
+    const { chat, decir } = await abrirMelki(page);
+    const pedir = pedirA(page, chat, decir);
+    const lista = page.locator("[data-tour=lista-antenas]");
+    const n0 = await nodosEnLista(page);
+    // Inglés con acento, como lo escribe el reconocimiento: «at a repeater…» es «add a repeater…»
+    const puso = await pedir("at a repeater 5 km north of Example", /I understood: “add a repeater 5 km north of Example”/, 30000);
+    await lista.getByText(/^Repeater 1$/).waitFor({ timeout: 15000 });
+    afirmar(!RASTRO_ESPANOL.test(puso.replace(/«[^»]*»|“[^”]*”/g, "")), `La respuesta debería estar en inglés: ${puso.slice(0, 200)}`);
+    // «mood» es «move»
+    await pedir("mood Repeater 1 1 km east", /I understood: “move Repeater 1 1 km east”/, 30000);
+    // «the lead repeater won» es «delete Repeater 1»: como borra, pregunta antes
+    await pedir("the lead repeater won", /Since that deletes or replaces something, shall I go ahead\?/);
+    await foto("confirmar");
+    await chat.getByRole("button", { name: "Yes, do it" }).last().click();
+    await lista.getByText(/^Repeater 1$/).waitFor({ state: "detached", timeout: 15000 });
+    afirmar((await nodosEnLista(page)) === n0, "Al confirmar debería quitar el Repeater 1");
+    // Por voz, con la barra abierta: «at a repeat her…» se hace; la charla («get away» no es «gateway») pasa en silencio
+    const { hud, esperarEstado, decir: hablar, callado, sinProgreso, dichos } = asistenteDeMentira(page);
+    await page.getByRole("button", { name: "Turn on the Melki Assistant" }).first().click();
+    await hud.waitFor();
+    await esperarEstado(/^atento$/);
+    await callado();
+    await hablar("at a repeat her 3 km south of example");
+    await page.waitForFunction((n) => document.querySelectorAll("[data-tour=lista-antenas] > li").length === n + 1, n0, { timeout: 20000 });
+    await sinProgreso();
+    await esperarEstado(/^(atento|esperando)$/);
+    await callado();
+    const antes = await dichos();
+    await hablar("I need to get away from here");
+    await hud.getByText(/I didn't take that as an order/).waitFor({ timeout: 10000 });
+    await page.waitForTimeout(1200);
+    afirmar((await dichos()) === antes && (await nodosEnLista(page)) === n0 + 1, "La charla en inglés debería pasar en silencio");
+    await foto("voz");
+  },
+  {
+    hablar: true,
+    preparar: async (page) => {
+      await page.addInitScript(() => localStorage.getItem("simulador-cobertura-idioma") || localStorage.setItem("simulador-cobertura-idioma", JSON.stringify({ idioma: "en", auto: true })));
+      await page.addInitScript(manosLibresDeMentira);
     },
   },
 );
