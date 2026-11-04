@@ -686,6 +686,28 @@ con un punto.
     por nodo frente a la meta del área objetivo y le dice cuáles sobran
     y cuánto se ahorra, o, si falta cobertura, le propone el ajuste en
     vez de poner antenas a ojo.
+ cc) Inglés y español por igual: háblele o escríbale a Melki en el
+    idioma que quiera, aunque la pantalla esté en el otro. Entiende y
+    hace las órdenes en los dos, y le contesta, le escribe y le habla
+    en el idioma en que usted le habló (todo el simulador pasa a ese
+    idioma, con el botón para volver). Basta una orden corta
+    ("Simulate", "optimize it", "simula"); "ok", "zoom" o "gateway"
+    no cambian nada. Entiende el inglés natural, con errores de
+    tecleo y de dictado ("simualte", "repeat her", "gate way"),
+    números en palabras ("a kilometer", "a couple"), millas y pies, y
+    el inglés con la forma del español ("put one repeater 2 km at
+    north of the gateway", "how much costs the network?"). En español
+    también entiende las palabras del inglés que se cuelan ("pon un
+    repeater...", "haz el stress test") y los nodos con su nombre en
+    el otro idioma ("sube el Repetidor 2" si el mapa tiene "Repeater
+    2"). Entiende el nodo dicho sin su nombre, como en español: "move
+    it 2 km east" (el último que se tocó, como "muévelo"), "delete
+    that one" (el seleccionado), "turn Repeater 1 off"; los nombres
+    nuevos quedan como se dijeron ("rename it to North Tower,
+    please"). La charla ("gracias, Melki", "thanks Melki") no cambia
+    el idioma de la pantalla. Con el cambio automático apagado (en
+    "Configuración"), le entiende los dos idiomas y le contesta en
+    el de la pantalla.
 
 
 3. BUENO SABER
