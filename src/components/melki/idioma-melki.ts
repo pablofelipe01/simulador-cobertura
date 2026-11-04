@@ -6,7 +6,7 @@
 // Melki y el idioma: si le escriben o le hablan en el otro idioma, cambia todo el simulador a ese idioma (si el cambio
 // automático está encendido) y lo avisa con un botón para volver; «speak English» o «habla en español» lo cambian
 // siempre. Los nombres de los nodos y de los lugares no cuentan para decidir («go to Barranca de Upía» es inglés).
-import { cambioAutomatico, detectarIdioma, idioma, pedidoDeIdioma, type Idioma } from "@/lib/idioma";
+import { cambioAutomatico, idioma, idiomaProbable, pedidoDeIdioma, type Idioma } from "@/lib/idioma";
 
 /** Palabras que unen un nombre de lugar («Barranca de Upía», «San José del Guaviare», «La Primavera»). */
 const UNION = String.raw`(?:de|del|la|las|los|el|y|de la|de los|de las)`;
@@ -33,15 +33,17 @@ export type CambioIdioma = { idioma: Idioma; pedido: boolean };
 
 /**
  * ¿Este mensaje cambia el idioma? Un pedido («speak English», «en español por favor») siempre; si no, con el cambio
- * automático encendido y clara ventaja del otro idioma. Las frases muy cortas («ok», «hello», «simula») no cambian nada.
+ * automático encendido, cuando está en el otro idioma: por la ventaja de sus palabras o, en una orden corta, por el verbo
+ * con que empieza (v17.3: «Simulate», «optimize it», «carga el ejemplo»). Las palabras que se usan en los dos idiomas
+ * («ok», «hello», «gateway», «LoRa», «zoom») no cambian nada.
  */
 export function cambioDeIdioma(texto: string, nombres: string[] = []): CambioIdioma | null {
   const pedido = pedidoDeIdioma(texto);
   if (pedido) return pedido === idioma() ? null : { idioma: pedido, pedido: true };
   if (!cambioAutomatico()) return null;
-  const d = detectarIdioma(sinNombres(texto, nombres));
-  if (!d.idioma || d.idioma === idioma()) return null;
-  return { idioma: d.idioma, pedido: false };
+  const d = idiomaProbable(sinNombres(texto, nombres));
+  if (!d || d === idioma()) return null;
+  return { idioma: d, pedido: false };
 }
 
 /** ¿El mensaje no trae nada más que el pedido de cambiar de idioma? (entonces no hay nada más que hacer con él) */

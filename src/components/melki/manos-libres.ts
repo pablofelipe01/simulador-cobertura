@@ -9,7 +9,7 @@
 // segundos para seguir la conversación sin repetir su nombre. Aquí está lo que no depende de la pantalla: reconocer el llamado, los controles de voz («para»,
 // «repite», «más detalle», «sí, hazlo», «la segunda», «deja de escuchar»), limpiar lo dicho, resumir la respuesta para
 // leerla y las frases del asistente.
-import { idioma, tx } from "@/lib/idioma";
+import { idioma, tx, type Idioma } from "@/lib/idioma";
 
 import { normalizarDictado } from "./dictado";
 import { numerosEnPalabras, numerosEnPalabrasEn } from "./numeros";
@@ -129,7 +129,7 @@ export function controlDeVoz(frase: string): ControlVoz | null {
     )
   )
     return { tipo: "apagar" };
-  if (/^(adios|chao|hasta luego|hasta pronto|nos vemos|bye|goodbye)( melki)?$/.test(t)) return { tipo: "apagar", despedida: true };
+  if (/^((gracias|muchas gracias|listo|bueno|ok) )?(adios|chao|chau|hasta luego|hasta pronto|hasta manana|nos vemos|nos vemos luego|bye|goodbye)( melki)?$/.test(t)) return { tipo: "apagar", despedida: true };
   if (/^(gracias|muchas gracias|mil gracias|listo gracias|ok gracias|perfecto|perfecto gracias|excelente|genial|muy bien|vale|ok|okey|listo|thank you|thanks)$/.test(t)) return { tipo: "gracias" };
   if (/^(no|no gracias|nada|cancela|cancelalo|cancelar|olvidalo|dejalo|dejalo asi|mejor no|asi esta bien|no hagas nada)$/.test(t)) return { tipo: "no" };
   if (/^(si|claro|dale|hazlo|hagalo|hagale|de una|adelante|confirmo|correcto|exacto|aplicalo|aplica|aplicala|ponlo|ponla|si por favor|si hazlo|si dale|si claro|si adelante|ok hazlo|ok dale|yes|do it|go)( (hazlo|por favor|dale|adelante|porfa))?$/.test(t))
@@ -151,10 +151,10 @@ function controlEnIngles(t: string): ControlVoz | null {
   const u = t.replace(/'/g, "");
   if (/^(stop|stop it|stop talking|quiet|be quiet|silence|enough|thats enough|hold on|wait|shut up|pause)$/.test(u)) return { tipo: "callar" };
   if (/^(repeat|repeat that|repeat it|say (that|it) again|again|come again|what did you say|sorry what|pardon|i (did not|didnt) (hear|catch) (that|you)|once more)$/.test(u)) return { tipo: "repetir" };
-  if (/^(more details?|give me (more )?details?|in detail|explain( more| it| that)?|read it all|read everything|tell me everything|the full answer|tell me more|go on|keep going|and what else|what else)$/.test(u)) return { tipo: "detalle" };
+  if (/^(more details?|give me (more )?details?|in detail|explain( more| it| that)?|read it all|read everything|tell me everything|the full answer|tell me more|go on|keep going|carry on|continue|and what else|what else)$/.test(u)) return { tipo: "detalle" };
   if (/^(turn off|switch off|disable|close) (the )?(microphone|mic)( completely)?$|^(do not|dont) listen to me( anymore)?$|^stop listening (completely|altogether)$/.test(u)) return { tipo: "microfono" };
   if (/^(turn off|switch off|deactivate|disable|close|exit|stop) (the )?(hands ?free( mode)?|assistant|melki assistant|voice assistant|listening)$|^stop listening( to me)?$/.test(u)) return { tipo: "apagar" };
-  if (/^(goodbye|bye|bye bye|see you|see you later|good night)( melki)?$/.test(u)) return { tipo: "apagar", despedida: true };
+  if (/^((thanks|thank you|ok|okay|alright) )?(goodbye|bye|bye bye|bye for now|goodbye for now|see you|see ya|see you later|see you soon|catch you later|talk to you later|take care|farewell|good night)( melki)?$/.test(u)) return { tipo: "apagar", despedida: true };
   if (/^(thanks|thank you|thank you very much|thanks a lot|many thanks|perfect|perfect thanks|excellent|great|very good|good job|well done|ok thanks|okay thanks|got it|ok|okay)$/.test(u)) return { tipo: "gracias" };
   if (/^(no|no thanks|no thank you|nothing|cancel|cancel it|cancel that|never ?mind|forget it|leave it|leave it like that|better not|do nothing|dont do anything|do not do anything)$/.test(u)) return { tipo: "no" };
   if (/^(yes|yeah|yep|sure|of course|do it|go ahead|go for it|confirm|confirmed|apply it|apply|correct|exactly|please do|yes please|yes do it|ok do it|okay do it|sounds good)( please)?$/.test(u)) return { tipo: "accion", indice: 0 };
@@ -169,9 +169,12 @@ function controlEnIngles(t: string): ControlVoz | null {
   return null;
 }
 
-/** Lo dicho, listo para Melki: números en cifras, coordenadas y sin muletillas. */
-export function limpiarComando(frase: string): string {
-  if (idioma() === "en") return limpiarComandoIngles(frase);
+/**
+ * Lo dicho, listo para Melki: números en cifras, coordenadas y sin muletillas. `lengua`: el idioma en que se oyó (el del
+ * reconocimiento; el doble oído también oye en el otro idioma).
+ */
+export function limpiarComando(frase: string, lengua: Idioma = idioma()): string {
+  if (lengua === "en") return limpiarComandoIngles(frase);
   let t = frase.replace(/\s+/g, " ").trim();
   t = numerosEnPalabras(t);
   t = normalizarDictado(t);
