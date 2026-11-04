@@ -14,6 +14,7 @@ import { detectarIdioma } from "@/lib/idioma";
 
 import { numerosEnPalabrasEn } from "./numeros";
 import { corregirIngles } from "./ortografia-en";
+import { corregirOido } from "./oido";
 
 export type ContextoTraduccion = {
   /** Los nombres de los nodos del mapa («Gateway», «Repeater 3», «Repetidor 1»…). */
@@ -204,7 +205,7 @@ const LONGITUD: [RegExp, string][] = [
   [/\bnautical miles?\b/gi, "millas náuticas"],
   [/\b(kilomet(?:er|re)s?|kms?)\b/gi, "km"],
   [/\bsquare miles?\b/gi, "millas cuadradas"],
-  [/\bsquare (?:kilomet(?:er|re)s?|kms?)\b|\bsq\.? ?km\b/gi, "km²"],
+  [/\bsquare (?:kilomet(?:er|re)s?|kms?)\b|\bsq\.? ?km\b|\b(?:kilomet(?:er|re)s?|kms?) squared\b/gi, "km²"],
   [/\bsquare met(?:er|re)s?\b|\bsq\.? ?m\b/gi, "metros cuadrados"],
   [/\bmiles\b/gi, "millas"],
   [/\bmile\b/gi, "milla"],
@@ -370,6 +371,48 @@ const ENTEROS: Regla[] = [
   [/^(?:no|without) (?:the )?roads?(?: layer)?$/i, "quita las vías"],
 ];
 
+/** v17.4 · «Why doesn't Person 1 have signal?», «why is Repeater 2 out of range?»: lo mismo que «¿por qué … no tiene señal?». */
+const SIN_SENAL_EN: Regla[] = [
+  [/^why (?:doesn't|does not|can't|cannot|isn't|is not|won't|didn't|did not|couldn't) (⟦\d+⟧|it|that one|.+?) (?:have|get|receive|has|got|reach|pick up)(?: any| a| the)? (?:signal|coverage|service|connection|link)(?: anymore| now)?$/i, (_m, x: string) => `¿por qué ${/^(?:it|that one)$/i.test(x) ? "ese nodo" : x} no tiene señal?`],
+  [/^why (?:can't|cannot|doesn't|does not|won't|isn't|is not) (⟦\d+⟧|it|that one|.+?) (?:connect|connecting|reach the gateway|get to the gateway|reach the network|be reached)(?: to the (?:network|mesh|gateway))?$/i, (_m, x: string) => `¿por qué ${/^(?:it|that one)$/i.test(x) ? "ese nodo" : x} no tiene señal?`],
+  [/^why (?:is|does) (⟦\d+⟧|it|that one|.+?) (?:out of (?:coverage|range|reach)|disconnected|offline|without (?:signal|coverage)|have no (?:signal|coverage)|has no (?:signal|coverage)|not connected|uncovered|in red)$/i, (_m, x: string) => `¿por qué ${/^(?:it|that one)$/i.test(x) ? "ese nodo" : x} no tiene señal?`],
+  [/^why (?:has|does) (⟦\d+⟧|it|that one|.+?) (?:got|get|have) no (?:signal|coverage|service)$/i, (_m, x: string) => `¿por qué ${/^(?:it|that one)$/i.test(x) ? "ese nodo" : x} no tiene señal?`],
+  [/^what(?:'s| is) wrong with (⟦\d+⟧|.+?)$/i, (_m, x: string) => `¿por qué ${/^(?:it|that one)$/i.test(x) ? "ese nodo" : x} no tiene señal?`],
+  // «What does LoRa mean?», «what means LoRa?», «what exactly is LoRa?»: lo mismo que «¿qué es LoRa?»
+  [/^what (?:does|do) (?:the )?(?:sf|s f|spreading factor) (?:mean|stand for)$/i, "¿qué es el factor de dispersión?"],
+  [/^what (?:does|do) (.+?) (?:mean|stand for)$/i, "¿qué es $1?"],
+  [/^what means (.+)$/i, "¿qué es $1?"],
+  [/^what (?:exactly is|is exactly) (.+)$|^what is (.+?) exactly$/i, (_m, a: string, b: string) => `¿qué es ${a ?? b}?`],
+  [/^(?:what is|what's|explain|define|tell me about) (?:the )?spreading factor$/i, "¿qué es el factor de dispersión?"],
+  // «How much does it cost?»: la red del mapa
+  [/^how much (?:does|would|will) (?:it|this|all this|that|everything|all of this) cost$/i, "¿cuánto cuesta esto?"],
+];
+
+/**
+ * v17.4 · Una altura relativa en español («súbelo 5 m más», «baja ⟦0⟧ 3 m más»): con «it» o «that one», el clítico; con
+ * un nodo o «the gateway», tal cual (las palabras se traducen después).
+ */
+function relativa(verbo: "sube" | "baja", x: string | undefined, h: string): string {
+  const objeto = (x ?? "").trim();
+  if (!objeto || /^(?:it|that one|this one)$/i.test(objeto)) return `${verbo === "sube" ? "súbelo" : "bájalo"} ${h} m más`;
+  return `${verbo} ${objeto} ${h} m más`;
+}
+const POR_CUANTO = String.raw`(?:by |another |an extra |a further |an additional |some |about |around )?`;
+/** El número y la unidad («5 m», «5 more m»: «meters» ya llega como «m»). */
+const CUANTO_M = String.raw`(\d+(?:\.\d+)?) ?(?:more |extra |additional |further )?m`;
+const HACIA_ARRIBA = String.raw`(?: more| higher| up| extra| taller| further| more up)?`;
+const HACIA_ABAJO = String.raw`(?: more| lower| down| less| shorter| further| more down)?`;
+/** El nodo de una altura relativa (sin «to», «at» ni «until»: «lower X to 10 m» es la altura dicha). */
+const OBJETO_ALTURA = String.raw`(?: (it|that one|this one|(?:(?!\b(?:to|at|until|till)\b).)+?))?`;
+/** «Raise it 5 m», «lift Repeater 1 by 5 m», «bump it up another 3 m», «raise the gateway 2 m higher». */
+const ALTURA_SUBE = new RegExp(String.raw`^(?:raise|lift|increase|bump|hike)(?: up)?${OBJETO_ALTURA}(?: up)? ${POR_CUANTO}${CUANTO_M}${HACIA_ARRIBA}$`, "i");
+/** «Move it up 5 m», «bring Repeater 1 up by 2 m» (sin «up», «move it 5 m» es un traslado). */
+const ALTURA_SUBE_CON_UP = new RegExp(String.raw`^(?:move|put|push|jack|crank|bring|get)${OBJETO_ALTURA} up ${POR_CUANTO}${CUANTO_M}${HACIA_ARRIBA}$`, "i");
+/** «Lower it 3 m», «drop Repeater 1 by 2 m», «reduce the gateway 1 m». */
+const ALTURA_BAJA = new RegExp(String.raw`^(?:lower|drop|reduce|decrease|shorten|cut)(?: down)?${OBJETO_ALTURA}(?: down)? ${POR_CUANTO}${CUANTO_M}${HACIA_ABAJO}$`, "i");
+/** «Bring it down 4 m», «take Repeater 1 down by 2 m». */
+const ALTURA_BAJA_CON_DOWN = new RegExp(String.raw`^(?:bring|take|move|put|get)${OBJETO_ALTURA} down ${POR_CUANTO}${CUANTO_M}${HACIA_ABAJO}$`, "i");
+
 // 3. Frases del dominio (se aplican en orden, sobre todo el texto)
 const FRASES: Regla[] = [
   // v17.3 · «northward», «to the north side»: el rumbo de siempre
@@ -379,7 +422,12 @@ const FRASES: Regla[] = [
   [/^(?:move|pan|shift|take|bring|scroll) the (?:map|view|camera|screen) (?:to|over to|towards?) (.+?)$/i, "llévame a $1"],
   // Conectores de varias órdenes
   // («next to the gateway» es junto al gateway, no «luego»)
+  // v17.4 · «bring it closer to the gateway», «move Repeater 1 close to Person 2»: acercarlo a ese nodo
+  [/^(?:bring|get|take|move|put|pull|push) (?!(?:a|an|another|one|some|new|\d+)\b)(.+?) (?:a (?:bit|little) )?(?:closer|nearer|close|near|right next|next) to (.+)$/i, (_m, x: string, y: string) => (/^(?:it|that one|this one)$/i.test(x) ? `acércalo a ${y}` : `acerca ${x} a ${y}`)],
   [/\bnext to\b/gi, "cerca de"],
+  // v17.4 · «close to», «beside», «alongside», «nearby»: también junto a ese nodo («close» solo es ocultar)
+  [/\b(?:very |really |right |quite )?(?:close to|closer to|nearer to|close by|beside|alongside|by the side of)\b/gi, "cerca de"],
+  [/\bnearby (?=(?:the |a |an )?\S)/gi, "cerca de "],
   [/\s*,?\s*\b(?:and then|then|after that|afterwards|next)\b\s*,?\s*/gi, ", luego "],
   // Preguntas que el intérprete contesta
   [/^how much (?:would|will|does|do) (?:it )?cost to cover (?:the )?(?:whole|entire) country(?: with ([\d.]+) ?% (?:adoption|uptake))?\??$/i, (_m, a: string) => `cuánto costaría cubrir todo el país${a ? ` con ${a}% de adopción` : ""}`],
@@ -469,6 +517,8 @@ const FRASES: Regla[] = [
   [/\b(?:stop|remove|turn off) the animation\b/gi, "quita la animación"],
   [/\b(?:show|fit|zoom to|frame|see) (?:me )?(?:the )?(?:whole|entire|full) (?:network|mesh)\b|\bfit (?:the )?(?:map|view) to (?:the )?(?:network|mesh)\b|\bzoom to fit\b/gi, "muéstrame toda la red"],
   [/\b(?:turn on|activate|enable|open|use|give me|grab|get|pick up|take|bring up) (?:the )?ruler\b(?: tool)?|\bmeasure with the ruler\b/gi, "activa la regla"],
+  // v17.4 · Borrar lo medido con la regla («delete the measurements», «clear the ruler»)
+  [/\b(?:delete|remove|clear|erase|wipe|reset|trash|get rid of)(?: all)?(?: of)? (?:the |my |these |those )?(?:ruler )?(?:measurements?|measures|measured lines|ruler lines)\b|\b(?:clear|erase|wipe|reset) (?:the )?ruler\b/gi, "borra las mediciones"],
   // v17.2 · El lápiz de malla (cómo se usa, soltarlo y activarlo)
   [/\bhow (?:do|can|should|would) (?:i|we|you) use (?:the )?(?:mesh )?(?:pencil|brush)\b/gi, "cómo se usa el lápiz"],
   [/\b(?:turn off|deactivate|disable|close|put down|put away|drop|release|stop using|exit|leave) (?:the )?(?:mesh )?(?:pencil|brush)\b|\bput (?:the )?(?:mesh )?(?:pencil|brush) (?:down|away)\b/gi, "suelta el lápiz"],
@@ -554,7 +604,9 @@ const FRASES: Regla[] = [
   [/\bgive me the (?:cheapest|most economical) option(?: to make it feasible| for it to be feasible)?\b/gi, "dame la opción más económica para que sea factible"],
   [/\bapply the optimi[sz]ation\b/gi, "aplica la optimización"],
   // v17.3 · «accept the optimization», «go with the optimized network», «apply optimization»
-  [/\b(?:apply|accept|use|go with|take|keep|implement|confirm|approve)(?: the)? (?:optimi[sz]ation|optimi[sz]ed (?:network|mesh|version|design|layout|one)|optimi[sz]ation proposal)\b|^apply optimi[sz]ation$/gi, "aplica la optimización"],
+  [/\b(?:apply|accept|use|go with|take|keep|implement|confirm|approve)(?: the| that| this| your| my| our)? (?:optimi[sz]ations?|optimi[sz]ed (?:network|mesh|version|design|layout|one)s?|optimi[sz]ation proposals?)\b|^apply optimi[sz]ations?$/gi, "aplica la optimización"],
+  // v17.4 · «Run the optimization»: el sustantivo en inglés ya no pasa por el verbo del español («optimiz…»)
+  [/\b(?:run|do|make|start|launch|perform|execute|begin|carry out)(?: the| an| a| another| a new)? (?:network |mesh )?optimi[sz]ation(?: of (?:the|my|our) (?:network|mesh))?\b/gi, "optimiza la red"],
   [/\boptimi[sz]e the (?:network|mesh) for the load\b/gi, "optimiza la red para la carga"],
   [/\boptimi[sz]e the (?:network'?s? )?cost(?: of the network)?\b/gi, "optimiza el costo de la red"],
   [/\boptimi[sz]e the (?:network|mesh) with (?:a )?(?:maximum|max|at most) (?:of )?(\d+) support antennas?(?: and (?:do not|don't) move the nodes)?\b/gi, (m, n: string) => `optimiza la red con máximo ${n} antenas de apoyo${/move/i.test(m) ? " y no muevas los nodos" : ""}`],
@@ -677,12 +729,28 @@ const FRASES: Regla[] = [
   [/\bat (?=\d+(?:\.\d+)? ?(?:m|km|millas|milla|millas náuticas|pies|yardas|cuadras)\b)/gi, "a "],
   [/\b(\d+(?:\.\d+)?) ?m (?:high|tall|height|above (?:the )?ground)\b/gi, "a $1 m"],
   [/\b(?:put|set) (.+?) (?:at|to) the (?:maximum|max|highest) height\b/gi, "pon el $1 a la altura máxima"],
-  [/\b(?:raise|lift|increase|set|put|make|move up) all (?:the )?repeaters (?:to|at)? ?(\d+(?:\.\d+)?) ?m\b|\b(?:set|make) all (?:the )?repeaters (\d+(?:\.\d+)?) ?m(?: high| tall)?\b/gi, (_m, a: string, b: string) => `sube todos los repetidores a ${a ?? b} m`],
+  // v17.4 · «raise all the repeaters 5 m» suma 5 m a cada uno; «raise all the repeaters to 20 m» los deja a 20 m
+  [/\b(raise|lift|increase|bump|lower|drop|reduce|decrease) all (?:of )?(?:the )?(repeaters|antennas|nodes|towers|people|persons) (?:by |another )?(\d+(?:\.\d+)?) ?m(?: more| higher| lower| up| down)?$/gi, (_m, v: string, g: string, h: string) => `${/^(?:lower|drop|reduce|decrease)$/i.test(v) ? "baja" : "sube"} todos los ${g} ${h} m más`],
+  [/\b(?:raise|lift|increase|move up) all (?:the )?repeaters (?:to|at|up to) ?(\d+(?:\.\d+)?) ?m\b|\b(?:set|put|make) all (?:the )?repeaters (?:to |at )?(\d+(?:\.\d+)?) ?m(?: high| tall)?\b/gi, (_m, a: string, b: string) => `sube todos los repetidores a ${a ?? b} m`],
   [/\b(?:make|set) all (?:the )?antennas (?:at|to)? ?(\d+(?:\.\d+)?) ?m\b|\ball (?:the )?antennas (?:at|to) (\d+(?:\.\d+)?) ?m\b/gi, (_m, a: string, b: string) => `que todas las antenas estén a ${a ?? b} m`],
   [/\b(?:set|change|adjust) (?:the )?height of (.+?) to (\d+(?:\.\d+)?) ?m\b|\b(?:set|change|adjust) (.+?)'?s height to (\d+(?:\.\d+)?) ?m\b/gi, (_m, a: string, h: string, b: string, k: string) => `ajusta la altura de ${a ?? b} a ${h ?? k} m`],
   [/\b(?:raise|lift|increase|move up)( it| that one)? to (\d+(?:\.\d+)?) ?m\b/gi, (_m, it: string, h: string) => (it ? `súbelo a ${h} m` : `sube a ${h} m`)],
   [/\b(?:raise|lift|increase|move up) (.+?) to (\d+(?:\.\d+)?) ?m\b/gi, "sube $1 a $2 m"],
   [/\b(?:lower|drop|reduce|bring down) (.+?) to (\d+(?:\.\d+)?) ?m\b/gi, "baja $1 a $2 m"],
+  // v17.4 · Alturas relativas, como «súbelo 5 m más»: «raise it 5 m», «raise Repeater 1 by 5 m», «lower it 3 m», «make it
+  // 5 m taller», «add 5 m to it», «take 2 m off Repeater 1», «increase its height by 5 m», «move it up 5 m»
+  [/^(increase|raise|decrease|reduce|lower) (its|it's|that one's|.+?'s) height by (\d+(?:\.\d+)?) ?m$/i, (_m, v: string, x: string, h: string) => relativa(/^(?:increase|raise)$/i.test(v) ? "sube" : "baja", /^(?:its|it's)$/i.test(x) ? "it" : x.replace(/'s$/i, ""), h)],
+  [/^(increase|raise|decrease|reduce|lower) (?:the )?height of (it|that one|.+?) by (\d+(?:\.\d+)?) ?m$/i, (_m, v: string, x: string, h: string) => relativa(/^(?:increase|raise)$/i.test(v) ? "sube" : "baja", x, h)],
+  [ALTURA_SUBE, (_m, x: string | undefined, h: string) => relativa("sube", x, h)],
+  [ALTURA_SUBE_CON_UP, (_m, x: string | undefined, h: string) => relativa("sube", x, h)],
+  [ALTURA_BAJA, (_m, x: string | undefined, h: string) => relativa("baja", x, h)],
+  [ALTURA_BAJA_CON_DOWN, (_m, x: string | undefined, h: string) => relativa("baja", x, h)],
+  [/^make (it|that one|.+?) (\d+(?:\.\d+)?) ?m (taller|higher|shorter|lower)$/i, (_m, x: string, h: string, d: string) => relativa(/^(?:taller|higher)$/i.test(d) ? "sube" : "baja", x, h)],
+  [/^(?:add|give|put) (?:another |an extra |an additional )?(\d+(?:\.\d+)?) ?m(?: more| extra)?(?: of height| in height| height)? (?:to|on|onto) (it|that one|.+?)(?:'s height| height)?$/i, (_m, h: string, x: string) => relativa("sube", x, h)],
+  [/^give (it|that one|⟦\d+⟧) (?:another |an extra |an additional )?(\d+(?:\.\d+)?) ?m(?: more| extra)?(?: of height| in height| height)?$/i, (_m, x: string, h: string) => relativa("sube", x, h)],
+  [/^(?:take|cut|shave|knock) (\d+(?:\.\d+)?) ?m off (?:of )?(it|that one|.+?)$/i, (_m, h: string, x: string) => relativa("baja", x, h)],
+  [/^(?:move|bring|take|put) (⟦\d+⟧|it|that one) (up|down) (?:by )?(?:another )?(\d+(?:\.\d+)?) ?m(?: more)?$/i, (_m, x: string, d: string, h: string) => relativa(d.toLowerCase() === "up" ? "sube" : "baja", x, h)],
+  [/^(⟦\d+⟧|it|that one),? (?:another )?(\d+(?:\.\d+)?) ?m (higher|taller|up|lower|shorter|down)$/i, (_m, x: string, h: string, d: string) => relativa(/^(?:higher|taller|up)$/i.test(d) ? "sube" : "baja", x, h)],
   [/^(?:raise|lift) (?:it|that one)$/i, "súbelo"],
   [/^(?:lower) (?:it|that one)$/i, "bájalo"],
   [/\b(?:raise|lift) (.+?)$/gi, "sube $1"],
@@ -776,7 +844,7 @@ const FRASES: Regla[] = [
   [/^(?:set|place|locate|situate|position|install|plant|stick|drop) (?:the |our |my )?gateway (?:in|at|on|near) (.+)$/i, "pon el gateway en $1"],
   [/^(?:the |our |my )?gateway (?:in|at) (.+)$|^(?:the |our |my )?gateway (?:goes|should go|will go|must go|has to go|needs to go|belongs) (?:in|at|to|on) (.+)$/i, (_m, a: string, b: string) => `pon el gateway en ${a ?? b}`],
   // Llevar el mapa
-  [/^(?:take me to|go to|fly to|fly me to|navigate to|head to|move the map to|pan to|zoom (?:in )?(?:to|on|into)|zoom into|center (?:the map )?on|centre (?:the map )?on|show me|find|locate|where is|let us go to|bring me to) (.+?)\??$/i, "llévame a $1"],
+  [/^(?:take me to|go to|fly to|fly me to|navigate to|head to|move the map to|pan to|zoom (?:in )?(?:to|on|into)|zoom into|center (?:the map )?on|centre (?:the map )?on|show me|find me|find|locate|where is|let us go to|bring me to) (.+?)\??$/i, "llévame a $1"],
   // «take me Villavicencio» (sin el «to»)
   [/^take me (?!to\b|on\b|through\b|around\b|back\b|home\b)(.+?)\??$/i, "llévame a $1"],
   // Simular (v17.3: «run a simulation», «start/kick off/redo the simulation», «update the coverage», «simulation»)
@@ -977,6 +1045,9 @@ const USTED: Record<string, string> = {
   deshaga: "deshaz", explique: "explica", expliqueme: "explícame", digame: "dime", deme: "dame", enseneme: "enséñame", lleve: "lleva",
   lleveme: "llévame", ajuste: "ajusta", ajustelo: "ajústalo", ajustemelo: "ajústamelo", ajustela: "ajústala", anada: "añade",
   agregue: "agrega", agreguele: "agrégale", inscriba: "inscribe",
+  // v17.4 · También los que se oyen mucho por voz
+  deje: "deja", dejelo: "déjalo", anime: "anima", pone: "pon", ponele: "ponle", ensene: "enseña", vuelva: "vuelve", empiece: "empieza",
+  cubrame: "cúbreme", calculeme: "calcúlame", pase: "pasa", inscribalo: "inscríbelo",
 };
 const sinTildes = (x: string) => x.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 function conElTu(t: string): string {
@@ -994,7 +1065,9 @@ function conElTu(t: string): string {
  * nada de eso sale igual.
  */
 export function espanolDeMezcla(texto: string, contexto: ContextoTraduccion = {}): string {
-  const limpio = texto.normalize("NFC").replace(/[’‘]/g, "'");
+  // v17.4 · Lo que el reconocimiento oye mal y es seguro de corregir («gueiguey» → «gateway», «kilo metros»)
+  const entrada = texto.normalize("NFC").replace(/[’‘]/g, "'");
+  const limpio = corregirOido(entrada, "es", contexto.nombres ?? []);
   const p = proteger(limpio, contexto.nombres ?? []);
   // Un nombre nuevo dicho en español («renombra el Repetidor 1 como North Tower», «llama al escenario Coverage Test», «un
   // repetidor llamado Repeater Hill en…») queda como se dijo: sus palabras no se traducen
@@ -1015,7 +1088,7 @@ export function espanolDeMezcla(texto: string, contexto: ContextoTraduccion = {}
   }
   const r = restaurar(t, p.piezas);
   // Si nada cambió (salvo los espacios), queda tal cual se escribió
-  return r.replace(/\s+/g, " ").trim() === limpio.replace(/\s+/g, " ").trim() ? texto : r;
+  return r.replace(/\s+/g, " ").trim() === entrada.replace(/\s+/g, " ").trim() ? texto : r;
 }
 
 /**
@@ -1059,6 +1132,9 @@ export function traducirPedido(texto: string, contexto: ContextoTraduccion = {})
   t = corregirIngles(t, contexto.nombres ?? []);
   for (const [re, por] of CONTRACCIONES) t = t.replace(re, por);
   t = numerosEnPalabrasEn(t);
+  // v17.4 · Lo que el reconocimiento oye mal con acento y es seguro de corregir («to kilometers» → «2 kilometers», «2 km
+  // nort» → «north», «a reporter» → «a repeater», «the get away» → «the gateway», «move Person to…» → «Person 2»)
+  t = corregirOido(t, "en", contexto.nombres ?? []);
   t = cifras(t);
   t = normalizarIngles(t);
   // v17.3 · «What happens if I move it 2 km east?», «what if I add a repeater…?», «would it help to raise it?»: es una
@@ -1073,6 +1149,8 @@ export function traducirPedido(texto: string, contexto: ContextoTraduccion = {})
   t = t.replace(/\bthe (⟦\d+⟧)/gi, "$1");
   // v17.3 · Sin los signos del final, las reglas de frase entera también valen para «…?» y «…!»
   t = t.replace(/\s*[?!.]+\s*$/, "");
+  // v17.4 · «Why doesn't Person 1 have signal?», «what does LoRa mean?», «how much does it cost?»
+  for (const [re, por] of SIN_SENAL_EN) if (re.test(t)) return restaurar(t.replace(re, por as string), p.piezas);
   const pp = preguntaPorPalabras(t, pregunta);
   if (pp) return restaurar(pp, p.piezas);
   const e = entera(t);

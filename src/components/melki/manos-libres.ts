@@ -179,14 +179,37 @@ export function limpiarComando(frase: string, lengua: Idioma = idioma()): string
   t = numerosEnPalabras(t);
   t = normalizarDictado(t);
   // Muletillas al empezar o al terminar («eh», «este», «o sea», «bueno», «mmm»), también repetidas al hablar rápido
-  for (let i = 0; i < 3; i++) t = t.replace(/^(eh+|em+|m+|este|bueno|pues|a ver|mira|oye|o sea|osea|entonces|digamos|ehm+)[, ]+/i, "");
-  t = t.replace(/[, ]+(eh+|por favor|porfa|porfavor|gracias)$/i, "");
+  for (let i = 0; i < 3; i++) t = t.replace(/^(eh+|em+|m+|este|bueno|pues|a ver|mira|oye|o sea|osea|entonces|digamos|ehm+|listo|vale|okey|ok)[, ]+(?=\S)/i, "");
+  t = t.replace(/[, ]+(eh+|por favor|porfa|porfavor|gracias|pues|o sea|ya)$/i, "");
   return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+const COSA_A_LA_VISTA =
+  /\b(roads?|rods|rows|streets|layers?|liars|coverage|network|mesh|view|panels?|toolbar|legend|terrain|satellite|map|nodes?|labels|towns?|people|persons|repeaters?|antennas?|gateways?|links?|routes?|hops|zones?|areas?|heat ?map|grid|profile|results?|legend|names|signal|elevation|relief|hills|contours?|municipalit(?:y|ies)|villages?|population|houses|everything)\b/i;
+const CON_VERBO =
+  /\b(is|are|was|were|it'?s|that'?s|there'?s|do|does|did|can|could|will|would|should|have|has|had|works?|looks?|seems?|means?|think|know|need|want|go|goes|went|get|got|make|let'?s?|what|why|how|when|where|who|which|if|then|but|and|or|because|i|you|we|they|he|she|far|good|bad|anyway|basically)\b/i;
+
+/**
+ * v17.4 · Con acento, «show» se oye «so»: «so me the roads» y «so the roads please» piden ver algo (sin verbo después,
+ * no es la muletilla «so, …»).
+ */
+function soEsShow(t: string): string {
+  const m = t.match(/^so\s+(.+)$/i);
+  if (!m) return t;
+  if (/^(?:me|us)\b/i.test(m[1])) return `show ${m[1]}`;
+  const cosa = m[1].replace(/[,.!?]+$/, "").replace(/\s+please$/i, "");
+  // Lo que se muestra: «the roads», «all the nodes», «the whole network» o «roads» (sin artículo, empieza por la cosa);
+  // «so add a repeater» o «so the coverage is fine» siguen siendo la muletilla
+  const articulo = cosa.match(/^(?:the|all|all the|my|our|every|those|these)\s+(.+)$/i);
+  const empiezaPorCosa = cosa.match(COSA_A_LA_VISTA)?.index === 0;
+  if (/^[a-z]+(?:\s+[a-z]+){0,3}$/i.test(articulo ? articulo[1] : cosa) && (articulo ? COSA_A_LA_VISTA.test(articulo[1]) : empiezaPorCosa) && !CON_VERBO.test(cosa)) return `show ${m[1]}`;
+  return t;
 }
 
 /** Lo dicho en inglés, listo para Melki: números en cifras y sin muletillas («um», «so», «okay so»). */
 function limpiarComandoIngles(frase: string): string {
   let t = numerosEnPalabrasEn(frase.replace(/\s+/g, " ").trim());
+  t = soEsShow(t);
   for (let i = 0; i < 3; i++) t = t.replace(/^(um+|uh+|er+|erm|hmm+|so|well|like|okay so|ok so|right|alright|now|let me see|you know)[, ]+/i, "");
   t = t.replace(/[, ]+(um+|uh+|please|thanks|thank you)$/i, "");
   return t.charAt(0).toUpperCase() + t.slice(1);

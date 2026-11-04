@@ -109,7 +109,7 @@ export type AreaPedida =
    */
   | { forma: "poligono"; puntos: Poligono; nombre: string; dibujar: boolean; etiqueta?: string };
 
-export type Coordenada = { lat: number; lon: number; corregido?: boolean };
+export type Coordenada = { lat: number; lon: number; corregido?: boolean; desde?: string };
 
 type DatosNodo = Partial<Pick<Antena, "nombre" | "alturaM" | "gananciaDbi" | "potenciaDbm" | "pasarela" | "tipo" | "patron" | "azimutDeg" | "elevacionDeg" | "equipo">>;
 
@@ -199,7 +199,7 @@ type OrdenSola =
   /** La opción económica de un diseño: quitar esos repetidores y medir de nuevo la cobertura del área. */
   | { tipo: "usar-economica"; ids: string[]; nombres: string[]; area: Poligono; margenDb: number; respaldo: boolean; clases: string; metaPct: number; ahorroCop: number }
   | { tipo: "eliminar-varios"; ids: string[]; descripcion: string }
-  | { tipo: "editar-varios"; ids: string[]; cambios: Partial<Antena>; descripcion: string }
+  | { tipo: "editar-varios"; ids: string[]; cambios: Partial<Antena>; descripcion: string; deltaAlturaM?: number }
   | { tipo: "auto"; valor: boolean }
   | { tipo: "encuadrar" }
   | { tipo: "cobertura-area"; id: string; margenDb: number }
@@ -789,7 +789,10 @@ function lugarEnTexto(tn: string, api: Api, estricto = true): Lugar | null {
     let mejor: { c: CandidatoLugar; frase: string } | null = null;
     let primera: DudaLugar | null = null;
     for (let k = palabras.length; k >= 1; k--) {
-      const frase = palabras.slice(0, k).join(" ");
+      let frase = palabras.slice(0, k).join(" ");
+      // v17.4 · El dictado parte los nombres: «Kumar al» es Cumaral y «via vicencio», Villavicencio («villa» se oye «vía»)
+      if (k >= 2 && /\s(?:al|el|la|a)$/.test(frase)) frase = frase.replace(/\s+(al|el|la|a)$/, "$1");
+      if (k >= 2 && /^via\s+[a-z]{4,}/.test(frase)) frase = frase.replace(/^via\s+/, "villa");
       // «La Macarena» sí; «la loma», «la zona» no
       const sinArticulo = frase.replace(/^(la|las|los|el)\s+/, "");
       if (sinArticulo.length < 3 || /^(la|las|los|el)$/.test(sinArticulo) || NO_ES_LUGAR.test(sinArticulo) || /\b(que|con|para|hacia|cubr\w*|y|o|de|del|en|el|la|los|las|a|al)$/.test(frase)) continue;
@@ -829,8 +832,13 @@ function lugarDeConsulta(consulta: string, api: Api): { lugar: Lugar | null; sug
     usarLugar(forzado.lugar);
     return { lugar: forzado.lugar, sugerencias: [] };
   }
-  // Primero lo dicho completo; si no, sus partes («barranca de upía meta rápido» → «barranca de upía meta»)
-  const d = decidirLugar(candidatosLugar(consulta, api));
+  // Primero lo dicho completo; si no, sus partes («barranca de upía meta rápido» → «barranca de upía meta»). v17.4: el
+  // dictado parte «Villanueva» o «Villavicencio» en «via nueva», «via vicencio» («villa» se oye «vía»)
+  let d = decidirLugar(candidatosLugar(consulta, api));
+  if (d.tipo !== "seguro" && /^v[ií]a\s+[a-z]{4,}/i.test(consulta)) {
+    const villa = decidirLugar(candidatosLugar(consulta.replace(/^v[ií]a\s+/i, "villa"), api));
+    if (villa.tipo === "seguro") d = villa;
+  }
   if (d.tipo === "seguro") {
     usarLugar(d.candidato.lugar, d.candidato, consulta);
     return { lugar: d.candidato.lugar, sugerencias: [] };
@@ -947,6 +955,124 @@ function piezaGenerica(frase: string, antenas: Antena[], ultimo?: Antena): Anten
   return [...antenas].reverse().find((a) => a.activa && piezaDe(a) === tipo);
 }
 
+/* ───────────── v17.4 · «Cerca de…» y el nodo que se mueve ───────────── */
+
+/** «Cerca del gateway», «junto a la Persona 2», «al lado del Repetidor 1» («near», «next to» y «beside» llegan así del inglés). */
+const CERCA_DE =
+  /\b(?:muy |bien |mas )?(?:cerca|cerquita|junto|al lado|a un lado|a un costado|al costado|pegad[oa]|pegadit[oa]|al pie)\s+(?:de\s+(?:la|el|los|las)\s+|del\s+|de\s+|a\s+(?:la|el|los|las)\s+|al\s+|a\s+)?(.{2,60})/;
+/** «Acerca el Repetidor 1 al gateway», «arrímalo a la Persona 2», «júntalo con el Repetidor 2»: también es «cerca de…». */
+const ACERCAR =
+  /\b(?:acerca(?!\s+del?\b)|acercalo|acercala|acerquelo|acerquela|arrima|arrimalo|arrimala|junta|juntalo|juntala|pega|pegalo|pegala)\b\s*(?:a\s+(?=(?:el|la|los|las)\s|[a-z]+\s+\d))?(?:(?:el|la|los|las)\s+)?(.{0,40}?)\s*\b(?:a|al|a la|hacia el|hacia la|hacia|con el|con la|con)\s+(.{2,60})/;
+/** «Lleva el Repetidor 1 al gateway», «mueve la Persona 2 a la Persona 1» (a un nodo): también es junto a él. */
+// (con «mueve» o «lleva» hace falta lo que se mueve antes del «a»: en «mueve a Persona 1 500 m al oriente» la «a» es de
+// persona, no del destino; «muévelo al gateway» ya lo trae)
+const HACIA_NODO =
+  /\b(?:(?:muevelo|muevela|llevalo|llevala|pasalo|pasala|mandalo|mandala|trasladalo|trasladala)\b.*?|(?:mueve|mover|lleva|llevar|traslada|trasladar|pasa|manda)\b\s+\S.*?)\s(?:a|al|a la|hasta el|hasta la|hasta)\s+((?:el |la )?[a-z][a-z0-9 ]{1,40}?)\s*$/;
+/** El «cerca de…» de la frase: lo que sigue (el nodo de referencia) y dónde empieza. */
+function cercaDicho(tn: string): { resto: string; inicio: number } | null {
+  const c = tn.match(CERCA_DE);
+  if (c) return { resto: c[1], inicio: c.index ?? 0 };
+  const a = tn.match(ACERCAR);
+  if (a) return { resto: a[2], inicio: (a.index ?? 0) + a[0].length - a[2].length };
+  const h = tn.match(HACIA_NODO);
+  if (h) return { resto: h[1], inicio: (h.index ?? 0) + h[0].length - h[1].length - (h[0].length - h[0].trimEnd().length) };
+  return null;
+}
+/** A cuánto de un nodo queda lo que se pone o se mueve «cerca» de él. */
+export const DISTANCIA_CERCA_M = 200;
+const RUMBOS_8: [string, string][] = [
+  ["norte", "north"],
+  ["noreste", "northeast"],
+  ["este", "east"],
+  ["sureste", "southeast"],
+  ["sur", "south"],
+  ["suroeste", "southwest"],
+  ["oeste", "west"],
+  ["noroeste", "northwest"],
+];
+const rumbo8 = (g: number) => RUMBOS_8[Math.round((((g % 360) + 360) % 360) / 45) % 8];
+/** Verbos con los que un nodo que ya existe cambia de sitio («pon el Repetidor 1 cerca del gateway» es moverlo). */
+const VERBO_MOVER_NODO =
+  /\b(mueve|mover|muevelo|muevela|muevete|muevanlo|muevanla|traslad\w*|reubic\w*|desplaz\w*|corre|correlo|correla|lleva|llevalo|llevala|acerca(?!\s+del?\b)|acercalo|acercala|arrima\w*|juntalo|juntala|pegalo|pegala|pon|ponlo|ponla|coloca|colocalo|colocala|ubica|ubicalo|ubicala|situa\w*)\b/;
+/** Los que solo pueden ser un traslado (con «pon», «lleva» o «ubica» hace falta decir a dónde). */
+const SOLO_MOVER = /\b(mueve|mover|muevelo|muevela|muevete|muevanlo|muevanla|traslad\w*|reubic\w*|desplaz\w*|corre|correlo|correla)\b/;
+
+/** Los nodos nombrados con su posición en la frase, en orden. */
+function mencionesDeNodos(tn: string, antenas: Antena[]): { a: Antena; pos: number }[] {
+  const encontrados: { a: Antena; pos: number }[] = [];
+  for (const a of [...antenas].sort((x, y) => y.nombre.length - x.nombre.length)) {
+    const nombre = n(a.nombre);
+    if (nombre.length < 2) continue;
+    // La posición es la del nombre (no la del espacio de antes)
+    const m = tn.match(new RegExp(`(^|[^a-z0-9])${escRe(nombre)}($|[^a-z0-9])`));
+    if (!m || m.index === undefined) continue;
+    const pos = m.index + m[1].length;
+    if (!encontrados.some((e) => Math.abs(e.pos - pos) < 2)) encontrados.push({ a, pos });
+  }
+  return encontrados.sort((x, y) => x.pos - y.pos);
+}
+
+/** Dónde empieza el destino de un traslado o de una pieza nueva: «cerca de…», «a 2 km al norte…», una coordenada. */
+function inicioDelDestino(tn: string): number {
+  const marcas = [
+    cercaDicho(tn)?.inicio ?? -1,
+    tn.search(new RegExp(String.raw`\b\d+(?:[.,]\d+)?\s*${UNIDAD_LONGITUD}\s+(?:mas\s+)?(?:al|hacia|rumbo|en direccion)\b`)),
+    tn.search(/-?\b\d{1,3}[.,]\d+\s*,\s*-?\d{1,3}[.,]\d+/),
+  ].filter((i) => i >= 0);
+  return marcas.length ? Math.min(...marcas) : -1;
+}
+
+/**
+ * v17.4 · El nodo que cambia de sitio: el que se nombra antes del destino («mueve el Repetidor 1 cerca del gateway»
+ * mueve el Repetidor 1, no el gateway); «muévelo…», «ponlo cerca de…», el último que se tocó.
+ */
+function nodoQueSeMueve(tn: string, antenas: Antena[], ultimo: Antena | undefined, destino: number, sel: string | null): Antena | undefined {
+  if (!VERBO_MOVER_NODO.test(tn)) return undefined;
+  const menciones = mencionesDeNodos(tn, antenas);
+  const antes = menciones.filter((x) => destino < 0 || x.pos < destino);
+  if (antes.length) return antes[0].a;
+  const previo = destino < 0 ? tn : tn.slice(0, destino);
+  if (/\b(gateway|getway|pasarela)\b/.test(previo)) return piezaGenerica(previo, antenas, ultimo);
+  // «Mueve ese nodo…» es el seleccionado (si hay uno); «muévelo…», el último que se tocó
+  const dicho = buscarNodo(previo, antenas, sel);
+  if (dicho) return dicho;
+  if (ultimo && CLITICO.test(previo)) return ultimo;
+  // «Mueve el repetidor al gateway», «lleva la persona al Repetidor 1»: el repetidor (o la persona) de siempre (el último
+  // que se tocó, si es de ese tipo), no el nodo del destino
+  const pieza = previo.replace(/^.*?\b(?:mueve|mover|lleva|llevar|traslada\w*|reubica\w*|desplaza\w*|corre|pasa|manda|acerca|arrima|junta|pega|pon|coloca|ubica|situa\w*)\b\s*/, "");
+  if (pieza !== previo) return piezaGenerica(` ${pieza}`, antenas, ultimo);
+  return undefined;
+}
+
+/**
+ * v17.4 · «Cerca del gateway», «junto a la Persona 2»: un punto a 200 m de ese nodo. Al mover un nodo, del lado en que
+ * está (se acerca sin dar la vuelta); una pieza nueva, del lado más despejado de los demás nodos.
+ */
+function cercaEnTexto(tn: string, antenas: Antena[], movido: Antena | undefined, ultimo: Antena | undefined): (Coordenada & { desde: string }) | null {
+  const c = cercaDicho(tn);
+  if (!c) return null;
+  const frase = ` ${c.resto} `;
+  const destino = mencionesDeNodos(frase, antenas)[0]?.a ?? piezaGenerica(frase.replace(/^\s*(?:la|el|los|las)\s+/, " "), antenas, ultimo);
+  if (!destino || destino.id === movido?.id) return null;
+  const d = DISTANCIA_CERCA_M;
+  let grados = 0;
+  if (movido && distanciaM(destino.lat, destino.lon, movido.lat, movido.lon) > 1) grados = rumbo(destino.lat, destino.lon, movido.lat, movido.lon);
+  else {
+    let mejor = -1;
+    for (let k = 0; k < 8; k++) {
+      const q = desplazar(destino.lat, destino.lon, d, k * 45);
+      const libre = Math.min(Infinity, ...antenas.filter((a) => a.id !== destino.id && a.id !== movido?.id).map((a) => distanciaM(q.lat, q.lon, a.lat, a.lon)));
+      if (libre > mejor + 1) {
+        mejor = libre;
+        grados = k * 45;
+      }
+    }
+  }
+  const q = desplazar(destino.lat, destino.lon, d, grados);
+  const [es, en] = rumbo8(grados);
+  return { lat: q.lat, lon: q.lon, desde: tx(`a ${formatoDistancia(d)} al ${es} de ${destino.nombre}`, `${formatoDistancia(d)} ${en} of ${destino.nombre}`) };
+}
+
 /** Coordenada del pedido: relativa («a 10 km al norte del gateway»), escrita, o el centro de un lugar nombrado. */
 function ubicacionEnTexto(texto: string, tn: string, api: Api, antenas: Antena[], conLugar: boolean): (Coordenada & { desde?: string; lugar?: Lugar }) | null {
   const rel = relativaEnTexto(texto, tn, api, antenas);
@@ -957,6 +1083,47 @@ function ubicacionEnTexto(texto: string, tn: string, api: Api, antenas: Antena[]
   const l = lugarEnTexto(tn, api);
   return l ? { lat: l.lat, lon: l.lon, desde: tx(`en ${l.nombre}${l.tipo === "municipio" ? ` (${l.detalle})` : ""}`, `in ${l.nombre}${l.tipo === "municipio" ? ` (${l.detalle})` : ""}`), lugar: l } : null;
 }
+
+/**
+ * v17.4 · «Mueve el gateway a Cumaral», «lleva el Repetidor 1 hasta Restrepo»: el centro del municipio (o del lugar) dicho
+ * después de «a», «hasta» o «hacia» (con un número es una distancia o una coordenada, y con un nodo, «cerca de» él).
+ */
+function lugarDelTraslado(tn: string, api: Api): (Coordenada & { desde: string; lugar: Lugar }) | null {
+  if (!SOLO_MOVER.test(tn) && !/\b(lleva|llevalo|llevala)\b/.test(tn)) return null;
+  const m = tn.match(/\s(?:a|al|hasta|hacia)\s+(?!\d|-)(?!(?:el\s+|la\s+)?(?:norte|sur|este|oeste|oriente|occidente|noreste|noroeste|sureste|suroeste|sudeste|sudoeste|nororiente|noroccidente|suroriente|suroccidente)\b)([a-z][a-z .,]{2,60})$/);
+  if (!m) return null;
+  const l = lugarEnTexto(`en ${m[1].replace(/[.,]+$/, "")}`, api);
+  return l ? { lat: l.lat, lon: l.lon, desde: tx(`en ${l.nombre}${l.tipo === "municipio" ? ` (${l.detalle})` : ""}`, `in ${l.nombre}${l.tipo === "municipio" ? ` (${l.detalle})` : ""}`), lugar: l } : null;
+}
+
+/**
+ * v17.4 · Una altura relativa: «súbelo 5 m», «súbelo 5 m más», «bájalo 3 metros», «ponlo 5 m más alto», «súmale 2 m»,
+ * «sube el Repetidor 1 en 5 m», «quítale 3 m» (+5, −3…). Con «a», «hasta» o «de» la altura es la dicha («súbelo a 20 m»,
+ * «déjalo en 20 m», «ponlo 20 m»): null.
+ */
+export function cambioDeAltura(tn: string, actual?: number): number | null {
+  const m = tn.match(/(\d{1,3}(?:[.,]\d+)?)\s*(?:m|mts?|metros?)\b(?!\s*s\.?\s*n)/);
+  if (!m || m.index === undefined) return null;
+  const valor = num(m[1]);
+  if (!(valor > 0)) return null;
+  const antes = tn.slice(0, m.index).trim();
+  const despues = tn.slice(m.index + m[0].length).trim();
+  const masAlto = /^(?:mas\s+)?(?:alto|arriba|hacia arriba)\b/.test(despues);
+  const masBajo = /^(?:mas\s+)?(?:bajo|abajo|hacia abajo)\b|^menos\b/.test(despues);
+  const fuerte = /^(?:mas|menos|extra|adicional(?:es)?)\b/.test(despues) || /\b(?:otros|otras)$/.test(antes);
+  const verboBaja = /\b(baj\w*|disminu\w*|reduc\w*|rebaj\w*|recort\w*|restal\w*|resta|quital\w*|descend\w*)\b/.test(antes);
+  const verboSube = /\b(sub\w*|eleva\w*|levanta\w*|aument\w*|increment\w*|suma|sumal\w*|agregal\w*|anadel\w*|alza\w*|dale)\b/.test(antes);
+  const marcaAbsoluta = /\b(?:a|hasta|de)$/.test(antes) || (/\ben$/.test(antes) && (!(verboSube || verboBaja) || /\b(deja\w*|pon\w*|qued\w*)\b/.test(antes)));
+  if (!fuerte && !masAlto && !masBajo && (marcaAbsoluta || !(verboSube || verboBaja))) return null;
+  // «Sube el Repetidor 1 25 metros» con el repetidor a 15 m: el reconocimiento se comió el «a» (es «a 25 m»); «súbelo 5
+  // metros» sí suma (5 m es menos de lo que ya tiene). Con «más», «otros» o «en» siempre suma
+  if (actual !== undefined && verboSube && !verboBaja && !fuerte && !masAlto && !/\ben$/.test(antes) && valor > actual) return null;
+  const signo = masBajo ? -1 : masAlto ? 1 : verboBaja ? -1 : 1;
+  return signo * valor;
+}
+
+/** La altura que resulta de sumarle o restarle algo (entre 0,5 y 300 m, como en el panel). */
+const alturaCon = (actual: number, cambio: number) => Math.round(Math.min(300, Math.max(0.5, actual + cambio)) * 10) / 10;
 
 /* ───────────── Zonas para el diseño: un municipio entero, una parte, lo que se ve ───────────── */
 
@@ -1329,7 +1496,7 @@ function margenPedido(tn: string): { margenDb: number; clases: string } {
  */
 function interpretarAjuste(texto: string, tn: string, antenas: Antena[]): Orden | null {
   const verbo =
-    /\b(ajust(a|ala|alo|ame|amela|amelo|ar|arla|arlo|en|e)|reajust\w*|optimiz\w*|hazla factible|hacerla factible|volverla factible|vuelvela factible|dejala factible|dejarla factible|(que|para que) (sea|quede) (factible|viable)|mejor(a|ar|e|ame|amela|ala) (la |mi )?(red|malla|cobertura)|mejor relacion|relacion (costo|cobertura)|costo[- ]?beneficio|(al|con el) menor costo|menos costo|mas economic\w*|(que|lo que) (le )?falta para (ser|que sea|quedar) (factible|viable)|que necesit\w* para (ser|que sea|hacerla|dejarla|que quede) (factible|viable)|como (la )?(hago|dejo|vuelvo|pongo) (factible|viable)|antenas? de apoyo|apoyos?\b.*\b(sugi\w*|propon\w*|donde)|(sugi\w*|propon\w*|recomiend\w*) (antenas|puntos|sitios|apoyos|donde poner))\b/;
+    /\b(ajust(a|ala|alo|ame|amela|amelo|ar|arla|arlo|en|e)|reajust\w*|optimiz(?!ations?\b|ed\b|ers?\b)\w*|hazla factible|hacerla factible|volverla factible|vuelvela factible|dejala factible|dejarla factible|(que|para que) (sea|quede) (factible|viable)|mejor(a|ar|e|ame|amela|ala) (la |mi )?(red|malla|cobertura)|mejor relacion|relacion (costo|cobertura)|costo[- ]?beneficio|(al|con el) menor costo|menos costo|mas economic\w*|(que|lo que) (le )?falta para (ser|que sea|quedar) (factible|viable)|que necesit\w* para (ser|que sea|hacerla|dejarla|que quede) (factible|viable)|como (la )?(hago|dejo|vuelvo|pongo) (factible|viable)|antenas? de apoyo|apoyos?\b.*\b(sugi\w*|propon\w*|donde)|(sugi\w*|propon\w*|recomiend\w*) (antenas|puntos|sitios|apoyos|donde poner))\b/;
   // «Dame la mayor cobertura posible» es pedir la opción de máxima cobertura; «¿cómo dejo la mayor cobertura posible?»
   // pide consejos (los da el cerebro, con el botón para proponerla)
   const pideMaxima =
@@ -1622,7 +1789,17 @@ function interpretarLote(texto: string, tn: string, antenas: Antena[]): Orden | 
     .map((a) => a.id);
   const nombreEs = grupo === "menos-gateway" ? "todos los nodos menos el gateway" : `${/^(personas|gente|antenas|torres|piezas)$/.test(grupo) ? "todas las" : "todos los"} ${grupo === "gente" ? "personas" : grupo}`;
   const nombre = tx(nombreEs, grupo === "menos-gateway" ? "all nodes except the gateway" : `all ${GRUPO_INGLES[grupo] ?? grupo}`);
-  if (/\b(borra\w*|elimina\w*|quita\w*|saca\w*|suprim\w*)\b/.test(tn) && !/\bpasarela\b/.test(tn)) return { tipo: "eliminar-varios", ids, descripcion: nombre };
+  // v17.4 · «Sube todos los repetidores 5 m (más)», «quítales 2 m a todas las antenas»: a cada uno lo suyo
+  const delta = cambioDeAltura(tn);
+  if (/\b(borra\w*|elimina\w*|quita\w*|saca\w*|suprim\w*)\b/.test(tn) && !/\bpasarela\b/.test(tn) && delta === null) return { tipo: "eliminar-varios", ids, descripcion: nombre };
+  if (delta !== null)
+    return {
+      tipo: "editar-varios",
+      ids,
+      cambios: {},
+      deltaAlturaM: delta,
+      descripcion: tx(`${nombre} ${delta > 0 ? "suben" : "bajan"} ${fn(Math.abs(delta))} m`, `${nombre} ${delta > 0 ? "raised" : "lowered"} ${fn(Math.abs(delta))} m`),
+    };
   const alturaTxt = texto.match(/(\d{1,3}(?:[.,]\d+)?)\s*(?:m|mts?|metros?)\b/i);
   if (alturaTxt && /\b(sube|subir|subelos|baja|bajar|bajalos|pon\w*|cambia\w*|deja\w*|altura|queden|quede|quedan|esten|este|estan|ubica\w*|eleva\w*)\b/.test(tn)) {
     const h = Math.min(300, Math.max(0.5, num(alturaTxt[1])));
@@ -1822,7 +1999,7 @@ const OBJETO = /\b(antena|antenas|nodo|nodos|torre|repetidor|pasarela|router|sen
 export type ContextoOrden = { ultimoNodo?: string | null; ultimoLugar?: Lugar | null; forzarLugar?: { dicho: string; lugar: Lugar } };
 
 const CLITICO =
-  /\b(subelo|subela|bajalo|bajala|muevelo|muevela|borralo|borrala|eliminalo|eliminala|quitalo|quitala|renombralo|renombrala|llamalo|llamala|apuntalo|apuntala|conviertelo|conviertela|activalo|activala|desactivalo|desactivala|ponle|dale|cambiale|subele|bajale|quitale|agregale|dejalo|dejala|elevalo|elevala|trasladalo|trasladala|reubicalo|reubicala|giralo|girala|inclinalo|inclinala|ese (nodo|repetidor|gateway|equipo)|este (nodo|repetidor|gateway|equipo)|esa (persona|antena|torre)|esta (persona|antena|torre))\b/;
+  /\b(subelo|subela|bajalo|bajala|muevelo|muevela|borralo|borrala|eliminalo|eliminala|quitalo|quitala|renombralo|renombrala|llamalo|llamala|apuntalo|apuntala|conviertelo|conviertela|activalo|activala|desactivalo|desactivala|ponle|dale|cambiale|subele|bajale|quitale|agregale|dejalo|dejala|elevalo|elevala|trasladalo|trasladala|reubicalo|reubicala|giralo|girala|inclinalo|inclinala|ponlo|ponla|llevalo|llevala|acercalo|acercala|colocalo|colocala|ubicalo|ubicala|arrimalo|arrimala|correlo|correla|juntalo|juntala|ese (nodo|repetidor|gateway|equipo)|este (nodo|repetidor|gateway|equipo)|esa (persona|antena|torre)|esta (persona|antena|torre))\b/;
 
 /**
  * Interpreta la orden y, si un lugar dicho puede ser varios («barranco vía» → Barranca de Upía, Barranquilla…), la
@@ -2000,17 +2177,22 @@ function interpretarOrdenBase(dicho: string, api: Api, pendiente: Pendiente, con
   }
   const antenas = api.antenas();
   const ultimo = contexto.ultimoNodo ? antenas.find((x) => x.id === contexto.ultimoNodo) : undefined;
-  // «Mueve Repetidor 1 2 km al sur»: la distancia se cuenta desde ese mismo nodo
-  const movido = /\b(mueve|mover|muevelo|muevela|traslad\w*|reubic\w*|desplaz\w*|corre|correlo)\b/.test(tn) ? nodosMencionados(tn, antenas)[0] : undefined;
-  const coord: Coordenada | null = relativaEnTexto(texto, tn, api, antenas, movido ?? ultimo) ?? extraerCoordenadas(texto);
+  // «Mueve Repetidor 1 2 km al sur»: la distancia se cuenta desde ese mismo nodo. v17.4 · El que se mueve es el que se
+  // nombra antes del destino («mueve el Repetidor 1 cerca del gateway»), y «cerca de…» es un punto a 200 m de ese nodo
+  const iDestino = inicioDelDestino(tn);
+  const movido = nodoQueSeMueve(tn, antenas, ultimo, iDestino, api.seleccion());
+  const coord: Coordenada | null =
+    relativaEnTexto(texto, tn, api, antenas, movido ?? ultimo) ??
+    extraerCoordenadas(texto) ??
+    (VERBO_AGREGAR.test(tn) || VERBO_MOVER_NODO.test(tn) || pendiente?.tipo === "agregar" || pendiente?.tipo === "mover" || pendiente?.tipo === "pieza" ? cercaEnTexto(tn, antenas, movido, ultimo) : null);
   const sel = api.seleccion();
 
   if (/\b(deshace\w*|deshaz|revierte|revertir|anula lo ultimo)\b/.test(tn)) return null; // lo maneja Melki (necesita la instantánea)
   const paneles = interpretarPaneles(tn);
   if (paneles) return paneles;
 
-  // Completar un pedido que esperaba coordenadas
-  if (pendiente && coord && !OBJETO.test(tn.replace(/\b(en|a)\b/g, ""))) {
+  // Completar un pedido que esperaba coordenadas (v17.4: también «cerca del Repetidor 1», donde el nodo es la referencia)
+  if (pendiente && coord && !OBJETO.test((iDestino >= 0 ? tn.slice(0, iDestino) : tn).replace(/\b(en|a)\b/g, ""))) {
     if (pendiente.tipo === "agregar") return { tipo: "agregar", datos: pendiente.datos, coord };
     if (pendiente.tipo === "mover") return { tipo: "mover", id: pendiente.id, coord };
     if (pendiente.tipo === "pieza") return { tipo: "pieza", pieza: pendiente.pieza, datos: pendiente.datos, coord };
@@ -2088,22 +2270,39 @@ function interpretarOrdenBase(dicho: string, api: Api, pendiente: Pendiente, con
   if (pantalla) return pantalla;
 
   // Las piezas también se ponen en un lugar nombrado («pon el gateway en Cumaral»)
-  const enLugar = !coord && VERBO_AGREGAR.test(tn) && /\b(gateway|getway|repetidor\w*|persona|gente)\b/.test(tn) ? ubicacionEnTexto(texto, tn, api, antenas, true) : null;
-  const malla = interpretarMalla(texto, tn, api, coord ?? enLugar, ultimo);
+  // (y al mover el gateway, el municipio dicho: «mueve el gateway a Cumaral»; «lleva la red a…» es sembrar, no esto)
+  const enLugar = coord
+    ? null
+    : VERBO_AGREGAR.test(tn) && /\b(gateway|getway|repetidor\w*|persona|gente)\b/.test(tn)
+      ? ubicacionEnTexto(texto, tn, api, antenas, true)
+      : movido?.pasarela || (!movido && /\b(gateway|getway|pasarela)\b/.test(tn.slice(0, iDestino >= 0 ? iDestino : tn.length).replace(/\s(?:a|al|hasta|hacia)\s+.*$/, "")))
+        ? lugarDelTraslado(tn, api)
+        : null;
+  const malla = interpretarMalla(texto, tn, api, coord ?? enLugar, ultimo, movido);
   if (malla) return malla;
 
   // Órdenes sobre un nodo existente. «Inscribe una antena…» pide un nodo nuevo aunque ya exista uno solo,
-  // salvo que se nombre uno existente o se diga «la antena», «este nodo»…
-  const nombrado = nodosMencionados(tn, antenas)[0];
+  // salvo que se nombre uno existente o se diga «la antena», «este nodo»… v17.4 · El nodo nombrado en el destino
+  // («pon una antena cerca del Repetidor 1», «a 2 km al norte del gateway») es la referencia, no el nodo del pedido
+  const menciones = mencionesDeNodos(tn, antenas);
+  const nombrado = (iDestino >= 0 ? menciones.filter((x) => x.pos < iDestino) : menciones)[0]?.a;
   const pideNuevo = VERBO_AGREGAR.test(tn) && OBJETO.test(tn) && !nombrado && !/\b(la|el|esta|este|esa|ese|su)\s+(antena|nodo|torre)\b/.test(tn);
-  // El nodo del pedido es el primero que se nombra («ponle una Yagi a Ejemplo apuntando a Torre NE» → Ejemplo)
-  const nodo = pideNuevo ? null : (nombrado ?? buscarNodo(tn, antenas, sel) ?? (ultimo && CLITICO.test(tn) ? ultimo : null));
+  // El nodo del pedido es el primero que se nombra («ponle una Yagi a Ejemplo apuntando a Torre NE» → Ejemplo); al
+  // moverlo, el que se nombra antes del destino («muévelo cerca del gateway» es el último que se tocó)
+  // («lleva el Repetidor 1 hasta Restrepo»: al centro de ese municipio)
+  const lugarTraslado = movido && !coord ? lugarDelTraslado(tn, api) : null;
+  const seMueve = Boolean(movido) && (SOLO_MOVER.test(tn) || (coord !== null && iDestino >= 0) || lugarTraslado !== null);
+  const nodo = pideNuevo ? null : seMueve ? movido! : (nombrado ?? buscarNodo(tn, antenas, sel) ?? (ultimo && CLITICO.test(tn) ? ultimo : null));
   if (nodo) {
-    if (/\b(elimina\w*|borra\w*|quita\w*|suprim\w*|saca\w*)\b/.test(tn) && !/\bpasarela\b/.test(tn)) return { tipo: "eliminar", id: nodo.id };
+    const deltaAltura = cambioDeAltura(tn, nodo.alturaM);
+    if (/\b(elimina\w*|borra\w*|quita\w*|suprim\w*|saca\w*)\b/.test(tn) && !/\bpasarela\b/.test(tn) && deltaAltura === null) return { tipo: "eliminar", id: nodo.id };
     if (/\b(duplic\w*|copia\w*|clona\w*)\b/.test(tn)) return { tipo: "duplicar", id: nodo.id };
     if (/^(selecciona\w*|elige|escoge|abre|muestrame|ver|enfoca\w*)\b/.test(tn) && !/\b(perfil|informe|senal|distancia)\b/.test(tn)) return { tipo: "seleccionar", id: nodo.id };
     if (/\b(mueve|mover|muevela|muevelo|muevete|muevele|muevanlo|muevanla|traslad\w*|reubic\w*|desplaz\w*|cambia la ubicacion|cambiar la ubicacion|cambia las coordenadas|cambiar las coordenadas)\b/.test(tn))
-      return { tipo: "mover", id: nodo.id, coord: coord ?? undefined };
+      return { tipo: "mover", id: nodo.id, coord: coord ?? lugarDelTraslado(tn, api) ?? undefined };
+    // v17.4 · «Pon el Repetidor 1 cerca de la Persona 2», «llévalo a 2 km al norte del gateway», «acerca el Repetidor 1 al
+    // gateway»: un nodo que ya existe cambia de sitio (no se pone uno nuevo)
+    if (seMueve && (coord ?? lugarTraslado)) return { tipo: "mover", id: nodo.id, coord: (coord ?? lugarTraslado)! };
     // v17.3 · «renómbralo a Loma Alta» (con tilde) y sin la cortesía del final («… a Loma Alta, por favor»: el nombre es «Loma Alta»)
     const sinCortesia = texto.replace(/(?:[\s,]+(?:por favor|porfa|porfavor|gracias|muchas gracias|please|thanks|thank you))+[\s.!]*$/i, "");
     const ren = sinCortesia.match(/(?:ren[oó]mbr\w*|c[aá]mbi\w* (?:el )?nombre(?: de)?|ll[aá]mal[ao])\b.*?\b(?:a|por|como)\s+["“«]?([^"”»,.;]{2,40})["”»]?\s*$/i);
@@ -2179,7 +2378,21 @@ function interpretarOrdenBase(dicho: string, api: Api, pendiente: Pendiente, con
       return { tipo: "editar", id: nodo.id, cambios: { equipo: q.id, potenciaDbm: q.potenciaDbm, gananciaDbi: q.gananciaDbi, perdidaCableDb: q.perdidaCableDb }, descripcion: tx(`ahora usa el equipo «${q.nombre}»`, `now using the “${q.nombre}” device`) };
     }
     const alturaTxt = texto.match(/(\d{1,3}(?:[.,]\d+)?)\s*(?:m|mts?|metros?)\b(?!\s*s\.?\s*n)/i);
-    if (alturaTxt && /\b(altura|sube|subir|subela|subelo|eleva\w*|baja|bajar|bajala|bajalo|pon\w*|cambi\w*|deja\w*)\b/.test(tn) && !/\breceptor\b/.test(tn))
+    // v17.4 · «Súbelo 5 m (más)», «bájalo 3 metros», «ponlo 5 m más alto»: se le suma o se le resta a la que tiene
+    if (deltaAltura !== null && !/\b(receptor|potencia|ganancia|volumen)\b/.test(tn)) {
+      const h = alturaCon(nodo.alturaM, deltaAltura);
+      const tope = h !== Math.round((nodo.alturaM + deltaAltura) * 10) / 10;
+      return {
+        tipo: "editar",
+        id: nodo.id,
+        cambios: { alturaM: h },
+        descripcion: tx(
+          `altura ${fn(h)} m (${deltaAltura > 0 ? "subió" : "bajó"} ${fn(Math.abs(h - nodo.alturaM))} m${tope ? `; ${h <= 0.5 ? "lo mínimo es 0,5 m" : "lo máximo es 300 m"}` : ""})`,
+          `height ${fn(h)} m (${deltaAltura > 0 ? "up" : "down"} ${fn(Math.abs(h - nodo.alturaM))} m${tope ? `; ${h <= 0.5 ? "the minimum is 0.5 m" : "the maximum is 300 m"}` : ""})`,
+        ),
+      };
+    }
+    if (alturaTxt && /\b(altura|sube|subir|subela|subelo|subele|eleva\w*|baja|bajar|bajala|bajalo|bajale|pon\w*|cambi\w*|deja\w*)\b/.test(tn) && !/\breceptor\b/.test(tn))
       return { tipo: "editar", id: nodo.id, cambios: { alturaM: Math.min(300, Math.max(0.5, num(alturaTxt[1]))) }, descripcion: tx(`altura ${fn(num(alturaTxt[1]))} m`, `height ${fn(num(alturaTxt[1]))} m`) };
     const pot = texto.match(/(\d{1,2}(?:[.,]\d+)?)\s*dbm\b/i);
     if (pot && /\b(potencia|pon\w*|cambi\w*|sube|baja)\b/.test(tn)) return { tipo: "editar", id: nodo.id, cambios: { potenciaDbm: num(pot[1]), equipo: "personalizado" }, descripcion: tx(`potencia ${f1(num(pot[1]))} dBm`, `power ${f1(num(pot[1]))} dBm`) };
@@ -2278,11 +2491,11 @@ function interpretarOrdenBase(dicho: string, api: Api, pendiente: Pendiente, con
     if (mencionados[0] && !coord) return { tipo: "donde", ref: ref(mencionados[0]) };
     if (coord) return { tipo: "donde", ref: { tipo: "coord", coord } };
   }
-  if (/\b(ve a|ir a|vamos a|llevame|lleva el mapa|muestrame|mostrar|ubicame|centra\w*|acerca\w*|zoom|busca\w*|encuentra|localiza\w*)\b/.test(tn)) {
+  if (/\b(ve a|ir a|vamos a|llevame|lleva el mapa|muestrame|mostrar|ubicame|centra\w*|acerca(?!\s+del?\b)\w*|zoom|busca\w*|encuentra|localiza\w*)\b/.test(tn)) {
     if (coord) return { tipo: "ir", coord };
     if (mencionados[0]) return { tipo: "ir", id: mencionados[0].id };
     const consulta = tn
-      .replace(/.*\b(ve a|ir a|vamos a|llevame a|llevame|muestrame|mostrar|ubicame en|ubicame|centra el mapa en|centra en|centrar en|acercate a|busca|buscar|encuentra|localiza)\b/, "")
+      .replace(/.*\b(ve a|ir a|vamos a|lleva el mapa a|lleva el mapa hasta|llevame hasta|llevame a|llevame|muestrame|mostrar|ubicame en|ubicame|centra el mapa en|centra en|centrar en|acercate a|busca|buscar|encuentra|localiza)\b/, "")
       .replace(/\b(el|la|los|las|municipio de|departamento de|por favor|porfa|porfavor|en el mapa|mapa)\b/g, " ")
       .replace(/\s+/g, " ")
       .trim();
@@ -2347,6 +2560,9 @@ function piezaEnTexto(tn: string, antenas: Antena[]): Pieza | null {
   for (const { pieza, re } of orden) {
     const m = tn.match(re);
     if (!m) continue;
+    // v17.4 · La que sirve de referencia para el sitio no es la que se pone («agrega … a 2 km al norte del gateway»)
+    const antesDe = tn.slice(0, m.index ?? 0);
+    if (new RegExp(String.raw`\b(?:(?:al|el|hacia el|hacia)\s+(?:${RUMBOS})\s+(?:del?|de la)|(?:cerca|junto|al lado|lejos|frente|alrededor|enseguida|encima)\s+(?:del?|de la|al|a la)|desde\s+(?:el|la)|entre\s+(?:el|la))\s*$`).test(antesDe)) continue;
     // «Inscribe un nodo antena en mi casa» o «antena con internet» siguen siendo nodos del modo avanzado
     if (otroEquipo && (pieza === "persona" || m[0] === "internet")) continue;
     // «Repetidor 2» o «Persona 3» seguidos de su número son nodos que ya existen (pero en «un repetidor 2 millas al
@@ -2359,7 +2575,7 @@ function piezaEnTexto(tn: string, antenas: Antena[]): Pieza | null {
   return null;
 }
 
-function interpretarMalla(texto: string, tn: string, api: Api, coord: Coordenada | null, ultimo?: Antena): Orden | null {
+function interpretarMalla(texto: string, tn: string, api: Api, coord: Coordenada | null, ultimo?: Antena, movido?: Antena): Orden | null {
   if (PREGUNTA.test(tn) && !/\b(puedes|podrias|me ayudas)\b/.test(tn)) return null;
   const antenas = api.antenas();
   // Modo de la pantalla
@@ -2396,8 +2612,16 @@ function interpretarMalla(texto: string, tn: string, api: Api, coord: Coordenada
   if (/\bcomo (un |una )?(repetidor\w*|companion|room server|cliente|billetera)\b|\b(rol|retransmit\w*)\b/.test(tn) && nodosMencionados(tn, antenas).length) return null;
   // Poner una pieza: «pon el gateway en…», «agrega un repetidor en… a 20 m», «pon una persona en…»
   const pieza = piezaEnTexto(tn, antenas);
-  const moverGateway = pieza === "gateway" && /\b(mueve|mover|muevelo|traslad\w*|cambia\w* .*(sitio|lugar|ubicacion))\b/.test(tn);
-  if (pieza && (VERBO_AGREGAR.test(tn) || moverGateway) && !/\b(mide|medir|distancia|perfil|senal en)\b/.test(tn)) {
+  // v17.4 · Un nodo que ya existe y se nombra antes del destino es el que se mueve («mueve/pon el Repetidor 1 cerca del
+  // gateway» no mueve el gateway): el gateway solo se mueve si es él el que se nombra primero
+  if (pieza && movido && piezaDe(movido) !== pieza && !movido.pasarela) return null;
+  const iGateway = tn.search(/\b(gateway|getway|pasarela)\b/);
+  const primero = mencionesDeNodos(tn, antenas)[0];
+  const esElGateway = !primero || primero.a.pasarela || primero.pos >= iGateway;
+  const moverGateway = pieza === "gateway" && /\b(mueve|mover|muevelo|traslad\w*|cambia\w* .*(sitio|lugar|ubicacion))\b/.test(tn) && esElGateway;
+  // (v17.4: «llévame a Villa Nueva casa nare» es ir a un lugar, aunque traiga «nueva» y «casa»)
+  const irA = /^\s*(?:llevame|ubicame|ve a|vamos a|busca|buscame|encuentra|encuentrame|localiza)\b/.test(tn);
+  if (pieza && !irA && (VERBO_AGREGAR.test(tn) || moverGateway) && !/\b(mide|medir|distancia|perfil|senal en)\b/.test(tn)) {
     const datos: DatosNodo = {};
     const nombre = nombreNuevo(texto);
     if (nombre) datos.nombre = nombre;
@@ -2726,6 +2950,17 @@ function datosAntena(api: Api, a: Antena): CifraPitch[] {
 function textoCoord(c: { lat: number; lon: number }) {
   return `${aGMS(c.lat, "lat")}, ${aGMS(c.lon, "lon")} (${aDecimal(c.lat)}, ${aDecimal(c.lon)})`;
 }
+/** El municipio del punto («, en Cumaral (Meta)»), salvo que la referencia ya lo diga («en Cumaral (Meta)»). */
+const sufijoLugar = (c: Coordenada, lugar: string | null) => (lugar && !(c.desde && /^(?:en|in) /.test(c.desde)) ? tx(`, en ${lugar}`, `, in ${lugar}`) : "");
+/** v17.4 · «a 200 m al noreste de Gateway (4.2008, -73.3984)» o, sin referencia, «a 4° 12′ … (4.2, -73.4)». */
+function textoDestino(c: Coordenada, moviendo = false): string {
+  if (c.desde) {
+    // Al mover a un municipio: «a Restrepo (Meta)», «to Restrepo (Meta)»
+    const desde = moviendo ? c.desde.replace(/^en /, "a ").replace(/^in /, "to ") : c.desde;
+    return tx(`${desde.startsWith("a ") || desde.startsWith("en ") ? desde : `a ${desde}`} (${aDecimal(c.lat)}, ${aDecimal(c.lon)})`, `${desde} (${aDecimal(c.lat)}, ${aDecimal(c.lon)})`);
+  }
+  return tx(`a ${textoCoord(c)}`, `to ${textoCoord(c)}`);
+}
 
 /** Cómo se escribe una coordenada (el ejemplo que da Melki). */
 const ejemploCoord = () => tx("4.5123, -73.1234 o 4°30'44\" N, 73°07'24\" O", "4.5123, -73.1234 or 4°30'44\" N, 73°07'24\" W");
@@ -2785,7 +3020,7 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
       api.centrar(o.coord.lat, o.coord.lon);
       const lugar = api.ubicacion(o.coord.lat, o.coord.lon);
       return {
-        texto: tx(`Moví «${a.nombre}» a ${textoCoord(o.coord)}${lugar ? `, en ${lugar}` : ""}. Recalculo la simulación.`, `I moved “${a.nombre}” to ${textoCoord(o.coord)}${lugar ? `, in ${lugar}` : ""}. Recalculating the simulation.`),
+        texto: tx(`Moví «${a.nombre}» ${textoDestino(o.coord, true)}${sufijoLugar(o.coord, lugar)}. Recalculo la simulación.`, `I moved “${a.nombre}” ${textoDestino(o.coord, true)}${sufijoLugar(o.coord, lugar)}. Recalculating the simulation.`),
         acciones: [deshacer()],
         deshacer: antes,
         esperar: a.id,
@@ -3125,8 +3360,8 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
         api.centrar(lat, lon);
         return {
           texto: tx(
-            `Moví el gateway «${gw.nombre}» a ${textoCoord(o.coord)}${lugar ? `, en ${lugar}` : ""}: ahí entra el internet. Calculo de nuevo quién queda conectado.`,
-            `I moved the gateway “${gw.nombre}” to ${textoCoord(o.coord)}${lugar ? `, in ${lugar}` : ""}: that's where the internet comes in. I'm recalculating who stays connected.`,
+            `Moví el gateway «${gw.nombre}» ${textoDestino(o.coord, true)}${sufijoLugar(o.coord, lugar)}: ahí entra el internet. Calculo de nuevo quién queda conectado.`,
+            `I moved the gateway “${gw.nombre}” ${textoDestino(o.coord, true)}${sufijoLugar(o.coord, lugar)}: that's where the internet comes in. I'm recalculating who stays connected.`,
           ),
           acciones: [deshacer()],
           deshacer: antes,
@@ -3138,8 +3373,8 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
       const que = { gateway: tx("el gateway (Gateway + Internet)", "the gateway (Gateway + Internet)"), repetidor: tx("el repetidor", "the repeater"), persona: tx("la persona", "the person") }[o.pieza];
       return {
         texto: tx(
-          `Listo: puse ${que} «${nueva.nombre}» en ${textoCoord({ lat, lon })}${lugar ? `, en ${lugar}` : ""}, a ${fn(nueva.alturaM)} m.${o.coord.corregido ? " Tomé la longitud como oeste (negativa), como corresponde en Colombia." : ""} Ya calculo con el relieve real si queda conectad${o.pieza === "persona" ? "a" : "o"} al gateway.`,
-          `Done: I placed ${que} “${nueva.nombre}” at ${textoCoord({ lat, lon })}${lugar ? `, in ${lugar}` : ""}, ${fn(nueva.alturaM)} m high.${o.coord.corregido ? " I took the longitude as west (negative), as is correct in Colombia." : ""} I'm now checking with the real terrain whether it connects to the gateway.`,
+          `Listo: puse ${que} «${nueva.nombre}» ${o.coord.desde ? textoDestino(o.coord) : `en ${textoCoord({ lat, lon })}`}${sufijoLugar(o.coord, lugar)}, a ${fn(nueva.alturaM)} m.${o.coord.corregido ? " Tomé la longitud como oeste (negativa), como corresponde en Colombia." : ""} Ya calculo con el relieve real si queda conectad${o.pieza === "persona" ? "a" : "o"} al gateway.`,
+          `Done: I placed ${que} “${nueva.nombre}” ${o.coord.desde ? textoDestino(o.coord) : `at ${textoCoord({ lat, lon })}`}${sufijoLugar(o.coord, lugar)}, ${fn(nueva.alturaM)} m high.${o.coord.corregido ? " I took the longitude as west (negative), as is correct in Colombia." : ""} I'm now checking with the real terrain whether it connects to the gateway.`,
         ),
         acciones: [deshacer()],
         deshacer: antes,
@@ -3570,7 +3805,7 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
     case "editar-varios": {
       const cambiar = antenas.filter((a) => o.ids.includes(a.id));
       if (!cambiar.length) return { texto: tx("No encontré nodos de ese tipo.", "I couldn't find nodes of that type.") };
-      for (const a of cambiar) api.editar(a.id, o.cambios);
+      for (const a of cambiar) api.editar(a.id, o.deltaAlturaM !== undefined ? { ...o.cambios, alturaM: alturaCon(a.alturaM, o.deltaAlturaM) } : o.cambios);
       return {
         texto: tx(`Hecho: ${o.descripcion} (${cambiar.map((a) => a.nombre).join(", ")}). Recalculo la simulación.`, `Done: ${o.descripcion} (${cambiar.map((a) => a.nombre).join(", ")}). Recalculating the simulation.`),
         acciones: [deshacer()],

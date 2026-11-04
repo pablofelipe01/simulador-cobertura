@@ -323,9 +323,17 @@ export function presupuestoEnTexto(bajo: string): Presupuesto | null {
     const dolares = /usd|us\$/.test(moneda) || /dolares|usd/.test(despues);
     // «12 m» son metros; «$80 M» o «80 MM de pesos» son millones
     if (/^mm?$/.test(escala) && !moneda && !despues) continue;
-    const plata = Boolean(moneda) || Boolean(despues) || /millon|mil millones/.test(escala);
-    if (!plata) continue;
     let v = leerNumero(`${m[2]}${m[3] ? " mil" : ""}`);
+    // v17.4 · «Con un presupuesto de 120000000» (dictado: «ciento veinte millones» llega en cifras): también es plata, si
+    // la cifra va junto a lo que la nombra («… para 2000000 personas con un presupuesto de 90000000» es la segunda)
+    const antes = bajo.slice(0, m.index ?? 0);
+    const despuesCifra = bajo.slice((m.index ?? 0) + m[0].length);
+    const junto =
+      /\b(?:presupuesto|invertir|inversion|gastar|plata|dinero|capital|tope)(?:\s+(?:de|del|total|maximo|disponible|aprobado|es|era|sera|seria|hasta|como|unos?|cerca\s+de|maximo\s+de))*\s*[:=]?\s*$/.test(antes) ||
+      /^\s*(?:de\s+)?(?:presupuesto|inversion|plata|dinero|capital)\b/.test(despuesCifra);
+    const cifraGrande = !escala && v >= 1e6 && junto;
+    const plata = Boolean(moneda) || Boolean(despues) || /millon|mil millones/.test(escala) || cifraGrande;
+    if (!plata) continue;
     if (/^mil millones/.test(escala)) v *= 1e9;
     else if (/^millon/.test(escala) || /^mm?$/.test(escala)) v *= 1e6;
     else if (escala === "k") v *= 1e3;
