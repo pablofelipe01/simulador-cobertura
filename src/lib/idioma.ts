@@ -352,7 +352,7 @@ const PALABRAS_ES = new Set(
 const PALABRAS_EN = new Set(
   (
     "the of and or to in on at by from with without for about into onto over under between near around this that these those there here it its is are was were be been " +
-    "do does did done have has had will would can could should shall may might must what which who whom whose when where why how much many more less " +
+    "do does did done have had will would can could should shall may might must what which who whom whose when where why how much many more less " +
     "please thanks thank hello hi hey yes yeah okay sure great good morning afternoon evening help want need you your i my we our us they them he she let lets " +
     "add put place remove delete erase move rename change raise lower set make build create design simulate run show tell give take go open close hide test export " +
     "download undo repeat speak talk stop quiet next previous back finish start explain calculate measure optimize adjust zoom center find search " +
@@ -363,6 +363,66 @@ const PALABRAS_EN = new Set(
 );
 // Contracciones del inglés («what's», «don't», «I'm», «let's»): casi nunca aparecen en español
 const CONTRACCION = /\b[a-z]+'(s|t|re|ve|ll|d|m)\b/;
+// v17.3 · Más palabras que delatan cada idioma (las órdenes del simulador con otras palabras). No van las que se usan en
+// los dos («real», «normal», «radio», «link», «test», «zoom», «set» como préstamo, «use» del «use usted»)
+for (const p of (
+  "apply switch turn load save select pick choose connect duplicate copy clone populate cover fly navigate increase decrease " +
+  "reduce enable disable activate deactivate tilt point orient aim mark suggest recommend send seed spread scatter fill draw " +
+  "wipe clear lift shift push relocate nudge satellite roads terrain ground ruler pencil scenario example sample simulation " +
+  "protocol spreading factor hops hop limit report profile distance reliability climate soil wet dry flat everyone everybody " +
+  "someone somebody gonna wanna sir accept approve kill trash ditch scrap hook off optimization optimisation adjustment " +
+  "layer layers toolbar label labels rivers tall high feet miles yards blocks acres hectare kilometer meter mile foot"
+).split(" "))
+  PALABRAS_EN.add(p);
+for (const p of (
+  "aplica selecciona conecta duplica copia elimina guarda carga usa activa desactiva apaga enciende prende siembra puebla " +
+  "reparte dibuja suelta marca apunta orienta inclina llama sugiere sugiereme recomienda envia manda cubre vamos escenario " +
+  "ejemplo simulacion relieve terreno satelital vias regla lapiz saltos limite enlace informe perfil distancia confiabilidad " +
+  "clima suelo humedo seco plano alto alta ponlo ponla subelo bajalo muevelo senor senora"
+).split(" "))
+  PALABRAS_ES.add(p);
+
+/**
+ * v17.3 · Verbos y preguntas con que empieza una orden y que son de un solo idioma: con ellos basta una orden corta para
+ * saber el idioma («Simulate», «optimize it», «load the example»; «simula», «carga el ejemplo», «usa SF10»). Los préstamos
+ * que se dicen igual en español («ok», «zoom», «reset», «stop», «test», «check», «play», «click») no están, ni «use»
+ * (también es el «use usted» del español: «Use SF10»).
+ */
+const VERBOS_EN = new Set(
+  (
+    "simulate simulation optimize optimise add delete remove erase move shift relocate raise lower lift rename show display hide " +
+    "export download save load select pick choose connect duplicate copy clone apply switch turn set put place design build " +
+    "create make populate measure cover take go fly navigate center find locate open close run start give undo redo explain tell " +
+    "increase decrease reduce enable disable activate deactivate adjust calculate compute send draw mark point tilt orient aim " +
+    "spread scatter fill seed suggest recommend help walk present speak talk read repeat call name drop get bring keep let lets " +
+    "accept approve kill trash ditch scrap hook lose " +
+    "can could would will should shall what how why where who which when is are does do did am was were have"
+  ).split(" "),
+);
+const VERBOS_ES = new Set(
+  (
+    "simula simular simulalo optimiza optimizala agrega agregale agregame anade elimina eliminalo eliminala borra borralo quita " +
+    "quitale mueve muevelo muevela sube subelo subela baja bajalo bajala renombra muestra muestrame oculta exporta descarga guarda " +
+    "carga selecciona conecta duplica aplica cambia usa pon ponme ponle ponlo ponla disena disename arma armame crea creame puebla " +
+    "mide cubre llevame lleva ve vamos haz hazme prueba abre cierra deshaz explicame dime dame ensename calcula ajusta ajustamelo " +
+    "activa desactiva apaga enciende prende manda envia siembra reparte dibuja suelta marca apunta orienta inclina llama sugiere " +
+    "sugiereme recomienda recomiendame ubica ubicame busca encuentra acerca aleja habla hablame repite " +
+    // Con «usted» (sin «active», «incline» ni «quite», que también son palabras del inglés)
+    "simule agregue anada ponga mueva suba baje muestre oculte elimine borre cambie haga disene arme exporte descargue guarde " +
+    "cargue seleccione conecte duplique aplique renombre desactive apague encienda mande envie siembre pueble reparta " +
+    "dibuje suelte marque apunte oriente sugiera recomiende ubique busque encuentre acerque aleje hable repita mida cubra " +
+    "calcule optimice pruebe abra cierre deshaga explique digame deme ensename lleve " +
+    // Preguntas
+    "que como cuanto cuanta cuantos cuantas donde cual cuales quien quienes cuando hay tengo necesito quiero puedes podrias"
+  ).split(" "),
+);
+/** v17.3 · Las órdenes de una sola palabra (sin nada más se hacen): con ellas basta para saber el idioma. */
+const SOLAS_EN = new Set("simulate optimize optimise undo redo export download save recalculate calculate compute populate".split(" "));
+const SOLAS_ES = new Set(
+  "simula simular simulalo optimiza optimizala deshaz exporta descarga guarda calcula recalcula puebla simule optimice exporte descargue guarde calcule pueble".split(" "),
+);
+/** Lo que puede ir antes del verbo sin decir el idioma («ok», «hey», «Melki», «please»). */
+const ANTES_DEL_VERBO = new Set("ok okay oki okey hey hi hello hola oye oiga melki please porfa so well um uh eh ah ya bueno listo vale dale y and".split(" "));
 
 export type Deteccion = { idioma: Idioma | null; es: number; en: number };
 
@@ -394,6 +454,33 @@ export function detectarIdioma(texto: string, quitar?: (t: string) => string): D
   }
   const decide = (a: number, b: number) => a >= 2 && a - b >= 2 && a >= b * 2;
   return { idioma: decide(en, es) ? "en" : decide(es, en) ? "es" : null, es, en };
+}
+
+/**
+ * v17.3 · El idioma de una orden, también cuando es corta: si detectarIdioma no decide, decide el verbo con que empieza
+ * cuando es de un solo idioma y no hay palabras del otro («Simulate», «apply the optimization» → inglés; «simula», «usa
+ * SF10» → español). Con palabras que se usan en los dos idiomas («ok», «zoom», «gateway», «LoRa», «hello») sigue sin decidir.
+ */
+export function idiomaProbable(texto: string, quitar?: (t: string) => string): Idioma | null {
+  const d = detectarIdioma(texto, quitar);
+  if (d.idioma) return d.idioma;
+  let t = texto.normalize("NFC");
+  if (quitar) t = quitar(t);
+  const palabras =
+    t
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/'[a-z]+/g, "")
+      .match(/[a-z]+/g) ?? [];
+  const resto = palabras.filter((p) => !ANTES_DEL_VERBO.has(p));
+  const primera = resto[0];
+  if (!primera) return null;
+  // Un verbo solo es una orden si se hace sin más («Simulate», «deshaz»); «show», «mark» o «will» solos no dicen el idioma
+  if (resto.length === 1 && !SOLAS_EN.has(primera) && !SOLAS_ES.has(primera)) return null;
+  if (d.es === 0 && VERBOS_EN.has(primera)) return "en";
+  if (d.en === 0 && VERBOS_ES.has(primera)) return "es";
+  return null;
 }
 
 /* ───────────── Cambiar de idioma por pedido ───────────── */
