@@ -1,0 +1,5271 @@
+{
+ "descripcion": "v17.4 · Frases dichas con mala pronunciación, como las escribe el reconocimiento de voz (en-US con acento colombiano; es-CO rápido), con la frase bien dicha: [lo oído, lo que se quiso decir]. Las escribieron a ciegas, sin ver el código, en tres tandas (la tercera se midió antes de tocar nada por ella). «charla»: conversación cercana que no debe volverse una orden. «minimo»: el porcentaje que debe entenderse.",
+ "minimo": {
+  "en": 83,
+  "es": 90
+ },
+ "en": [
+  [
+   "at a repeater 2 km north of the gateway",
+   "add a repeater 2 km north of the gateway"
+  ],
+  [
+   "add a repeat her to kilometers north of the gateway",
+   "add a repeater 2 km north of the gateway"
+  ],
+  [
+   "add a reporter 2 km north of the get away",
+   "add a repeater 2 km north of the gateway"
+  ],
+  [
+   "had a repeater too kilometers nort of the gateway",
+   "add a repeater 2 km north of the gateway"
+  ],
+  [
+   "and a repeater two kilometers north of the gateway",
+   "add a repeater 2 km north of the gateway"
+  ],
+  [
+   "add a repeater 2 kilo meters north of the gay way",
+   "add a repeater 2 km north of the gateway"
+  ],
+  [
+   "put a person tree kilometers sauce of the gateway",
+   "put a person 3 km south of the gateway"
+  ],
+  [
+   "but a person 3 km south of the gateway",
+   "put a person 3 km south of the gateway"
+  ],
+  [
+   "put a person 3 km sout of the gateway",
+   "put a person 3 km south of the gateway"
+  ],
+  [
+   "move Person to 1 km is",
+   "move Person 2 1 km east"
+  ],
+  [
+   "mood Person 2 1 km east",
+   "move Person 2 1 km east"
+  ],
+  [
+   "move person to one kilometer east",
+   "move Person 2 1 km east"
+  ],
+  [
+   "mood Repeater won 2 kilometers vest",
+   "move Repeater 1 2 km west"
+  ],
+  [
+   "move repeater one 2 km wes",
+   "move Repeater 1 2 km west"
+  ],
+  [
+   "move Repeater 1 too kilometers guest",
+   "move Repeater 1 2 km west"
+  ],
+  [
+   "the lead Repeater to",
+   "delete Repeater 2"
+  ],
+  [
+   "delete repeater too",
+   "delete Repeater 2"
+  ],
+  [
+   "delight Person won",
+   "delete Person 1"
+  ],
+  [
+   "delete person won",
+   "delete Person 1"
+  ],
+  [
+   "similar",
+   "simulate"
+  ],
+  [
+   "stimulate the network",
+   "simulate the network"
+  ],
+  [
+   "simulate the net work",
+   "simulate the network"
+  ],
+  [
+   "rice it 5 meters",
+   "raise it 5 meters"
+  ],
+  [
+   "raise it 5 matters",
+   "raise it 5 meters"
+  ],
+  [
+   "raise Repeater won by 5 matters",
+   "raise Repeater 1 by 5 meters"
+  ],
+  [
+   "lover Repeater 2 3 meters",
+   "lower Repeater 2 3 meters"
+  ],
+  [
+   "lower repeater to tree meters",
+   "lower Repeater 2 3 meters"
+  ],
+  [
+   "raise repeater one to twenty five meters",
+   "raise Repeater 1 to 25 meters"
+  ],
+  [
+   "rays repeater 1 to 25 meters",
+   "raise Repeater 1 to 25 meters"
+  ],
+  [
+   "show me the cover age",
+   "show me the coverage"
+  ],
+  [
+   "how many reporters are there",
+   "how many repeaters are there"
+  ],
+  [
+   "how many repeat hers are there",
+   "how many repeaters are there"
+  ],
+  [
+   "fine me Villa Nueva Casanare",
+   "find me Villanueva Casanare"
+  ],
+  [
+   "find me via nueva casanare",
+   "find me Villanueva Casanare"
+  ],
+  [
+   "tag me to Cumaral",
+   "take me to Cumaral"
+  ],
+  [
+   "take me to coo ma ral",
+   "take me to Cumaral"
+  ],
+  [
+   "go too Villavicencio",
+   "go to Villavicencio"
+  ],
+  [
+   "take me too villa vicencio",
+   "take me to Villavicencio"
+  ],
+  [
+   "soon in",
+   "zoom in"
+  ],
+  [
+   "soon out",
+   "zoom out"
+  ],
+  [
+   "optimise the net work",
+   "optimize the network"
+  ],
+  [
+   "up to mice the network",
+   "optimize the network"
+  ],
+  [
+   "run a dress test",
+   "run the stress test"
+  ],
+  [
+   "run the stress taste",
+   "run the stress test"
+  ],
+  [
+   "lord the example",
+   "load the example"
+  ],
+  [
+   "load the sample",
+   "load the example"
+  ],
+  [
+   "hide the rhodes",
+   "hide the roads"
+  ],
+  [
+   "show the rose",
+   "show the roads"
+  ],
+  [
+   "rename repeater won to Loma Alta",
+   "rename Repeater 1 to Loma Alta"
+  ],
+  [
+   "re name Repeater 1 to Loma Alta",
+   "rename Repeater 1 to Loma Alta"
+  ],
+  [
+   "move the get away to Cumaral",
+   "move the gateway to Cumaral"
+  ],
+  [
+   "move the gateway too Cumaral",
+   "move the gateway to Cumaral"
+  ],
+  [
+   "moved the gateway to coo ma ral",
+   "move the gateway to Cumaral"
+  ],
+  [
+   "design a for km network in villa vicencio",
+   "design a 4 km network in Villavicencio"
+  ],
+  [
+   "the sign a 4 km network in Villavicencio",
+   "design a 4 km network in Villavicencio"
+  ],
+  [
+   "how far is repeater won from the get away",
+   "how far is Repeater 1 from the gateway?"
+  ],
+  [
+   "how far is repeater one from the gateway",
+   "how far is Repeater 1 from the gateway?"
+  ],
+  [
+   "export the k m z",
+   "export the KMZ"
+  ],
+  [
+   "expert the KMZ",
+   "export the KMZ"
+  ],
+  [
+   "send a message from person to",
+   "send a message from Person 2"
+  ],
+  [
+   "sand a message from Person 2",
+   "send a message from Person 2"
+  ],
+  [
+   "select person won",
+   "select Person 1"
+  ],
+  [
+   "duplicate repeater won",
+   "duplicate Repeater 1"
+  ],
+  [
+   "populate the area with 500 pupils",
+   "populate the area with 500 people"
+  ],
+  [
+   "pop you late the area with 500 people",
+   "populate the area with 500 people"
+  ],
+  [
+   "put a repeater near the get away",
+   "put a repeater near the gateway"
+  ],
+  [
+   "put a repeater next to the gate way",
+   "put a repeater near the gateway"
+  ],
+  [
+   "move Repeater 1 next to the get away",
+   "move Repeater 1 next to the gateway"
+  ],
+  [
+   "move repeater won close to the gateway",
+   "move Repeater 1 next to the gateway"
+  ],
+  [
+   "add an antenna at 4.25 minus 73.4",
+   "add an antenna at 4.25, -73.4"
+  ],
+  [
+   "delete all the notes",
+   "delete all the nodes"
+  ],
+  [
+   "the lead all the nodes",
+   "delete all the nodes"
+  ],
+  [
+   "raise all the repeaters 5 matters",
+   "raise all the repeaters 5 m"
+  ],
+  [
+   "make it 5 meters taller",
+   "make it 5 m taller"
+  ],
+  [
+   "make it five matters taller",
+   "make it 5 m taller"
+  ],
+  [
+   "use s f ten",
+   "use SF10"
+  ],
+  [
+   "use sf 10",
+   "use SF10"
+  ],
+  [
+   "simulate please milky",
+   "simulate"
+  ],
+  [
+   "okay so similar",
+   "simulate"
+  ],
+  [
+   "um add a repeater to kilometers is of the gateway",
+   "add a repeater 2 km east of the gateway"
+  ],
+  [
+   "at a repeater 2 km is of the gateway",
+   "add a repeater 2 km east of the gateway"
+  ],
+  [
+   "put a person 500 meters nort of repeater won",
+   "put a person 500 meters north of Repeater 1"
+  ],
+  [
+   "put a person 500 matters north of repeater 1",
+   "put a person 500 meters north of Repeater 1"
+  ],
+  [
+   "path profile between the get away and repeater won",
+   "path profile between the gateway and Repeater 1"
+  ],
+  [
+   "turn repeater won off",
+   "turn Repeater 1 off"
+  ],
+  [
+   "turn repeater 1 of",
+   "turn Repeater 1 off"
+  ],
+  [
+   "show the topographic map",
+   "show the topographic map"
+  ],
+  [
+   "move the getaway to Kumar al",
+   "move the gateway to Cumaral"
+  ],
+  [
+   "move the gate way to Kumaral",
+   "move the gateway to Cumaral"
+  ],
+  [
+   "delete all the nose",
+   "delete all the nodes"
+  ],
+  [
+   "how far is repeater won from the getaway",
+   "how far is Repeater 1 from the gateway?"
+  ],
+  [
+   "how far is repeat or one from the gateway",
+   "how far is Repeater 1 from the gateway?"
+  ],
+  [
+   "pat profile between the gateway and repeater 1",
+   "path profile between the gateway and Repeater 1"
+  ],
+  [
+   "path pro file between the gateway and the repeater 1",
+   "path profile between the gateway and Repeater 1"
+  ],
+  [
+   "stimulate",
+   "Simulate."
+  ],
+  [
+   "similar",
+   "Simulate."
+  ],
+  [
+   "move repeater 1 to km north",
+   "move Repeater 1 2 km north"
+  ],
+  [
+   "move the repeater 1 2 kilo meters nor",
+   "move Repeater 1 2 km north"
+  ],
+  [
+   "delete repeater to",
+   "delete Repeater 2"
+  ],
+  [
+   "delete repeat her 2",
+   "delete Repeater 2"
+  ],
+  [
+   "delete every thing",
+   "delete everything"
+  ],
+  [
+   "deleted everything",
+   "delete everything"
+  ],
+  [
+   "race repeater 1 to 25 meters",
+   "raise Repeater 1 to 25 meters"
+  ],
+  [
+   "raise repeater 1 2 25 meters",
+   "raise Repeater 1 to 25 meters"
+  ],
+  [
+   "rename repeater 1 to lomalta",
+   "rename Repeater 1 to Loma Alta"
+  ],
+  [
+   "re name repeater one two Loma alto",
+   "rename Repeater 1 to Loma Alta"
+  ],
+  [
+   "design a for km network in via vicencio",
+   "design a 4 km network in Villavicencio"
+  ],
+  [
+   "the sign a 4 kilometer network in Villa Vicencio",
+   "design a 4 km network in Villavicencio"
+  ],
+  [
+   "optimize the net work",
+   "optimise the network"
+  ],
+  [
+   "optimist the network",
+   "optimise the network"
+  ],
+  [
+   "a play the optimization",
+   "apply the optimisation"
+  ],
+  [
+   "okay apply the optimizations",
+   "apply the optimisation"
+  ],
+  [
+   "ran the stress text",
+   "run the stress test"
+  ],
+  [
+   "Ronda stress test",
+   "run the stress test"
+  ],
+  [
+   "runner load test",
+   "run a load test"
+  ],
+  [
+   "run a lot test",
+   "run a load test"
+  ],
+  [
+   "at 500 people and see if it holds up",
+   "add 500 people and see if it holds up"
+  ],
+  [
+   "add five hundred pupil and see if it holes up",
+   "add 500 people and see if it holds up"
+  ],
+  [
+   "so roads",
+   "show roads"
+  ],
+  [
+   "show Rhodes",
+   "show roads"
+  ],
+  [
+   "flight to Villa Vicenza",
+   "fly to Villavicencio"
+  ],
+  [
+   "fly to via Vicente",
+   "fly to Villavicencio"
+  ],
+  [
+   "expert to KMZ",
+   "export to KMZ"
+  ],
+  [
+   "export 2 KMS",
+   "export to KMZ"
+  ],
+  [
+   "loaded sample",
+   "load the sample"
+  ],
+  [
+   "load the example",
+   "load the sample"
+  ],
+  [
+   "change the proto call to mesh tastic",
+   "change the protocol to Meshtastic"
+  ],
+  [
+   "chance the protocol to mesh tactic",
+   "change the protocol to Meshtastic"
+  ],
+  [
+   "juice actual terrain",
+   "use actual terrain"
+  ],
+  [
+   "use actual the rain",
+   "use actual terrain"
+  ],
+  [
+   "link bucket between the gateway and repeater 1",
+   "link budget between the gateway and Repeater 1"
+  ],
+  [
+   "leak budget between the gateway and repeater Juan",
+   "link budget between the gateway and Repeater 1"
+  ],
+  [
+   "roller",
+   "ruler"
+  ],
+  [
+   "okay rule her",
+   "ruler"
+  ],
+  [
+   "connect person to to the network",
+   "connect Person 2 to the network"
+  ],
+  [
+   "connected Pearson 2 to the network",
+   "connect Person 2 to the network"
+  ],
+  [
+   "send a test massage from person 2",
+   "send a test message from Person 2"
+  ],
+  [
+   "sender test message from Pearson to",
+   "send a test message from Person 2"
+  ],
+  [
+   "peek person 1",
+   "pick Person 1"
+  ],
+  [
+   "pick person won",
+   "pick Person 1"
+  ],
+  [
+   "copy repeated one",
+   "copy Repeater 1"
+  ],
+  [
+   "copy re peter one",
+   "copy Repeater 1"
+  ],
+  [
+   "add tree hundred people within 3 km of repeater 1",
+   "add 300 people within 3 km of Repeater 1"
+  ],
+  [
+   "had 300 people with in 3 km of repeater 1",
+   "add 300 people within 3 km of Repeater 1"
+  ],
+  [
+   "pointed north",
+   "point it north"
+  ],
+  [
+   "point eat north",
+   "point it north"
+  ],
+  [
+   "add a repeat or to kilometers north of the gateway",
+   "add a repeater 2 kilometres north of the gateway"
+  ],
+  [
+   "at a repeater 2 kilometers north of the gate way",
+   "add a repeater 2 kilometres north of the gateway"
+  ],
+  [
+   "remove all notes",
+   "remove all nodes"
+  ],
+  [
+   "remove hall nodes",
+   "remove all nodes"
+  ],
+  [
+   "measure the distant from person 2 to repeater 1",
+   "Measure the distance from Person 2 to Repeater 1"
+  ],
+  [
+   "major the distance from person to to repeat her one",
+   "Measure the distance from Person 2 to Repeater 1"
+  ],
+  [
+   "so the pad profile from the gateway to repeater 1",
+   "show the path profile from the gateway to Repeater 1"
+  ],
+  [
+   "show the pass profile from the getaway to repeater 1",
+   "show the path profile from the gateway to Repeater 1"
+  ],
+  [
+   "could you run the stimulation please",
+   "could you run the simulation, please?"
+  ],
+  [
+   "could you ran the simulation police",
+   "could you run the simulation, please?"
+  ],
+  [
+   "move repeater one to kilometers north",
+   "move repeater one two kilometers north"
+  ],
+  [
+   "move repeater won too kilometers nor",
+   "move repeater one two kilometers north"
+  ],
+  [
+   "can you delete the repeater 2",
+   "can you delete Repeater 2?"
+  ],
+  [
+   "can you the lead repeater too",
+   "can you delete Repeater 2?"
+  ],
+  [
+   "it's start again from zero",
+   "start again from zero"
+  ],
+  [
+   "okay star again from zero",
+   "start again from zero"
+  ],
+  [
+   "change the eight of repeater 1 to 25 meters",
+   "change the height of Repeater 1 to twenty five meters"
+  ],
+  [
+   "chains the high of repeater 1 to 25 meters",
+   "change the height of Repeater 1 to twenty five meters"
+  ],
+  [
+   "rename repeater to as Sarah azul",
+   "Rename Repeater 2 as Cerro Azul"
+  ],
+  [
+   "rename repeater 2 has zero azul",
+   "Rename Repeater 2 as Cerro Azul"
+  ],
+  [
+   "can you bill a 4 km network in Villa Vincenzo",
+   "can you build a 4km network in Villavicencio?"
+  ],
+  [
+   "can you build a for kilometer network in Villavicencio",
+   "can you build a 4km network in Villavicencio?"
+  ],
+  [
+   "ran the optimization",
+   "run the optimization"
+  ],
+  [
+   "so run the optimizations",
+   "run the optimization"
+  ],
+  [
+   "apply the optimize network",
+   "apply the optimized network"
+  ],
+  [
+   "applied the optimized networks",
+   "apply the optimized network"
+  ],
+  [
+   "can you a stress test the network",
+   "can you stress test the network?"
+  ],
+  [
+   "can use stress test the network",
+   "can you stress test the network?"
+  ],
+  [
+   "can it and all 500 people",
+   "can it handle 500 people?"
+  ],
+  [
+   "can eat handle five hundred people",
+   "can it handle 500 people?"
+  ],
+  [
+   "show the rows please",
+   "show the roads please"
+  ],
+  [
+   "so the rods please",
+   "show the roads please"
+  ],
+  [
+   "go to via vicencio meta",
+   "go to villavicencio meta"
+  ],
+  [
+   "go to Villa Vicente metal",
+   "go to villavicencio meta"
+  ],
+  [
+   "expert for Google Earth",
+   "export for Google Earth"
+  ],
+  [
+   "export for google art",
+   "export for Google Earth"
+  ],
+  [
+   "load the sample net work",
+   "Load the sample network"
+  ],
+  [
+   "lot the sample network",
+   "Load the sample network"
+  ],
+  [
+   "set as if to 10",
+   "set SF to 10"
+  ],
+  [
+   "set SF 210",
+   "set SF to 10"
+  ],
+  [
+   "flat the rain",
+   "flat terrain"
+  ],
+  [
+   "flat train",
+   "flat terrain"
+  ],
+  [
+   "check the leak from repeater 1 to repeater 2",
+   "check the link from Repeater 1 to Repeater 2"
+  ],
+  [
+   "check the link from repeater won to repeater too",
+   "check the link from Repeater 1 to Repeater 2"
+  ],
+  [
+   "used the pencil",
+   "use the pencil"
+  ],
+  [
+   "use the pen seal",
+   "use the pencil"
+  ],
+  [
+   "connect all the pupil",
+   "connect all the people"
+  ],
+  [
+   "Kinect all the people",
+   "connect all the people"
+  ],
+  [
+   "send a massage from person to",
+   "send a message from person two"
+  ],
+  [
+   "sent a message from Pearson two",
+   "send a message from person two"
+  ],
+  [
+   "shoes person 1",
+   "choose Person 1"
+  ],
+  [
+   "chews person won",
+   "choose Person 1"
+  ],
+  [
+   "a scatter 300 people within tree km around repeater 1",
+   "scatter 300 people within 3 km around Repeater 1"
+  ],
+  [
+   "is cutter 300 people with in 3 km a round repeater one",
+   "scatter 300 people within 3 km around Repeater 1"
+  ],
+  [
+   "at a repeat her to km north of the get away",
+   "add a repeat her 2 km north of the gate way"
+  ],
+  [
+   "add a re peter 2 kilometers nor of the gateway",
+   "add a repeat her 2 km north of the gate way"
+  ],
+  [
+   "delete every note",
+   "delete every node"
+  ],
+  [
+   "delete a very node",
+   "delete every node"
+  ],
+  [
+   "distant between the gateway and repeater 1",
+   "distance between the gateway and Repeater 1"
+  ],
+  [
+   "this dance between the get away and repeater one",
+   "distance between the gateway and Repeater 1"
+  ],
+  [
+   "simulate the cover edge",
+   "simulate the coverage"
+  ],
+  [
+   "simulated that coverage",
+   "simulate the coverage"
+  ],
+  [
+   "move repeater won 2 km north word",
+   "move Repeater 1 2 km northward"
+  ],
+  [
+   "move re peter 1 to km northward",
+   "move Repeater 1 2 km northward"
+  ],
+  [
+   "trust repeater 2",
+   "trash Repeater 2"
+  ],
+  [
+   "trash repeated 2",
+   "trash Repeater 2"
+  ],
+  [
+   "a race all",
+   "erase all"
+  ],
+  [
+   "erase hall",
+   "erase all"
+  ],
+  [
+   "sue be repeater 1 a 25 m",
+   "sube Repeater 1 a 25 m"
+  ],
+  [
+   "super repeater 1 a 25 meters",
+   "sube Repeater 1 a 25 m"
+  ],
+  [
+   "cole repeater 1 Loma Alta",
+   "call Repeater 1 Loma Alta"
+  ],
+  [
+   "call repeater 1 low ma alta",
+   "call Repeater 1 Loma Alta"
+  ],
+  [
+   "design me a for km network in Villa Vicencio",
+   "design me a 4 km network in Villavicencio"
+  ],
+  [
+   "the sign me a 4 km network in Villavicencio",
+   "design me a 4 km network in Villavicencio"
+  ],
+  [
+   "a just the network for me",
+   "adjust the network for me"
+  ],
+  [
+   "adjust the net work 4 me",
+   "adjust the network for me"
+  ],
+  [
+   "except the optimization",
+   "accept the optimization"
+  ],
+  [
+   "a set the optimizations",
+   "accept the optimization"
+  ],
+  [
+   "make the stress text please",
+   "make the stress test please"
+  ],
+  [
+   "make this stress tests please",
+   "make the stress test please"
+  ],
+  [
+   "popular with 500 people",
+   "populate with 500 people"
+  ],
+  [
+   "populated with 500 peoples",
+   "populate with 500 people"
+  ],
+  [
+   "this able the roads",
+   "disable the roads"
+  ],
+  [
+   "disabled the rows",
+   "disable the roads"
+  ],
+  [
+   "tech me to via Vincenzo",
+   "take me to Villavicensio"
+  ],
+  [
+   "take me too Villa Vicencio",
+   "take me to Villavicensio"
+  ],
+  [
+   "safe the project",
+   "save the project"
+  ],
+  [
+   "um save the projects",
+   "save the project"
+  ],
+  [
+   "set the up limit to 5",
+   "set the hop limit to five"
+  ],
+  [
+   "okay set the hope limit to five",
+   "set the hop limit to five"
+  ],
+  [
+   "simulate on flat the rain",
+   "simulate on flat terrain"
+  ],
+  [
+   "simulated on a flat terrain",
+   "simulate on flat terrain"
+  ],
+  [
+   "check the link between the getaway and repeat her one",
+   "check the link between the gateway and Repeater 1"
+  ],
+  [
+   "check the links between the gateway and repeater won",
+   "check the link between the gateway and Repeater 1"
+  ],
+  [
+   "I need the rule",
+   "I need the ruler"
+  ],
+  [
+   "I need the roller",
+   "I need the ruler"
+  ],
+  [
+   "connect every one please",
+   "connect everyone please"
+  ],
+  [
+   "so connected everyone please",
+   "connect everyone please"
+  ],
+  [
+   "massage from person 2",
+   "message from Person 2"
+  ],
+  [
+   "message for person too",
+   "message from Person 2"
+  ],
+  [
+   "selected person won",
+   "select person one"
+  ],
+  [
+   "select parson 1",
+   "select person one"
+  ],
+  [
+   "place 300 people around repeater 1 in a 3 km radios",
+   "place 300 people around Repeater 1 in a 3 km radius"
+  ],
+  [
+   "place free hundred people a round repeater 1 in a 3 km radius",
+   "place 300 people around Repeater 1 in a 3 km radius"
+  ],
+  [
+   "I wanna repeater to km north of the gateway",
+   "I want a repeater 2 km north of the gateway"
+  ],
+  [
+   "I want a repeater 2 km nord of the great way",
+   "I want a repeater 2 km north of the gateway"
+  ],
+  [
+   "distance between person to and repeater 1",
+   "distance between Person 2 and Repeater 1"
+  ],
+  [
+   "distance between Pearson 2 and repeater one",
+   "distance between Person 2 and Repeater 1"
+  ],
+  [
+   "would you mine simulating",
+   "would you mind simulating?"
+  ],
+  [
+   "would you mind stimulating",
+   "would you mind simulating?"
+  ],
+  [
+   "send repeater one 2 4.25 minus 73.40",
+   "send Repeater 1 to 4.25 -73.40"
+  ],
+  [
+   "sent repeater won to 4.25 - 73.4",
+   "send Repeater 1 to 4.25 -73.40"
+  ],
+  [
+   "delete the Pearson won",
+   "delete the person 1"
+  ],
+  [
+   "deleted the person one",
+   "delete the person 1"
+  ],
+  [
+   "whip everything",
+   "wipe everything"
+  ],
+  [
+   "wipe every thing",
+   "wipe everything"
+  ],
+  [
+   "raise repeater Juan up to 25 meters",
+   "raise Repeater 1 up to 25 meters"
+  ],
+  [
+   "raise repeat her one app to 25 meters",
+   "raise Repeater 1 up to 25 meters"
+  ],
+  [
+   "call repeater too Cerro Azul",
+   "call Repeater 2 Cerro Azul"
+  ],
+  [
+   "call repeater 2 Sierra azul",
+   "call Repeater 2 Cerro Azul"
+  ],
+  [
+   "I need a network for 500 hectors in Cumaral",
+   "I need a network for 500 hectares in Cumaral"
+  ],
+  [
+   "I need a network for 500 hectare in come a rail",
+   "I need a network for 500 hectares in Cumaral"
+  ],
+  [
+   "optimize the hole network",
+   "optimize the whole network"
+  ],
+  [
+   "optimized the old network",
+   "optimize the whole network"
+  ],
+  [
+   "go with the optimizations",
+   "go with the optimization"
+  ],
+  [
+   "okay go with optimization",
+   "go with the optimization"
+  ],
+  [
+   "a start the stress test",
+   "start the stress test"
+  ],
+  [
+   "star the stress tests",
+   "start the stress test"
+  ],
+  [
+   "a spread 300 users across the aria",
+   "spread 300 users across the area"
+  ],
+  [
+   "spread tree hundred user across the area",
+   "spread 300 users across the area"
+  ],
+  [
+   "go to satellite few",
+   "go to satellite view"
+  ],
+  [
+   "go to sat light view",
+   "go to satellite view"
+  ],
+  [
+   "flame to Bogota",
+   "Fly me to Bogotá"
+  ],
+  [
+   "fly me too bogata",
+   "Fly me to Bogotá"
+  ],
+  [
+   "export a k m z for google art",
+   "export a KMZ for Google Earth"
+  ],
+  [
+   "export at KMC for Google Earth",
+   "export a KMZ for Google Earth"
+  ],
+  [
+   "set the liability too high",
+   "set reliability to high"
+  ],
+  [
+   "set real ability to high",
+   "set reliability to high"
+  ],
+  [
+   "use the train",
+   "use the terrain"
+  ],
+  [
+   "used the terrain",
+   "use the terrain"
+  ],
+  [
+   "leak report repeater won and repeater 2",
+   "link report Repeater 1 and Repeater 2"
+  ],
+  [
+   "linked report repeater 1 and repeater 2",
+   "link report Repeater 1 and Repeater 2"
+  ],
+  [
+   "gimme the ruler",
+   "give me the ruler"
+  ],
+  [
+   "give me the rule are",
+   "give me the ruler"
+  ],
+  [
+   "get person to connect it",
+   "get Person 2 connected"
+  ],
+  [
+   "get person 2 connect",
+   "get Person 2 connected"
+  ],
+  [
+   "half person 2 send a message",
+   "have Person 2 send a message"
+  ],
+  [
+   "have person to sent a message",
+   "have Person 2 send a message"
+  ],
+  [
+   "select the get away",
+   "Select the gateway"
+  ],
+  [
+   "selected the gate way",
+   "Select the gateway"
+  ],
+  [
+   "add on repeat a door 2 km north of the gateway",
+   "add un repetidor 2 km north of the gateway"
+  ],
+  [
+   "add a repeat it or 2 km north of the gateway",
+   "add un repetidor 2 km north of the gateway"
+  ],
+  [
+   "was the distance from the gateway to repeat her one",
+   "what's the distance from the gateway to Repeater 1?"
+  ],
+  [
+   "what's the distant from the get away to repeater 1",
+   "what's the distance from the gateway to Repeater 1?"
+  ],
+  [
+   "simulate a gain",
+   "simulate again"
+  ],
+  [
+   "simulated again",
+   "simulate again"
+  ],
+  [
+   "move person to nor by 300 m",
+   "move Person 2 north by 300 m"
+  ],
+  [
+   "move Pearson 2 north buy 300 meters",
+   "move Person 2 north by 300 m"
+  ],
+  [
+   "take person one of the mop",
+   "take Person 1 off the map"
+  ],
+  [
+   "take person won off the map",
+   "take Person 1 off the map"
+  ],
+  [
+   "the lead all",
+   "delete all"
+  ],
+  [
+   "delete Al",
+   "delete all"
+  ],
+  [
+   "reduce repeater ones hate to 10 m",
+   "reduce Repeater 1's height to 10 m"
+  ],
+  [
+   "reduced repeater won's height to ten meters",
+   "reduce Repeater 1's height to 10 m"
+  ],
+  [
+   "name repeater 1 Loma alter",
+   "name Repeater 1 Loma Alta"
+  ],
+  [
+   "named repeater 1 Luma alta",
+   "name Repeater 1 Loma Alta"
+  ],
+  [
+   "with a budget of 120 million bill me a network tree km around here",
+   "with a budget of 120 million, build me a network 3 km around here"
+  ],
+  [
+   "with a bucket of a hundred twenty million build me a net work 3 km around ear",
+   "with a budget of 120 million, build me a network 3 km around here"
+  ],
+  [
+   "which back up antenna do you suggest",
+   "which backup antennas do you suggest?"
+  ],
+  [
+   "which backup and tennis do you suggest",
+   "which backup antennas do you suggest?"
+  ],
+  [
+   "juice the optimization",
+   "use the optimization"
+  ],
+  [
+   "use that optimization",
+   "use the optimization"
+  ],
+  [
+   "do this stress test",
+   "do the stress test"
+  ],
+  [
+   "so do the stress tests",
+   "do the stress test"
+  ],
+  [
+   "put 500 people on the net work and see if it holes",
+   "put 500 people on the network and see if it holds"
+  ],
+  [
+   "put 500 peoples on the network and see if eat holds",
+   "put 500 people on the network and see if it holds"
+  ],
+  [
+   "show me the road player",
+   "show me the road layer"
+  ],
+  [
+   "show me the road liar",
+   "show me the road layer"
+  ],
+  [
+   "where is via Vicenza",
+   "where's Villavicencio?"
+  ],
+  [
+   "wears Villa Vicente",
+   "where's Villavicencio?"
+  ],
+  [
+   "add an antenna note in villa vicencio at 20 m",
+   "add an antenna node in Villavicencio at 20 m"
+  ],
+  [
+   "add an antenna node in via vicencio add 20 meters",
+   "add an antenna node in Villavicencio at 20 m"
+  ],
+  [
+   "adjusted with towers up to 40 m",
+   "adjust it with towers up to 40 m"
+  ],
+  [
+   "a just it with tours up to 40 meters",
+   "adjust it with towers up to 40 m"
+  ],
+  [
+   "apply the up to my station",
+   "apply the optimization"
+  ],
+  [
+   "um apply to optimization",
+   "apply the optimization"
+  ],
+  [
+   "point repeater won south",
+   "point Repeater 1 south"
+  ],
+  [
+   "pointer peter 1 south",
+   "point Repeater 1 south"
+  ],
+  [
+   "use the area I measure as the target era at 95%",
+   "use the area I measured as the target area at 95%"
+  ],
+  [
+   "use the area I measured has the target area at 95%",
+   "use the area I measured as the target area at 95%"
+  ],
+  [
+   "turn off simulate and change",
+   "turn off simulate on change"
+  ],
+  [
+   "turn of simulated on change",
+   "turn off simulate on change"
+  ],
+  [
+   "Use mess core",
+   "use Mesh Core"
+  ],
+  [
+   "use match core",
+   "use Mesh Core"
+  ],
+  [
+   "lowest the network",
+   "load test the network"
+  ],
+  [
+   "loud test the network",
+   "load test the network"
+  ],
+  [
+   "what does the network coast",
+   "what does the network cost?"
+  ],
+  [
+   "what does the net work cause",
+   "what does the network cost?"
+  ],
+  [
+   "cover a circle 10 km India meter around the gateway",
+   "cover a circle 10 km in diameter around the gateway"
+  ],
+  [
+   "cover a circle 10 kilometers in diameter around the get away",
+   "cover a circle 10 km in diameter around the gateway"
+  ],
+  [
+   "the stance from the gateway to repeater one",
+   "distance from the gateway to Repeater 1"
+  ],
+  [
+   "distance from the gateway 2 repeater 1",
+   "distance from the gateway to Repeater 1"
+  ],
+  [
+   "Duplicated gateway",
+   "Duplicate the gateway"
+  ],
+  [
+   "duplicate the gate way",
+   "Duplicate the gateway"
+  ],
+  [
+   "make tower to the gateway",
+   "make Tower 2 the gateway"
+  ],
+  [
+   "make tour two the getaway",
+   "make Tower 2 the gateway"
+  ],
+  [
+   "race all repeaters to 20 m",
+   "raise all repeaters to 20 m"
+  ],
+  [
+   "raise all repeater to 20 meters",
+   "raise all repeaters to 20 m"
+  ],
+  [
+   "loaded demo",
+   "load the demo"
+  ],
+  [
+   "okay low the demo",
+   "load the demo"
+  ],
+  [
+   "put a repeater 5 km north of example and similar",
+   "put a repeater 5 km north of Example and simulate"
+  ],
+  [
+   "put a repeater 5 km north off example and stimulate",
+   "put a repeater 5 km north of Example and simulate"
+  ],
+  [
+   "Delete Tory to",
+   "delete Torre 2"
+  ],
+  [
+   "the lead Torre 2",
+   "delete Torre 2"
+  ],
+  [
+   "delete old people",
+   "delete all people"
+  ],
+  [
+   "deleted all people",
+   "delete all people"
+  ],
+  [
+   "show me the whole mess",
+   "show me the whole mesh"
+  ],
+  [
+   "so me the hole mesh",
+   "show me the whole mesh"
+  ],
+  [
+   "do the stress test on mark it day",
+   "do the stress test on market day"
+  ],
+  [
+   "do this stress test on market they",
+   "do the stress test on market day"
+  ],
+  [
+   "safe as KMZ",
+   "save as KMZ"
+  ],
+  [
+   "save as KMC",
+   "save as KMZ"
+  ],
+  [
+   "torn on the ruler",
+   "turn on the ruler"
+  ],
+  [
+   "turn on the roller",
+   "turn on the ruler"
+  ],
+  [
+   "radio leak report for the gateway and repeater one",
+   "radio link report for the gateway and Repeater 1"
+  ],
+  [
+   "radio link rapport for the get way and repeater Juan",
+   "radio link report for the gateway and Repeater 1"
+  ],
+  [
+   "sum to villavicencio",
+   "zoom to Villavicencio"
+  ],
+  [
+   "zoom 2 villa vicencio",
+   "zoom to Villavicencio"
+  ],
+  [
+   "feel each repeater to its limit",
+   "fill each repeater to its limit"
+  ],
+  [
+   "fill itch repeater to eats limit",
+   "fill each repeater to its limit"
+  ],
+  [
+   "send a massage from person won",
+   "send a message from Person 1"
+  ],
+  [
+   "sent a message from Pearson 1",
+   "send a message from Person 1"
+  ],
+  [
+   "Seat the mesh",
+   "Seed the mesh"
+  ],
+  [
+   "see the mess",
+   "Seed the mesh"
+  ],
+  [
+   "repeater one two 4.25 minus 73.40",
+   "Repeater 1 to 4.25, -73.40"
+  ],
+  [
+   "repeat her 1 to 4:25 -73.40",
+   "Repeater 1 to 4.25, -73.40"
+  ],
+  [
+   "call the scenario fin Kayla Esperanza",
+   "call the scenario Finca La Esperanza"
+  ],
+  [
+   "call this scenario Finca la Speranza",
+   "call the scenario Finca La Esperanza"
+  ],
+  [
+   "okay clear them up",
+   "clear the map"
+  ],
+  [
+   "Clear the mop",
+   "clear the map"
+  ],
+  [
+   "optimist the network for the load",
+   "optimize the network for the load"
+  ],
+  [
+   "optimize the network for the lot",
+   "optimize the network for the load"
+  ],
+  [
+   "do I need more antenna",
+   "Do I need more antennas?"
+  ],
+  [
+   "to I neat more antennas",
+   "Do I need more antennas?"
+  ],
+  [
+   "so the panels",
+   "show the panels"
+  ],
+  [
+   "chow the panel",
+   "show the panels"
+  ],
+  [
+   "up limit 5",
+   "hop limit 5"
+  ],
+  [
+   "hope limit five",
+   "hop limit 5"
+  ],
+  [
+   "make me a sustainable net walk",
+   "make me a sustainable network"
+  ],
+  [
+   "make me as sustainable network",
+   "make me a sustainable network"
+  ],
+  [
+   "had a person 1 km east of the gateway",
+   "add a person 1 km east of the gateway"
+  ],
+  [
+   "add a person one kilometer ease of the get away",
+   "add a person 1 km east of the gateway"
+  ],
+  [
+   "populate the zone with a spare density",
+   "populate the zone with a sparse density"
+  ],
+  [
+   "populate the sun with as sparse density",
+   "populate the zone with a sparse density"
+  ],
+  [
+   "remove the popular ones",
+   "remove the populated ones"
+  ],
+  [
+   "remove the populated once",
+   "remove the populated ones"
+  ],
+  [
+   "remove the popularity zone",
+   "remove the popularity zones"
+  ],
+  [
+   "remove the popular city zones",
+   "remove the popularity zones"
+  ],
+  [
+   "turn on the real the rain",
+   "turn on the real terrain"
+  ],
+  [
+   "turn on the real train",
+   "turn on the real terrain"
+  ],
+  [
+   "rename the getaway to hacienda central",
+   "rename the gateway to Hacienda Central"
+  ],
+  [
+   "rename the gateway to a sienna central",
+   "rename the gateway to Hacienda Central"
+  ],
+  [
+   "select repeater to",
+   "select Repeater 2"
+  ],
+  [
+   "selected re Peter 2",
+   "select Repeater 2"
+  ],
+  [
+   "connect all uses",
+   "connect all users"
+  ],
+  [
+   "connect hall users",
+   "connect all users"
+  ],
+  [
+   "Is dare signal at 4.21 minus 73.35",
+   "is there signal at 4.21, -73.35?"
+  ],
+  [
+   "is their signal add 4.21 -73.35",
+   "is there signal at 4.21, -73.35?"
+  ],
+  [
+   "Start the stimulation",
+   "start the simulation"
+  ],
+  [
+   "so star the simulation",
+   "start the simulation"
+  ],
+  [
+   "point a hemp low northeast",
+   "point Ejemplo northeast"
+  ],
+  [
+   "point example north east",
+   "point Ejemplo northeast"
+  ],
+  [
+   "how much does the network cost for metta",
+   "how much does the network cost for Meta?"
+  ],
+  [
+   "how much is the network cost for Meta",
+   "how much does the network cost for Meta?"
+  ],
+  [
+   "size for 5000 uses in 800 kilometers is square of savannah",
+   "size for 5000 users in 800 km2 of savannah"
+  ],
+  [
+   "sighs for 5000 users in 800 square kilometers of sabana",
+   "size for 5000 users in 800 km2 of savannah"
+  ],
+  [
+   "who does the network not walk for",
+   "who does the network not work for?"
+  ],
+  [
+   "who does the net work no work for",
+   "who does the network not work for?"
+  ],
+  [
+   "Show the rows",
+   "show the roads"
+  ],
+  [
+   "show the rods",
+   "show the roads"
+  ],
+  [
+   "but 700 people on repeater 1 and see if it holes",
+   "put 700 people on Repeater 1 and see if it holds"
+  ],
+  [
+   "put 700 people on repeater one and see if eat holds",
+   "put 700 people on Repeater 1 and see if it holds"
+  ],
+  [
+   "add an antenna note at 4.23 minus 73.33",
+   "Add an antenna node at 4.23 -73.33"
+  ],
+  [
+   "at an antenna node at 4.23 -73.33",
+   "Add an antenna node at 4.23 -73.33"
+  ],
+  [
+   "please optimized network",
+   "please optimize the network"
+  ],
+  [
+   "pleased optimize the network",
+   "please optimize the network"
+  ],
+  [
+   "remove the target aria",
+   "remove the target area"
+  ],
+  [
+   "remove the tar get area",
+   "remove the target area"
+  ],
+  [
+   "stimulate on change",
+   "Simulate on change"
+  ],
+  [
+   "simulated on chance",
+   "Simulate on change"
+  ],
+  [
+   "export an imagine",
+   "export an image"
+  ],
+  [
+   "expert and image",
+   "export an image"
+  ],
+  [
+   "run the low test please",
+   "run the load test please"
+  ],
+  [
+   "ran the load tests please",
+   "run the load test please"
+  ],
+  [
+   "How match does the network cost",
+   "how much does the network cost"
+  ],
+  [
+   "how much dose the network cost",
+   "how much does the network cost"
+  ],
+  [
+   "layout a for kilometer network in villavicencio",
+   "lay out a 4 km network in Villavicencio"
+  ],
+  [
+   "lay out a 4 km network in Bella Vicencio",
+   "lay out a 4 km network in Villavicencio"
+  ],
+  [
+   "how far is it from the getaway to repeater won",
+   "how far is it from the gateway to Repeater 1?"
+  ],
+  [
+   "how far is eat from the gateway 2 repeater 1",
+   "how far is it from the gateway to Repeater 1?"
+  ],
+  [
+   "Make a coffee of repeater 1",
+   "make a copy of Repeater 1"
+  ],
+  [
+   "make a copy of repeated one",
+   "make a copy of Repeater 1"
+  ],
+  [
+   "raise repeater 1 to 80 fit",
+   "raise Repeater 1 to 80 ft"
+  ],
+  [
+   "raise repeater won to 80 fee",
+   "raise Repeater 1 to 80 ft"
+  ],
+  [
+   "said all the repeaters to 15 m",
+   "set all the repeaters to 15 m"
+  ],
+  [
+   "set all their repeaters to 15 meters",
+   "set all the repeaters to 15 m"
+  ],
+  [
+   "load and example",
+   "load an example"
+  ],
+  [
+   "um lot an example",
+   "load an example"
+  ],
+  [
+   "load the mess example",
+   "load the mesh example"
+  ],
+  [
+   "load them mesh example",
+   "load the mesh example"
+  ],
+  [
+   "removed from the map",
+   "remove it from the map"
+  ],
+  [
+   "remove eat from the mop",
+   "remove it from the map"
+  ],
+  [
+   "delete everything accept the gateway",
+   "delete everything except the gateway"
+  ],
+  [
+   "delete every thing except the gate way",
+   "delete everything except the gateway"
+  ],
+  [
+   "show the hole network",
+   "show the whole network"
+  ],
+  [
+   "chow the whole network",
+   "show the whole network"
+  ],
+  [
+   "run as stress test on the network",
+   "Run a stress test on the network"
+  ],
+  [
+   "ran a stress test and the net work",
+   "Run a stress test on the network"
+  ],
+  [
+   "export the CSB file",
+   "export the CSV file"
+  ],
+  [
+   "expert the C S V file",
+   "export the CSV file"
+  ],
+  [
+   "open the rule",
+   "open the ruler"
+  ],
+  [
+   "opened ruler",
+   "open the ruler"
+  ],
+  [
+   "Anna lies the link gateway repeater 1",
+   "analyze the link gateway Repeater 1"
+  ],
+  [
+   "analyze the lean gateway repeater won",
+   "analyze the link gateway Repeater 1"
+  ],
+  [
+   "take me to Barranca the you pia meta",
+   "take me to Barranca de Upía, Meta"
+  ],
+  [
+   "take me to bar Anka de Upia metta",
+   "take me to Barranca de Upía, Meta"
+  ],
+  [
+   "feel the gateway to its limit",
+   "fill the gateway to its limit"
+  ],
+  [
+   "fill the gateway two its limit",
+   "fill the gateway to its limit"
+  ],
+  [
+   "sent a payment from person won",
+   "send a payment from Person 1"
+  ],
+  [
+   "send up payment from person one",
+   "send a payment from Person 1"
+  ],
+  [
+   "sit the mesh again",
+   "seed the mesh again"
+  ],
+  [
+   "seed the match a gain",
+   "seed the mesh again"
+  ],
+  [
+   "sift repeater 2 1 km south east",
+   "shift Repeater 2 1 km southeast"
+  ],
+  [
+   "chief repeater to one kilometer southeast",
+   "shift Repeater 2 1 km southeast"
+  ],
+  [
+   "start from a scratch",
+   "start from scratch"
+  ],
+  [
+   "um a start from scratch",
+   "start from scratch"
+  ],
+  [
+   "Recommend sport gateways",
+   "recommend support gateways"
+  ],
+  [
+   "recommend support getaways",
+   "recommend support gateways"
+  ],
+  [
+   "is my mess oversize",
+   "is my mesh oversized?"
+  ],
+  [
+   "his my mesh Uber sized",
+   "is my mesh oversized?"
+  ],
+  [
+   "milky clear the screen",
+   "Melki, clear the screen"
+  ],
+  [
+   "Mel key clear the scream",
+   "Melki, clear the screen"
+  ],
+  [
+   "a switch to SF10",
+   "switch to SF10"
+  ],
+  [
+   "switch to as F 10",
+   "switch to SF10"
+  ],
+  [
+   "and repeater 2 km north of gateway",
+   "add repeater 2 km north of gateway"
+  ],
+  [
+   "add repeater too kilometers north of gateway",
+   "add repeater 2 km north of gateway"
+  ],
+  [
+   "popular the zone with 250 people",
+   "populate the zone with 250 people"
+  ],
+  [
+   "populated zone with 250 people",
+   "populate the zone with 250 people"
+  ],
+  [
+   "remove the populate people",
+   "remove the populated people"
+  ],
+  [
+   "remove depopulated people",
+   "remove the populated people"
+  ],
+  [
+   "use the real relieve",
+   "use the real relief"
+  ],
+  [
+   "juice the reel relief",
+   "use the real relief"
+  ],
+  [
+   "change eats name to Loma alta",
+   "change its name to Loma Alta"
+  ],
+  [
+   "chains his name to lo Malta",
+   "change its name to Loma Alta"
+  ],
+  [
+   "peek the gateway",
+   "pick the gateway"
+  ],
+  [
+   "pick that gateway",
+   "pick the gateway"
+  ],
+  [
+   "see repeaters towers 4.4 -73.0",
+   "seed repeaters towards 4.4, -73.0"
+  ],
+  [
+   "seed re peters towards 4.4 minus 73",
+   "seed repeaters towards 4.4, -73.0"
+  ],
+  [
+   "does the signal rich 4.21 -73.35",
+   "does the signal reach 4.21, -73.35?"
+  ],
+  [
+   "the signal reach 4.21 minus 73.35",
+   "does the signal reach 4.21, -73.35?"
+  ],
+  [
+   "so update the cover edge",
+   "update the coverage"
+  ],
+  [
+   "updated coverage",
+   "update the coverage"
+  ],
+  [
+   "till ejemplo 5 the grease down",
+   "tilt Ejemplo 5 degrees down"
+  ],
+  [
+   "teal ejemplo five degree down",
+   "tilt Ejemplo 5 degrees down"
+  ],
+  [
+   "how much would it cost to cover the hole country with 50% adaptation",
+   "how much would it cost to cover the whole country with 50% adoption"
+  ],
+  [
+   "how much would it cost to cover the whole country wit 50% option",
+   "how much would it cost to cover the whole country with 50% adoption"
+  ],
+  [
+   "size 5,000 users of her 800 km² of savanna",
+   "size 5,000 users over 800 km² of savanna"
+  ],
+  [
+   "size 5000 juicers over 800 kilometers scared of savanna",
+   "size 5,000 users over 800 km² of savanna"
+  ],
+  [
+   "Which users are feeling",
+   "which users are failing?"
+  ],
+  [
+   "wish uses are failing",
+   "which users are failing?"
+  ],
+  [
+   "Turn on the road slayer",
+   "Turn on the roads layer"
+  ],
+  [
+   "turn on the rows layer",
+   "Turn on the roads layer"
+  ],
+  [
+   "and each repeater 150 people within 1 km",
+   "in each repeater 150 people within 1 km"
+  ],
+  [
+   "in each repeat her 150 people within won kilometer",
+   "in each repeater 150 people within 1 km"
+  ],
+  [
+   "add and antenna no at 4.23 -73.33",
+   "add an antenna node at 4.23 -73.33"
+  ],
+  [
+   "add an antenna nod at 4.23 - 73.33",
+   "add an antenna node at 4.23 -73.33"
+  ],
+  [
+   "recommend super antennas",
+   "recommend support antennas"
+  ],
+  [
+   "recommends support antenna",
+   "recommend support antennas"
+  ],
+  [
+   "use the aria I measured as the target area with 95%",
+   "use the area I measured as the target area with 95%"
+  ],
+  [
+   "use the area I measure it as the target area with 95%",
+   "use the area I measured as the target area with 95%"
+  ],
+  [
+   "similar on change",
+   "simulate on change"
+  ],
+  [
+   "simulate own change",
+   "simulate on change"
+  ],
+  [
+   "give me a PDF off the report",
+   "give me a PDF of the report"
+  ],
+  [
+   "Give me a BDF of the report",
+   "give me a PDF of the report"
+  ],
+  [
+   "how much can it and all",
+   "how much can it handle?"
+  ],
+  [
+   "how much con it handle",
+   "how much can it handle?"
+  ],
+  [
+   "give me the detail budget",
+   "give me the detailed budget"
+  ],
+  [
+   "give me the detailed bad yet",
+   "give me the detailed budget"
+  ],
+  [
+   "cover to kilometers around repeater 1",
+   "cover 2 km around Repeater 1"
+  ],
+  [
+   "cover 2 km a round repeater Juan",
+   "cover 2 km around Repeater 1"
+  ],
+  [
+   "measure the distance between the getaway and repeater one",
+   "measure the distance between the gateway and Repeater 1"
+  ],
+  [
+   "measure the distance be twin the gateway and repeater 1",
+   "measure the distance between the gateway and Repeater 1"
+  ],
+  [
+   "make a copy of eat",
+   "make a copy of it"
+  ],
+  [
+   "make a copy off it",
+   "make a copy of it"
+  ],
+  [
+   "repeater one high 25 meters",
+   "Repeater 1 height 25 m"
+  ],
+  [
+   "repeater 1 hide 25 m",
+   "Repeater 1 height 25 m"
+  ],
+  [
+   "set all repeaters 2 25 m",
+   "set all repeaters to 25 m"
+  ],
+  [
+   "set all repeaters too 25 meters",
+   "set all repeaters to 25 m"
+  ],
+  [
+   "Open the sample",
+   "open the example"
+  ],
+  [
+   "hope in the example",
+   "open the example"
+  ],
+  [
+   "at a yogi antenna at 4.5 - 73.1 pointing north",
+   "add a yagi antenna at 4.5, -73.1 pointing north"
+  ],
+  [
+   "add a Jaggi antenna at 4.5 minus 70 tree point one pointing north",
+   "add a yagi antenna at 4.5, -73.1 pointing north"
+  ],
+  [
+   "at most to support antennas",
+   "at most 2 support antennas"
+  ],
+  [
+   "at most two sport antennas",
+   "at most 2 support antennas"
+  ],
+  [
+   "turn on auto magic simulation",
+   "turn on automatic simulation"
+  ],
+  [
+   "torn on automatic stimulation",
+   "turn on automatic simulation"
+  ],
+  [
+   "use the mesh core protocol please",
+   "use the MeshCore protocol please"
+  ],
+  [
+   "used the mesh corp protocol please",
+   "use the MeshCore protocol please"
+  ],
+  [
+   "up to how many payments can I handle",
+   "up to how many payments can it handle?"
+  ],
+  [
+   "app to how many payment can it handle",
+   "up to how many payments can it handle?"
+  ],
+  [
+   "how much dose the network cost",
+   "how much does the network cost?"
+  ],
+  [
+   "how much does the net work coast",
+   "how much does the network cost?"
+  ],
+  [
+   "cover the aria I measured",
+   "cover the area I measured"
+  ],
+  [
+   "cover the area I measure",
+   "cover the area I measured"
+  ],
+  [
+   "what is the distance between the getaway and person two",
+   "what is the distance between the gateway and Person 2?"
+  ],
+  [
+   "what is the distance between the gate way and Pearson 2",
+   "what is the distance between the gateway and Person 2?"
+  ],
+  [
+   "copy that gateway",
+   "copy the gateway"
+  ],
+  [
+   "okay copy the get away",
+   "copy the gateway"
+  ],
+  [
+   "put a yogi on example pointing at tower two",
+   "put a Yagi on Example pointing at Tower 2"
+  ],
+  [
+   "but a yeah gee on example pointing a tower 2",
+   "put a Yagi on Example pointing at Tower 2"
+  ],
+  [
+   "race all the repeaters to 12 m",
+   "raise all the repeaters to 12 m"
+  ],
+  [
+   "rise all the repeaters to twelve meter",
+   "raise all the repeaters to 12 m"
+  ],
+  [
+   "opened demo",
+   "open the demo"
+  ],
+  [
+   "upon the demo",
+   "open the demo"
+  ],
+  [
+   "deleted all the people",
+   "delete all the people"
+  ],
+  [
+   "so delete all those people",
+   "delete all the people"
+  ],
+  [
+   "soon to fit the network",
+   "zoom to fit the network"
+  ],
+  [
+   "zoom to feet the net work",
+   "zoom to fit the network"
+  ],
+  [
+   "how many users can each repeat her handle",
+   "how many users can each repeater handle?"
+  ],
+  [
+   "how many uses can each repeater hand all",
+   "how many users can each repeater handle?"
+  ],
+  [
+   "I need the KMC file",
+   "I need the KMZ file"
+  ],
+  [
+   "I need decay MZ file",
+   "I need the KMZ file"
+  ],
+  [
+   "turnoff the pencil",
+   "turn off the pencil"
+  ],
+  [
+   "turn of the pencils",
+   "turn off the pencil"
+  ],
+  [
+   "linked report between the gateway and repeater one",
+   "link report between the gateway and Repeater 1"
+  ],
+  [
+   "link report between the get away and repeat a 1",
+   "link report between the gateway and Repeater 1"
+  ],
+  [
+   "take me to Barranca the opia",
+   "take me to Barranca de Upía"
+  ],
+  [
+   "take me to bar Inca de utopia",
+   "take me to Barranca de Upía"
+  ],
+  [
+   "feel the gateway up to its limit",
+   "fill the gateway up to its limit"
+  ],
+  [
+   "fill the gateway app to his limit",
+   "fill the gateway up to its limit"
+  ],
+  [
+   "send a text message",
+   "Send a test message"
+  ],
+  [
+   "sent a test message",
+   "Send a test message"
+  ],
+  [
+   "is which to advanced mode",
+   "switch to advanced mode"
+  ],
+  [
+   "switch to advance mod",
+   "switch to advanced mode"
+  ],
+  [
+   "please move repeater one to kilometers north",
+   "please move Repeater 1 2 km north"
+  ],
+  [
+   "please moved repeater 1 2 km nor",
+   "please move Repeater 1 2 km north"
+  ],
+  [
+   "why the map clean",
+   "wipe the map clean"
+  ],
+  [
+   "wipe the mop clean",
+   "wipe the map clean"
+  ],
+  [
+   "why not at more antennas",
+   "Why not add more antennas?"
+  ],
+  [
+   "why not add more and tennis",
+   "Why not add more antennas?"
+  ],
+  [
+   "so the aria is an oil palm plantation",
+   "the area is an oil palm plantation"
+  ],
+  [
+   "the area is and oil palm plan station",
+   "the area is an oil palm plantation"
+  ],
+  [
+   "repeater two kilometers north of the getaway",
+   "repeater 2 km north of the gateway"
+  ],
+  [
+   "repeaters 2 km north of that gateway",
+   "repeater 2 km north of the gateway"
+  ],
+  [
+   "popular with 250 people",
+   "populate with 250 people"
+  ],
+  [
+   "populate wit two hundred fifty people",
+   "populate with 250 people"
+  ],
+  [
+   "simulate with flat the rain",
+   "simulate with flat terrain"
+  ],
+  [
+   "stimulate with flat terrain",
+   "simulate with flat terrain"
+  ],
+  [
+   "change the name of repeater 2 to zero azul",
+   "change the name of repeater two to Cerro Azul"
+  ],
+  [
+   "chains the name of repeater too to Sarah Azul",
+   "change the name of repeater two to Cerro Azul"
+  ],
+  [
+   "give person to coverage",
+   "give Person 2 coverage"
+  ],
+  [
+   "give person 2 cover age",
+   "give Person 2 coverage"
+  ],
+  [
+   "hey milky simulate",
+   "hey melki simulate"
+  ],
+  [
+   "hey Mel key simulate",
+   "hey melki simulate"
+  ],
+  [
+   "radio link report between ejemplo and Tory 2",
+   "radio link report between Ejemplo and Torre 2"
+  ],
+  [
+   "radio link reports between a hemplo and tore two",
+   "radio link report between Ejemplo and Torre 2"
+  ],
+  [
+   "show me the satellite few",
+   "show me the satellite view"
+  ],
+  [
+   "show me the settle light view",
+   "show me the satellite view"
+  ],
+  [
+   "put 5000 people on repeat her two",
+   "put 5000 people on Repeater 2"
+  ],
+  [
+   "but five thousand people on the repeater 2",
+   "put 5000 people on Repeater 2"
+  ],
+  [
+   "add an antenna note called north tower at 4.5123 - 73.1234 at 20 m",
+   "add an antenna node called North Tower at 4.5123, -73.1234 at 20 m"
+  ],
+  [
+   "and an antenna node cold north tower at 4.5123 comma minus 73.1234 at 20 meters",
+   "add an antenna node called North Tower at 4.5123, -73.1234 at 20 m"
+  ],
+  [
+   "do the auto magic adjustment",
+   "do the automatic adjustment"
+  ],
+  [
+   "to the automatic a just meant",
+   "do the automatic adjustment"
+  ],
+  [
+   "generator PDF",
+   "generate the PDF"
+  ],
+  [
+   "generate the BDF",
+   "generate the PDF"
+  ],
+  [
+   "send 15 what's up messages at once",
+   "send 15 WhatsApp messages at once"
+  ],
+  [
+   "send fifteen WhatsApp messages at ones",
+   "send 15 WhatsApp messages at once"
+  ],
+  [
+   "build a network 10 km around Villa Vicencio",
+   "build a network 10 km around Villavicencio"
+  ],
+  [
+   "built a network 10 kilometers around Villa Vicente",
+   "build a network 10 km around Villavicencio"
+  ],
+  [
+   "what is the distance between repeater one and repeater too",
+   "what is the distance between Repeater 1 and Repeater 2"
+  ],
+  [
+   "what is the distant between repeater 1 and repeat a 2",
+   "what is the distance between Repeater 1 and Repeater 2"
+  ],
+  [
+   "clone repeater won",
+   "clone Repeater 1"
+  ],
+  [
+   "cologne repeater 1",
+   "clone Repeater 1"
+  ],
+  [
+   "raise the repeater one on till 20 m",
+   "raise the Repeater 1 until 20 m"
+  ],
+  [
+   "rice the repeater 1 until twenty meters",
+   "raise the Repeater 1 until 20 m"
+  ],
+  [
+   "raise hall the repeaters to 20 meters",
+   "raise all the repeaters to 20 m"
+  ],
+  [
+   "raised all the repeaters to twenty meter",
+   "raise all the repeaters to 20 m"
+  ],
+  [
+   "opening example",
+   "open an example"
+  ],
+  [
+   "open and example",
+   "open an example"
+  ],
+  [
+   "get read of repeater two",
+   "get rid of Repeater 2"
+  ],
+  [
+   "get rid off repeater 2",
+   "get rid of Repeater 2"
+  ],
+  [
+   "removal people",
+   "remove all people"
+  ],
+  [
+   "remove all pupils",
+   "remove all people"
+  ],
+  [
+   "show my whole network",
+   "show me the whole network"
+  ],
+  [
+   "show me the old net work",
+   "show me the whole network"
+  ],
+  [
+   "do this stress test please",
+   "do the stress test please"
+  ],
+  [
+   "do the stress text please",
+   "do the stress test please"
+  ],
+  [
+   "expert in KMZ",
+   "export in KMZ"
+  ],
+  [
+   "ex port in k m z",
+   "export in KMZ"
+  ],
+  [
+   "put the pen sill down",
+   "put the pencil down"
+  ],
+  [
+   "but the pencil down",
+   "put the pencil down"
+  ],
+  [
+   "house the link between the gateway and repeater one",
+   "how's the link between the gateway and Repeater 1?"
+  ],
+  [
+   "how is the leak between the getaway and repeater 1",
+   "how's the link between the gateway and Repeater 1?"
+  ],
+  [
+   "had to Villavicencio",
+   "head to Villavicencio"
+  ],
+  [
+   "head to Via Vicencio",
+   "head to Villavicencio"
+  ],
+  [
+   "how many people can repeater too handle",
+   "how many people can Repeater 2 handle?"
+  ],
+  [
+   "how many people can repeat or 2 handle",
+   "how many people can Repeater 2 handle?"
+  ],
+  [
+   "send a test massage",
+   "send a test message"
+  ],
+  [
+   "um send a tess message",
+   "send a test message"
+  ],
+  [
+   "move repeater one north to km",
+   "move Repeater 1 north 2 km"
+  ],
+  [
+   "movie repeater 1 north 2 km",
+   "move Repeater 1 north 2 km"
+  ],
+  [
+   "delete hall please",
+   "delete all please"
+  ],
+  [
+   "the lead all please",
+   "delete all please"
+  ],
+  [
+   "okay are there any extra antenna",
+   "are there any extra antennas?"
+  ],
+  [
+   "are they any extra antennas",
+   "are there any extra antennas?"
+  ],
+  [
+   "this zone is a palm plantation",
+   "the zone is a palm plantation"
+  ],
+  [
+   "the zone is a balm plantation",
+   "the zone is a palm plantation"
+  ],
+  [
+   "put her repeater a mile north of the gateway",
+   "put a repeater a mile north of the gateway"
+  ],
+  [
+   "put a repeat or a mile north of the get away",
+   "put a repeater a mile north of the gateway"
+  ],
+  [
+   "put 1000 people and check weather it holds",
+   "Put 1000 people and check whether it holds"
+  ],
+  [
+   "put a thousand people and check whether it's old",
+   "Put 1000 people and check whether it holds"
+  ],
+  [
+   "use flat grown",
+   "use flat ground"
+  ],
+  [
+   "juice flat ground",
+   "use flat ground"
+  ],
+  [
+   "rename repeater one to north tour",
+   "rename Repeater 1 to North Tower"
+  ],
+  [
+   "re name repeater 1 to not tower",
+   "rename Repeater 1 to North Tower"
+  ],
+  [
+   "please connect person one to the mess",
+   "please connect Person 1 to the mesh"
+  ],
+  [
+   "please connect Pearson 1 to the match",
+   "please connect Person 1 to the mesh"
+  ],
+  [
+   "calculated coverage",
+   "calculate the coverage"
+  ],
+  [
+   "calculate the cover edge",
+   "calculate the coverage"
+  ],
+  [
+   "link report for example and tower to",
+   "link report for Example and Tower 2"
+  ],
+  [
+   "linked report for a sample and tower 2",
+   "link report for Example and Tower 2"
+  ],
+  [
+   "I'd the rivers and the names",
+   "hide the rivers and the names"
+  ],
+  [
+   "hide the reverse and then names",
+   "hide the rivers and the names"
+  ],
+  [
+   "through 400 users onto repeater two",
+   "throw 400 users onto repeater 2"
+  ],
+  [
+   "true 400 users on to repeater 2",
+   "throw 400 users onto repeater 2"
+  ],
+  [
+   "add on antenna node called north tower at 4.5123 negative 73.1234 at fifteen meters",
+   "add an antenna node called North Tower at 4.5123, -73.1234 at 15 m"
+  ],
+  [
+   "add an antenna node called nor tower at 4.51 23 - 73.12 34 at 15 m",
+   "add an antenna node called North Tower at 4.5123, -73.1234 at 15 m"
+  ],
+  [
+   "um give me the cheap is option to make it feasible",
+   "give me the cheapest option to make it feasible"
+  ],
+  [
+   "give me the cheapest auction to make it feasible",
+   "give me the cheapest option to make it feasible"
+  ],
+  [
+   "chains to mesh core protocol",
+   "change to MeshCore protocol"
+  ],
+  [
+   "change to mess core proto call",
+   "change to MeshCore protocol"
+  ],
+  [
+   "sent 15 payments at ones",
+   "send 15 payments at once"
+  ],
+  [
+   "send fifteen payment at once",
+   "send 15 payments at once"
+  ],
+  [
+   "build me a network 5 miles around Kumar Al",
+   "build me a network 5 miles around Cumaral"
+  ],
+  [
+   "bill me a network five mile around Cumara",
+   "build me a network 5 miles around Cumaral"
+  ],
+  [
+   "measure the distance form the gateway to repeater one",
+   "measure the distance from the gateway to Repeater 1"
+  ],
+  [
+   "measure the distance from the gateway two repeater 1",
+   "measure the distance from the gateway to Repeater 1"
+  ],
+  [
+   "turn tower to into a gateway",
+   "turn Tower 2 into a gateway"
+  ],
+  [
+   "torn tower 2 in to a get away",
+   "turn Tower 2 into a gateway"
+  ],
+  [
+   "charged the example",
+   "charge the example"
+  ],
+  [
+   "charge the exam pull",
+   "charge the example"
+  ],
+  [
+   "remove repeater to",
+   "remove Repeater 2"
+  ],
+  [
+   "remove repeated 2",
+   "remove Repeater 2"
+  ],
+  [
+   "how far can each repeater hole up",
+   "How far can each repeater hold up?"
+  ],
+  [
+   "how far can its repeater hold up",
+   "How far can each repeater hold up?"
+  ],
+  [
+   "download the km z",
+   "download the KMZ"
+  ],
+  [
+   "down load the KMC",
+   "download the KMZ"
+  ],
+  [
+   "open the pencils",
+   "open the pencil"
+  ],
+  [
+   "open the pen seal",
+   "open the pencil"
+  ],
+  [
+   "show me the link between repeater one end repeater two",
+   "Show me the link between Repeater 1 and Repeater 2"
+  ],
+  [
+   "show me the links between repeat a 1 and repeater 2",
+   "Show me the link between Repeater 1 and Repeater 2"
+  ],
+  [
+   "take me to repeat her one",
+   "take me to Repeater 1"
+  ],
+  [
+   "take me to a repeater one",
+   "take me to Repeater 1"
+  ],
+  [
+   "how many people can repeater one Handel",
+   "how many people can Repeater 1 handle?"
+  ],
+  [
+   "how many people can repeat 1 handle",
+   "how many people can Repeater 1 handle?"
+  ],
+  [
+   "sent a payment from repeater one",
+   "send a payment from Repeater 1"
+  ],
+  [
+   "send a payment from repeat her won",
+   "send a payment from Repeater 1"
+  ],
+  [
+   "repeater won 2 km north",
+   "Repeater 1 2 km north"
+  ],
+  [
+   "repeated one two kilometers north",
+   "Repeater 1 2 km north"
+  ],
+  [
+   "clean them up",
+   "clean the map"
+  ],
+  [
+   "okay clean that map",
+   "clean the map"
+  ],
+  [
+   "why don't I add more reporters",
+   "why don't I add more repeaters?"
+  ],
+  [
+   "why don't I had more repeaters",
+   "why don't I add more repeaters?"
+  ],
+  [
+   "receiver game of 3 DBI",
+   "receiver gain of 3 dBi"
+  ],
+  [
+   "receive her gain of tree dbi",
+   "receiver gain of 3 dBi"
+  ],
+  [
+   "could you put a repeater at 4.25 -73.3 with a eight of 20 meters",
+   "could you put a repeater at 4.25, -73.3 with a height of 20 meters"
+  ],
+  [
+   "could you put a repeater at 4.25 minus 73.3 with a high of twenty meter",
+   "could you put a repeater at 4.25, -73.3 with a height of 20 meters"
+  ],
+  [
+   "put 500 people and see it holds",
+   "put 500 people and see if it holds"
+  ],
+  [
+   "put five hundred people and see if it hold",
+   "put 500 people and see if it holds"
+  ],
+  [
+   "a zoom flat terrain",
+   "assume flat terrain"
+  ],
+  [
+   "assume flat train",
+   "assume flat terrain"
+  ],
+  [
+   "call repeater to Loma Alta",
+   "call Repeater 2 Loma Alta"
+  ],
+  [
+   "call repeater 2 low Malta",
+   "call Repeater 2 Loma Alta"
+  ],
+  [
+   "connect the missing once",
+   "Connect the missing ones"
+  ],
+  [
+   "connected missing ones",
+   "Connect the missing ones"
+  ],
+  [
+   "time to stimulate",
+   "time to simulate"
+  ],
+  [
+   "dime to simulate",
+   "time to simulate"
+  ],
+  [
+   "orient ejemplo to 120 decrees",
+   "orient Ejemplo to 120 degrees"
+  ],
+  [
+   "orient a hemp low to 120°",
+   "orient Ejemplo to 120 degrees"
+  ],
+  [
+   "put the rose",
+   "put the roads"
+  ],
+  [
+   "okay put the road",
+   "put the roads"
+  ],
+  [
+   "put 200 people around each repeater with in one kilometer",
+   "put 200 people around each repeater within 1 km"
+  ],
+  [
+   "put 200 people around itch repeater within 1 km",
+   "put 200 people around each repeater within 1 km"
+  ],
+  [
+   "add an antenna no at 4.5123 - 73.1234",
+   "add an antenna node at 4.5123, -73.1234"
+  ],
+  [
+   "at an antenna node at 4.5 1 2 3 minus 73.1 2 3 4",
+   "add an antenna node at 4.5123, -73.1234"
+  ],
+  [
+   "optimized the network now",
+   "optimize the network now"
+  ],
+  [
+   "optimus the network now",
+   "optimize the network now"
+  ],
+  [
+   "a sport to PDF",
+   "export to PDF"
+  ],
+  [
+   "export two PDF",
+   "export to PDF"
+  ],
+  [
+   "send 5 massages at once in one second",
+   "send 5 messages at once in 1 second"
+  ],
+  [
+   "sent five messages at once and one second",
+   "send 5 messages at once in 1 second"
+  ],
+  [
+   "cover 800 jars around the gateway",
+   "cover 800 yards around the gateway"
+  ],
+  [
+   "cover 800 yard around the gate way",
+   "cover 800 yards around the gateway"
+  ],
+  [
+   "how far is person too from repeater one",
+   "how far is Person 2 from Repeater 1?"
+  ],
+  [
+   "how far his person 2 from repeater 1",
+   "how far is Person 2 from Repeater 1?"
+  ],
+  [
+   "turned into a repeater",
+   "turn it into a repeater"
+  ],
+  [
+   "turn it in to a repeat or",
+   "turn it into a repeater"
+  ],
+  [
+   "low the example network",
+   "load the example network"
+  ],
+  [
+   "load the example net worth",
+   "load the example network"
+  ],
+  [
+   "remove the repeat or 2",
+   "remove the Repeater 2"
+  ],
+  [
+   "removed a repeater 2",
+   "remove the Repeater 2"
+  ],
+  [
+   "perform a stress text",
+   "perform a stress test"
+  ],
+  [
+   "perform address test",
+   "perform a stress test"
+  ],
+  [
+   "safe the scenario to a file",
+   "Save the scenario to a file"
+  ],
+  [
+   "save the scenery to a file",
+   "Save the scenario to a file"
+  ],
+  [
+   "grab that pencil",
+   "Grab the pencil"
+  ],
+  [
+   "grub the pencil",
+   "Grab the pencil"
+  ]
+ ],
+ "es": [
+  [
+   "sube lo a 9 m",
+   "súbelo a 9 m"
+  ],
+  [
+   "subelo a 9 m",
+   "súbelo a 9 m"
+  ],
+  [
+   "por un repetidor a 2 km al norte del gateway",
+   "agrega un repetidor a 2 km al norte del gateway"
+  ],
+  [
+   "agrega un repetido a 2 km al norte del gateway",
+   "agrega un repetidor a 2 km al norte del gateway"
+  ],
+  [
+   "agrega un repetidor a 2 km al norte del gueiguey",
+   "agrega un repetidor a 2 km al norte del gateway"
+  ],
+  [
+   "agrega un repetidor a 2 kilo metros al norte del gateway",
+   "agrega un repetidor a 2 km al norte del gateway"
+  ],
+  [
+   "a grega un repetidor a 2 km al norte del gateway",
+   "agrega un repetidor a 2 km al norte del gateway"
+  ],
+  [
+   "si mula",
+   "simula"
+  ],
+  [
+   "simular",
+   "simula"
+  ],
+  [
+   "ilumina el Repetidor 2",
+   "elimina el Repetidor 2"
+  ],
+  [
+   "elimina el repetido 2",
+   "elimina el Repetidor 2"
+  ],
+  [
+   "mueve el gate way a Cumaral",
+   "mueve el gateway a Cumaral"
+  ],
+  [
+   "mueve el gueit güey a Cumaral",
+   "mueve el gateway a Cumaral"
+  ],
+  [
+   "muebe el gateway a Cumaral",
+   "mueve el gateway a Cumaral"
+  ],
+  [
+   "vaya el gateway a 12 m",
+   "baja el gateway a 12 m"
+  ],
+  [
+   "baja el getwey a 12 m",
+   "baja el gateway a 12 m"
+  ],
+  [
+   "sube el repetido 1 a 25 m",
+   "sube el Repetidor 1 a 25 m"
+  ],
+  [
+   "sobre el Repetidor 1 a 25 m",
+   "sube el Repetidor 1 a 25 m"
+  ],
+  [
+   "pon un modo antena en 4.23 -73.33",
+   "Inscribe un nodo antena en 4.23 -73.33"
+  ],
+  [
+   "pon la persona 1 como repetidor",
+   "pon a Persona 1 como repetidor"
+  ],
+  [
+   "renombra el repetido 1 como Loma Alta",
+   "renombra el Repetidor 1 como Loma Alta"
+  ],
+  [
+   "haz la prueba de es tres",
+   "haz la prueba de estrés"
+  ],
+  [
+   "haz la prueba de extres",
+   "haz la prueba de estrés"
+  ],
+  [
+   "pon el gate way en Cumaral",
+   "pon el gateway en Cumaral"
+  ],
+  [
+   "mueve el Repetidor 1 2 kilo metros al norte",
+   "mueve el Repetidor 1 2 km al norte"
+  ],
+  [
+   "mueve lo 2 km al norte",
+   "mueve el Repetidor 1 2 km al norte"
+  ],
+  [
+   "bueno eh simula",
+   "simula"
+  ],
+  [
+   "este, optimiza la red",
+   "optimiza la red"
+  ],
+  [
+   "lleva me a Villavicencio",
+   "llévame a Villavicencio"
+  ],
+  [
+   "llevame a villa vicencio",
+   "llévame a Villavicencio"
+  ],
+  [
+   "distancia entre el repetido 1 y el gateway",
+   "distancia entre el Repetidor 1 y el gateway"
+  ],
+  [
+   "duplica el repetido 1",
+   "duplica el Repetidor 1"
+  ],
+  [
+   "envía un mensaje desde personal 2",
+   "envía un mensaje desde Persona 2"
+  ],
+  [
+   "elimina la persona 1",
+   "elimina Persona 1"
+  ],
+  [
+   "pon 500 personas y mira si a guanta",
+   "pon 500 personas y mira si aguanta"
+  ],
+  [
+   "usa mes tastic",
+   "usa Meshtastic"
+  ],
+  [
+   "usa ese efe 10",
+   "usa SF10"
+  ],
+  [
+   "exporta el k m z",
+   "exporta el KMZ"
+  ],
+  [
+   "muestra las bías",
+   "muestra las vías"
+  ],
+  [
+   "quita las vias",
+   "quita las vías"
+  ],
+  [
+   "muere el gateway a Kumaral",
+   "mueve el gateway a Cumaral"
+  ],
+  [
+   "elimina todos los modos",
+   "elimina todos los nodos"
+  ],
+  [
+   "elimina todo los nodos",
+   "elimina todos los nodos"
+  ],
+  [
+   "distancia entre el repetidor uno y el gueitwey",
+   "distancia entre el Repetidor 1 y el gateway"
+  ],
+  [
+   "distancia entre repetidor 1 y el get way",
+   "distancia entre el Repetidor 1 y el gateway"
+  ],
+  [
+   "perfil del geitwey al repetidor uno",
+   "perfil del gateway al Repetidor 1"
+  ],
+  [
+   "perfil del Gateway el repetidor 1",
+   "perfil del gateway al Repetidor 1"
+  ],
+  [
+   "bueno simula",
+   "simula"
+  ],
+  [
+   "agrega un repetidor a dos kilómetros al norte del getwey",
+   "agrega un repetidor a 2 km al norte del gateway"
+  ],
+  [
+   "este agrega un repetidor a 2km al norte del gateway",
+   "agrega un repetidor a 2 km al norte del gateway"
+  ],
+  [
+   "agrega un repetidor en 4,25 menos 73,40",
+   "agrega un repetidor en 4.25, -73.40"
+  ],
+  [
+   "agregar un repetidor en 4.25 -73.40",
+   "agrega un repetidor en 4.25, -73.40"
+  ],
+  [
+   "pon una persona a un kilómetro al oriente del gueiwey",
+   "pon una persona a 1 km al oriente del gateway"
+  ],
+  [
+   "pon una persona 1 km al oriente del Gate Way",
+   "pon una persona a 1 km al oriente del gateway"
+  ],
+  [
+   "muévele repetidor uno 2 km al norte",
+   "mueve el Repetidor 1 2 km al norte"
+  ],
+  [
+   "mueve el repetidor uno dos kilómetros al norte",
+   "mueve el Repetidor 1 2 km al norte"
+  ],
+  [
+   "ponle gateway en Cumaral",
+   "pon el gateway en Cumaral"
+  ],
+  [
+   "pon el geiwey en cumaral pues",
+   "pon el gateway en Cumaral"
+  ],
+  [
+   "eliminar el repetidor dos",
+   "elimina el Repetidor 2"
+  ],
+  [
+   "elimina al repetidor 2",
+   "elimina el Repetidor 2"
+  ],
+  [
+   "empieza de 0",
+   "empieza de cero"
+  ],
+  [
+   "empezar de cero",
+   "empieza de cero"
+  ],
+  [
+   "súbele repetidor 1 a 25 metros",
+   "sube el Repetidor 1 a 25 m"
+  ],
+  [
+   "sube el repetidor uno veinticinco metros",
+   "sube el Repetidor 1 a 25 m"
+  ],
+  [
+   "bájale repetidor 1 a 10 metros",
+   "baja el Repetidor 1 a 10 m"
+  ],
+  [
+   "baja al repetidor uno a diez metros",
+   "baja el Repetidor 1 a 10 m"
+  ],
+  [
+   "sube lo a 9 metros",
+   "súbelo a 9 m"
+  ],
+  [
+   "subelo a nueve metros",
+   "súbelo a 9 m"
+  ],
+  [
+   "renombra el repetidor uno con Loma Alta",
+   "renombra el Repetidor 1 como Loma Alta"
+  ],
+  [
+   "re nombra el repetidor 1 como lomalta",
+   "renombra el Repetidor 1 como Loma Alta"
+  ],
+  [
+   "pon a persona uno como repetidora",
+   "pon a Persona 1 como repetidor"
+  ],
+  [
+   "armame una red de cuatro kilómetros en Villavicencio",
+   "ármame una red de 4 km en Villavicencio"
+  ],
+  [
+   "ármame una red 4 km en Villavicencio",
+   "ármame una red de 4 km en Villavicencio"
+  ],
+  [
+   "diseño una red para 500 hectáreas en Cumaral",
+   "diseña una red para 500 hectáreas en Cumaral"
+  ],
+  [
+   "diseña una red pa quinientas hectáreas en Kumaral",
+   "diseña una red para 500 hectáreas en Cumaral"
+  ],
+  [
+   "ármame una red de 3 km ala redonda de aquí con un presupuesto de ciento veinte millones",
+   "ármame una red de 3 km a la redonda de aquí con un presupuesto de 120 millones"
+  ],
+  [
+   "arma me una red de tres kilómetros a la redonda de aquí con presupuesto de 120 millones",
+   "ármame una red de 3 km a la redonda de aquí con un presupuesto de 120 millones"
+  ],
+  [
+   "optimízala red",
+   "optimiza la red"
+  ],
+  [
+   "optimizar la red",
+   "optimiza la red"
+  ],
+  [
+   "ajusta me lo automáticamente",
+   "Ajústamelo automáticamente"
+  ],
+  [
+   "ajústamelo automaticamente pues",
+   "Ajústamelo automáticamente"
+  ],
+  [
+   "aplicar la optimización",
+   "aplica la optimización"
+  ],
+  [
+   "bueno aplica optimizacion",
+   "aplica la optimización"
+  ],
+  [
+   "has la prueba de estrés",
+   "haz la prueba de estrés"
+  ],
+  [
+   "haz la prueba de stress",
+   "haz la prueba de estrés"
+  ],
+  [
+   "hazla prueba de carga",
+   "haz la prueba de carga"
+  ],
+  [
+   "as la prueba de carga",
+   "haz la prueba de carga"
+  ],
+  [
+   "por 500 personas y mira si aguanta",
+   "pon 500 personas y mira si aguanta"
+  ],
+  [
+   "pon quinientas personas y mira si aguantan",
+   "pon 500 personas y mira si aguanta"
+  ],
+  [
+   "puéblala zona con 500 personas",
+   "puebla la zona con 500 personas"
+  ],
+  [
+   "pueblo la zona con quinientas personas",
+   "puebla la zona con 500 personas"
+  ],
+  [
+   "nuestra las vías",
+   "muestra las vías"
+  ],
+  [
+   "eh muestra las vias",
+   "muestra las vías"
+  ],
+  [
+   "quitar las vías",
+   "quita las vías"
+  ],
+  [
+   "quita la vía",
+   "quita las vías"
+  ],
+  [
+   "ponle mapa satelital",
+   "pon el mapa satelital"
+  ],
+  [
+   "pon el mapa satélite",
+   "pon el mapa satelital"
+  ],
+  [
+   "con el mapa topográfico",
+   "pon el mapa topográfico"
+  ],
+  [
+   "o sea pon el mapa topografico",
+   "pon el mapa topográfico"
+  ],
+  [
+   "llévame Villavicencio",
+   "llévame a Villavicencio"
+  ],
+  [
+   "llévame a Villa Vicencio",
+   "llévame a Villavicencio"
+  ],
+  [
+   "listo exporta el KMZ",
+   "exporta el KMZ"
+  ],
+  [
+   "exporta el CSB",
+   "exporta el CSV"
+  ],
+  [
+   "exportar el c s v",
+   "exporta el CSV"
+  ],
+  [
+   "guardar el escenario",
+   "guarda el escenario"
+  ],
+  [
+   "bueno guarda escenario",
+   "guarda el escenario"
+  ],
+  [
+   "cárgale ejemplo",
+   "carga el ejemplo"
+  ],
+  [
+   "o sea carga el ejemplo",
+   "carga el ejemplo"
+  ],
+  [
+   "usa mech tastic",
+   "usa Meshtastic"
+  ],
+  [
+   "usa SF diez",
+   "usa SF10"
+  ],
+  [
+   "pon el limite de saltos en cinco",
+   "pon el límite de saltos en 5"
+  ],
+  [
+   "pone el límite de salto en 5",
+   "pon el límite de saltos en 5"
+  ],
+  [
+   "usar el relieve real",
+   "usa el relieve real"
+  ],
+  [
+   "eh usa relieve real",
+   "usa el relieve real"
+  ],
+  [
+   "usar terreno plano",
+   "usa terreno plano"
+  ],
+  [
+   "usa el terreno plano",
+   "usa terreno plano"
+  ],
+  [
+   "usa lonely rice",
+   "usa Longley-Rice"
+  ],
+  [
+   "usa longli rais",
+   "usa Longley-Rice"
+  ],
+  [
+   "informa del enlace geitguey y repetidor 1",
+   "informe del enlace gateway y Repetidor 1"
+  ],
+  [
+   "informe de enlace geitwey y repetidor uno",
+   "informe del enlace gateway y Repetidor 1"
+  ],
+  [
+   "sugiere me antenas de apoyo",
+   "sugiéreme antenas de apoyo"
+  ],
+  [
+   "sugiereme antena de apoyo",
+   "sugiéreme antenas de apoyo"
+  ],
+  [
+   "conecta persona dos",
+   "conecta a Persona 2"
+  ],
+  [
+   "conectó a persona 2",
+   "conecta a Persona 2"
+  ],
+  [
+   "conecta todos",
+   "conecta a todos"
+  ],
+  [
+   "conecte a todos",
+   "conecta a todos"
+  ],
+  [
+   "envían mensaje desde persona 2",
+   "envía un mensaje desde Persona 2"
+  ],
+  [
+   "envia un mensaje desde persona dos",
+   "envía un mensaje desde Persona 2"
+  ],
+  [
+   "selección a persona uno",
+   "selecciona Persona 1"
+  ],
+  [
+   "eh selecciona persona 1",
+   "selecciona Persona 1"
+  ],
+  [
+   "duplicar el repetidor uno",
+   "duplica el Repetidor 1"
+  ],
+  [
+   "armame una red de 5 millas a la redonda de Barranca de Upia Meta",
+   "ármame una red de 5 millas a la redonda de Barranca de Upía, Meta"
+  ],
+  [
+   "ármame una red de cinco millas ala redonda de barranca de u pía meta",
+   "ármame una red de 5 millas a la redonda de Barranca de Upía, Meta"
+  ],
+  [
+   "agregan repetidor a 3 km al sur del gateway",
+   "agrega un repetidor a 3 km al sur del gateway"
+  ],
+  [
+   "agrega un repetidor a tres kilómetros al sur de gueitwey",
+   "agrega un repetidor a 3 km al sur del gateway"
+  ],
+  [
+   "agrega un repetidor a 1,5 km al occidente de persona 1",
+   "agrega un repetidor a 1.5 km al occidente de Persona 1"
+  ],
+  [
+   "agrega un repetidor a 1.5 kilómetros al accidente de persona uno",
+   "agrega un repetidor a 1.5 km al occidente de Persona 1"
+  ],
+  [
+   "agrega un repetidor a 500 metros al oriente del repetidor 2",
+   "agrega un repetidor a 500 m al oriente de Repetidor 2"
+  ],
+  [
+   "agrega un repetidor a quinientos metros a oriente de repetidor dos",
+   "agrega un repetidor a 500 m al oriente de Repetidor 2"
+  ],
+  [
+   "mueve repetidor 2 un kilómetro al sureste",
+   "mueve Repetidor 2 1 km al sureste"
+  ],
+  [
+   "mueve el repetidor dos 1 km al sur este",
+   "mueve Repetidor 2 1 km al sureste"
+  ],
+  [
+   "mueve persona dos 300 metros al norte",
+   "mueve Persona 2 300 m al norte"
+  ],
+  [
+   "mueve la persona 2 trescientos metros al norte",
+   "mueve Persona 2 300 m al norte"
+  ],
+  [
+   "mueve el getwey a Restrepo",
+   "mueve el gateway a Restrepo"
+  ],
+  [
+   "muevo el gateway Restrepo",
+   "mueve el gateway a Restrepo"
+  ],
+  [
+   "elimine persona uno",
+   "elimina Persona 1"
+  ],
+  [
+   "este elimina persona 1",
+   "elimina Persona 1"
+  ],
+  [
+   "elimina torres 2",
+   "elimina Torre 2"
+  ],
+  [
+   "eliminar la torre dos",
+   "elimina Torre 2"
+  ],
+  [
+   "suba repetidor 2 a treinta metros",
+   "sube Repetidor 2 a 30 m"
+  ],
+  [
+   "sube repartidor 2 a 30m",
+   "sube Repetidor 2 a 30 m"
+  ],
+  [
+   "baja el gate way a 12 metros",
+   "baja el gateway a 12 m"
+  ],
+  [
+   "baja el getway a doce metros",
+   "baja el gateway a 12 m"
+  ],
+  [
+   "renombra repetidor 2 con cerro azul",
+   "renombra Repetidor 2 como Cerro Azul"
+  ],
+  [
+   "re nombra repetidor dos como Cerro Azul",
+   "renombra Repetidor 2 como Cerro Azul"
+  ],
+  [
+   "pon persona 2 como repetidor",
+   "pon a Persona 2 como repetidor"
+  ],
+  [
+   "bueno pon a persona dos como repetidor",
+   "pon a Persona 2 como repetidor"
+  ],
+  [
+   "diseña una red para ochocientas hectáreas en Restrepo pues",
+   "diseña una red para 800 hectáreas en Restrepo"
+  ],
+  [
+   "diseñar una red para 800 hectárea en Restrepo",
+   "diseña una red para 800 hectáreas en Restrepo"
+  ],
+  [
+   "ármame una red de diez kilómetros a la redonda de Villa Vicencio",
+   "ármame una red de 10 km a la redonda de Villavicencio"
+  ],
+  [
+   "armame una red de 10 km a la redonda Villavicencio",
+   "ármame una red de 10 km a la redonda de Villavicencio"
+  ],
+  [
+   "ármame una red de dos millas a la redonda de Puerto Lopez",
+   "ármame una red de 2 millas a la redonda de Puerto López"
+  ],
+  [
+   "ármame una red de 2 millas ala redonda de puerto lópez",
+   "ármame una red de 2 millas a la redonda de Puerto López"
+  ],
+  [
+   "pon 1.000 personas y mira sí aguanta",
+   "pon 1000 personas y mira si aguanta"
+  ],
+  [
+   "pon mil personas mira si aguanta",
+   "pon 1000 personas y mira si aguanta"
+  ],
+  [
+   "Puebla la zona con trescientas personas",
+   "puebla la zona con 300 personas"
+  ],
+  [
+   "puebla la zona como 300 personas",
+   "puebla la zona con 300 personas"
+  ],
+  [
+   "lleva me a Cumaral",
+   "llévame a Cumaral"
+  ],
+  [
+   "llévame a Kumaral",
+   "llévame a Cumaral"
+  ],
+  [
+   "llevame a Bogota",
+   "llévame a Bogotá"
+  ],
+  [
+   "bueno llévame Bogotá",
+   "llévame a Bogotá"
+  ],
+  [
+   "usa efe nueve",
+   "usa SF9"
+  ],
+  [
+   "usa s f 9",
+   "usa SF9"
+  ],
+  [
+   "distancia entre persona dos y repetidor uno",
+   "distancia entre Persona 2 y Repetidor 1"
+  ],
+  [
+   "distancias entre persona 2 y el repetidor 1",
+   "distancia entre Persona 2 y Repetidor 1"
+  ],
+  [
+   "informe del enlace repetidor uno y repetidor dos",
+   "informe del enlace Repetidor 1 y Repetidor 2"
+  ],
+  [
+   "informe de enlace repetidor 1 y repetidora 2",
+   "informe del enlace Repetidor 1 y Repetidor 2"
+  ],
+  [
+   "conecta la persona 1",
+   "conecta a Persona 1"
+  ],
+  [
+   "conectar persona uno",
+   "conecta a Persona 1"
+  ],
+  [
+   "selecciona el gate güey",
+   "selecciona el gateway"
+  ],
+  [
+   "selecciona al getaway",
+   "selecciona el gateway"
+  ],
+  [
+   "a ver duplica el geitwey",
+   "duplica el gateway"
+  ],
+  [
+   "duplique el geit wey",
+   "duplica el gateway"
+  ],
+  [
+   "agrega un repetidor a 800 metros al sur de persona dos",
+   "agrega un repetidor a 800 m al sur de Persona 2"
+  ],
+  [
+   "agrega un repetidor a ochocientos metros al sur de persona 2 pues",
+   "agrega un repetidor a 800 m al sur de Persona 2"
+  ],
+  [
+   "pon una persona a dos kilómetros al occidente del gatewey",
+   "pon una persona a 2 km al occidente del gateway"
+  ],
+  [
+   "pon una persona a 2 km occidente del Gateway",
+   "pon una persona a 2 km al occidente del gateway"
+  ],
+  [
+   "diseña una red de tres kilómetros en Restrepo",
+   "diseña una red de 3 km en Restrepo"
+  ],
+  [
+   "diseña una red 3 km en restrepo",
+   "diseña una red de 3 km en Restrepo"
+  ],
+  [
+   "distancia entre el geteway y persona dos",
+   "distancia entre el gateway y Persona 2"
+  ],
+  [
+   "distancia entre gateway y persona 2",
+   "distancia entre el gateway y Persona 2"
+  ],
+  [
+   "mueve repetidor uno un kilómetro al occidente",
+   "mueve Repetidor 1 1 km al occidente"
+  ],
+  [
+   "mueva el repetidor 1 1 km a occidente",
+   "mueve Repetidor 1 1 km al occidente"
+  ],
+  [
+   "inscribe un nodo antena llamado nor tauer en 4.5123 -73.1234 a 20 metros",
+   "Inscribe un nodo antena llamado North Tower en 4.5123, -73.1234 a 20 m"
+  ],
+  [
+   "Escribe un nodo antena llamado North Tower en 4.5123 coma menos 73.1234 a veinte metros",
+   "Inscribe un nodo antena llamado North Tower en 4.5123, -73.1234 a 20 m"
+  ],
+  [
+   "ajusta la red pa llegar a la meta con el menor costo",
+   "ajusta la red para llegar a la meta con el menor costo"
+  ],
+  [
+   "ajústala red para llegar a la meta con el mejor costo",
+   "ajusta la red para llegar a la meta con el menor costo"
+  ],
+  [
+   "apunta repetidor uno al sur",
+   "apunta Repetidor 1 al sur"
+  ],
+  [
+   "apunta repetido 1 al sur pues",
+   "apunta Repetidor 1 al sur"
+  ],
+  [
+   "que es el aria objetivo",
+   "¿qué es el área objetivo?"
+  ],
+  [
+   "a ver qué es el área objetivo",
+   "¿qué es el área objetivo?"
+  ],
+  [
+   "activa las simulación automática",
+   "activa la simulación automática"
+  ],
+  [
+   "activar simulación automática",
+   "activa la simulación automática"
+  ],
+  [
+   "arma me una red que cubra todo el municipio",
+   "ármame una red que cubra todo el municipio"
+  ],
+  [
+   "arma una red que cubre todo el municipio",
+   "ármame una red que cubra todo el municipio"
+  ],
+  [
+   "manda quince mensajes de wasap en diez segundos",
+   "manda 15 mensajes de WhatsApp en 10 segundos"
+  ],
+  [
+   "mande 15 mensajes de Whats App en 10 segundos",
+   "manda 15 mensajes de WhatsApp en 10 segundos"
+  ],
+  [
+   "dame el presupuesto de tallado",
+   "dame el presupuesto detallado"
+  ],
+  [
+   "bueno dame presupuesto detallado",
+   "dame el presupuesto detallado"
+  ],
+  [
+   "cubre dos millas cuadradas alrededor del gate way",
+   "cubre 2 millas cuadradas alrededor del gateway"
+  ],
+  [
+   "cubre 2 millas cuadradas al rededor del getaway",
+   "cubre 2 millas cuadradas alrededor del gateway"
+  ],
+  [
+   "distancia entre el repetidor uno y el repetidor dos",
+   "distancia entre el Repetidor 1 y el Repetidor 2"
+  ],
+  [
+   "distancia entre el repetidor 1 el repetidor 2",
+   "distancia entre el Repetidor 1 y el Repetidor 2"
+  ],
+  [
+   "duplica el repetidor uno",
+   "duplica Repetidor 1"
+  ],
+  [
+   "publica repetidor 1",
+   "duplica Repetidor 1"
+  ],
+  [
+   "súbele repetidor 1 a 25 metros",
+   "sube el repetidor 1 a 25 metros"
+  ],
+  [
+   "eh sube el repetidor uno a 25 metros",
+   "sube el repetidor 1 a 25 metros"
+  ],
+  [
+   "que todos los repetidores queden a quince metros",
+   "que todos los repetidores queden a 15 m"
+  ],
+  [
+   "que todos los repetidores que den a 15 metros",
+   "que todos los repetidores queden a 15 m"
+  ],
+  [
+   "carga el ejemplo de maya",
+   "carga el ejemplo de malla"
+  ],
+  [
+   "cárgale ejemplo de malla",
+   "carga el ejemplo de malla"
+  ],
+  [
+   "elimina persona dos",
+   "elimina Persona 2"
+  ],
+  [
+   "elimine la persona 2",
+   "elimina Persona 2"
+  ],
+  [
+   "elimina todo menos el geiguei",
+   "elimina todo menos el gateway"
+  ],
+  [
+   "ilumina todo menos el gateway",
+   "elimina todo menos el gateway"
+  ],
+  [
+   "Muestra me toda la red",
+   "muéstrame toda la red"
+  ],
+  [
+   "muéstrale toda la red",
+   "muéstrame toda la red"
+  ],
+  [
+   "hasta donde aguanta cada repetido",
+   "¿hasta dónde aguanta cada repetidor?"
+  ],
+  [
+   "asta dónde aguanta cada repetidor",
+   "¿hasta dónde aguanta cada repetidor?"
+  ],
+  [
+   "guarda el escenario con el nombre de prueba norte",
+   "guarda el escenario con el nombre Prueba Norte"
+  ],
+  [
+   "guarda el escenario con el hombre Prueba Norte",
+   "guarda el escenario con el nombre Prueba Norte"
+  ],
+  [
+   "deja de de dibujar",
+   "deja de dibujar"
+  ],
+  [
+   "listo deje de dibujar",
+   "deja de dibujar"
+  ],
+  [
+   "llévame barranca de upia meta",
+   "llévame a Barranca de Upía, Meta"
+  ],
+  [
+   "lleva me a barranca de u pía meta",
+   "llévame a Barranca de Upía, Meta"
+  ],
+  [
+   "cuántas personas aguanta el repetidor uno",
+   "cuántas personas aguanta el Repetidor 1"
+  ],
+  [
+   "cuánta personas aguanta el repetidor 1",
+   "cuántas personas aguanta el Repetidor 1"
+  ],
+  [
+   "enviaron mensaje de prueba",
+   "Enviar un mensaje de prueba"
+  ],
+  [
+   "envía un mensaje de prueba eh",
+   "Enviar un mensaje de prueba"
+  ],
+  [
+   "pasa a modo avanzado",
+   "pasa al modo avanzado"
+  ],
+  [
+   "pasa al modo avanzando",
+   "pasa al modo avanzado"
+  ],
+  [
+   "mueve repetidor uno dos kilómetros al sur",
+   "mueve Repetidor 1 2 km al sur"
+  ],
+  [
+   "mueve el repetidor 1 a 2 km al sur",
+   "mueve Repetidor 1 2 km al sur"
+  ],
+  [
+   "llama el escenario finca la esperanza",
+   "llama al escenario Finca La Esperanza"
+  ],
+  [
+   "llamar escenario Finca La Esperanza",
+   "llama al escenario Finca La Esperanza"
+  ],
+  [
+   "optimiza la red pa la carga",
+   "optimiza la red para la carga"
+  ],
+  [
+   "optimiza la red para la carta",
+   "optimiza la red para la carga"
+  ],
+  [
+   "necesito más Atenas",
+   "¿necesito más antenas?"
+  ],
+  [
+   "eh necesito más antena",
+   "¿necesito más antenas?"
+  ],
+  [
+   "oculta la vara superior",
+   "oculta la barra superior"
+  ],
+  [
+   "este oculta barra superior",
+   "oculta la barra superior"
+  ],
+  [
+   "ponla confiabilidad alta",
+   "pon la confiabilidad alta"
+  ],
+  [
+   "pon la contabilidad alta",
+   "pon la confiabilidad alta"
+  ],
+  [
+   "has me una red sostenible económica en cumaral",
+   "hazme una red sostenible económica en Cumaral"
+  ],
+  [
+   "hazme una red sostenible económico Cumaral",
+   "hazme una red sostenible económica en Cumaral"
+  ],
+  [
+   "llévame a la antena de ejemplo",
+   "llévame a la antena Ejemplo"
+  ],
+  [
+   "llévame la antena ejemplo",
+   "llévame a la antena Ejemplo"
+  ],
+  [
+   "agrega un repetidor a tres kilómetros al norte del geitwey",
+   "agrega un repetidor a 3 km al norte del gateway"
+  ],
+  [
+   "agregan repetidor a 3 km al norte del Gateway",
+   "agrega un repetidor a 3 km al norte del gateway"
+  ],
+  [
+   "pueblo con 250 personas",
+   "puebla con 250 personas"
+  ],
+  [
+   "Puebla con doscientas cincuenta personas",
+   "puebla con 250 personas"
+  ],
+  [
+   "quita las probadas",
+   "quita las pobladas"
+  ],
+  [
+   "quítalas pobladas",
+   "quita las pobladas"
+  ],
+  [
+   "quita la zona de popularidad",
+   "quita las zonas de popularidad"
+  ],
+  [
+   "quita las zonas de polaridad",
+   "quita las zonas de popularidad"
+  ],
+  [
+   "simula con terreno llano",
+   "simula con terreno plano"
+  ],
+  [
+   "simular con terreno plano",
+   "simula con terreno plano"
+  ],
+  [
+   "renombra el repetidor 1 como Nort Tower",
+   "renombra el Repetidor 1 como North Tower"
+  ],
+  [
+   "re nombra el repetidor uno como North Tower",
+   "renombra el Repetidor 1 como North Tower"
+  ],
+  [
+   "Selecciona repetidor dos",
+   "selecciona Repetidor 2"
+  ],
+  [
+   "selección a repetidor 2",
+   "selecciona Repetidor 2"
+  ],
+  [
+   "lleva la red a para te bueno",
+   "lleva la red a Paratebueno"
+  ],
+  [
+   "llevar la red a Paratebueno",
+   "lleva la red a Paratebueno"
+  ],
+  [
+   "llega señal a 4.21 menos 73.35",
+   "¿llega señal a 4.21, -73.35?"
+  ],
+  [
+   "llega la señal a 4,21 -73,35",
+   "¿llega señal a 4.21, -73.35?"
+  ],
+  [
+   "ey melqui simula",
+   "Hey Melki, simula"
+  ],
+  [
+   "hay melky simula",
+   "Hey Melki, simula"
+  ],
+  [
+   "qué pasa de noche con los planes solares",
+   "¿qué pasa de noche con los paneles solares?"
+  ],
+  [
+   "que pasa de noche con paneles solares",
+   "¿qué pasa de noche con los paneles solares?"
+  ],
+  [
+   "cuánto costará cubrir todo el país con 50 por ciento de adopción",
+   "cuánto costaría cubrir todo el país con 50% de adopción"
+  ],
+  [
+   "cuanto costaría cubrir todo el país con cincuenta por ciento de adopción",
+   "cuánto costaría cubrir todo el país con 50% de adopción"
+  ],
+  [
+   "dimensión a 5000 usuarios en 800 kilómetros cuadrados de sabana",
+   "dimensiona 5.000 usuarios en 800 km² de sabana"
+  ],
+  [
+   "dimensiona 5000 usuarios en 800 km cuadrados de sábana",
+   "dimensiona 5.000 usuarios en 800 km² de sabana"
+  ],
+  [
+   "a quienes no le funciona la red",
+   "¿a quiénes no les funciona la red?"
+  ],
+  [
+   "a quién es no les funciona la red",
+   "¿a quiénes no les funciona la red?"
+  ],
+  [
+   "anima a la red",
+   "anima la red"
+  ],
+  [
+   "anime la red",
+   "anima la red"
+  ],
+  [
+   "mete le 400 usuarios al repetidor 2",
+   "métele 400 usuarios al repetidor 2"
+  ],
+  [
+   "métele cuatrocientos usuarios a repetidor dos",
+   "métele 400 usuarios al repetidor 2"
+  ],
+  [
+   "y escribe un modo antena en 4.5123 -73.1234",
+   "inscribe un nodo antena en 4.5123, -73.1234"
+  ],
+  [
+   "inscribe un nodo antena en 4 punto 5123 menos 73 punto 1234",
+   "inscribe un nodo antena en 4.5123, -73.1234"
+  ],
+  [
+   "optimizar el costo",
+   "optimiza el costo"
+  ],
+  [
+   "bueno optimiza costo",
+   "optimiza el costo"
+  ],
+  [
+   "orienta el repetidor dos hacia el gate güey",
+   "orienta el repetidor 2 hacia el gateway"
+  ],
+  [
+   "orienta el repetidor 2 Asia el gateway",
+   "orienta el repetidor 2 hacia el gateway"
+  ],
+  [
+   "quítale área objetivo",
+   "quita el área objetivo"
+  ],
+  [
+   "quita el área de objetivo",
+   "quita el área objetivo"
+  ],
+  [
+   "apaga similar al cambiar",
+   "apaga simular al cambiar"
+  ],
+  [
+   "apaga simula al cambiar",
+   "apaga simular al cambiar"
+  ],
+  [
+   "exportar una imagen",
+   "exporta una imagen"
+  ],
+  [
+   "exporte una imagen pues",
+   "exporta una imagen"
+  ],
+  [
+   "manda quince mensajes de whatsapp al tiempo",
+   "manda 15 mensajes de WhatsApp al tiempo"
+  ],
+  [
+   "manda 15 mensaje de guasap al tiempo",
+   "manda 15 mensajes de WhatsApp al tiempo"
+  ],
+  [
+   "cual es el presupuesto de la maya",
+   "¿cuál es el presupuesto de la malla?"
+  ],
+  [
+   "y cuál es el presupuesto de malla",
+   "¿cuál es el presupuesto de la malla?"
+  ],
+  [
+   "cubre en un radio de tres mil pies alrededor del gateway",
+   "cubre en un radio de 3000 pies alrededor del gateway"
+  ],
+  [
+   "cubre un radio de 3.000 pies alrededor del get way",
+   "cubre en un radio de 3000 pies alrededor del gateway"
+  ],
+  [
+   "distancia entre repetidor 1 y repetido 2",
+   "distancia entre Repetidor 1 y Repetidor 2"
+  ],
+  [
+   "distancias entre repetidor uno y repetidor dos",
+   "distancia entre Repetidor 1 y Repetidor 2"
+  ],
+  [
+   "sube al repetidor 1 a 25 metros",
+   "sube Repetidor 1 a 25 m"
+  ],
+  [
+   "sube repetidor uno a veinticinco metros",
+   "sube Repetidor 1 a 25 m"
+  ],
+  [
+   "sube todos los repetidores a doce metros",
+   "sube todos los repetidores a 12 m"
+  ],
+  [
+   "sube todo los repetidores a 12 metros",
+   "sube todos los repetidores a 12 m"
+  ],
+  [
+   "pon un repetidor a cinco kilómetros al norte de ejemplo y simula",
+   "pon un repetidor a 5 km al norte de Ejemplo y simula"
+  ],
+  [
+   "pone un repetidor a 5 km al norte del ejemplo y simula",
+   "pon un repetidor a 5 km al norte de Ejemplo y simula"
+  ],
+  [
+   "borra toda las personas",
+   "borra todas las personas"
+  ],
+  [
+   "borre todas las personas porfa",
+   "borra todas las personas"
+  ],
+  [
+   "ajusta la vista toda la red",
+   "ajusta la vista a toda la red"
+  ],
+  [
+   "ajusta la lista a toda la red",
+   "ajusta la vista a toda la red"
+  ],
+  [
+   "eh hasta cuantos usuarios aguanta cada repetidor",
+   "¿hasta cuántos usuarios aguanta cada repetidor?"
+  ],
+  [
+   "hasta cuántos usuarios aguantan cada repetidor",
+   "¿hasta cuántos usuarios aguanta cada repetidor?"
+  ],
+  [
+   "exportan Excel",
+   "exporta en excel"
+  ],
+  [
+   "exporta en el excel",
+   "exporta en excel"
+  ],
+  [
+   "dámele lapicito",
+   "dame el lapicito"
+  ],
+  [
+   "oiga dame lapicito",
+   "dame el lapicito"
+  ],
+  [
+   "llévame a parate bueno",
+   "llévame a Paratebueno"
+  ],
+  [
+   "lleva me para te bueno",
+   "llévame a Paratebueno"
+  ],
+  [
+   "cuantas personas aguantan el repetidor 1",
+   "¿cuántas personas aguanta el Repetidor 1?"
+  ],
+  [
+   "o sea cuántas personas aguanta repetidor uno",
+   "¿cuántas personas aguanta el Repetidor 1?"
+  ],
+  [
+   "envía 15 pagos al tiempo",
+   "envía quince pagos al tiempo"
+  ],
+  [
+   "en vía quince pagos al tiempo",
+   "envía quince pagos al tiempo"
+  ],
+  [
+   "vuelve a sembrarla malla",
+   "vuelve a sembrar la malla"
+  ],
+  [
+   "vuelve sembrar la maya",
+   "vuelve a sembrar la malla"
+  ],
+  [
+   "mueve repetidor uno un kilómetro al norte",
+   "mueve Repetidor 1 1 km al norte"
+  ],
+  [
+   "mueva repetidor 1 un km al norte",
+   "mueve Repetidor 1 1 km al norte"
+  ],
+  [
+   "recomiéndame gate ways de apoyo",
+   "recomiéndame gateways de apoyo"
+  ],
+  [
+   "recomienda me gateway de apoyo",
+   "recomiéndame gateways de apoyo"
+  ],
+  [
+   "porque no pongo más repetidores",
+   "¿por qué no pongo más repetidores?"
+  ],
+  [
+   "por qué no pongo mas repetidoras",
+   "¿por qué no pongo más repetidores?"
+  ],
+  [
+   "abre el panel de resultado",
+   "abre el panel de resultados"
+  ],
+  [
+   "abre el papel de resultados",
+   "abre el panel de resultados"
+  ],
+  [
+   "simula con vegetación tensa",
+   "simula con vegetación densa"
+  ],
+  [
+   "simulación vegetación densa",
+   "simula con vegetación densa"
+  ],
+  [
+   "haz me una red sostenible",
+   "hazme una red sostenible"
+  ],
+  [
+   "hazme una res sostenible",
+   "hazme una red sostenible"
+  ],
+  [
+   "pon el Gate Way en villavicencio",
+   "pon el gateway en Villavicencio"
+  ],
+  [
+   "ponle gateway en Villa Vicencio",
+   "pon el gateway en Villavicencio"
+  ],
+  [
+   "pon quinientas personas",
+   "pon 500 personas"
+  ],
+  [
+   "por 500 personas",
+   "pon 500 personas"
+  ],
+  [
+   "renombra repetidor dos como loma alta",
+   "renombra Repetidor 2 como Loma Alta"
+  ],
+  [
+   "renombra repetidor 2 cómo Lomalta",
+   "renombra Repetidor 2 como Loma Alta"
+  ],
+  [
+   "conecta los que faltan",
+   "Conectar a los que faltan"
+  ],
+  [
+   "conectarlos que faltan",
+   "Conectar a los que faltan"
+  ],
+  [
+   "qué es la lora",
+   "¿qué es lora?"
+  ],
+  [
+   "que es Laura",
+   "¿qué es lora?"
+  ],
+  [
+   "cuánto cuesta la red pal choco",
+   "¿cuánto cuesta la red para el Chocó?"
+  ],
+  [
+   "cuanto cuesta la red para Chocó",
+   "¿cuánto cuesta la red para el Chocó?"
+  ],
+  [
+   "dimensiona 5 mil usuarios en 800 km² de la sabana",
+   "dimensiona 5.000 usuarios en 800 km2 de sabana"
+  ],
+  [
+   "dimensionar cinco mil usuarios en 800 kilómetros cuadrados de sabana",
+   "dimensiona 5.000 usuarios en 800 km2 de sabana"
+  ],
+  [
+   "eh que usuarios no funcionan",
+   "¿qué usuarios no funcionan?"
+  ],
+  [
+   "qué usuario no funciona",
+   "¿qué usuarios no funcionan?"
+  ],
+  [
+   "escribe un nodo antena llamado torre norte en 4.5123 - 73.1234 a 15 m",
+   "inscribe un nodo antena llamado Torre Norte en 4.5123, -73.1234 a 15 m"
+  ],
+  [
+   "inscribe un nodo antena llamada Torre Norte en 4.5123 menos 73.1234 a 15 metros",
+   "inscribe un nodo antena llamado Torre Norte en 4.5123, -73.1234 a 15 m"
+  ],
+  [
+   "que necesito pa que sea factible",
+   "¿qué necesito para que sea factible?"
+  ],
+  [
+   "bueno qué necesitó para que sea factible",
+   "¿qué necesito para que sea factible?"
+  ],
+  [
+   "usa el área que me di como área objetivo con el 95%",
+   "usa el área que medí como área objetivo con el 95 %"
+  ],
+  [
+   "usar el área que medí como área objetivo con el 95 por ciento",
+   "usa el área que medí como área objetivo con el 95 %"
+  ],
+  [
+   "exportar un PDF",
+   "exporta un pdf"
+  ],
+  [
+   "eh exporta en pdf",
+   "exporta un pdf"
+  ],
+  [
+   "hasta cuantos pagos aguantan",
+   "¿hasta cuántos pagos aguanta?"
+  ],
+  [
+   "pues hasta cuántos pago aguanta",
+   "¿hasta cuántos pagos aguanta?"
+  ],
+  [
+   "cuanto cuesta la red pues",
+   "¿cuánto cuesta la red?"
+  ],
+  [
+   "cuánto cuestan la red",
+   "¿cuánto cuesta la red?"
+  ],
+  [
+   "cubre 3 km a la redonda del get way",
+   "cubre 3 km a la redonda del gateway"
+  ],
+  [
+   "cobre tres kilómetros a la ronda del gateway",
+   "cubre 3 km a la redonda del gateway"
+  ],
+  [
+   "sube lo a 25 metros",
+   "súbelo a 25 m"
+  ],
+  [
+   "súbele a 25 m",
+   "súbelo a 25 m"
+  ],
+  [
+   "sube todo los repetidores a veinticinco metros",
+   "sube todos los repetidores a 25 m"
+  ],
+  [
+   "suba todos los repetidores a 25 m",
+   "sube todos los repetidores a 25 m"
+  ],
+  [
+   "prueba ahora pico",
+   "prueba la hora pico"
+  ],
+  [
+   "pruébala hora pico",
+   "prueba la hora pico"
+  ],
+  [
+   "exporta Google Earth",
+   "exporta a Google Earth"
+  ],
+  [
+   "exportar a google ert",
+   "exporta a Google Earth"
+  ],
+  [
+   "quiero dibujar la maya",
+   "quiero dibujar la malla"
+  ],
+  [
+   "quiero dibujarla malla",
+   "quiero dibujar la malla"
+  ],
+  [
+   "lleva me a 4.25 -73.30",
+   "llévame a 4.25, -73.30"
+  ],
+  [
+   "llévame a 4,25 menos 73,30",
+   "llévame a 4.25, -73.30"
+  ],
+  [
+   "evalúa hasta qué punto soporte el repetidor uno con 400 personas a tres kilómetros",
+   "evalúa hasta qué punto soporta el Repetidor 1 con 400 personas a 3 km"
+  ],
+  [
+   "eh evalúa hasta qué punto soporta el repetido 1 con 400 personas a 3 km",
+   "evalúa hasta qué punto soporta el Repetidor 1 con 400 personas a 3 km"
+  ],
+  [
+   "manda un WhatsApp",
+   "manda un guasap"
+  ],
+  [
+   "manda un guasá",
+   "manda un guasap"
+  ],
+  [
+   "mueve a persona uno 500 metros al oriente",
+   "mueve Persona 1 500 m al oriente"
+  ],
+  [
+   "mueva persona 1 500 m a oriente",
+   "mueve Persona 1 500 m al oriente"
+  ],
+  [
+   "debo poner mas torres pues",
+   "¿debo poner más torres?"
+  ],
+  [
+   "debo pone más torre",
+   "¿debo poner más torres?"
+  ],
+  [
+   "abre la barra de herramientas arriba",
+   "abre la barra de herramientas de arriba"
+  ],
+  [
+   "abra la vara de herramientas de arriba",
+   "abre la barra de herramientas de arriba"
+  ],
+  [
+   "radio 12 kilómetros",
+   "radio de 12 km"
+  ],
+  [
+   "bueno radio de doce kilómetros",
+   "radio de 12 km"
+  ],
+  [
+   "armar una red mesh en 4.5149 -73.0024",
+   "arma una red mesh en 4.5149, -73.0024"
+  ],
+  [
+   "arma una red mes en 4.5149 menos 73.0024",
+   "arma una red mesh en 4.5149, -73.0024"
+  ],
+  [
+   "pon una persona a 4.25 menos 73.30",
+   "pon una persona en 4.25, -73.30"
+  ],
+  [
+   "por una persona en 4.25, -73.30",
+   "pon una persona en 4.25, -73.30"
+  ],
+  [
+   "reparte una persona por kilómetro cuadrado solo donde halla señal",
+   "reparte 1 persona por km2 solo donde haya señal"
+  ],
+  [
+   "repartir 1 persona por km² solo donde haya seña",
+   "reparte 1 persona por km2 solo donde haya señal"
+  ],
+  [
+   "cambia le el nombre al gateway por hacienda central",
+   "cámbiale el nombre al gateway por Hacienda Central"
+  ],
+  [
+   "cámbiale el nombre al gate way por la Hacienda Central",
+   "cámbiale el nombre al gateway por Hacienda Central"
+  ],
+  [
+   "conecta los que faltan",
+   "conecta a los que faltan"
+  ],
+  [
+   "conecte a los que falta",
+   "conecta a los que faltan"
+  ],
+  [
+   "hola Melquis simula",
+   "hola melkis simula"
+  ],
+  [
+   "hola melki estimula",
+   "hola melkis simula"
+  ],
+  [
+   "necesito licencia para usar la banda del 915 megahertz",
+   "¿necesito licencia para usar la banda de 915 MHz?"
+  ],
+  [
+   "necesito licencias para usar la banda de 915 mega hertz",
+   "¿necesito licencia para usar la banda de 915 MHz?"
+  ],
+  [
+   "cuánto cuesta cubrí todo el país",
+   "¿cuánto cuesta cubrir todo el país?"
+  ],
+  [
+   "y cuánto cuesta cubrir todo país",
+   "¿cuánto cuesta cubrir todo el país?"
+  ],
+  [
+   "pinta solo con un umbral de menos 105 dbm",
+   "pinta solo con umbral de -105 dBm"
+  ],
+  [
+   "pinta sólo con umbral de -105 de b m",
+   "pinta solo con umbral de -105 dBm"
+  ],
+  [
+   "pon 5 mil personas en el repetidor dos",
+   "pon 5000 personas en el Repetidor 2"
+  ],
+  [
+   "pon 5000 personas el repetidor 2",
+   "pon 5000 personas en el Repetidor 2"
+  ],
+  [
+   "inscribe un nodo antena llamado torre norte en 4,5123 -73,1234 a 20 metros",
+   "Inscribe un nodo antena llamado Torre Norte en 4.5123, -73.1234 a 20 m"
+  ],
+  [
+   "Inscribe un modo antena llamado Torre Norte en 4.5123 -73.1234 a 20 m",
+   "Inscribe un nodo antena llamado Torre Norte en 4.5123, -73.1234 a 20 m"
+  ],
+  [
+   "ajusta la con menos repetidores",
+   "ajústala con menos repetidores"
+  ],
+  [
+   "ajustala con menos repetidoras",
+   "ajústala con menos repetidores"
+  ],
+  [
+   "envía quince pagos a tiempo",
+   "envía 15 pagos al tiempo"
+  ],
+  [
+   "envió 15 pagos al tiempo",
+   "envía 15 pagos al tiempo"
+  ],
+  [
+   "cubre el area que mide con respaldo",
+   "cubre el área que medí con respaldo"
+  ],
+  [
+   "cubra el área que medí con el respaldo",
+   "cubre el área que medí con respaldo"
+  ],
+  [
+   "pon le una yagui a ejemplo apuntando a torre 2",
+   "ponle una Yagi a Ejemplo apuntando a Torre 2"
+  ],
+  [
+   "ponle una Yaqui al ejemplo apuntando a torre dos",
+   "ponle una Yagi a Ejemplo apuntando a Torre 2"
+  ],
+  [
+   "subo todos los repetidores a 20 m",
+   "sube todos los repetidores a 20 m"
+  ],
+  [
+   "sube todos los repetidores a veinte metro",
+   "sube todos los repetidores a 20 m"
+  ],
+  [
+   "guardar el lápiz",
+   "guarda el lápiz"
+  ],
+  [
+   "bueno guarda el lapiz",
+   "guarda el lápiz"
+  ],
+  [
+   "llévame a Barrancas de Upía",
+   "llévame a Barranca de Upía"
+  ],
+  [
+   "llévame barranca de upia",
+   "llévame a Barranca de Upía"
+  ],
+  [
+   "oye Melky cuantas personas aguanta el repetidor uno",
+   "oye melki cuántas personas aguanta el Repetidor 1"
+  ],
+  [
+   "hoy melqui cuántas personas aguanta el repetidor 1",
+   "oye melki cuántas personas aguanta el Repetidor 1"
+  ],
+  [
+   "manda un mensaje prueba",
+   "manda un mensaje de prueba"
+  ],
+  [
+   "o sea manda un mensaje de prueba",
+   "manda un mensaje de prueba"
+  ],
+  [
+   "ahí antenas de más",
+   "¿hay antenas de más?"
+  ],
+  [
+   "hay antenas demás",
+   "¿hay antenas de más?"
+  ],
+  [
+   "muestra los panales",
+   "muestra los paneles"
+  ],
+  [
+   "nuestra los paneles",
+   "muestra los paneles"
+  ],
+  [
+   "pon el limite de saltos en doce",
+   "pon el límite de saltos en 12"
+  ],
+  [
+   "ponle límite de salto en 12",
+   "pon el límite de saltos en 12"
+  ],
+  [
+   "pon a una persona en 4.31 menos 73.22",
+   "pon una persona en 4.31, -73.22"
+  ],
+  [
+   "pon una persona en 4 punto 31 menos 73 punto 22",
+   "pon una persona en 4.31, -73.22"
+  ],
+  [
+   "pueblo la zona con 250 personas",
+   "puebla la zona con doscientas cincuenta personas"
+  ],
+  [
+   "Puebla la zona con doscientos cincuenta persona",
+   "puebla la zona con doscientas cincuenta personas"
+  ],
+  [
+   "oye Melqui conecta a los que faltan",
+   "Oye Melki, conecta a los que faltan"
+  ],
+  [
+   "oye Milky conecta los que faltan",
+   "Oye Melki, conecta a los que faltan"
+  ],
+  [
+   "poblar repartir explica y simula",
+   "Poblar reparte, explica y simula"
+  ],
+  [
+   "poblaré parte explica y simula",
+   "Poblar reparte, explica y simula"
+  ],
+  [
+   "este cuánto consume cada usuario de la red",
+   "¿cuánto consume cada usuario de la red?"
+  ],
+  [
+   "cuanto consume cada usuario en la red",
+   "¿cuánto consume cada usuario de la red?"
+  ],
+  [
+   "cuánto cuesta la red en norte de santander con ese efe 10",
+   "¿cuánto cuesta la red en Norte de Santander con SF10?"
+  ],
+  [
+   "cuánto cuesta la red el Norte de Santander con SF 10",
+   "¿cuánto cuesta la red en Norte de Santander con SF10?"
+  ],
+  [
+   "muestra la señal en de bm",
+   "muestra la señal en dBm"
+  ],
+  [
+   "muestre la señal en DBM",
+   "muestra la señal en dBm"
+  ],
+  [
+   "pon setecientas personas en el repetidor 1 y mire la estabilidad de la red",
+   "pon 700 personas en el Repetidor 1 y mira la estabilidad de la red"
+  ],
+  [
+   "pon 700 personas en repetidor 1 y mira la estabilidad de red",
+   "pon 700 personas en el Repetidor 1 y mira la estabilidad de la red"
+  ],
+  [
+   "agregar un nodo portátil en 4.31 73.42",
+   "agrega un nodo portátil en 4.31, 73.42"
+  ],
+  [
+   "agrega un nudo portátil en 4 punto 31 73 punto 42",
+   "agrega un nodo portátil en 4.31, 73.42"
+  ],
+  [
+   "ajústala con torre hasta 40 m",
+   "ajústala con torres hasta 40 metros"
+  ],
+  [
+   "ajústala con torres de hasta cuarenta metros",
+   "ajústala con torres hasta 40 metros"
+  ],
+  [
+   "envíe veinticinco pagos al tiempo",
+   "envía 25 pagos al tiempo"
+  ],
+  [
+   "en vía 25 pagos al tiempo",
+   "envía 25 pagos al tiempo"
+  ],
+  [
+   "una red de 1 km y medio a la redonda del getaway",
+   "una red de un kilómetro y medio a la redonda del gateway"
+  ],
+  [
+   "una red de un kilómetro y medio ala redonda del gueiwey",
+   "una red de un kilómetro y medio a la redonda del gateway"
+  ],
+  [
+   "ponle una antena yagui a ejemplo apuntando a torre 2",
+   "ponle una antena yagi a Ejemplo apuntando a Torre 2"
+  ],
+  [
+   "ponle una antena Yagi en ejemplo apuntando a torre dos",
+   "ponle una antena yagi a Ejemplo apuntando a Torre 2"
+  ],
+  [
+   "has la prueba de estrés en día de mercado",
+   "haz la prueba de estrés en día de mercado"
+  ],
+  [
+   "haz la prueba de estrés en día del mercado",
+   "haz la prueba de estrés en día de mercado"
+  ],
+  [
+   "a paga el lápiz",
+   "apaga el lápiz"
+  ],
+  [
+   "apague el lapiz",
+   "apaga el lápiz"
+  ],
+  [
+   "ubica me en barranca de upía meta",
+   "ubícame en Barranca de Upía, Meta"
+  ],
+  [
+   "ubícame en barranco de upia meta",
+   "ubícame en Barranca de Upía, Meta"
+  ],
+  [
+   "cuál es el límite de personas en cada punto",
+   "¿cuál es el límite de personas de cada punto?"
+  ],
+  [
+   "cual es el límite de persona de cada punto",
+   "¿cuál es el límite de personas de cada punto?"
+  ],
+  [
+   "envía un mensaje de la persona",
+   "envía un mensaje desde la persona"
+  ],
+  [
+   "envía un mensaje desde la persona pues",
+   "envía un mensaje desde la persona"
+  ],
+  [
+   "puedo quita algunos repetidores",
+   "¿puedo quitar algunos repetidores?"
+  ],
+  [
+   "pudo quitar algunos repetidores",
+   "¿puedo quitar algunos repetidores?"
+  ],
+  [
+   "oculto los paneles",
+   "oculta los paneles"
+  ],
+  [
+   "este oculta los paneles",
+   "oculta los paneles"
+  ],
+  [
+   "clima continental templada",
+   "clima continental templado"
+  ],
+  [
+   "clima continente templado",
+   "clima continental templado"
+  ],
+  [
+   "pon el gateway en 4.2 menos 73.37",
+   "pon el gateway en cuatro punto dos, menos setenta y tres punto tres siete"
+  ],
+  [
+   "pon el geiwey en cuatro punto dos menos setenta y tres punto tres siete",
+   "pon el gateway en cuatro punto dos, menos setenta y tres punto tres siete"
+  ],
+  [
+   "en esta zona son 250 usuarios reparte los por la malla",
+   "en esta zona son 250 usuarios, repártelos por la malla"
+  ],
+  [
+   "esta zona son doscientos cincuenta usuarios repártelos por la malla",
+   "en esta zona son 250 usuarios, repártelos por la malla"
+  ],
+  [
+   "Melkin por favor conecta los que faltan",
+   "Melki por favor conecta a los que faltan"
+  ],
+  [
+   "Belky porfavor conecta a los que faltan",
+   "Melki por favor conecta a los que faltan"
+  ],
+  [
+   "calcular la red para cinco mil usuarios",
+   "calcula la red para 5000 usuarios"
+  ],
+  [
+   "calcula la red pa 5000 usuarios",
+   "calcula la red para 5000 usuarios"
+  ],
+  [
+   "quiénes el inge",
+   "¿quién es el inge?"
+  ],
+  [
+   "bueno quien es el inge",
+   "¿quién es el inge?"
+  ],
+  [
+   "y cuanto cuesta la red para el meta",
+   "¿cuánto cuesta la red para el Meta?"
+  ],
+  [
+   "cuánto cuesta la red pal Meta",
+   "¿cuánto cuesta la red para el Meta?"
+  ],
+  [
+   "colores arco iris de menos 120 a menos 70 dbm",
+   "colores arcoíris de -120 a -70 dBm"
+  ],
+  [
+   "calores arcoíris de -120 a -70 dbm",
+   "colores arcoíris de -120 a -70 dBm"
+  ],
+  [
+   "en cada repetidor ciento cincuenta personas a un kilómetro",
+   "en cada repetidor 150 personas a 1 km"
+  ],
+  [
+   "en cada repetidora 150 personas a 1 km",
+   "en cada repetidor 150 personas a 1 km"
+  ],
+  [
+   "registra un nodo antena en 4.1 -73.2",
+   "registra un nodoantena en 4.1, -73.2"
+  ],
+  [
+   "registró un nodo antena en 4.1 menos 73.2",
+   "registra un nodoantena en 4.1, -73.2"
+  ],
+  [
+   "optimizar el costo de la red",
+   "optimiza el costo de la red"
+  ],
+  [
+   "optimiza el coste de la red",
+   "optimiza el costo de la red"
+  ],
+  [
+   "mande cinco mensajes al tiempo en un segundo",
+   "manda 5 mensajes al tiempo en 1 segundo"
+  ],
+  [
+   "manda 5 mensajes al tiempo un segundo",
+   "manda 5 mensajes al tiempo en 1 segundo"
+  ],
+  [
+   "vuelve me a hacerlo de las 11226 hectáreas de manera estable",
+   "vuélveme a hacerlo de las 11226 hectáreas de manera estable"
+  ],
+  [
+   "vuélveme a serlo de las 11.226 hectáreas de manera estable",
+   "vuélveme a hacerlo de las 11226 hectáreas de manera estable"
+  ],
+  [
+   "súbalo a 30 metros",
+   "súbelo a 30 m"
+  ],
+  [
+   "su velo a 30 m",
+   "súbelo a 30 m"
+  ],
+  [
+   "pruebas de estrés",
+   "prueba de estrés"
+  ],
+  [
+   "prueba de stress",
+   "prueba de estrés"
+  ],
+  [
+   "actívala regla",
+   "activa la regla"
+  ],
+  [
+   "active la regla",
+   "activa la regla"
+  ],
+  [
+   "llévame la antena repetidor uno",
+   "llévame a la antena Repetidor 1"
+  ],
+  [
+   "llévame a la antena del repetidor 1",
+   "llévame a la antena Repetidor 1"
+  ],
+  [
+   "llena cada repetidor hasta su limite de persona",
+   "llena cada repetidor hasta su límite de personas"
+  ],
+  [
+   "llena cada repetidor hasta el límite de personas",
+   "llena cada repetidor hasta su límite de personas"
+  ],
+  [
+   "envía un mensaje desde la persona uno",
+   "envía un mensaje desde Persona 1"
+  ],
+  [
+   "envía mensaje desde persona 1",
+   "envía un mensaje desde Persona 1"
+  ],
+  [
+   "porque no pongo más antenas",
+   "¿por qué no pongo más antenas?"
+  ],
+  [
+   "por que no pongo mas antenas",
+   "¿por qué no pongo más antenas?"
+  ],
+  [
+   "muestra la barra derriba",
+   "muestra la barra de arriba"
+  ],
+  [
+   "muestras la barra de arriba",
+   "muestra la barra de arriba"
+  ]
+ ],
+ "charla": {
+  "en": [
+   "I need to get away from here for a while",
+   "can you pass me the coffee",
+   "what time is the meeting",
+   "I'll call you back later",
+   "the weather is really nice today",
+   "did you see the game last night",
+   "my phone is almost out of battery",
+   "let's order some pizza",
+   "where did I leave my keys",
+   "I'm going to the bathroom",
+   "hold on a second",
+   "yeah that sounds good",
+   "no I don't think so",
+   "she said she would be late",
+   "how are you doing today",
+   "thanks for the help",
+   "it's too hot in here",
+   "turn on the lights please",
+   "close the door",
+   "who is that guy",
+   "I have to pick up the kids",
+   "the reporter asked a lot of questions",
+   "the note is on the table",
+   "we need more people at the party",
+   "my son is in Cumaral this weekend",
+   "is it going to rain",
+   "I forgot my password again",
+   "send me the photos",
+   "we should go north for the holidays",
+   "there are two kilometers to the store",
+   "the tower of the church is very high",
+   "that movie was similar to the book",
+   "the simulator in the arcade was fun",
+   "I want to lower my expenses",
+   "raise your hand if you agree",
+   "move your car please",
+   "delete that email",
+   "put it on the table",
+   "add sugar to the coffee",
+   "the network at the office is slow",
+   "my signal is very weak here",
+   "the antenna on the roof broke",
+   "what a great day",
+   "I love this song",
+   "let me think about it"
+  ],
+  "es": [
+   "pásame el café",
+   "a qué hora es la reunión",
+   "te llamo más tarde",
+   "qué buen día hace hoy",
+   "viste el partido de anoche",
+   "se me está acabando la batería",
+   "pidamos una pizza",
+   "dónde dejé las llaves",
+   "ya vuelvo, voy al baño",
+   "espera un segundo",
+   "sí, me parece bien",
+   "no, no creo",
+   "dijo que llegaba tarde",
+   "cómo estás hoy",
+   "gracias por la ayuda",
+   "hace mucho calor aquí",
+   "prende la luz por favor",
+   "cierra la puerta",
+   "quién es ese señor",
+   "tengo que recoger a los niños",
+   "el repartidor ya llegó con el pedido",
+   "la nota está en la mesa",
+   "necesitamos más gente en la fiesta",
+   "mi hijo está en Cumaral este fin de semana",
+   "va a llover",
+   "se me olvidó la contraseña otra vez",
+   "mándame las fotos",
+   "deberíamos ir al norte en vacaciones",
+   "son dos kilómetros hasta la tienda",
+   "la torre de la iglesia es muy alta",
+   "esa película se parece al libro",
+   "quiero bajar los gastos",
+   "levanta la mano si estás de acuerdo",
+   "mueve el carro por favor",
+   "borra ese correo",
+   "ponlo en la mesa",
+   "échale azúcar al café",
+   "la red de la oficina está lenta",
+   "aquí casi no hay señal",
+   "la antena del techo se dañó",
+   "qué día tan bueno",
+   "me encanta esta canción",
+   "déjame pensarlo",
+   "estás ahí",
+   "nuevo modo de juego"
+  ]
+ }
+}
