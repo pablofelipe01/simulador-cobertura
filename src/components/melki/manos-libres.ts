@@ -105,7 +105,8 @@ export type ControlVoz =
   | { tipo: "callar" }
   | { tipo: "repetir" }
   | { tipo: "detalle" }
-  | { tipo: "apagar" }
+  /** Dejar de atender (al reposo). `despedida`: «chao», «hasta luego»… (sin su nombre puede ser a otra persona). */
+  | { tipo: "apagar"; despedida?: boolean }
   /** Apagar del todo el micrófono (también la escucha en reposo). */
   | { tipo: "microfono" }
   | { tipo: "gracias" }
@@ -123,11 +124,12 @@ export function controlDeVoz(frase: string): ControlVoz | null {
   if (/^(apaga|desactiva|cierra|quita|deten)\w* (el |la )?(microfono|escucha( pasiva| en reposo)?)( del todo)?$|^no me escuches( mas)?$|^ya no me escuches( mas)?$|^deja de escuchar(me)? del todo$|^no escuches mas$/.test(t))
     return { tipo: "microfono" };
   if (
-    /^(apaga|desactiva|termina|cierra|sal de|quita|deten)\w* (el )?(modo )?(manos libres|escucha|microfono|jarvis|asistente( melki| de voz)?)$|^deja de escuchar(me)?$|^ya no (me )?escuches$|^no me escuches$|^(adios|chao|hasta luego|hasta pronto|nos vemos|bye|goodbye)( melki)?$/.test(
+    /^(apaga|desactiva|termina|cierra|sal de|quita|deten)\w* (el )?(modo )?(manos libres|escucha|microfono|jarvis|asistente( melki| de voz)?)$|^deja de escuchar(me)?$|^ya no (me )?escuches$|^no me escuches$/.test(
       t,
     )
   )
     return { tipo: "apagar" };
+  if (/^(adios|chao|hasta luego|hasta pronto|nos vemos|bye|goodbye)( melki)?$/.test(t)) return { tipo: "apagar", despedida: true };
   if (/^(gracias|muchas gracias|mil gracias|listo gracias|ok gracias|perfecto|perfecto gracias|excelente|genial|muy bien|vale|ok|okey|listo|thank you|thanks)$/.test(t)) return { tipo: "gracias" };
   if (/^(no|no gracias|nada|cancela|cancelalo|cancelar|olvidalo|dejalo|dejalo asi|mejor no|asi esta bien|no hagas nada)$/.test(t)) return { tipo: "no" };
   if (/^(si|claro|dale|hazlo|hagalo|hagale|de una|adelante|confirmo|correcto|exacto|aplicalo|aplica|aplicala|ponlo|ponla|si por favor|si hazlo|si dale|si claro|si adelante|ok hazlo|ok dale|yes|do it|go)( (hazlo|por favor|dale|adelante|porfa))?$/.test(t))
@@ -151,7 +153,8 @@ function controlEnIngles(t: string): ControlVoz | null {
   if (/^(repeat|repeat that|repeat it|say (that|it) again|again|come again|what did you say|sorry what|pardon|i (did not|didnt) (hear|catch) (that|you)|once more)$/.test(u)) return { tipo: "repetir" };
   if (/^(more details?|give me (more )?details?|in detail|explain( more| it| that)?|read it all|read everything|tell me everything|the full answer|tell me more|go on|keep going|and what else|what else)$/.test(u)) return { tipo: "detalle" };
   if (/^(turn off|switch off|disable|close) (the )?(microphone|mic)( completely)?$|^(do not|dont) listen to me( anymore)?$|^stop listening (completely|altogether)$/.test(u)) return { tipo: "microfono" };
-  if (/^(turn off|switch off|deactivate|disable|close|exit|stop) (the )?(hands ?free( mode)?|assistant|melki assistant|voice assistant|listening)$|^stop listening( to me)?$|^(goodbye|bye|bye bye|see you|see you later|good night)( melki)?$/.test(u)) return { tipo: "apagar" };
+  if (/^(turn off|switch off|deactivate|disable|close|exit|stop) (the )?(hands ?free( mode)?|assistant|melki assistant|voice assistant|listening)$|^stop listening( to me)?$/.test(u)) return { tipo: "apagar" };
+  if (/^(goodbye|bye|bye bye|see you|see you later|good night)( melki)?$/.test(u)) return { tipo: "apagar", despedida: true };
   if (/^(thanks|thank you|thank you very much|thanks a lot|many thanks|perfect|perfect thanks|excellent|great|very good|good job|well done|ok thanks|okay thanks|got it|ok|okay)$/.test(u)) return { tipo: "gracias" };
   if (/^(no|no thanks|no thank you|nothing|cancel|cancel it|cancel that|never ?mind|forget it|leave it|leave it like that|better not|do nothing|dont do anything|do not do anything)$/.test(u)) return { tipo: "no" };
   if (/^(yes|yeah|yep|sure|of course|do it|go ahead|go for it|confirm|confirmed|apply it|apply|correct|exactly|please do|yes please|yes do it|ok do it|okay do it|sounds good)( please)?$/.test(u)) return { tipo: "accion", indice: 0 };
@@ -277,10 +280,11 @@ export const saludoDelDia = (hora: number) =>
 
 /**
  * Las frases del asistente con el trato elegido. Con `hora` (la del equipo) saluda como una persona, según el momento
- * del día («Buenas tardes, señor. Bienvenido.»); sin ella, con «Hola».
+ * del día («Buenas tardes, señor. Bienvenido.»); sin ella, con «Hola». Con `sinNombre` (v17.2, lo normal) dice que con su
+ * barra abierta toma las órdenes sin que lo llamen; sin él, que lo llamen por su nombre.
  */
-export function frases(trato: Trato, hora?: number) {
-  if (idioma() === "en") return frasesIngles(trato, hora);
+export function frases(trato: Trato, hora?: number, sinNombre = true) {
+  if (idioma() === "en") return frasesIngles(trato, hora, sinNombre);
   const s = trato === "senor" ? "señor" : trato === "senora" ? "señora" : "";
   /** «…, señor» o nada. */
   const coma = (frase: string) => (s ? `${frase}, ${s}` : frase);
@@ -289,9 +293,13 @@ export function frases(trato: Trato, hora?: number) {
   const llamados = [coma("Dígame") + ".", coma("A sus órdenes") + ".", coma("Le escucho") + ".", `¿En qué le sirvo${s ? `, ${s}` : ""}?`];
   return {
     bienvenida: (primera: boolean) =>
-      primera
-        ? `${coma(hola)}. ${bienvenido}. Soy Melki, su asistente: estoy atento y presto a seguir sus órdenes. Cuando me necesite, diga «Hola Melki», aunque esta barra esté cerrada.`
-        : `${coma("A su servicio")}. Diga «Hola Melki» cuando me necesite.`,
+      sinNombre
+        ? primera
+          ? `${coma(hola)}. ${bienvenido}. Soy Melki, su asistente: estoy atento y presto a seguir sus órdenes. Mientras esta barra esté abierta, dígame lo que necesite sin llamarme; con la barra cerrada, diga «Hola Melki».`
+          : `${coma("A su servicio")}. Le escucho: dígame lo que necesite.`
+        : primera
+          ? `${coma(hola)}. ${bienvenido}. Soy Melki, su asistente: estoy atento y presto a seguir sus órdenes. Cuando me necesite, diga «Hola Melki», aunque esta barra esté cerrada.`
+          : `${coma("A su servicio")}. Diga «Hola Melki» cuando me necesite.`,
     llamado: (vez: number, ingles: boolean) =>
       ingles
         ? `Hello${s ? `, ${trato === "senora" ? "madam" : "sir"}` : ""}. Le escucho.`
@@ -307,7 +315,7 @@ export function frases(trato: Trato, hora?: number) {
     sinPendiente: `No tengo nada pendiente${s ? `, ${s}` : ""}. Dígame qué necesita.`,
     sinOpcion: `No tengo esa opción${s ? `, ${s}` : ""}. Dígame qué necesita.`,
     yaHecho: `Eso ya está hecho${s ? `, ${s}` : ""}. ¿Qué sigue?`,
-    yaEscucho: `Ya le estoy escuchando${s ? `, ${s}` : ""}: diga «Hola Melki» y su pedido.`,
+    yaEscucho: sinNombre ? `Ya le estoy escuchando${s ? `, ${s}` : ""}: dígame su pedido.` : `Ya le estoy escuchando${s ? `, ${s}` : ""}: diga «Hola Melki» y su pedido.`,
     /** Sugerencias cuando los paneles están ocultos (terminan en pregunta: «sí» u «ok» las acepta). */
     verResultados: `Para verlo con más detalle, ¿desea que le muestre el panel de resultados${s ? `, ${s}` : ""}?`,
     verHerramientas: `Para revisar los nodos y los parámetros, ¿le muestro el panel de herramientas${s ? `, ${s}` : ""}?`,
@@ -318,16 +326,20 @@ export function frases(trato: Trato, hora?: number) {
 }
 
 /** Las mismas frases en inglés, con la cortesía serena de un mayordomo («sir», «ma'am»). */
-function frasesIngles(trato: Trato, hora?: number) {
+function frasesIngles(trato: Trato, hora?: number, sinNombre = true) {
   const s = trato === "senor" ? "sir" : trato === "senora" ? "ma'am" : "";
   const coma = (frase: string) => (s ? `${frase}, ${s}` : frase);
   const hola = hora === undefined ? "Hello" : saludoDelDia(hora);
   const llamados = [s ? `Yes, ${s}?` : "Yes?", coma("At your service") + ".", coma("I'm listening") + ".", `How may I help you${s ? `, ${s}` : ""}?`];
   return {
     bienvenida: (primera: boolean) =>
-      primera
-        ? `${coma(hola)}. Welcome. I'm Melki, your assistant: attentive and ready to follow your orders. Whenever you need me, say “Hey Melki”, even if this bar is closed.`
-        : `${coma("At your service")}. Say “Hey Melki” whenever you need me.`,
+      sinNombre
+        ? primera
+          ? `${coma(hola)}. Welcome. I'm Melki, your assistant: attentive and ready to follow your orders. While this bar is open, just tell me what you need without calling me; with the bar closed, say “Hey Melki”.`
+          : `${coma("At your service")}. I'm listening: tell me what you need.`
+        : primera
+          ? `${coma(hola)}. Welcome. I'm Melki, your assistant: attentive and ready to follow your orders. Whenever you need me, say “Hey Melki”, even if this bar is closed.`
+          : `${coma("At your service")}. Say “Hey Melki” whenever you need me.`,
     // Llamado con un saludo («Hello Melki»): se le responde el saludo completo
     llamado: (vez: number, conSaludo?: boolean) => (vez === 0 || conSaludo ? `${coma(hola)}. I'm listening; attentive and ready to follow your orders.` : llamados[(vez - 1) % llamados.length]),
     despedida: `With your permission${s ? `, ${s}` : ""}, I'll stop listening. I'll be here whenever you need me.`,
@@ -338,7 +350,7 @@ function frasesIngles(trato: Trato, hora?: number) {
     sinPendiente: `I have nothing pending${s ? `, ${s}` : ""}. Tell me what you need.`,
     sinOpcion: `I don't have that option${s ? `, ${s}` : ""}. Tell me what you need.`,
     yaHecho: `That's already done${s ? `, ${s}` : ""}. What's next?`,
-    yaEscucho: `I'm already listening${s ? `, ${s}` : ""}: say “Hey Melki” and your request.`,
+    yaEscucho: sinNombre ? `I'm already listening${s ? `, ${s}` : ""}: tell me your request.` : `I'm already listening${s ? `, ${s}` : ""}: say “Hey Melki” and your request.`,
     verResultados: `To see it in more detail, shall I show you the results panel${s ? `, ${s}` : ""}?`,
     verHerramientas: `To review the nodes and parameters, shall I show you the tools panel${s ? `, ${s}` : ""}?`,
     mostrando: (panel: "resultados" | "herramientas") => `${coma("With pleasure")}. Here is the ${panel === "resultados" ? "results" : "tools"} panel.`,
@@ -352,13 +364,13 @@ export const SALUDO_MANOS_LIBRES = frases("senor").bienvenida(true);
 export const saludoManosLibres = () => frases("senor").bienvenida(true);
 
 export const AYUDA_VOZ =
-  "Soy el Asistente Melki: por voz entiendo lo mismo que por escrito. Dígame «Hola Melki», «Oye Melki» o «Hey Melki» y su pedido; por ejemplo: «pon el gateway en Cumaral», «conecta a los que faltan», «puebla la zona con doscientas cincuenta personas», «¿cuántas personas aguanta el Repetidor 1?», «¿cómo dejo la mayor cobertura posible?», «muestra el panel de resultados» o «pantalla limpia». Después de responder me quedo atento unos segundos: siga hablando sin repetir mi nombre. Para usar mis botones diga «sí, hazlo» o «la segunda»; también entiendo «para», «repite», «más detalle», «deshaz», «deja de escuchar» (quedo en reposo, atento a «Hola Melki») y «apaga el micrófono». Mi barra se arrastra a cualquier parte del mapa y se achica sola mientras espero. Entiendo los municipios aunque se oigan mal («ubícame en Barranca de Upía, Meta»); si dudo, le pregunto «¿se refiere a…?», y si no le entiendo, le pido que me lo repita. También: «ármame una red que cubra todo el municipio», «la zona norte del municipio», «¿dónde estamos?», y «explícame la red»: mi robot la recorre punto por punto y le escribo por qué quedó así. No hablo en voz alta: le escucho todo el tiempo, hago lo que me pida y le dejo la respuesta escrita en mi barra y en la conversación. Si quiere oírme, diga «háblame» o toque el parlante de la conversación; «no hables» me vuelve a callar.";
+  "Soy el Asistente Melki: por voz entiendo lo mismo que por escrito. Mientras mi barra esté abierta, dígame su pedido directamente, sin llamarme; por ejemplo: «pon el gateway en Cumaral», «conecta a los que faltan», «puebla la zona con doscientas cincuenta personas», «¿cuántas personas aguanta el Repetidor 1?», «¿cómo dejo la mayor cobertura posible?», «muestra el panel de resultados» o «pantalla limpia». Lo que no sea una orden lo dejo pasar. Con la barra cerrada (en reposo), diga «Hola Melki», «Oye Melki» o «Hey Melki» y su pedido. Si me habla en inglés, mi doble oído lo entiende y cambio de idioma solo. Para usar mis botones diga «sí, hazlo» o «la segunda»; también entiendo «para», «repite», «más detalle», «deshaz», «deja de escuchar» (quedo en reposo, atento a «Hola Melki») y «apaga el micrófono». Mi barra se arrastra a cualquier parte del mapa y se achica sola mientras espero. Entiendo los municipios aunque se oigan mal («ubícame en Barranca de Upía, Meta»); si dudo, le pregunto «¿se refiere a…?», y si no le entiendo, le pido que me lo repita. También: «ármame una red que cubra todo el municipio», «la zona norte del municipio», «¿dónde estamos?», y «explícame la red»: mi robot la recorre punto por punto y le escribo por qué quedó así. No hablo en voz alta: le escucho todo el tiempo, hago lo que me pida y le dejo la respuesta escrita en mi barra y en la conversación. Si quiere oírme, diga «háblame» o toque el parlante de la conversación; «no hables» me vuelve a callar.";
 
 /** La ayuda de la voz en el idioma de la pantalla. */
 export const ayudaVoz = () =>
   tx(
     AYUDA_VOZ,
-    "I'm the Melki Assistant: by voice I understand the same as in writing. Say “Hey Melki” or “Hello Melki” followed by your request; for example: “put the gateway in Cumaral”, “connect the missing ones”, “populate the zone with two hundred fifty people”, “how many people can Repeater 1 handle?”, “show the results panel” or “clean the screen”. After answering I stay attentive for a few seconds: keep talking without repeating my name. To use my buttons say “yes, do it” or “the second one”; I also understand “stop”, “repeat”, “more details”, “undo”, “stop listening” (I go on standby, attentive to “Hey Melki”) and “turn off the microphone”. My bar can be dragged anywhere on the map and shrinks while I wait. I understand municipalities even when they sound wrong (“take me to Barranca de Upía, Meta”); if I'm not sure, I ask “do you mean…?”, and if I don't understand you, I ask you to repeat it. Also: “build me a network that covers the whole municipality”, “where are we?”, and “walk me through the network”: my robot goes through it point by point and I write why it turned out that way. I don't speak out loud: I listen all the time, do what you ask and leave the answer written on my bar and in the conversation. If you want to hear me, say “talk to me” or tap the speaker in the conversation; “stop talking” silences me again. To switch languages, say “habla en español” or use the gear in the top bar.",
+    "I'm the Melki Assistant: by voice I understand the same as in writing. While my bar is open, just tell me your request, without calling me; for example: “put the gateway in Cumaral”, “connect the missing ones”, “populate the zone with two hundred fifty people”, “how many people can Repeater 1 handle?”, “show the results panel” or “clean the screen”. Anything that isn't an order I let pass. With the bar closed (on standby), say “Hey Melki” or “Hello Melki” followed by your request. If you speak to me in Spanish, my second ear understands it and I switch languages on my own. To use my buttons say “yes, do it” or “the second one”; I also understand “stop”, “repeat”, “more details”, “undo”, “stop listening” (I go on standby, attentive to “Hey Melki”) and “turn off the microphone”. My bar can be dragged anywhere on the map and shrinks while I wait. I understand municipalities even when they sound wrong (“take me to Barranca de Upía, Meta”); if I'm not sure, I ask “do you mean…?”, and if I don't understand you, I ask you to repeat it. Also: “build me a network that covers the whole municipality”, “where are we?”, and “walk me through the network”: my robot goes through it point by point and I write why it turned out that way. I don't speak out loud: I listen all the time, do what you ask and leave the answer written on my bar and in the conversation. If you want to hear me, say “talk to me” or tap the speaker in the conversation; “stop talking” silences me again. To switch languages, say “habla en español” or use the gear in the top bar.",
   );
 
 /** Palabras del simulador que ayudan a elegir entre lo que el reconocimiento cree haber oído. */

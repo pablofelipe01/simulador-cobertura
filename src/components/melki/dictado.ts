@@ -45,6 +45,11 @@ export type OpcionesDictado = {
   continuo?: boolean;
   /** Con `continuo`: se detiene sola después de este silencio (ms). Sin él, escucha hasta que la detengan. */
   silencioMax?: number;
+  /**
+   * Guarda los últimos segundos de audio del micrófono (en el computador, con el micrófono ya permitido) para volver a
+   * oír una frase con el doble oído (v17.2).
+   */
+  grabar?: boolean;
 };
 
 export type Dictado = {
@@ -57,6 +62,11 @@ export type Dictado = {
    * se estaba oyendo se descarta; al reanudar vuelve a escuchar enseguida.
    */
   pausar?: (pausado: boolean) => void;
+  /**
+   * El audio que oyó el micrófono entre esas dos horas (reloj de la página, ms), a 16 kHz; null si no se guardó (sin
+   * `grabar`, en el celular o sin el micrófono permitido todavía).
+   */
+  audio?: (desde: number, hasta: number) => Float32Array | null;
   /** Motor usado en esta sesión (para mostrarlo). */
   motor: "navegador" | "dispositivo" | "whisper";
 };
@@ -96,6 +106,11 @@ function claseReconocedor(): ClaseReconocedor | null {
 export const hayReconocimientoNavegador = () => claseReconocedor() !== null;
 /** ¿Se puede grabar el micrófono (para el dictado privado con Whisper)? */
 export const hayMicrofono = () => typeof navigator !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia);
+/**
+ * ¿La escucha seguida puede guardar el audio de los últimos segundos (para el doble oído)? En el celular y la tableta el
+ * micrófono queda solo para el reconocimiento del navegador: ahí no se graba.
+ */
+export const puedeGuardarAudio = () => hayMicrofono() && !esMovil();
 
 /* ───────────── Texto dictado → texto que Melki entiende ───────────── */
 
@@ -259,7 +274,55 @@ export function loNuevo(anterior: string, frase: string, { acumula, reciente }: 
  * que oye y para no cortar a quien sigue hablando. No pide permiso: solo si el micrófono ya está permitido. En el
  * celular no se usa (allí el micrófono no se puede abrir dos veces). Devuelve con qué cerrarlo.
  */
-async function abrirMicrofono(onNivel?: (nivel: number, voz: boolean) => void): Promise<(() => void) | null> {
+/** El micrófono abierto en paralelo: con qué cerrarlo y, si se pidió grabar, el audio de los últimos segundos. */
+type MicrofonoAbierto = { cerrar: () => void; audio: ((desde: number, hasta: number) => Float32Array | null) | null };
+
+/** Cuántos segundos de audio guarda el doble oído (una frase larga cabe de sobra). */
+const SEGUNDOS_GRABADOS = 25;
+
+/**
+ * Guarda en un anillo los últimos segundos del micrófono, con la hora de cada bloque, para recortar después la frase que
+ * no se entendió y volver a oírla (a 16 kHz, como la quiere Whisper).
+ */
+function grabadora(ctx: AudioContext, fuente: MediaStreamAudioSourceNode): { audio: (desde: number, hasta: number) => Float32Array | null; soltar: () => void } {
+  const fs = ctx.sampleRate;
+  const anillo = new Float32Array(Math.ceil(fs * SEGUNDOS_GRABADOS));
+  let escritos = 0;
+  /** Hora (reloj de la página) en que llegó el último bloque y cuántas muestras iban hasta él. */
+  let ultimo = { hora: 0, total: 0 };
+  const proc = ctx.createScriptProcessor(4096, 1, 1);
+  const silencio = ctx.createGain();
+  silencio.gain.value = 0;
+  fuente.connect(proc);
+  proc.connect(silencio);
+  silencio.connect(ctx.destination);
+  proc.onaudioprocess = (e) => {
+    const x = e.inputBuffer.getChannelData(0);
+    for (let i = 0; i < x.length; i++) anillo[(escritos + i) % anillo.length] = x[i];
+    escritos += x.length;
+    ultimo = { hora: reloj(), total: escritos };
+  };
+  const audio = (desde: number, hasta: number): Float32Array | null => {
+    if (!ultimo.hora || hasta <= desde) return null;
+    const muestra = (t: number) => Math.round(ultimo.total - ((ultimo.hora - t) * fs) / 1000);
+    const a = Math.max(muestra(desde), escritos - anillo.length + 1, 0);
+    const b = Math.min(muestra(hasta), escritos);
+    if (b - a < fs * 0.2) return null;
+    const x = new Float32Array(b - a);
+    for (let i = 0; i < x.length; i++) x[i] = anillo[(a + i) % anillo.length];
+    return a16k(x, fs);
+  };
+  return {
+    audio,
+    soltar: () => {
+      proc.onaudioprocess = null;
+      proc.disconnect();
+      silencio.disconnect();
+    },
+  };
+}
+
+async function abrirMicrofono(onNivel?: (nivel: number, voz: boolean) => void, grabar = false): Promise<MicrofonoAbierto | null> {
   if (esMovil() || !hayMicrofono()) return null;
   try {
     const p = await navigator.permissions?.query({ name: "microphone" as PermissionName });
@@ -275,17 +338,25 @@ async function abrirMicrofono(onNivel?: (nivel: number, voz: boolean) => void): 
     return null;
   }
   const soltarFlujo = () => flujo.getTracks().forEach((t) => t.stop());
-  if (!onNivel) return soltarFlujo;
+  if (!onNivel && !grabar) return { cerrar: soltarFlujo, audio: null };
   let ctx: AudioContext;
   try {
     ctx = new AudioContext();
   } catch {
-    return soltarFlujo;
+    return { cerrar: soltarFlujo, audio: null };
   }
   const fuente = ctx.createMediaStreamSource(flujo);
   const analizador = ctx.createAnalyser();
   analizador.fftSize = 1024;
   fuente.connect(analizador);
+  let grabacion: ReturnType<typeof grabadora> | null = null;
+  if (grabar) {
+    try {
+      grabacion = grabadora(ctx, fuente);
+    } catch {
+      grabacion = null;
+    }
+  }
   // Sin un toque en la página el audio queda en pausa: arranca con el primer toque o tecla
   const reanudar = () => void ctx.resume().catch(() => {});
   reanudar();
@@ -304,15 +375,19 @@ async function abrirMicrofono(onNivel?: (nivel: number, voz: boolean) => void): 
     const voz = rms > Math.max(0.012, fondo * 3);
     if (voz) ultimaVoz = reloj();
     else fondo = fondo * 0.97 + Math.min(rms, 0.05) * 0.03;
-    onNivel(Math.min(1, rms / 0.12), reloj() - ultimaVoz < 300);
+    onNivel?.(Math.min(1, rms / 0.12), reloj() - ultimaVoz < 300);
   }, 70);
-  return () => {
-    window.clearInterval(id);
-    window.removeEventListener("pointerdown", reanudar);
-    window.removeEventListener("keydown", reanudar);
-    fuente.disconnect();
-    soltarFlujo();
-    if (ctx.state !== "closed") ctx.close().catch(() => {});
+  return {
+    cerrar: () => {
+      window.clearInterval(id);
+      window.removeEventListener("pointerdown", reanudar);
+      window.removeEventListener("keydown", reanudar);
+      grabacion?.soltar();
+      fuente.disconnect();
+      soltarFlujo();
+      if (ctx.state !== "closed") ctx.close().catch(() => {});
+    },
+    audio: grabacion?.audio ?? null,
   };
 }
 
@@ -386,6 +461,8 @@ function conReconocedor(Clase: ClaseReconocedor, idioma: string, local: boolean,
   let reintento = 0;
   let ultimoSonido = reloj();
   let cerrarMic: (() => void) | null = null;
+  /** El audio que guarda el micrófono abierto en paralelo (doble oído). */
+  let audioMic: ((desde: number, hasta: number) => Float32Array | null) | null = null;
   let abriendoMic = false;
 
   /** Al volver a la pestaña, al recuperar el internet o el foco: si no estaba escuchando, vuelve enseguida. */
@@ -417,6 +494,7 @@ function conReconocedor(Clase: ClaseReconocedor, idioma: string, local: boolean,
     soltarOyentes();
     cerrarMic?.();
     cerrarMic = null;
+    audioMic = null;
     eventos.onParcial?.("", { inicio: 0 });
     eventos.onTexto(final, "");
     eventos.onEstado("inactivo");
@@ -426,11 +504,14 @@ function conReconocedor(Clase: ClaseReconocedor, idioma: string, local: boolean,
   const mantenerMicrofono = () => {
     if (!opciones.continuo || cerrarMic || abriendoMic || terminado) return;
     abriendoMic = true;
-    void abrirMicrofono(eventos.onNivel).then((cerrar) => {
+    void abrirMicrofono(eventos.onNivel, Boolean(opciones.grabar)).then((mic) => {
       abriendoMic = false;
-      if (!cerrar) return;
-      if (terminado || cancelado) cerrar();
-      else cerrarMic = cerrar;
+      if (!mic) return;
+      if (terminado || cancelado) mic.cerrar();
+      else {
+        cerrarMic = mic.cerrar;
+        audioMic = mic.audio;
+      }
     });
   };
 
@@ -590,6 +671,7 @@ function conReconocedor(Clase: ClaseReconocedor, idioma: string, local: boolean,
   arrancar();
   return {
     motor: local ? "dispositivo" : "navegador",
+    audio: opciones.grabar ? (desde: number, hasta: number) => audioMic?.(desde, hasta) ?? null : undefined,
     detener: () => {
       if (detenido || cancelado) return;
       detenido = true;
@@ -607,6 +689,7 @@ function conReconocedor(Clase: ClaseReconocedor, idioma: string, local: boolean,
       soltarOyentes();
       cerrarMic?.();
       cerrarMic = null;
+      audioMic = null;
       const r = actual;
       actual = null;
       r?.abort();
@@ -706,7 +789,8 @@ function prepararWhisper(eventos: EventosDictado): Promise<void> {
 }
 
 let siguienteId = 1;
-function transcribir(audio: Float32Array): Promise<string> {
+/** Transcribe en el trabajador (el audio se le entrega: quien lo necesite después, que mande una copia). */
+function transcribirEn(audio: Float32Array, lengua: "spanish" | "english"): Promise<string> {
   const w = obtenerTrabajador();
   const id = siguienteId++;
   return new Promise((ok, mal) => {
@@ -718,8 +802,32 @@ function transcribir(audio: Float32Array): Promise<string> {
       }
     };
     oyentes.add(oir);
-    w.postMessage({ tipo: "transcribir", id, audio, idioma: idioma() === "en" ? "english" : "spanish" }, [audio.buffer]);
+    w.postMessage({ tipo: "transcribir", id, audio, idioma: lengua }, [audio.buffer]);
   });
+}
+const transcribir = (audio: Float32Array) => transcribirEn(audio, idioma() === "en" ? "english" : "spanish");
+
+/* ───────────── Doble oído (v17.2) ───────────── */
+
+/**
+ * Prepara el doble oído: el mismo Whisper del dictado privado (la primera vez se descarga, unos 80 MB, y queda en este
+ * equipo). `alAvanzar` recibe lo que va pasando («Descargando… 34 de 80 MB»).
+ */
+export function prepararDobleOido(alAvanzar?: (detalle: string) => void): Promise<void> {
+  return prepararWhisper({
+    onTexto: () => {},
+    onError: () => {},
+    onEstado: (_e, detalle) => {
+      if (detalle) alAvanzar?.(detalle.replace(/reconocedor privado/g, tx("doble oído", "second ear")).replace(/private recognizer/g, "second ear"));
+    },
+  });
+}
+
+/** Vuelve a oír el mismo audio en cada idioma pedido (uno tras otro), sin lo que Whisper suele inventar. */
+export async function transcribirEnIdiomas(audio: Float32Array, lenguas: ("spanish" | "english")[]): Promise<string[]> {
+  const salida: string[] = [];
+  for (const lengua of lenguas) salida.push(quitarTartamudeo(limpiarWhisper(await transcribirEn(audio.slice(), lengua))));
+  return salida;
 }
 
 /** Lineal: pasa el audio a 16 kHz si el navegador no aceptó esa frecuencia. */
