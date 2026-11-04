@@ -197,17 +197,34 @@ export function disenar(pedido: PedidoDiseno, relieve: Relieve, caja: Caja): Dis
     let gw: Antena;
     if (pedido.gatewayFijo) gw = { ...pedido.gateway, id: "diseno-gateway" };
     else {
-      const centro = centroPoligono(pedido.area);
+      const centroCaja = centroPoligono(pedido.area);
+      const centros = [centroCaja];
+      // v17.2: en un área cóncava (la franja curva del lápiz de malla, un municipio en forma de C) el centro de la caja
+      // puede quedar por fuera; también se prueba alrededor del punto del área más cercano a ese centro
+      if (!dentroPoligono(centroCaja.lon, centroCaja.lat, pedido.area) && gruesa.lats.length) {
+        const mc = metrosPorGrado(centroCaja.lat);
+        let k0 = 0;
+        let menor = Infinity;
+        for (let k = 0; k < gruesa.lats.length; k++) {
+          const d = ((gruesa.lats[k] - centroCaja.lat) * mc.lat) ** 2 + ((gruesa.lons[k] - centroCaja.lon) * mc.lon) ** 2;
+          if (d < menor) {
+            menor = d;
+            k0 = k;
+          }
+        }
+        centros.push({ lat: gruesa.lats[k0], lon: gruesa.lons[k0] });
+      }
       const radioArea = Math.sqrt(areaM2 / Math.PI);
       const opciones: Antena[] = [];
-      for (const r of [0, 0.12, 0.24, 0.36]) {
-        const pasos = r === 0 ? 1 : 10;
-        for (let s = 0; s < pasos; s++) {
-          const q = r === 0 ? centro : desplazar(centro.lat, centro.lon, r * radioArea, (360 * s) / pasos);
-          if (r > 0 && !dentroPoligono(q.lon, q.lat, pedido.area)) continue;
-          opciones.push({ ...pedido.gateway, id: "diseno-gateway", lat: q.lat, lon: q.lon });
+      for (const centro of centros)
+        for (const r of [0, 0.12, 0.24, 0.36]) {
+          const pasos = r === 0 ? 1 : 10;
+          for (let s = 0; s < pasos; s++) {
+            const q = r === 0 ? centro : desplazar(centro.lat, centro.lon, r * radioArea, (360 * s) / pasos);
+            if (r > 0 && !dentroPoligono(q.lon, q.lat, pedido.area)) continue;
+            opciones.push({ ...pedido.gateway, id: "diseno-gateway", lat: q.lat, lon: q.lon });
+          }
         }
-      }
       let elegido = opciones[0];
       let mejorPuntaje = -Infinity;
       const lista = descubiertos(A);
