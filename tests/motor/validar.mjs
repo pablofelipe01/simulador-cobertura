@@ -41,6 +41,8 @@ export { Relieve } from "./src/lib/radio/relieve";
 export { evaluadorMargen, calcularCobertura, crearMalla } from "./src/lib/radio/cobertura";
 export { disenar, cajaDiseno } from "./src/lib/radio/diseno";
 export { poligonoCirculo, poligonoRectangulo, conArea, radioDeArea, areaM2, dentroPoligono, coberturaEnArea, porcentajeSobre, celdasEnPoligono, sirveAlArea } from "./src/lib/radio/area";
+export { leerTrazo } from "./src/lib/radio/trazo";
+export { analizarOptimo, sobraNodo } from "./src/lib/radio/optimo";
 export { ajustar, cajaAjuste, textoCambio, analisisAjuste, PERMISOS_AJUSTE, contornoCirculos } from "./src/lib/radio/ajuste";
 export { costoTorre, costoNodo, ALTURA_MAXIMA_M } from "./src/lib/radio/costos";
 export { costoRedTrama, OPERACION_TRAMA, SF_TRAMA } from "./src/lib/radio/trama";
@@ -731,6 +733,176 @@ caso("Sin D, todas conectadas", sinD.nodos.every((n) => n.saltos !== null));
   caso("Con un máximo de repetidores avisa que no alcanzó la meta", !corto.alcanzado && /máximo de 2/.test(corto.motivo ?? "") && corto.huecos.length > 0, `${corto.coberturaPct.toFixed(1)} %`);
   const existentes = m.disenar({ ...pedido, existentes: [gateway], gateway: null }, lomas, cajaL);
   caso("Usa el gateway que ya existe y no pone otro", existentes.nodos.every((n) => n.pieza === "repetidor") && existentes.alcanzado);
+
+  // v17.2 · La malla sobre una franja curva dibujada con el lápiz (el centro de su caja queda por fuera de la franja),
+  // con el criterio de equilibrio de Melki: señal media o mejor en el 95 % y el freno de rendimiento
+  const gL = m.metrosPorGrado(4.2);
+  const trazoCurvo = Array.from({ length: 121 }, (_, k) => {
+    const t = Math.PI * 0.15 + (Math.PI * 1.2 * k) / 120;
+    return [-73.37 + (4000 * Math.cos(t)) / gL.lon, 4.2 + (4000 * Math.sin(t)) / gL.lat];
+  });
+  const franja = m.leerTrazo(trazoCurvo, 1000);
+  const cajaF = m.cajaDiseno(franja.poligono, []);
+  const pedidoF = { area: franja.poligono, margenObjetivoDb: 30, porcentajeObjetivo: 95, existentes: [], gateway, repetidor, parametros: pd, maxRepetidores: 60, eficiencia: { minPct: 0.3 } };
+  const dF = m.disenar(pedidoF, lomas, cajaF);
+  const antsF = dF.nodos.map((n) => ({ ...(n.pieza === "gateway" ? gateway : repetidor), id: n.id, nombre: n.id, lat: n.lat, lon: n.lon }));
+  const mallaF = m.crearMalla(antsF, pd);
+  const cobF = await m.calcularCobertura(antsF, pd, lomas, mallaF);
+  const realF = m.porcentajeSobre(m.coberturaEnArea({ malla: mallaF, mejor: cobF.mejor, segundo: cobF.segundo }, franja.poligono), 30);
+  caso(
+    "Lápiz: la malla de una franja curva llega al 95 % con señal media o mejor (confirmado en el mapa)",
+    franja.tipo === "franja" && dF.alcanzado && realF >= 95,
+    `${dF.nodos.length - 1} repetidor(es) · ${realF.toFixed(1)} % en el mapa · gateway ${m.dentroPoligono(dF.nodos[0].lon, dF.nodos[0].lat, franja.poligono) ? "en la franja" : "fuera de la franja"}`,
+  );
+}
+
+// v17.2 · Lápiz de malla: el trazo a mano alzada se lee como zona (figura cerrada) o franja (trazo abierto)
+{
+  const c0 = { lat: 4.2, lon: -73.37 };
+  const g = m.metrosPorGrado(c0.lat);
+  const P = ([x, y]) => [c0.lon + x / g.lon, c0.lat + y / g.lat];
+  let semilla = 11;
+  const azar = () => (semilla = (semilla * 16807) % 2147483647) / 2147483647 - 0.5;
+  // El pulso de la mano: unos metros de temblor en cada punto
+  const mano = (pts) => pts.map(([x, y]) => P([x + 6 * azar(), y + 6 * azar()]));
+  const arco = (R, vueltas, n = 200) => Array.from({ length: n + 1 }, (_, k) => [R * Math.cos((2 * Math.PI * vueltas * k) / n), R * Math.sin((2 * Math.PI * vueltas * k) / n)]);
+  const tramos = (pts, n = 60) => {
+    const s = [];
+    for (let k = 1; k < pts.length; k++) for (let q = 0; q < n; q++) s.push([pts[k - 1][0] + ((pts[k][0] - pts[k - 1][0]) * q) / n, pts[k - 1][1] + ((pts[k][1] - pts[k - 1][1]) * q) / n]);
+    s.push(pts[pts.length - 1]);
+    return s;
+  };
+  const dentro = (l, xy) => m.dentroPoligono(...P(xy), l.poligono);
+  const simple = (r) => {
+    const cruza = (a, b, c, d) => {
+      const den = (b[0] - a[0]) * (d[1] - c[1]) - (b[1] - a[1]) * (d[0] - c[0]);
+      if (!den) return false;
+      const t = ((c[0] - a[0]) * (d[1] - c[1]) - (c[1] - a[1]) * (d[0] - c[0])) / den;
+      const u = ((c[0] - a[0]) * (b[1] - a[1]) - (c[1] - a[1]) * (b[0] - a[0])) / den;
+      return t >= 0 && t <= 1 && u >= 0 && u <= 1;
+    };
+    for (let i = 0; i < r.length; i++) for (let j = i + 2; j < r.length; j++) if (!(i === 0 && j === r.length - 1) && cruza(r[i], r[(i + 1) % r.length], r[j], r[(j + 1) % r.length])) return false;
+    return true;
+  };
+  const km2 = (l) => (l.areaM2 ?? 0) / 1e6;
+
+  const circulo = m.leerTrazo(mano(arco(3000, 1)), 1000);
+  caso("Lápiz: un círculo dibujado es una zona con su área", circulo.tipo === "zona" && cerca(km2(circulo), Math.PI * 9, 0.3) && dentro(circulo, [0, 0]) && !dentro(circulo, [3300, 0]), `${circulo.tipo} ${km2(circulo).toFixed(2)} km²`);
+  const casi = m.leerTrazo(mano(arco(3000, 0.9)), 1000);
+  const tresCuartos = m.leerTrazo(mano(arco(3000, 0.75)), 1000);
+  caso("Lápiz: casi cerrado (90 %) es zona; abierto en un cuarto es franja", casi.tipo === "zona" && tresCuartos.tipo === "franja", `${casi.tipo} · ${tresCuartos.tipo}`);
+  // Una U o una V dejan las puntas cerca, pero el final no vuelve hacia el comienzo: son trazos abiertos (franjas); el
+  // círculo al que le falta un pedazo sí vuelve hacia él (zona)
+  const u = m.leerTrazo(mano(tramos([[-300, 3000], [-300, 0], [300, 0], [300, 3000]])), 1000);
+  const v = m.leerTrazo(mano(tramos([[-400, 3000], [0, 0], [400, 3000]])), 1000);
+  const c88 = m.leerTrazo(mano(arco(3000, 0.88)), 1000);
+  caso("Lápiz: una U o una V (las puntas cerca) son franjas; el círculo al que le falta un pedazo es zona", u.tipo === "franja" && v.tipo === "franja" && c88.tipo === "zona", `${u.tipo} · ${v.tipo} · ${c88.tipo}`);
+  const pasado = m.leerTrazo(mano(arco(3000, 1.12, 224)), 1000);
+  caso("Lápiz: el trazo que se pasa del comienzo es la zona, sin la colita", pasado.tipo === "zona" && cerca(km2(pasado), Math.PI * 9, 0.5) && simple(pasado.poligono), `${pasado.tipo} ${km2(pasado).toFixed(2)} km²`);
+  const recta = m.leerTrazo(mano(tramos([[-5000, 0], [5000, 0]], 120)), 1000);
+  caso(
+    "Lápiz: una línea es una franja del ancho pedido, con puntas redondas",
+    recta.tipo === "franja" && cerca(km2(recta), 10 + Math.PI * 0.25, 0.25) && dentro(recta, [0, 440]) && dentro(recta, [0, -440]) && !dentro(recta, [0, 570]) && dentro(recta, [5400, 0]) && !dentro(recta, [5400, 400]) && !dentro(recta, [5580, 0]),
+    `${recta.tipo} ${km2(recta).toFixed(2)} km² · ${recta.poligono?.length} puntos`,
+  );
+  const ancha = m.leerTrazo(mano(tramos([[-5000, 0], [5000, 0]], 120)), 5000);
+  caso("Lápiz: el ancho elegido cambia la franja (5 km)", ancha.tipo === "franja" && cerca(km2(ancha), 50 + Math.PI * 6.25, 1.2), `${km2(ancha).toFixed(2)} km²`);
+  const idaVuelta = m.leerTrazo(mano(tramos([[-5000, 0], [5000, 0], [-5000, 40]])), 1000);
+  caso("Lápiz: ir y volver sobre la misma línea no es una zona", idaVuelta.tipo === "franja", idaVuelta.tipo);
+  const zigzag = m.leerTrazo(mano(tramos([[-6000, -3000], [-4000, 3000], [-2000, -3000], [0, 3000], [2000, -3000]])), 2000);
+  caso(
+    "Lápiz: un zigzag agudo da una franja que no se cruza a sí misma",
+    zigzag.tipo === "franja" && simple(zigzag.poligono) && [[-6000, -3000], [-4000, 3000], [-2000, -3000], [0, 3000], [2000, -3000], [-5000, 0], [1000, 0]].every((q) => dentro(zigzag, q)),
+    `${km2(zigzag).toFixed(2)} km² · ${zigzag.poligono?.length} puntos`,
+  );
+  const lobulo = (cx) => Array.from({ length: 101 }, (_, k) => [cx - Math.sign(cx) * 2000 * Math.cos((2 * Math.PI * k) / 100), 2000 * Math.sin((2 * Math.PI * k) / 100)]);
+  const ocho = m.leerTrazo(mano([...lobulo(-2000), ...lobulo(2000).slice(1)]), 1000);
+  caso("Lápiz: un ocho llena sus dos lazos", ocho.tipo === "zona" && dentro(ocho, [-2000, 0]) && dentro(ocho, [2000, 0]) && cerca(km2(ocho), 8 * Math.PI, 1.2) && simple(ocho.poligono), `${ocho.tipo} ${km2(ocho).toFixed(2)} km²`);
+  caso("Lápiz: un toque no es un dibujo", m.leerTrazo([P([0, 0]), P([1, 0])], 1000).tipo === "corto" && m.leerTrazo([P([0, 0])], 1000).tipo === "corto");
+  const t0 = performance.now();
+  const larga = m.leerTrazo(mano(tramos([[-150000, -20000], [0, 30000], [150000, -10000]], 400)), 500);
+  const ms = performance.now() - t0;
+  caso("Lápiz: una franja de 300 km queda con pocos puntos y rápido", larga.tipo === "franja" && larga.poligono.length <= 400 && ms < 3000 && cerca(km2(larga) / (larga.longitudM / 1000) / 0.5, 1, 0.05), `${larga.poligono?.length} puntos · ${ms.toFixed(0)} ms · ${km2(larga).toFixed(1)} km²`);
+  const curva = m.leerTrazo(mano(arco(3500, 0.7, 160)), 1500);
+  caso("Lápiz: una franja curva rodea el trazo (por dentro y por fuera)", curva.tipo === "franja" && simple(curva.poligono) && dentro(curva, [3500 * Math.cos(1), 3500 * Math.sin(1)]) && dentro(curva, [4150 * Math.cos(2), 4150 * Math.sin(2)]) && !dentro(curva, [0, 0]), `${km2(curva).toFixed(2)} km²`);
+}
+
+// v17.2 · El criterio de óptimo de Melki: óptimo no es más antenas sino el punto entre la estabilidad de la señal y el
+// costo. Un repetidor pegado al gateway casi no suma (su cobertura ya la dan otros): sobra; los de los extremos sí aportan
+{
+  const base = { tipo: "antena", alturaM: 15, potenciaDbm: 22, gananciaDbi: 5.8, perdidaCableDb: 1, equipo: "personalizado", rol: "REPETIDOR", activa: true, pasarela: false };
+  const po = { preset: "LONG_FAST", frecuenciaMhz: 915, alturaRxM: 1.5, gananciaRxDbi: 2, perdidaExtraDb: 0, radioKm: 12, resolucion: "rapida", limiteSaltos: 3 };
+  const c0 = { lat: 4.2, lon: -73.37 };
+  const R = (id, km, rb) => ({ ...base, id, nombre: id, ...m.desplazar(c0.lat, c0.lon, km * 1000, rb) });
+  const lista = [{ ...base, id: "g", nombre: "Gateway", ...c0, alturaM: 12, pasarela: true }, R("Este", 7, 90), R("Oeste", 7, 270), R("Pegado", 0.4, 45)];
+  const poli = m.poligonoRectangulo(c0.lat, c0.lon, 30000, 6000);
+  const conArea = await m.simular(61, lista, po, { tipo: "plano" }, ctx, { nombre: "Franja", puntos: poli, metaPct: 95, margenDb: 30 });
+  const o = m.analizarOptimo(conArea, lista, { poligono: poli, metaPct: 95, margenDb: 30 });
+  const ap = (id) => o.aportes.find((x) => x.id === id);
+  caso(
+    "Óptimo: el repetidor pegado al gateway sobra (la red cumple sin él); los de los extremos aportan",
+    o.cumple && Boolean(m.sobraNodo(o, "Pegado")) && !m.sobraNodo(o, "Este") && !m.sobraNodo(o, "Oeste") && ap("Este").unicaPct > 5 && ap("Pegado").unicaPct < 0.5,
+    `útil ${o.utilPct.toFixed(1)} % · Este ${ap("Este").unicaPct.toFixed(1)} % · Pegado ${ap("Pegado").unicaPct.toFixed(2)} % (solape ${ap("Pegado").solapePct.toFixed(0)} %)`,
+  );
+  caso("Óptimo: se pueden quitar juntos los que sobran sin bajar de la meta (nunca el gateway)", o.sobran.ids.length === 1 && o.sobran.ids[0] === "Pegado" && o.sobran.utilSinEllosPct >= 95, JSON.stringify(o.sobran));
+  const sinArea = m.analizarOptimo(await m.simular(62, lista, po, { tipo: "plano" }, ctx), lista, null);
+  caso("Óptimo sin área objetivo: sobra el que repite lo que ya cubren otros (≥ 90 %)", sinArea.metaPct === null && Boolean(m.sobraNodo(sinArea, "Pegado")) && !m.sobraNodo(sinArea, "Este") && sinArea.sobran.ids.join() === "Pegado", `${sinArea.aportes.map((x) => `${x.id} ${x.solapePct.toFixed(0)} %`).join(" · ")}`);
+  const respaldo = m.analizarOptimo(conArea, lista, { poligono: poli, metaPct: 95, margenDb: 30, respaldo: true });
+  caso("Óptimo con respaldo pedido: cubrir dos veces es la idea, no se cuestiona", !m.sobraNodo(respaldo, "Pegado") && respaldo.sobran.ids.length === 0);
+  // Un repetidor que es paso obligado (sin él otro se queda sin gateway) nunca sobra
+  const lejano = [...lista, R("Lejano", 34, 90)];
+  const rL = await m.simular(63, lejano, po, { tipo: "plano" }, ctx);
+  const oL = m.analizarOptimo(rL, lejano, null);
+  const critico = rL.nodos.find((x) => x.id === "Este")?.critico;
+  caso("Óptimo: el paso obligado hacia otro nodo no sobra", critico === true && oL.aportes.find((x) => x.id === "Este").dependientes >= 1 && !m.sobraNodo(oL, "Este") && !oL.sobran.ids.includes("Este"), `Este crítico: ${critico}`);
+
+  // Una red de mentira de 4 × 4 celdas: el gateway G, y los repetidores A y B, cubren las tres primeras filas; C, más allá,
+  // la última, y solo llega al gateway por A o por B. Ninguno de los dos es paso obligado por sí solo, pero juntos sí
+  const total = 16;
+  const caja = { oeste: -73.4, este: -73.36, sur: 4.18, norte: 4.22 };
+  const fila = (v, w) => Float32Array.from({ length: total }, (_, i) => (i < 12 ? v : w));
+  const capas = [fila(40, -60), fila(35, -60), fila(35, -60), fila(-60, 45)];
+  const porAntena = new Int8Array(4 * total);
+  capas.forEach((x, a) => x.forEach((v, i) => (porAntena[a * total + i] = Math.round(v))));
+  const mejor = Float32Array.from({ length: total }, (_, i) => Math.max(...capas.map((x) => x[i])));
+  const rM = {
+    malla: { caja, ancho: 4, alto: 4 },
+    mejor,
+    segundo: Float32Array.from({ length: total }, () => 10),
+    porAntena,
+    areaEstudioKm2: 19.7,
+    areaObjetivo: null,
+    antenas: ["G", "A", "B", "C"].map((id) => ({ id, nombre: id })),
+    nodos: [
+      { id: "G", critico: false, ruta: ["G"] },
+      { id: "A", critico: false, ruta: ["A", "G"] },
+      { id: "B", critico: false, ruta: ["B", "G"] },
+      { id: "C", critico: false, ruta: ["C", "A", "G"] },
+    ],
+    enlaces: [
+      { a: "G", b: "A", clase: "buena" },
+      { a: "G", b: "B", clase: "buena" },
+      { a: "A", b: "C", clase: "media" },
+      { a: "B", b: "C", clase: "media" },
+      { a: "G", b: "C", clase: "sin" },
+    ],
+  };
+  const infraM = [{ id: "G", nombre: "G", pasarela: true, rol: "REPETIDOR" }, ...["A", "B", "C"].map((id) => ({ id, nombre: id, rol: "REPETIDOR" }))];
+  const oM = m.analizarOptimo(rM, infraM, null);
+  caso("Óptimo: dos repetidores que juntos son el paso de otro nodo no se quitan juntos (uno de los dos sí)", oM.sobran.ids.length === 1 && ["A", "B"].includes(oM.sobran.ids[0]), JSON.stringify(oM.sobran.ids));
+  // Con respaldo pedido, la meta se mide con el segundo mejor nodo, como en el panel de resultados
+  const cuadro = [[caja.oeste, caja.sur], [caja.este, caja.sur], [caja.este, caja.norte], [caja.oeste, caja.norte]];
+  const conRespaldo = m.analizarOptimo(rM, infraM, { poligono: cuadro, metaPct: 95, margenDb: 30, respaldo: true });
+  const sinRespaldo = m.analizarOptimo(rM, infraM, { poligono: cuadro, metaPct: 95, margenDb: 30 });
+  caso("Óptimo: con respaldo la meta se mide con el segundo mejor nodo (como el panel)", conRespaldo.utilPct < 5 && conRespaldo.cumple === false && sinRespaldo.utilPct > 95 && sinRespaldo.cumple === true, `${conRespaldo.utilPct.toFixed(1)} % con respaldo · ${sinRespaldo.utilPct.toFixed(1)} % sin él`);
+  // El repetidor que deja la red en la meta (con él 95,3 %; sin él, 94,9 % de 95 %) hace falta; si la red cumple sin él, o
+  // si no llega ni con él y lo suyo ya lo cubren otros, se cuestiona
+  const aporte = (x = {}) => ({ id: "X", nombre: "X", gateway: false, propiaKm2: 1, unicaKm2: 0.004, unicaPct: 0.4, solapePct: 95, dependientes: 0, ...x });
+  const analisis = (x = {}, a = aporte()) => ({ donde: "objetivo", areaKm2: 1, margenDb: 30, utilPct: 95.3, metaPct: 95, cumple: true, respaldo: false, aportes: [a], sobran: { ids: [], utilSinEllosPct: 0 }, ...x });
+  caso(
+    "Óptimo: el que deja la red en su meta no se cuestiona; el que sobra con la meta cumplida, o el que repite lo de otros sin llegar a ella, sí",
+    m.sobraNodo(analisis(), "X") === null && Boolean(m.sobraNodo(analisis({ utilPct: 99 }), "X")) && Boolean(m.sobraNodo(analisis({ utilPct: 80, cumple: false }), "X")) && m.sobraNodo(analisis({ utilPct: 80, cumple: false }, aporte({ solapePct: 50 })), "X") === null,
+  );
 }
 
 // Ajuste inteligente (v11): red factible con la mejor relación cobertura–costo, sin torres de más de 30 m
