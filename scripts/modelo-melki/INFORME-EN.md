@@ -1,6 +1,6 @@
 # Modelo Melki en inglés · informe del entrenamiento
 
-Versión 1.0-en. Generado con `npm run modelo:entrenar -- --idioma en` (semilla 20261031; con la misma semilla sale el mismo modelo). Lo usa Melki con la pantalla en inglés: entiende QUÉ se pide (las mismas 150 intenciones del modelo en español); los datos del pedido y la orden que se hace siguen en español.
+Versión 1.0-en. Generado con `npm run modelo:entrenar -- --idioma en` (semilla 20261031; con la misma semilla sale el mismo modelo). Lo usa Melki con lo que le dicen en inglés (v17.3: también con la pantalla en español): entiende QUÉ se pide (las mismas 150 intenciones del modelo en español); los datos del pedido y la orden que se hace siguen en español.
 
 ## Lo que es
 
