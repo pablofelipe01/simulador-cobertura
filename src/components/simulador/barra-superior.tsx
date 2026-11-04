@@ -40,7 +40,7 @@ type Props = {
   /** Panel izquierdo (en el escritorio): cuando está oculto aparece aquí el botón para volver a abrirlo. */
   panelIzquierdo: boolean;
   onPanelIzquierdo: () => void;
-  /** Asistente Melki: escucha todo el tiempo y se activa con «Hola Melki». */
+  /** Asistente Melki: con su barra abierta toma las órdenes sin su nombre; en reposo se activa con «Hola Melki». */
   manosLibres: boolean;
   onManosLibres: () => void;
   /** Buscador; recibe una función para cerrarlo (en pantallas angostas se abre en una fila aparte). */
@@ -184,7 +184,7 @@ export function BarraSuperior(p: Props) {
           title={
             p.manosLibres
               ? tx("Apagar el Asistente Melki (o diga «Melki, deja de escuchar»)", "Turn off the Melki Assistant (or say “Melki, stop listening”)")
-              : tx("Asistente Melki: le escucha todo el tiempo y se activa cuando dice «Hola Melki»", "Melki Assistant: listens all the time and wakes up when you say “Hey Melki”")
+              : tx("Asistente Melki: con su barra abierta toma sus órdenes por voz sin que lo llame (en reposo, diga «Hola Melki»)", "Melki Assistant: with its bar open it takes your orders by voice without you calling it (on standby, say “Hey Melki”)")
           }
           aria-label={p.manosLibres ? tx("Apagar el Asistente Melki", "Turn off the Melki Assistant") : tx("Activar el Asistente Melki", "Turn on the Melki Assistant")}
         >

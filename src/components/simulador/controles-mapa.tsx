@@ -6,7 +6,7 @@
 "use client";
 
 // Controles sobre el mapa: herramienta (incluida la regla), tipo de nodo, modo de color, capas, leyenda e inspector de puntos.
-import { Crosshair, Flag, Hand, Layers, MapPin, Ruler, Smartphone, X } from "lucide-react";
+import { Crosshair, Flag, Hand, Layers, MapPin, Pencil, Ruler, Smartphone, X } from "lucide-react";
 import { useEffect, useRef, useState, type Dispatch } from "react";
 
 import { numeroLocal, tx } from "@/lib/idioma";
@@ -153,9 +153,15 @@ export function BarraMapa({ estado, despachar }: { estado: Estado; despachar: Di
               : { valor: "agregar", texto: <><Crosshair size={15} /> <span className={corto}>{tx("Agregar", "Add")}</span></>, titulo: tx("Clic en el mapa para agregar un nodo", "Click the map to add a node") },
             { valor: "inspeccionar", texto: <><MapPin size={15} /> <span className={corto}>{tx("Medir señal", "Measure signal")}</span></>, titulo: tx("Clic en el mapa para ver la señal de cada nodo antena en ese punto", "Click the map to see the signal of each antenna node at that point") },
             { valor: "regla", texto: <><Ruler size={15} /> <span className={corto}>{tx("Regla", "Ruler")}</span></>, titulo: tx("Medir distancias, trayectos y áreas, como en Google Earth", "Measure distances, paths and areas, as in Google Earth") },
+            {
+              valor: "lapiz",
+              texto: <><Pencil size={15} /> <span className={corto}>{tx("Lápiz", "Pencil")}</span></>,
+              titulo: tx("Lápiz de malla: dibuje a mano dónde va la malla y Melki la arma ahí con el mejor equilibrio entre señal y costo", "Mesh pencil: draw by hand where the mesh goes and Melki builds it there with the best balance between signal and cost"),
+            },
           ]}
         />
       </div>
+      {estado.herramienta === "lapiz" && <AyudaLapiz anchoM={estado.lapizAnchoM} despachar={despachar} />}
       {estado.herramienta === "agregar" && sembrar && (
         <div className="pointer-events-auto" data-tour="pieza-mapa">
           <Segmentado<Pieza>
@@ -203,6 +209,43 @@ export function BarraMapa({ estado, despachar }: { estado: Estado; despachar: Di
         />
       </div>
       <MenuCapas estado={estado} despachar={despachar} />
+    </div>
+  );
+}
+
+/** Anchos de la franja que cubre un trazo abierto del lápiz de malla (m). */
+export const ANCHOS_LAPIZ = [500, 1000, 2000, 5000] as const;
+
+/**
+ * v17.2 · Lápiz de malla: la ayuda mientras está armado. Una figura cerrada es una zona; una línea, una franja del ancho
+ * elegido (una vía, un río, una cerca).
+ */
+function AyudaLapiz({ anchoM, despachar }: { anchoM: number; despachar: Dispatch<Accion> }) {
+  useIdioma();
+  return (
+    <div className="pointer-events-auto flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-melki px-3 py-1.5 text-[13px] font-medium text-white shadow-sm" role="status" data-tour="lapiz-ayuda">
+      <Pencil size={15} aria-hidden="true" />
+      <span>{tx("Cierre la figura para una zona o trace una línea para una franja de", "Close the shape for a zone or trace a line for a strip:")}</span>
+      {/* El ancho y la X van juntos: si no caben, bajan los dos a la línea de abajo */}
+      <span className="flex items-center gap-1">
+        <span className="flex items-center gap-0.5" role="group" aria-label={tx("Ancho de la franja", "Strip width")}>
+          {ANCHOS_LAPIZ.map((v) => (
+            <button
+              key={v}
+              type="button"
+              aria-pressed={anchoM === v}
+              title={tx(`Franja de ${numeroLocal(v / 1000)} km de ancho`, `Strip ${numeroLocal(v / 1000)} km wide`)}
+              onClick={() => despachar({ tipo: "lapiz-ancho", valor: v })}
+              className={`rounded px-1.5 py-0.5 text-[12px] whitespace-nowrap tabular-nums ${anchoM === v ? "bg-white text-carbon" : "ring-1 ring-white/50 hover:bg-white/20"}`}
+            >
+              {numeroLocal(v / 1000)} km
+            </button>
+          ))}
+        </span>
+        <button type="button" onClick={() => despachar({ tipo: "herramienta", herramienta: "mover" })} className="-mr-1 rounded p-0.5 hover:bg-white/20" aria-label={tx("Soltar el lápiz", "Put the pencil down")} title={tx("Soltar el lápiz (Esc)", "Put the pencil down (Esc)")}>
+          <X size={15} />
+        </button>
+      </span>
     </div>
   );
 }

@@ -19,7 +19,8 @@ export type ModoMapa = "senal" | "servidor" | "redundancia";
 /** Escala de colores del mapa de señal: clases fijas, arcoíris entre dos niveles o un solo umbral. */
 export type EscalaSenal = "clases" | "arcoiris" | "umbral";
 /** «destino»: el próximo clic en el mapa elige el punto hacia el que se siembra la malla. */
-export type Herramienta = "mover" | "agregar" | "inspeccionar" | "regla" | "destino";
+/** v17.2: «lapiz» dibuja a mano alzada dónde va la malla (una zona cerrada o un trazo con su franja). */
+export type Herramienta = "mover" | "agregar" | "inspeccionar" | "regla" | "destino" | "lapiz";
 /** Modo de la pantalla: «Sembrar la malla» (sencillo, por piezas) o el modo avanzado con todos los paneles. */
 export type ModoApp = "sembrar" | "avanzado";
 export type FondoMapa = "satelite" | "topografico" | "opentopomap" | "calles";
@@ -69,6 +70,8 @@ export type Estado = {
   /** Tipo de medición de la regla y medición seleccionada. */
   reglaTipo: TipoMedicion;
   medicionSel: string | null;
+  /** Ancho de la franja que cubre un trazo abierto del lápiz de malla (m). */
+  lapizAnchoM: number;
   relieve: TipoRelieve;
   autoSimular: boolean;
   modo: ModoApp;
@@ -197,6 +200,7 @@ export type Accion =
   | { tipo: "herramienta"; herramienta: Herramienta }
   | { tipo: "tipo-nuevo"; valor: TipoNodo }
   | { tipo: "regla-tipo"; valor: TipoMedicion }
+  | { tipo: "lapiz-ancho"; valor: number }
   | { tipo: "medicion-agregar"; medicion: Medicion }
   | { tipo: "medicion-editar"; id: string; cambios: Partial<Medicion> }
   | { tipo: "medicion-eliminar"; id: string }
@@ -290,6 +294,8 @@ export function reductor(e: Estado, a: Accion): Estado {
       return { ...e, tipoNuevo: a.valor };
     case "regla-tipo":
       return { ...e, reglaTipo: a.valor };
+    case "lapiz-ancho":
+      return { ...e, lapizAnchoM: a.valor };
     case "medicion-agregar":
       return { ...conMediciones(e, [...mediciones, a.medicion]), medicionSel: a.medicion.id };
     case "medicion-editar":
@@ -360,6 +366,7 @@ export function estadoInicial(): Estado {
     tipoNuevo: "antena",
     reglaTipo: "trayecto",
     medicionSel: null,
+    lapizAnchoM: 1000,
     relieve: "teselas",
     autoSimular: true,
     modo: leerModo(),

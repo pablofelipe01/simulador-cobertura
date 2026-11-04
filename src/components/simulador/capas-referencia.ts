@@ -233,8 +233,16 @@ export class EtiquetasReferencia {
   private medidas = new Map<string, number>();
   private ultimo = 0;
   private pendiente = 0;
-  private alMover = () => this.actualizar();
-  private alZoom = () => this.programar();
+  /** Mientras el zoom se mueve, los nombres que entran o salen de su franja se desvanecen; quieto, todos van enteros. */
+  private enZoom = false;
+  private alMover = () => {
+    this.enZoom = false;
+    this.actualizar();
+  };
+  private alZoom = () => {
+    this.enZoom = true;
+    this.programar();
+  };
 
   constructor(private m: MapaML) {
     m.on("moveend", this.alMover);
@@ -348,7 +356,11 @@ export class EtiquetasReferencia {
       l.push({ x, y });
       porNombre.set(grupo, l);
     };
-    const opacidad = (minZ: number, maxZ: number) => Math.max(0, Math.min(1, minZ <= m.getMinZoom() + 0.01 ? 1 : (z - minZ) / 0.35 + 0.15, maxZ >= 22 ? 1 : (maxZ - z) / 0.35 + 0.15));
+    // Con el mapa quieto ningún nombre queda a medias (el zoom inicial, 5,5, es justo donde empiezan las capitales de
+    // departamento): el desvanecido es solo para la transición mientras se acerca o se aleja
+    const quieto = !this.enZoom;
+    const opacidad = (minZ: number, maxZ: number) =>
+      quieto ? 1 : Math.max(0, Math.min(1, minZ <= m.getMinZoom() + 0.01 ? 1 : (z - minZ) / 0.35 + 0.15, maxZ >= 22 ? 1 : (maxZ - z) / 0.35 + 0.15));
 
     // Candidatos en orden de importancia: primero los países y las aguas grandes; los ríos entran por su prioridad
     type Turno = { prioridad: number; punto?: Punto; rio?: Rio };

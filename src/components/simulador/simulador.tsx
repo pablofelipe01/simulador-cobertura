@@ -74,6 +74,7 @@ import { ALTURA_REPETIDOR_DEFECTO, ALTURAS_REPETIDOR, escenarioMalla, nombreLibr
 import { PerfilEnlace } from "./perfil-enlace";
 import { PerfilTerrenoPanel } from "./perfil-terreno";
 import { CoordenadasCursor, MenuContextual, TarjetaNodo, TarjetaPunto, type AccionPunto } from "./puntos-mapa";
+import { Lapiz } from "./lapiz";
 import { Regla } from "./regla";
 import { Interruptor, Segmentado } from "./ui";
 
@@ -1363,13 +1364,13 @@ export function Simulador() {
     despachar({ tipo: "pieza", pieza: "gateway" });
   };
 
-  // Escape suelta la herramienta de poner piezas o de elegir el destino
+  // Escape suelta la herramienta de poner piezas, de elegir el destino o el lápiz de malla
   useEffect(() => {
     const soltar = (ev: KeyboardEvent) => {
       if (ev.key !== "Escape") return;
       const h = ultimo.current.estado.herramienta;
       const t = ev.target as HTMLElement | null;
-      if ((h === "agregar" || h === "destino") && !t?.closest("input, textarea, select, [role=dialog]")) despachar({ tipo: "herramienta", herramienta: "mover" });
+      if ((h === "agregar" || h === "destino" || h === "lapiz") && !t?.closest("input, textarea, select, [role=dialog]")) despachar({ tipo: "herramienta", herramienta: "mover" });
     };
     window.addEventListener("keydown", soltar);
     return () => window.removeEventListener("keydown", soltar);
@@ -2242,6 +2243,7 @@ export function Simulador() {
           </button>
           <BarraMapa estado={estado} despachar={despachar} />
           <Regla mapa={mapa} estado={estado} despachar={despachar} onPerfil={abrirPerfilTerreno} onCentrar={encuadrarCaja} semilla={semillaRegla} />
+          <Lapiz mapa={mapa} estado={estado} despachar={despachar} />
           <CoordenadasCursor mapa={mapa} />
           {seleccionada && estado.herramienta !== "regla" && (
             <TarjetaNodo
