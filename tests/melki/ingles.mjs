@@ -458,6 +458,9 @@ const enIngles = (t) => !RASTRO.test(sinNombres(t));
     ["Thank you very much", "gracias", null],
     ["Hello", "saludo", /^Hello! I'm Melki/],
     ["Where is the toolbar?", "barra", /little arrow in the top right corner/],
+    ["How does the pencil work?", "lapiz", /^The mesh pencil is on the map bar/],
+    ["How do I use the pencil?", "lapiz", /^The mesh pencil is on the map bar/],
+    ["What is an optimal network?", "analista", /Optimal isn't the network with the most antennas/],
   ];
   const malas = [];
   for (const [q, tema, texto] of preguntas) {
