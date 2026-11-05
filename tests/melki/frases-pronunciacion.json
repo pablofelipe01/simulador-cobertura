@@ -1,8 +1,8 @@
 {
- "descripcion": "v17.4 · Frases dichas con mala pronunciación, como las escribe el reconocimiento de voz (en-US con acento colombiano; es-CO rápido), con la frase bien dicha: [lo oído, lo que se quiso decir]. Las escribieron a ciegas, sin ver el código, en tres tandas (la tercera se midió antes de tocar nada por ella). «charla»: conversación cercana que no debe volverse una orden. «minimo»: el porcentaje que debe entenderse.",
+ "descripcion": "v17.5 · Frases dichas con mala pronunciación, como las escribe el reconocimiento de voz (en-US con acento colombiano; es-CO rápido), con la frase bien dicha: [lo oído, lo que se quiso decir]. Las escribieron a ciegas, sin ver el código, en cinco tandas (la tercera, la cuarta y la quinta se midieron antes de tocar nada por ellas). «charla»: conversación cercana que no debe volverse una orden (con el asistente sin su nombre, como la deja pasar). «minimo»: el porcentaje que debe entenderse.",
  "minimo": {
-  "en": 83,
-  "es": 90
+  "en": 94,
+  "es": 95
  },
  "en": [
   [
@@ -3060,6 +3060,1486 @@
   [
    "grub the pencil",
    "Grab the pencil"
+  ],
+  [
+   "at a repeater 3 km not of the gateway",
+   "add a repeater 3 km north of the gateway"
+  ],
+  [
+   "put a person add 4.27 minus 73.49",
+   "put a person at 4.27, -73.49"
+  ],
+  [
+   "place the gateway in Kumar al",
+   "place the gateway in Cumaral"
+  ],
+  [
+   "add a person 500 meters south of repeat her 1",
+   "add a person 500 meters south of Repeater 1"
+  ],
+  [
+   "please put a repeater 1 km guest of person 2",
+   "please put a repeater 1 km west of Person 2"
+  ],
+  [
+   "put the gate way in Restrepo",
+   "put the gateway in Restrepo"
+  ],
+  [
+   "okay add another person near repeater to",
+   "okay, add another person near Repeater 2"
+  ],
+  [
+   "put a repeater half way between the gateway and Pearson 1",
+   "put a repeater halfway between the gateway and Person 1"
+  ],
+  [
+   "at a person in Baranca de Opia",
+   "add a person in Barranca de Upía"
+  ],
+  [
+   "put a repeat her at 4.31 minus 73.52",
+   "put a repeater at 4.31, -73.52"
+  ],
+  [
+   "can you add a person 2 km nor east of the gateway",
+   "can you add a person 2 km northeast of the gateway?"
+  ],
+  [
+   "please put a repeater necks to tower 2",
+   "please put a repeater next to Tower 2"
+  ],
+  [
+   "milky add a repeater 800 meters from person won",
+   "Melki, add a repeater 800 meters from Person 1"
+  ],
+  [
+   "put the gateway in Porto Lopez",
+   "put the gateway in Puerto López"
+  ],
+  [
+   "add a person 1.5 km south guest of repeater 2",
+   "add a person 1.5 km southwest of Repeater 2"
+  ],
+  [
+   "hey milky add a repeater 2 km south of person 2",
+   "hey Melki, add a repeater 2 km south of Person 2"
+  ],
+  [
+   "plays a person 300 meters east of tower 2",
+   "place a person 300 meters east of Tower 2"
+  ],
+  [
+   "um put a person in Villa Nueva",
+   "um, put a person in Villanueva"
+  ],
+  [
+   "add up person 1 km north of repeater one",
+   "add a person 1 km north of Repeater 1"
+  ],
+  [
+   "okay put a repeater for km west of the gateway",
+   "okay, put a repeater 4 km west of the gateway"
+  ],
+  [
+   "but a person at 4.15 negative 73.61",
+   "put a person at 4.15, -73.61"
+  ],
+  [
+   "could you place the gateway in Villa Vicencio",
+   "could you place the gateway in Villavicencio?"
+  ],
+  [
+   "move repeater to one kilometer east",
+   "move Repeater 2 one kilometer east"
+  ],
+  [
+   "move person one close to the gate way",
+   "move Person 1 close to the gateway"
+  ],
+  [
+   "move the gateway 500 meter south",
+   "move the gateway 500 meters south"
+  ],
+  [
+   "could you move repeater one 2 km to the guest",
+   "could you move Repeater 1 2 km to the west?"
+  ],
+  [
+   "bring person to closer to repeater one",
+   "bring Person 2 closer to Repeater 1"
+  ],
+  [
+   "move tower to 300 meters north",
+   "move Tower 2 300 meters north"
+  ],
+  [
+   "move person one to Cumaral",
+   "move Person 1 to Cumaral"
+  ],
+  [
+   "move repeater two to 4.22 minus 73.4",
+   "move Repeater 2 to 4.22, -73.40"
+  ],
+  [
+   "move example 1 km north east",
+   "move Ejemplo 1 km northeast"
+  ],
+  [
+   "please move the gateway 200 meters ease",
+   "please move the gateway 200 meters east"
+  ],
+  [
+   "can you move person to next to repeater too",
+   "can you move Person 2 next to Repeater 2?"
+  ],
+  [
+   "move repeater 1 to rest repo",
+   "move Repeater 1 to Restrepo"
+  ],
+  [
+   "move person 1 closer to tower too",
+   "move Person 1 closer to Tower 2"
+  ],
+  [
+   "ok move repeater 2 have a kilometer south",
+   "okay, move Repeater 2 half a kilometer south"
+  ],
+  [
+   "move the get away to Granada",
+   "move the gateway to Granada"
+  ],
+  [
+   "move repeater 1 near person to",
+   "move Repeater 1 near Person 2"
+  ],
+  [
+   "okay Melki delete repeat her one",
+   "okay Melki, delete Repeater 1"
+  ],
+  [
+   "remove person to",
+   "remove Person 2"
+  ],
+  [
+   "delete all the peoples",
+   "delete all the people"
+  ],
+  [
+   "get read of tower 2",
+   "get rid of Tower 2"
+  ],
+  [
+   "delete all the re peaters",
+   "delete all the repeaters"
+  ],
+  [
+   "remove example",
+   "remove Ejemplo"
+  ],
+  [
+   "please the lead person 1",
+   "please delete Person 1"
+  ],
+  [
+   "a race repeater 2",
+   "erase Repeater 2"
+  ],
+  [
+   "remove repeater one on repeater two",
+   "remove Repeater 1 and Repeater 2"
+  ],
+  [
+   "can you delete the tower 2",
+   "can you delete Tower 2?"
+  ],
+  [
+   "please clear all the people from the mop",
+   "please clear all the people from the map"
+  ],
+  [
+   "hey Mel key delete repeater 2",
+   "hey Melki, delete Repeater 2"
+  ],
+  [
+   "race repeater 2 to 30 meters",
+   "raise Repeater 2 to 30 meters"
+  ],
+  [
+   "lower repeater one too 10 m",
+   "lower Repeater 1 to 10 m"
+  ],
+  [
+   "lower eat for meters",
+   "lower it 4 meters"
+  ],
+  [
+   "now raise all the repeater 6 meters",
+   "now raise all the repeaters 6 meters"
+  ],
+  [
+   "make the gate way 20 meters tall",
+   "make the gateway 20 meters tall"
+  ],
+  [
+   "set the eight of tower 2 to 40 meters",
+   "set the height of Tower 2 to 40 meters"
+  ],
+  [
+   "raise example 2 meters",
+   "raise Ejemplo 2 meters"
+  ],
+  [
+   "lower person 1 to one point five meters",
+   "lower Person 1 to 1.5 meters"
+  ],
+  [
+   "put repeater 1 at 18 meters I",
+   "put Repeater 1 at 18 meters high"
+  ],
+  [
+   "can you raise the gateway 5 more meter",
+   "can you raise the gateway 5 more meters?"
+  ],
+  [
+   "drop repeater to down 5 meters",
+   "drop Repeater 2 down 5 meters"
+  ],
+  [
+   "raise eat 10 meters",
+   "raise it 10 meters"
+  ],
+  [
+   "okay said repeater 2 to 35 meters high",
+   "okay, set Repeater 2 to 35 meters high"
+  ],
+  [
+   "raise person 2 to tree meters",
+   "raise Person 2 to 3 meters"
+  ],
+  [
+   "can you rename repeater 2 to green heel",
+   "can you rename Repeater 2 to Green Hill?"
+  ],
+  [
+   "re name the gateway to base station",
+   "rename the gateway to Base Station"
+  ],
+  [
+   "change the name of person to to big farm",
+   "change the name of Person 2 to Big Farm"
+  ],
+  [
+   "rename tower 2 to Walter tower",
+   "rename Tower 2 to Water Tower"
+  ],
+  [
+   "rename example to main antenna",
+   "rename Ejemplo to Main Antenna"
+  ],
+  [
+   "please rename repeater 1 to a school",
+   "please rename Repeater 1 to School"
+  ],
+  [
+   "rename person 1 to help center",
+   "rename Person 1 to Health Center"
+  ],
+  [
+   "rename repeater to to mirror door",
+   "rename Repeater 2 to Mirador"
+  ],
+  [
+   "stimulate",
+   "simulate"
+  ],
+  [
+   "okay simulated again",
+   "okay, simulate again"
+  ],
+  [
+   "turn on simulate and change",
+   "turn on simulate on change"
+  ],
+  [
+   "Ron the simulation",
+   "run the simulation"
+  ],
+  [
+   "please simulate the net work",
+   "please simulate the network"
+  ],
+  [
+   "turn of simulate on change",
+   "turn off simulate on change"
+  ],
+  [
+   "hey Melky simulate again please",
+   "hey Melki, simulate again please"
+  ],
+  [
+   "a start the simulation",
+   "start the simulation"
+  ],
+  [
+   "please show the rose",
+   "please show the roads"
+  ],
+  [
+   "hide the reverse",
+   "hide the rivers"
+  ],
+  [
+   "switch to the satellite view",
+   "switch to satellite view"
+  ],
+  [
+   "typographic map",
+   "topographic map"
+  ],
+  [
+   "show me the hole network",
+   "show me the whole network"
+  ],
+  [
+   "I'd the tools please",
+   "hide the tools please"
+  ],
+  [
+   "zooming",
+   "zoom in"
+  ],
+  [
+   "some out",
+   "zoom out"
+  ],
+  [
+   "turn on the rivers later",
+   "turn on the rivers layer"
+  ],
+  [
+   "height the roads",
+   "hide the roads"
+  ],
+  [
+   "switch to this street map",
+   "switch to the street map"
+  ],
+  [
+   "zoom in a beet",
+   "zoom in a bit"
+  ],
+  [
+   "show me all the notes",
+   "show me all the nodes"
+  ],
+  [
+   "center the mop on the gateway",
+   "center the map on the gateway"
+  ],
+  [
+   "hide the panel",
+   "hide the panels"
+  ],
+  [
+   "show the tool",
+   "show the tools"
+  ],
+  [
+   "can you show me the whole net work",
+   "can you show me the whole network?"
+  ],
+  [
+   "which to the topographic map",
+   "switch to the topographic map"
+  ],
+  [
+   "satellite mop please",
+   "satellite map please"
+  ],
+  [
+   "hey Malki hide the roads on the rivers",
+   "hey Melki, hide the roads and the rivers"
+  ],
+  [
+   "show me the rods",
+   "show me the roads"
+  ],
+  [
+   "Melki turn on the roller",
+   "Melki, turn on the ruler"
+  ],
+  [
+   "grabbed the pencil",
+   "grab the pencil"
+  ],
+  [
+   "major the distance between the gateway and repeater one",
+   "measure the distance between the gateway and Repeater 1"
+  ],
+  [
+   "but down the pencil",
+   "put down the pencil"
+  ],
+  [
+   "turn off the rule",
+   "turn off the ruler"
+  ],
+  [
+   "juice the ruler",
+   "use the ruler"
+  ],
+  [
+   "measures from person 1 to tower 2",
+   "measure from Person 1 to Tower 2"
+  ],
+  [
+   "activated the pencil",
+   "activate the pencil"
+  ],
+  [
+   "please turn on the measure in tool",
+   "please turn on the measuring tool"
+  ],
+  [
+   "let's go of the pencil",
+   "let go of the pencil"
+  ],
+  [
+   "please bill me a network for km around the gateway",
+   "please build me a network 4 km around the gateway"
+  ],
+  [
+   "design a mess for Restrepo",
+   "design a mesh for Restrepo"
+  ],
+  [
+   "cover 800 Hector's around here",
+   "cover 800 hectares around here"
+  ],
+  [
+   "the sign a network for Puerto Lopez",
+   "design a network for Puerto López"
+  ],
+  [
+   "make a match that covers Villa Nueva",
+   "make a mesh that covers Villanueva"
+  ],
+  [
+   "plan a network to km around repeater 1",
+   "plan a network 2 km around Repeater 1"
+  ],
+  [
+   "build a mesh to cover 300 hectare around the gateway",
+   "build a mesh to cover 300 hectares around the gateway"
+  ],
+  [
+   "can you design a net work for Granada",
+   "can you design a network for Granada?"
+  ],
+  [
+   "design the network around tower 2 with a 5 km radios",
+   "design the network around Tower 2 with a 5 km radius"
+  ],
+  [
+   "build me a mesh for barranca de pia",
+   "build me a mesh for Barranca de Upía"
+  ],
+  [
+   "hey Melki design a network for yo pal",
+   "hey Melki, design a network for Yopal"
+  ],
+  [
+   "cover one thousand hectares around Cumaral",
+   "cover 1000 hectares around Cumaral"
+  ],
+  [
+   "okay see the mesh",
+   "okay, seed the mesh"
+  ],
+  [
+   "optimize the net work",
+   "optimize the network"
+  ],
+  [
+   "a play the optimization",
+   "apply the optimization"
+  ],
+  [
+   "recommend support and tennis",
+   "recommend support antennas"
+  ],
+  [
+   "to the automatic adjustment",
+   "do the automatic adjustment"
+  ],
+  [
+   "seat the network again",
+   "seed the network again"
+  ],
+  [
+   "optimize the mess please",
+   "optimize the mesh please"
+  ],
+  [
+   "suggest sport antennas",
+   "suggest support antennas"
+  ],
+  [
+   "Ron the automatic adjustment",
+   "run the automatic adjustment"
+  ],
+  [
+   "can you optimize the network four me",
+   "can you optimize the network for me?"
+  ],
+  [
+   "seed a match around the gateway",
+   "seed a mesh around the gateway"
+  ],
+  [
+   "popular the area with 400 people",
+   "populate the area with 400 people"
+  ],
+  [
+   "put 150 people around repeater to",
+   "put 150 people around Repeater 2"
+  ],
+  [
+   "let's run this stress test",
+   "let's run the stress test"
+  ],
+  [
+   "send 20 payment at once",
+   "send 20 payments at once"
+  ],
+  [
+   "please feel the gateway to its limit",
+   "please fill the gateway to its limit"
+  ],
+  [
+   "how many people can repeater 2 and all",
+   "how many people can Repeater 2 handle?"
+  ],
+  [
+   "at 100 people around the gateway",
+   "add 100 people around the gateway"
+  ],
+  [
+   "do a stress text",
+   "do a stress test"
+  ],
+  [
+   "sent 10 payments at the same time",
+   "send 10 payments at the same time"
+  ],
+  [
+   "saturated repeater 1",
+   "saturate Repeater 1"
+  ],
+  [
+   "how many people can the gateway sport",
+   "how many people can the gateway support?"
+  ],
+  [
+   "populate come aral with 500 people",
+   "populate Cumaral with 500 people"
+  ],
+  [
+   "put fifty people near Pearson one",
+   "put 50 people near Person 1"
+  ],
+  [
+   "okay run and other stress test",
+   "okay, run another stress test"
+  ],
+  [
+   "how many users can repeat her one handle",
+   "how many users can Repeater 1 handle?"
+  ],
+  [
+   "hey Melki population the area with 250 people",
+   "hey Melki, populate the area with 250 people"
+  ],
+  [
+   "watts the distance from the gateway to repeater too",
+   "what's the distance from the gateway to Repeater 2?"
+  ],
+  [
+   "Melki how much does the network coast",
+   "Melki, how much does the network cost?"
+  ],
+  [
+   "why doesn't person one half signal",
+   "why doesn't Person 1 have signal?"
+  ],
+  [
+   "hey Melki what is Laura",
+   "hey Melki, what is LoRa?"
+  ],
+  [
+   "what does as F mean",
+   "what does SF mean?"
+  ],
+  [
+   "how far is tower to from the gateway",
+   "how far is Tower 2 from the gateway?"
+  ],
+  [
+   "does person to have coverage",
+   "does Person 2 have coverage?"
+  ],
+  [
+   "what's the signal add person 1",
+   "what's the signal at Person 1?"
+  ],
+  [
+   "is their signal at person to",
+   "is there signal at Person 2?"
+  ],
+  [
+   "what's a mess network",
+   "what's a mesh network?"
+  ],
+  [
+   "what is a yogi antenna",
+   "what is a Yagi antenna?"
+  ],
+  [
+   "why doesn't repeater to connect to the gateway",
+   "why doesn't Repeater 2 connect to the gateway?"
+  ],
+  [
+   "which notes have no signal",
+   "which nodes have no signal?"
+  ],
+  [
+   "what's the distance between Pearson 1 and person 2",
+   "what's the distance between Person 1 and Person 2?"
+  ],
+  [
+   "what's the rains of the gateway",
+   "what's the range of the gateway?"
+  ],
+  [
+   "is tower 2 connect",
+   "is Tower 2 connected?"
+  ],
+  [
+   "what the total cost of the network",
+   "what's the total cost of the network?"
+  ],
+  [
+   "what is spread in factor",
+   "what is spreading factor?"
+  ],
+  [
+   "can person 2 rich the gateway",
+   "can Person 2 reach the gateway?"
+  ],
+  [
+   "hey Melki what's mesh core",
+   "hey Melki, what's MeshCore?"
+  ],
+  [
+   "export 2 KMZ",
+   "export to KMZ"
+  ],
+  [
+   "export a PDF",
+   "export to PDF"
+  ],
+  [
+   "okay safe the project",
+   "okay, save the project"
+  ],
+  [
+   "low the example",
+   "load the example"
+  ],
+  [
+   "new scenery",
+   "new scenario"
+  ],
+  [
+   "on do please",
+   "undo please"
+  ],
+  [
+   "and do that",
+   "undo that"
+  ],
+  [
+   "download the KMC",
+   "download the KMZ"
+  ],
+  [
+   "star a new scenario",
+   "start a new scenario"
+  ],
+  [
+   "open the sample",
+   "open the example"
+  ],
+  [
+   "undo the last changes",
+   "undo the last change"
+  ],
+  [
+   "please export everything to KMS",
+   "please export everything to KMZ"
+  ],
+  [
+   "hey melki saved the project",
+   "hey Melki, save the project"
+  ],
+  [
+   "save this scenario",
+   "save the scenario"
+  ],
+  [
+   "take me two Puerto Lopez",
+   "take me to Puerto López"
+  ],
+  [
+   "fine Villanueva in casa Nare",
+   "find Villanueva in Casanare"
+  ],
+  [
+   "please go to via Vicencio",
+   "please go to Villavicencio"
+  ],
+  [
+   "take me to Joe Paul",
+   "take me to Yopal"
+  ],
+  [
+   "go to Barranca the Upia",
+   "go to Barranca de Upía"
+  ],
+  [
+   "find me Kumar all",
+   "find me Cumaral"
+  ],
+  [
+   "so me Restrepo on the map",
+   "show me Restrepo on the map"
+  ],
+  [
+   "go to Grenada Meta",
+   "go to Granada, Meta"
+  ],
+  [
+   "Luke for Villavicencio",
+   "look for Villavicencio"
+  ],
+  [
+   "go to person to",
+   "go to Person 2"
+  ],
+  [
+   "can you take me to Kumaral",
+   "can you take me to Cumaral?"
+  ],
+  [
+   "go to Puerto Lopez in metal",
+   "go to Puerto López in Meta"
+  ],
+  [
+   "use as F 12",
+   "use SF 12"
+  ],
+  [
+   "the aria is an oil palm plantation",
+   "the area is an oil palm plantation"
+  ],
+  [
+   "I want to use the real train",
+   "I want to use the real terrain"
+  ],
+  [
+   "switch to mess core",
+   "switch to MeshCore"
+  ],
+  [
+   "juice SF 9",
+   "use SF 9"
+  ],
+  [
+   "set this spreading factor to 10",
+   "set the spreading factor to 10"
+  ],
+  [
+   "switch to mesh tastic",
+   "switch to Meshtastic"
+  ],
+  [
+   "set reliability two medium",
+   "set reliability to medium"
+  ],
+  [
+   "is an oil palm plantation",
+   "it's an oil palm plantation"
+  ],
+  [
+   "enable the real train",
+   "enable the real terrain"
+  ],
+  [
+   "please set the s f to 8",
+   "please set the SF to 8"
+  ],
+  [
+   "can you put a Yagi on example pointing at repeater 1",
+   "can you put a Yagi on Ejemplo pointing at Repeater 1?"
+  ],
+  [
+   "point ejemplo south east",
+   "point Ejemplo southeast"
+  ],
+  [
+   "aim a temple at tower 2",
+   "aim Ejemplo at Tower 2"
+  ],
+  [
+   "change example antenna to omni directional",
+   "change Ejemplo's antenna to omnidirectional"
+  ],
+  [
+   "put on omni antenna on example",
+   "put an omni antenna on Ejemplo"
+  ],
+  [
+   "point example towards the gate way",
+   "point Ejemplo toward the gateway"
+  ],
+  [
+   "rotate example forty five degrees",
+   "rotate Ejemplo 45 degrees"
+  ],
+  [
+   "put a jaggy on repeater 2 pointing north",
+   "put a Yagi on Repeater 2 pointing north"
+  ],
+  [
+   "give example a yogi antenna",
+   "give Ejemplo a Yagi antenna"
+  ],
+  [
+   "hey Melki point example at person one",
+   "hey Melki, point Ejemplo at Person 1"
+  ],
+  [
+   "add a repeater 2 km north of the get away",
+   "Add a repeater 2 km north of the Gateway"
+  ],
+  [
+   "put a person 500 meters east of repeater Juan",
+   "Put a person 500 meters east of Repeater 1"
+  ],
+  [
+   "hey milky can you put a new gateway in Kumar Al",
+   "Hey Melki, can you put a new gateway in Cumaral?"
+  ],
+  [
+   "at a repeater at 4.25 - 73.30",
+   "Add a repeater at 4.25, -73.30"
+  ],
+  [
+   "add an antenna note at 4 point 18 minus 73 point 55",
+   "Add an antenna node at 4.18, -73.55"
+  ],
+  [
+   "Melky add a person 1 kilometer south west of tower to",
+   "Melki, add a person 1 kilometer southwest of Tower 2"
+  ],
+  [
+   "please add a gateway in Puerto Guyton",
+   "Please add a gateway in Puerto Gaitán"
+  ],
+  [
+   "please add a repeater tree kilometers west of the example",
+   "Please add a repeater three kilometers west of Ejemplo"
+  ],
+  [
+   "could you please add to repeaters near tower 2",
+   "Could you please add two repeaters near Tower 2?"
+  ],
+  [
+   "add a person in Barranca de hoopia",
+   "Add a person in Barranca de Upía"
+  ],
+  [
+   "but a gateway at 4.31 negative 73.12",
+   "Put a gateway at 4.31, -73.12"
+  ],
+  [
+   "add a gateway in a casillas and a repeater 2 km north of it",
+   "Add a gateway in Acacías and a repeater 2 km north of it"
+  ],
+  [
+   "okay Melky put one repeater 800 meters Wes of person one please",
+   "Okay Melki, put one repeater 800 meters west of Person 1, please"
+  ],
+  [
+   "move repeater 1500 meters north",
+   "Move Repeater 1 500 meters north"
+  ],
+  [
+   "can you move person to next to the gateway",
+   "Can you move Person 2 next to the Gateway?"
+  ],
+  [
+   "bring person one closer to repeater to",
+   "Bring Person 1 closer to Repeater 2"
+  ],
+  [
+   "okay move the gate way to rest repo",
+   "Okay, move the Gateway to Restrepo"
+  ],
+  [
+   "can you move the example a little closer to person one",
+   "Can you move Ejemplo a little closer to Person 1?"
+  ],
+  [
+   "move the gateway 800 meter seats",
+   "Move the Gateway 800 meters east"
+  ],
+  [
+   "move person 2 to Villa Vicente",
+   "Move Person 2 to Villavicencio"
+  ],
+  [
+   "move repeater 1 right next to tower to and rise it to 25 meters",
+   "Move Repeater 1 right next to Tower 2 and raise it to 25 meters"
+  ],
+  [
+   "move example 300 meters south east",
+   "Move Ejemplo 300 meters southeast"
+  ],
+  [
+   "move parson 1 to 4.15 -73.62",
+   "Move Person 1 to 4.15, -73.62"
+  ],
+  [
+   "okay no move the gateway closer to person 2",
+   "Okay, now move the Gateway closer to Person 2"
+  ],
+  [
+   "move tower 2 to Puerto Lopez and sent her the map there",
+   "Move Tower 2 to Puerto López and center the map there"
+  ],
+  [
+   "ship repeater 2 half a kilometer to the north west",
+   "Shift Repeater 2 half a kilometer to the northwest"
+  ],
+  [
+   "delete all the repeater please",
+   "Delete all the repeaters, please"
+  ],
+  [
+   "delete example",
+   "Delete Ejemplo"
+  ],
+  [
+   "delete all the peoples",
+   "Delete all the people"
+  ],
+  [
+   "a race all the nodes",
+   "Erase all the nodes"
+  ],
+  [
+   "hey mail key rise repeater 1 to 30 meters",
+   "Hey Melki, raise Repeater 1 to 30 meters"
+  ],
+  [
+   "lower tower to buy 5 meters",
+   "Lower Tower 2 by 5 meters"
+  ],
+  [
+   "sit all the repeaters to 20 meters",
+   "Set all the repeaters to 20 meters"
+  ],
+  [
+   "raise the eight of repeater 2 to 40 meters",
+   "Raise the height of Repeater 2 to 40 meters"
+  ],
+  [
+   "hey Melky low the gateway antenna 3 meters",
+   "Hey Melki, lower the Gateway antenna 3 meters"
+  ],
+  [
+   "set the hide of example to 15 meters",
+   "Set the height of Ejemplo to 15 meters"
+  ],
+  [
+   "please rename repeater 12 Cumaral",
+   "Please rename Repeater 1 to Cumaral"
+  ],
+  [
+   "rename the scenario to your pal mesh",
+   "Rename the scenario to Yopal mesh"
+  ],
+  [
+   "change the name of tower 2 to Tara Mena",
+   "Change the name of Tower 2 to Tauramena"
+  ],
+  [
+   "call this is scenario Puerto Lopez pilot",
+   "Call this scenario Puerto López pilot"
+  ],
+  [
+   "similar again",
+   "Simulate again"
+  ],
+  [
+   "okay ran the simulation one more time",
+   "Okay, run the simulation one more time"
+  ],
+  [
+   "can you simulate the network no please",
+   "Can you simulate the network now, please?"
+  ],
+  [
+   "okay milky stimulate the network",
+   "Okay Melki, simulate the network"
+  ],
+  [
+   "simulate automatically when I move a note",
+   "Simulate automatically when I move a node"
+  ],
+  [
+   "so the rose and the rivers",
+   "Show the roads and the rivers"
+  ],
+  [
+   "can you switch to satellite few",
+   "Can you switch to satellite view?"
+  ],
+  [
+   "put on the top graphic map",
+   "Put on the topographic map"
+  ],
+  [
+   "show the rain please",
+   "Show the terrain, please"
+  ],
+  [
+   "turn on the cover edge colors",
+   "Turn on the coverage colors"
+  ],
+  [
+   "clothes the panels",
+   "Close the panels"
+  ],
+  [
+   "hide boat panels",
+   "Hide both panels"
+  ],
+  [
+   "I'd the toolbar",
+   "Hide the tool bar"
+  ],
+  [
+   "show me the hole network",
+   "Show me the whole network"
+  ],
+  [
+   "soon in a little bit please",
+   "Zoom in a little bit, please"
+  ],
+  [
+   "zoom out to see all the notes",
+   "Zoom out to see all the nodes"
+  ],
+  [
+   "hey milky can you show the river",
+   "Hey Melki, can you show the rivers?"
+  ],
+  [
+   "show the roads but height the rivers",
+   "Show the roads but hide the rivers"
+  ],
+  [
+   "show the legion and the coverage colors",
+   "Show the legend and the coverage colors"
+  ],
+  [
+   "milky turn on the roller",
+   "Melki, turn on the ruler"
+  ],
+  [
+   "turn of the pencil",
+   "Turn off the pencil"
+  ],
+  [
+   "major the distance between the gateway and the tower 2",
+   "Measure the distance between the Gateway and Tower 2"
+  ],
+  [
+   "activate the ruler and measure from the gateway to person Juan",
+   "Activate the ruler and measure from the Gateway to Person 1"
+  ],
+  [
+   "turn the pencil one",
+   "Turn the pencil on"
+  ],
+  [
+   "clear all the measurements and turn off the rule",
+   "Clear all the measurements and turn off the ruler"
+  ],
+  [
+   "design a network with a radios of 5 km around the gateway",
+   "Design a network with a radius of 5 km around the Gateway"
+  ],
+  [
+   "design a network for 300 actors around Granada",
+   "Design a network for 300 hectares around Granada"
+  ],
+  [
+   "design a network for the whole municipality of Taurine Mena",
+   "Design a network for the whole municipality of Tauramena"
+  ],
+  [
+   "design a sustainable network in Parate Bueno with a budget of 30 million pesos",
+   "Design a sustainable network in Paratebueno with a budget of 30 million pesos"
+  ],
+  [
+   "design a 3 km network around coma Ral and simulated",
+   "Design a 3 km network around Cumaral and simulate it"
+  ],
+  [
+   "can you design me a sustainable network 4 Restrepo",
+   "Can you design me a sustainable network for Restrepo?"
+  ],
+  [
+   "design a network for all of Acacia's with 50 million budget",
+   "Design a network for all of Acacías with a 50 million budget"
+  ],
+  [
+   "seat the mess please",
+   "Seed the mesh, please"
+  ],
+  [
+   "connect the mission people",
+   "Connect the missing people"
+  ],
+  [
+   "optimize the network and then simulated again",
+   "Optimize the network and then simulate again"
+  ],
+  [
+   "Melky this card the optimization",
+   "Melki, discard the optimization"
+  ],
+  [
+   "a play the optimization",
+   "Apply the optimization"
+  ],
+  [
+   "recommend support and tennis",
+   "Recommend support antennas"
+  ],
+  [
+   "ran the automatic adjustment",
+   "Run the automatic adjustment"
+  ],
+  [
+   "set the target area to 200 Hector's",
+   "Set the target area to 200 hectares"
+  ],
+  [
+   "okay see the mesh and connect the missing peoples",
+   "Okay, seed the mesh and connect the missing people"
+  ],
+  [
+   "which sport antennas do you recommend for person to",
+   "Which support antennas do you recommend for Person 2?"
+  ],
+  [
+   "apply the optimization and export the CSB",
+   "Apply the optimization and export the CSV"
+  ],
+  [
+   "please popular 200 people in the zone",
+   "Please populate 200 people in the zone"
+  ],
+  [
+   "populate fifty people around repeater won",
+   "Populate 50 people around Repeater 1"
+  ],
+  [
+   "show the population dense city",
+   "Show the population density"
+  ],
+  [
+   "run as stress test",
+   "Run a stress test"
+  ],
+  [
+   "do a low test with 100 payments at once",
+   "Do a load test with 100 payments at once"
+  ],
+  [
+   "send 500 what's up messages within 10 seconds",
+   "Send 500 WhatsApp messages within 10 seconds"
+  ],
+  [
+   "feel the repeater 2 to his limit",
+   "Fill Repeater 2 to its limit"
+  ],
+  [
+   "how many people can repeat her one handle",
+   "How many people can Repeater 1 handle?"
+  ],
+  [
+   "hey milky stress test the get away with 200 WhatsApp messages at the same time",
+   "Hey Melki, stress test the Gateway with 200 WhatsApp messages at the same time"
+  ],
+  [
+   "populate 300 people in the son and run a load test",
+   "Populate 300 people in the zone and run a load test"
+  ],
+  [
+   "hey Melky how much does the network coast",
+   "Hey Melki, how much does the network cost?"
+  ],
+  [
+   "wise person 2 without signal",
+   "Why is Person 2 without signal?"
+  ],
+  [
+   "why doesn't person one have single",
+   "Why doesn't Person 1 have signal?"
+  ],
+  [
+   "can you tell me which notes have no signal",
+   "Can you tell me which nodes have no signal?"
+  ],
+  [
+   "milky what is Laura",
+   "Melki, what is LoRa?"
+  ],
+  [
+   "what does ESF mean",
+   "What does SF mean?"
+  ],
+  [
+   "what is the BM",
+   "What is dBm?"
+  ],
+  [
+   "what is a hope in a mesh network",
+   "What is a hop in a mesh network?"
+  ],
+  [
+   "how far can a repeater rich",
+   "How far can a repeater reach?"
+  ],
+  [
+   "what's the coverage of tower to",
+   "What's the coverage of Tower 2?"
+  ],
+  [
+   "how far is tower 2 from the example",
+   "How far is Tower 2 from Ejemplo?"
+  ],
+  [
+   "can you tell me why person 1 has not signal",
+   "Can you tell me why Person 1 has no signal?"
+  ],
+  [
+   "what is the spending factor",
+   "What is the spreading factor?"
+  ],
+  [
+   "please export the KMC",
+   "Please export the KMZ"
+  ],
+  [
+   "is port to CSV",
+   "Export to CSV"
+  ],
+  [
+   "export the scenery",
+   "Export the scenario"
+  ],
+  [
+   "okay safe the project",
+   "Okay, save the project"
+  ],
+  [
+   "open project",
+   "Open a project"
+  ],
+  [
+   "lot the example",
+   "Load the example"
+  ],
+  [
+   "created a new scenario",
+   "Create a new scenario"
+  ],
+  [
+   "and do that",
+   "Undo that"
+  ],
+  [
+   "save the project and export the km's",
+   "Save the project and export the KMZ"
+  ],
+  [
+   "please on do the last change",
+   "Please undo the last change"
+  ],
+  [
+   "hey milky take me to your pal",
+   "Hey Melki, take me to Yopal"
+  ],
+  [
+   "find barranca the utopia",
+   "Find Barranca de Upía"
+  ],
+  [
+   "sender on repeater to",
+   "Center on Repeater 2"
+  ],
+  [
+   "show me Puerto Lopez on the mop",
+   "Show me Puerto López on the map"
+  ],
+  [
+   "take me to Villa Nueva in casa Nare",
+   "Take me to Villanueva in Casanare"
+  ],
+  [
+   "where is para te bueno on the map",
+   "Where is Paratebueno on the map?"
+  ],
+  [
+   "take me to Puerto guy tan",
+   "Take me to Puerto Gaitán"
+  ],
+  [
+   "fine Cumaral and zoom in",
+   "Find Cumaral and zoom in"
+  ],
+  [
+   "set these spreading factor to 12",
+   "Set the spreading factor to 12"
+  ],
+  [
+   "change the SF 29",
+   "Change the SF to 9"
+  ],
+  [
+   "set the frequency to 9:15 megahertz",
+   "Set the frequency to 915 megahertz"
+  ],
+  [
+   "set real ability to 95%",
+   "Set reliability to 95%"
+  ],
+  [
+   "change the climb it to rainy",
+   "Change the climate to rainy"
+  ],
+  [
+   "set the vegetation to all palm",
+   "Set the vegetation to oil palm"
+  ],
+  [
+   "please use the real train",
+   "Please use the real terrain"
+  ],
+  [
+   "use flight terrain instead of real terrain",
+   "Use flat terrain instead of real terrain"
+  ],
+  [
+   "use mess tactic instead of mesh core",
+   "Use Meshtastic instead of MeshCore"
+  ],
+  [
+   "set the receiver again to 5 DB",
+   "Set the receiver gain to 5 dB"
+  ],
+  [
+   "set the climate to dry and the vegetation to oil Pam",
+   "Set the climate to dry and the vegetation to oil palm"
+  ],
+  [
+   "change to mesh fantastic please",
+   "Change to Meshtastic, please"
+  ],
+  [
+   "Mel key put a yogi on tower 2 pointing at repeater 1",
+   "Melki, put a Yagi on Tower 2 pointing at Repeater 1"
+  ],
+  [
+   "point the yoga antenna of the gateway to the north east",
+   "Point the Yagi antenna of the Gateway to the northeast"
+  ],
+  [
+   "orient the yogi to 45°",
+   "Orient the Yagi to 45 degrees"
+  ],
+  [
+   "okay till the antenna down 5°",
+   "Okay, tilt the antenna down 5 degrees"
+  ],
+  [
+   "add a yagi antenna on repeater to pointing Wes",
+   "Add a Yagi antenna on Repeater 2 pointing west"
+  ],
+  [
+   "aim the yogi on person one at the get away",
+   "Aim the Yagi on Person 1 at the Gateway"
+  ],
+  [
+   "install a jaggy on example pointing to person 2",
+   "Install a Yagi on Ejemplo pointing to Person 2"
+  ],
+  [
+   "add a person 2 km south of repeater to and tell me if it has single",
+   "Add a person 2 km south of Repeater 2 and tell me if it has signal"
+  ],
+  [
+   "move the gateway to Puerto Gaitan and design a network of 10 km around eat",
+   "Move the Gateway to Puerto Gaitán and design a network of 10 km around it"
+  ],
+  [
+   "the lead person 2 and simulate again",
+   "Delete Person 2 and simulate again"
+  ],
+  [
+   "raise repeater to to 35 meters and check the coverage",
+   "Raise Repeater 2 to 35 meters and check the coverage"
+  ],
+  [
+   "take me to Granada and put a gateway their",
+   "Take me to Granada and put a gateway there"
+  ],
+  [
+   "turn on the satellite view and hi the names",
+   "Turn on the satellite view and hide the names"
+  ],
+  [
+   "major the distance from repeater one to the example and then delete the measurement",
+   "Measure the distance from Repeater 1 to Ejemplo and then delete the measurement"
+  ],
+  [
+   "put person one next to repeater to and tell me why it has no signal",
+   "Put Person 1 next to Repeater 2 and tell me why it has no signal"
+  ],
+  [
+   "design a network around the gateway with a 5 million budget and recommend support antenna",
+   "Design a network around the Gateway with a 5 million budget and recommend support antennas"
+  ],
+  [
+   "export the CSV and then open a news scenario",
+   "Export the CSV and then open a new scenario"
   ]
  ],
  "es": [
@@ -5170,6 +6650,1182 @@
   [
    "muestras la barra de arriba",
    "muestra la barra de arriba"
+  ],
+  [
+   "agrega un repetidor a 3 km al sur del geitwey",
+   "agrega un repetidor a 3 km al sur del gateway"
+  ],
+  [
+   "pon una persona en 4,27 menos 73,49",
+   "pon una persona en 4.27, -73.49"
+  ],
+  [
+   "pon el getwey en Cumaral",
+   "pon el gateway en Cumaral"
+  ],
+  [
+   "agrégame una persona 500 metros al oriente del repetidor 1",
+   "agrégame una persona a 500 metros al oriente del Repetidor 1"
+  ],
+  [
+   "coloca un repetidor entre el gate way y la persona 2",
+   "coloca un repetidor entre el gateway y la Persona 2"
+  ],
+  [
+   "pongo una persona en Restrepo",
+   "ponga una persona en Restrepo"
+  ],
+  [
+   "agrega otra persona cerca de repetidor 2",
+   "agrega otra persona cerca del Repetidor 2"
+  ],
+  [
+   "pon un repetidor a 1 km a occidente de la torre 2",
+   "pon un repetidor a 1 km al occidente de la Torre 2"
+  ],
+  [
+   "agrega un repetidor en 4 punto 31 menos 73 punto 52",
+   "agrega un repetidor en 4.31, -73.52"
+  ],
+  [
+   "pone el gateway en Puerto López",
+   "pon el gateway en Puerto López"
+  ],
+  [
+   "agrega una persona a 2 km al nor oriente del gateway",
+   "agrega una persona a 2 km al nororiente del gateway"
+  ],
+  [
+   "melqui pon un repetidor al lao de la torre 2",
+   "Melki, pon un repetidor al lado de la Torre 2"
+  ],
+  [
+   "pon una persona en barranca de pía",
+   "pon una persona en Barranca de Upía"
+  ],
+  [
+   "pon me un repetidor a 800 metros al norte de persona 1",
+   "ponme un repetidor a 800 metros al norte de la Persona 1"
+  ],
+  [
+   "pon un repetidor pegao al gateway",
+   "pon un repetidor pegado al gateway"
+  ],
+  [
+   "por favor agregue un repetidor a 4 km al occidente del gateway",
+   "por favor, agrega un repetidor a 4 km al occidente del gateway"
+  ],
+  [
+   "pon una persona en cuatro punto quince menos setenta y tres punto sesenta y uno",
+   "pon una persona en 4.15, -73.61"
+  ],
+  [
+   "muevo el repetidor 2 un kilómetro al sur",
+   "mueve el Repetidor 2 un kilómetro al sur"
+  ],
+  [
+   "a cerca la persona 1 al gateway",
+   "acerca la Persona 1 al gateway"
+  ],
+  [
+   "mueve el gateway 500 metros occidente",
+   "mueve el gateway 500 metros al occidente"
+  ],
+  [
+   "lleva la persona 2 a cumaral",
+   "lleva a la Persona 2 a Cumaral"
+  ],
+  [
+   "mueva la torre 2 300 metros al norte",
+   "mueve la Torre 2 300 metros al norte"
+  ],
+  [
+   "arrima el repetidor 1 ala persona 2",
+   "arrima el Repetidor 1 a la Persona 2"
+  ],
+  [
+   "mueve el ejemplo 1 km al nororiente",
+   "mueve Ejemplo 1 km al nororiente"
+  ],
+  [
+   "córreme el repetidor 2 al lao del gateway",
+   "córreme el Repetidor 2 al lado del gateway"
+  ],
+  [
+   "mueve la persona 1 a 4,22 menos 73,4",
+   "mueve la Persona 1 a 4.22, -73.40"
+  ],
+  [
+   "melqui mueve el repetidor 1 asia el oriente un kilómetro",
+   "Melki, mueve el Repetidor 1 hacia el oriente un kilómetro"
+  ],
+  [
+   "llevar el gateway a restrepo",
+   "lleva el gateway a Restrepo"
+  ],
+  [
+   "por favor mueve la persona 2 cerca de repetidor 1",
+   "por favor, mueve la Persona 2 cerca del Repetidor 1"
+  ],
+  [
+   "borra el repetido 1",
+   "borra el Repetidor 1"
+  ],
+  [
+   "bueno elimina toda la persona",
+   "bueno, elimina todas las personas"
+  ],
+  [
+   "elimina a torre 2",
+   "elimina la Torre 2"
+  ],
+  [
+   "borra me la persona 1",
+   "bórrame la Persona 1"
+  ],
+  [
+   "quita el ejemplo",
+   "quita Ejemplo"
+  ],
+  [
+   "borra todos los repetidore",
+   "borra todos los repetidores"
+  ],
+  [
+   "saca la persona dos de mapa",
+   "saca la Persona 2 del mapa"
+  ],
+  [
+   "por favor ilumina el repetidor 2",
+   "por favor, elimina el Repetidor 2"
+  ],
+  [
+   "borra la persona 1 y a persona 2",
+   "borra la Persona 1 y la Persona 2"
+  ],
+  [
+   "sube el repetidor dos a treinta metros",
+   "sube el Repetidor 2 a 30 metros"
+  ],
+  [
+   "baja la 2 metros",
+   "bájala 2 metros"
+  ],
+  [
+   "sube lo 5 metros",
+   "súbelo 5 metros"
+  ],
+  [
+   "sube todo los repetidores 5 metros",
+   "sube todos los repetidores 5 metros"
+  ],
+  [
+   "pon el gateway a veinte metros de altura",
+   "pon el gateway a 20 metros de altura"
+  ],
+  [
+   "baja a la persona 1 a 1.5 metros",
+   "baja la Persona 1 a 1.5 metros"
+  ],
+  [
+   "sube ejemplo dos metros",
+   "sube Ejemplo 2 metros"
+  ],
+  [
+   "sube le 10 metros al gateway",
+   "súbele 10 metros al gateway"
+  ],
+  [
+   "sube a la torre 2 a 40 metros",
+   "sube la Torre 2 a 40 metros"
+  ],
+  [
+   "por favor baje el repetidor 1 a 12 metros",
+   "por favor, baja el Repetidor 1 a 12 metros"
+  ],
+  [
+   "subelo a veinticinco metros",
+   "súbelo a 25 metros"
+  ],
+  [
+   "re nombra el repetidor 2 como La Mesa",
+   "renombra el Repetidor 2 como La Mesa"
+  ],
+  [
+   "cambia le el nombre a la persona 1 por escuela",
+   "cámbiale el nombre a la Persona 1 por Escuela"
+  ],
+  [
+   "ponle el nombre finca el rosal a la persona 2",
+   "ponle de nombre Finca El Rosal a la Persona 2"
+  ],
+  [
+   "renombra la torre 2 con tanque",
+   "renombra la Torre 2 como Tanque"
+  ],
+  [
+   "llama el gateway base principal",
+   "llama al gateway Base Principal"
+  ],
+  [
+   "renombre a ejemplo como antena norte",
+   "renombra Ejemplo como Antena Norte"
+  ],
+  [
+   "vuelve asimilar",
+   "vuelve a simular"
+  ],
+  [
+   "activa simulará al cambiar",
+   "activa simular al cambiar"
+  ],
+  [
+   "corre la simulación otra ves",
+   "corre la simulación otra vez"
+  ],
+  [
+   "has la simulación",
+   "haz la simulación"
+  ],
+  [
+   "deja activao simular al cambiar",
+   "deja activado simular al cambiar"
+  ],
+  [
+   "listo quita lo río",
+   "listo, quita los ríos"
+  ],
+  [
+   "mapa tipográfico",
+   "mapa topográfico"
+  ],
+  [
+   "muéstrame toa la red",
+   "muéstrame toda la red"
+  ],
+  [
+   "muéstrame los paneles",
+   "muestra los paneles"
+  ],
+  [
+   "es conde las herramientas",
+   "esconde las herramientas"
+  ],
+  [
+   "as zoom",
+   "haz zoom"
+  ],
+  [
+   "aleje el mapa",
+   "aleja el mapa"
+  ],
+  [
+   "oculta la vía",
+   "oculta las vías"
+  ],
+  [
+   "muestras los ríos",
+   "muestra los ríos"
+  ],
+  [
+   "cambia vista satelital",
+   "cambia a vista satelital"
+  ],
+  [
+   "pon en mapa topográfico",
+   "pon el mapa topográfico"
+  ],
+  [
+   "muéstrame toda la maya",
+   "muéstrame toda la malla"
+  ],
+  [
+   "centra el mapa en el geitwey",
+   "centra el mapa en el gateway"
+  ],
+  [
+   "oiga quite los ríos y la vía",
+   "oiga, quite los ríos y las vías"
+  ],
+  [
+   "porfavor muestra las herramientas",
+   "por favor, muestra las herramientas"
+  ],
+  [
+   "activar la regla",
+   "activa la regla"
+  ],
+  [
+   "suelta lápiz",
+   "suelta el lápiz"
+  ],
+  [
+   "a garra el lápiz",
+   "agarra el lápiz"
+  ],
+  [
+   "mide la distancia entre el gateway y repetidor 1",
+   "mide la distancia entre el gateway y el Repetidor 1"
+  ],
+  [
+   "des activa la regla",
+   "desactiva la regla"
+  ],
+  [
+   "coger el lápiz",
+   "coge el lápiz"
+  ],
+  [
+   "mide desde la persona 1 asta la torre 2",
+   "mide desde la Persona 1 hasta la Torre 2"
+  ],
+  [
+   "melqui usa la regla",
+   "Melki, usa la regla"
+  ],
+  [
+   "arma me una red de 5 km a la redonda del gateway",
+   "ármame una red de 5 km a la redonda del gateway"
+  ],
+  [
+   "diseña una maya pa cumaral",
+   "diseña una malla para Cumaral"
+  ],
+  [
+   "cubre 600 hectáreas al rededor de aquí",
+   "cubre 600 hectáreas alrededor de aquí"
+  ],
+  [
+   "diseña una red pa' Puerto López",
+   "diseña una red para Puerto López"
+  ],
+  [
+   "hazme una maya de 2 km alrededor del repetidor 1",
+   "hazme una malla de 2 km alrededor del Repetidor 1"
+  ],
+  [
+   "diseñar la red para Villanueva Casanare",
+   "diseña la red para Villanueva, Casanare"
+  ],
+  [
+   "arma una red que cubra 1000 hectárea alrededor de restrepo",
+   "arma una red que cubra 1000 hectáreas alrededor de Restrepo"
+  ],
+  [
+   "mel qui diseña una red pa Granada",
+   "Melki, diseña una red para Granada"
+  ],
+  [
+   "diseña me una malla para Yopal",
+   "diséñame una malla para Yopal"
+  ],
+  [
+   "oiga siempre la malla",
+   "oiga, siembra la malla"
+  ],
+  [
+   "optimice la red",
+   "optimiza la red"
+  ],
+  [
+   "aplica optimización",
+   "aplica la optimización"
+  ],
+  [
+   "recomienda antena de apoyo",
+   "recomienda antenas de apoyo"
+  ],
+  [
+   "as el ajuste automático",
+   "haz el ajuste automático"
+  ],
+  [
+   "siembre la red otra vez",
+   "siembra la red otra vez"
+  ],
+  [
+   "optimizar la malla por favor",
+   "optimiza la malla, por favor"
+  ],
+  [
+   "recomienda me antenas de soporte",
+   "recomiéndame antenas de soporte"
+  ],
+  [
+   "melqui hace el ajuste automático",
+   "Melki, haz el ajuste automático"
+  ],
+  [
+   "pueblo la zona con 400 personas",
+   "puebla la zona con 400 personas"
+  ],
+  [
+   "pon ciento cincuenta personas alrededor del repetidor 2",
+   "pon 150 personas alrededor del Repetidor 2"
+  ],
+  [
+   "haz la prueba destrés",
+   "haz la prueba de estrés"
+  ],
+  [
+   "en vía 20 pagos al tiempo",
+   "envía 20 pagos al tiempo"
+  ],
+  [
+   "llena el geitwey hasta el límite",
+   "llena el gateway hasta el límite"
+  ],
+  [
+   "cuánta persona aguanta el repetidor 2",
+   "¿cuántas personas aguanta el Repetidor 2?"
+  ],
+  [
+   "corre la prueba de es tres",
+   "corre la prueba de estrés"
+  ],
+  [
+   "manda diez pagos a mismo tiempo",
+   "manda 10 pagos al mismo tiempo"
+  ],
+  [
+   "satura al repetidor 1",
+   "satura el Repetidor 1"
+  ],
+  [
+   "cuántas personas soporta el gate wey",
+   "¿cuántas personas soporta el gateway?"
+  ],
+  [
+   "puebla cumaral con quinientas personas",
+   "puebla Cumaral con 500 personas"
+  ],
+  [
+   "por favor pon 50 persona cerca de la persona 1",
+   "por favor, pon 50 personas cerca de la Persona 1"
+  ],
+  [
+   "oye melqui cuánto cuesta la re",
+   "oye Melki, ¿cuánto cuesta la red?"
+  ],
+  [
+   "porque la persona 1 no tiene señal",
+   "¿por qué la Persona 1 no tiene señal?"
+  ],
+  [
+   "qué es Laura",
+   "¿qué es LoRa?"
+  ],
+  [
+   "qué significa ese efe",
+   "¿qué significa SF?"
+  ],
+  [
+   "cuál es la distancia de gateway al repetidor 1",
+   "¿cuál es la distancia del gateway al Repetidor 1?"
+  ],
+  [
+   "a cuánto queda la torre dos del geitwey",
+   "¿a cuánto queda la Torre 2 del gateway?"
+  ],
+  [
+   "la persona dos si tiene cobertura",
+   "¿la Persona 2 sí tiene cobertura?"
+  ],
+  [
+   "cuanto vale el repetidor",
+   "¿cuánto vale un repetidor?"
+  ],
+  [
+   "qué es una maya",
+   "¿qué es una malla?"
+  ],
+  [
+   "qué es mes cor",
+   "¿qué es MeshCore?"
+  ],
+  [
+   "por qué el repetidor 2 no se conecta el gateway",
+   "¿por qué el Repetidor 2 no se conecta al gateway?"
+  ],
+  [
+   "cuántas personas cubra la red",
+   "¿cuántas personas cubre la red?"
+  ],
+  [
+   "qué es el factor dispersión",
+   "¿qué es el factor de dispersión?"
+  ],
+  [
+   "qué no dos no tienen señal",
+   "¿qué nodos no tienen señal?"
+  ],
+  [
+   "melqui cuál es el costo total de la red",
+   "Melki, ¿cuál es el costo total de la red?"
+  ],
+  [
+   "exporta a ca eme zeta",
+   "exporta a KMZ"
+  ],
+  [
+   "exporta pdf",
+   "exporta a PDF"
+  ],
+  [
+   "listo guardo el proyecto",
+   "listo, guarda el proyecto"
+  ],
+  [
+   "cargue el ejemplo",
+   "carga el ejemplo"
+  ],
+  [
+   "crea un escenario de nuevo",
+   "crea un escenario nuevo"
+  ],
+  [
+   "des haz",
+   "deshaz"
+  ],
+  [
+   "deshace eso",
+   "deshaz eso"
+  ],
+  [
+   "guarda me el proyecto por favor",
+   "guárdame el proyecto, por favor"
+  ],
+  [
+   "descarga el k m z",
+   "descarga el KMZ"
+  ],
+  [
+   "exporta el informe en p d f",
+   "exporta el informe en PDF"
+  ],
+  [
+   "habré el ejemplo",
+   "abre el ejemplo"
+  ],
+  [
+   "ey llévame a villa vicencio",
+   "ey, llévame a Villavicencio"
+  ],
+  [
+   "busca me Restrepo",
+   "búscame Restrepo"
+  ],
+  [
+   "lléveme a Cumaral",
+   "llévame a Cumaral"
+  ],
+  [
+   "búscame villa nueva casanare",
+   "búscame Villanueva, Casanare"
+  ],
+  [
+   "muestra me barranca de upía",
+   "muéstrame Barranca de Upía"
+  ],
+  [
+   "vea Yopal",
+   "ve a Yopal"
+  ],
+  [
+   "llévame Puerto López",
+   "llévame a Puerto López"
+  ],
+  [
+   "buscar Granada meta",
+   "busca Granada, Meta"
+  ],
+  [
+   "melki llévame a villa nueva",
+   "Melki, llévame a Villanueva"
+  ],
+  [
+   "por favor busque me Villavicencio",
+   "por favor, búsqueme Villavicencio"
+  ],
+  [
+   "usa ese efe 11",
+   "usa SF11"
+  ],
+  [
+   "la zona es una plantación palma",
+   "la zona es una plantación de palma"
+  ],
+  [
+   "usa terreno real",
+   "usa el terreno real"
+  ],
+  [
+   "cambia a mesh core",
+   "cambia a MeshCore"
+  ],
+  [
+   "pon la confiabilidad a alta",
+   "pon la confiabilidad en alta"
+  ],
+  [
+   "usa ese F 9",
+   "usa SF 9"
+  ],
+  [
+   "cambia a mes tástic",
+   "cambia a Meshtastic"
+  ],
+  [
+   "usa el factor de dispersión de 10",
+   "usa el factor de dispersión 10"
+  ],
+  [
+   "sube la confiabilidad alta",
+   "sube la confiabilidad a alta"
+  ],
+  [
+   "el área es un cultivo de palmas",
+   "el área es un cultivo de palma"
+  ],
+  [
+   "ponle una yagui a ejemplo apuntando a torre 2",
+   "ponle una Yagi a Ejemplo apuntando a Torre 2"
+  ],
+  [
+   "apunta a ejemplo al nororiente",
+   "apunta Ejemplo al nororiente"
+  ],
+  [
+   "ponle una antena omni direccional a ejemplo",
+   "ponle una antena omnidireccional a Ejemplo"
+  ],
+  [
+   "apunta ejemplo hacia el geitwey",
+   "apunta Ejemplo hacia el gateway"
+  ],
+  [
+   "gire ejemplo 45 grados",
+   "gira Ejemplo 45 grados"
+  ],
+  [
+   "pon le una yagi al repetidor 2 apuntando al norte",
+   "ponle una Yagi al Repetidor 2 apuntando al norte"
+  ],
+  [
+   "melqui apunta ejemplo a la persona 1",
+   "Melki, apunta Ejemplo a la Persona 1"
+  ],
+  [
+   "cámbiale la antena a ejemplo por una yagui",
+   "cámbiale la antena a Ejemplo por una Yagi"
+  ],
+  [
+   "agrega un repetidor a 2 km al norte del geiwey",
+   "Agrega un repetidor a 2 km al norte del Gateway"
+  ],
+  [
+   "pon una persona 500 metros al oriente del repetido uno",
+   "Pon una persona a 500 metros al oriente del Repetidor 1"
+  ],
+  [
+   "eche me un repetidor a 3 km del gateway hacia el sur",
+   "Écheme un repetidor a 3 kilómetros del Gateway hacia el sur"
+  ],
+  [
+   "agregue una persona en 4,25 -73,30",
+   "Agrega una persona en 4.25, -73.30"
+  ],
+  [
+   "agrega un modo de antena en Restrepo",
+   "Agrega un nodo de antena en Restrepo"
+  ],
+  [
+   "pon un repetidor a 1 km y medio al no reste de la persona 2",
+   "Pon un repetidor a un kilómetro y medio al noreste de la Persona 2"
+  ],
+  [
+   "oye melqui ponme un repetidor en Granada",
+   "Oye Melki, ponme un repetidor en Granada"
+  ],
+  [
+   "pongan gateway en 4.12 menos 73.65",
+   "Ponga un gateway en 4.12, -73.65"
+  ],
+  [
+   "mete una persona en vía nueva casanare",
+   "Mete una persona en Villanueva, Casanare"
+  ],
+  [
+   "mueve el repetidor 1500 metros al este",
+   "Mueve el Repetidor 1 500 metros al este"
+  ],
+  [
+   "córrame la persona 2 un kilómetro pal sur",
+   "Córrame la Persona 2 un kilómetro para el sur"
+  ],
+  [
+   "a rime la persona uno al gateway",
+   "Arrime la Persona 1 al Gateway"
+  ],
+  [
+   "pon el repetidor 2 al lao de la torre 2",
+   "Pon el Repetidor 2 al lado de la Torre 2"
+  ],
+  [
+   "muevo la torre 2 a 4.31 menos 73.42",
+   "Mueve la Torre 2 a 4.31, -73.42"
+  ],
+  [
+   "acerca de la persona 2 al repetidor 1",
+   "Acerca la Persona 2 al Repetidor 1"
+  ],
+  [
+   "lleva el ejemplo a casias",
+   "Lleva el Ejemplo a Acacías"
+  ],
+  [
+   "muévame el repetidores 800 metros pal occidente",
+   "Muévame el Repetidor 2 800 metros para el occidente"
+  ],
+  [
+   "mueve el repetidor 1 a res trepo y súbelo a 30 metros",
+   "Mueve el Repetidor 1 a Restrepo y súbelo a 30 metros"
+  ],
+  [
+   "borra la personal 1",
+   "Borra la Persona 1"
+  ],
+  [
+   "quite me todos los repetidores",
+   "Quíteme todos los repetidores"
+  ],
+  [
+   "eliminar el ejemplo",
+   "Elimina el Ejemplo"
+  ],
+  [
+   "bórreme la persona uno y las personas dos",
+   "Bórreme la Persona 1 y la Persona 2"
+  ],
+  [
+   "su merced me hace el favor y borre la torre 2",
+   "Sumercé, ¿me hace el favor y borra la Torre 2?"
+  ],
+  [
+   "súbeme el repetidor 1 a 30 metros",
+   "Súbame el Repetidor 1 a 30 metros"
+  ],
+  [
+   "baja la torre 25 metros",
+   "Baja la Torre 2 cinco metros"
+  ],
+  [
+   "bájele 3 metros a la antena del getway",
+   "Bájele 3 metros a la antena del Gateway"
+  ],
+  [
+   "sube le 10 metros a todos los repetidores",
+   "Súbele 10 metros a todos los repetidores"
+  ],
+  [
+   "déjeme el ejemplo 15 metros de alto",
+   "Déjeme el Ejemplo a 15 metros de alto"
+  ],
+  [
+   "renombre el repetidor 1 como Cumaral",
+   "Renombra el Repetidor 1 como Cumaral"
+  ],
+  [
+   "cambia le el nombre al escenario por piloto Granada",
+   "Cámbiale el nombre al escenario por Piloto Granada"
+  ],
+  [
+   "ponle de nombre taura mena a la torre 2",
+   "Ponle de nombre Tauramena a la Torre 2"
+  ],
+  [
+   "hágale simular otra vez",
+   "Hágale, simule otra vez"
+  ],
+  [
+   "activa la simulación automática cuando cambia algo",
+   "Activa la simulación automática cuando cambie algo"
+  ],
+  [
+   "oye mel qui por fa simula",
+   "Oye Melki, porfa simula"
+  ],
+  [
+   "simula automático cada que mueva un modo",
+   "Simula automático cada que mueva un nodo"
+  ],
+  [
+   "muestra me las carreteras y lo ríos",
+   "Muéstrame las carreteras y los ríos"
+  ],
+  [
+   "muestre me el relieve de terreno",
+   "Muéstreme el relieve del terreno"
+  ],
+  [
+   "prende los calores de cobertura",
+   "Prende los colores de cobertura"
+  ],
+  [
+   "muéstreme la leyenda orita",
+   "Muéstreme la leyenda ahorita"
+  ],
+  [
+   "esconde los panales",
+   "Esconde los paneles"
+  ],
+  [
+   "muéstrame toda la res",
+   "Muéstrame toda la red"
+  ],
+  [
+   "has le zoom al geiwey",
+   "Hazle zoom al Gateway"
+  ],
+  [
+   "has zum pa fuera",
+   "Haz zoom para afuera"
+  ],
+  [
+   "haber melqui quítame la barra de herramientas",
+   "A ver Melki, quítame la barra de herramientas"
+  ],
+  [
+   "pase ponga la vista topográfica y muéstreme los ríos",
+   "Parce, ponga la vista topográfica y muéstreme los ríos"
+  ],
+  [
+   "prende la vista satelital y quítale los hombres",
+   "Prende la vista satelital y quítale los nombres"
+  ],
+  [
+   "activa la reja",
+   "Activa la regla"
+  ],
+  [
+   "apague el lápiz",
+   "Apaga el lápiz"
+  ],
+  [
+   "midió la distancia entre el geiwey y la torre 2",
+   "Mide la distancia entre el Gateway y la Torre 2"
+  ],
+  [
+   "regáleme la distancia de la persona 1 a repetidor 2",
+   "Regáleme la distancia de la Persona 1 al Repetidor 2"
+  ],
+  [
+   "borra la mediciones",
+   "Borra las mediciones"
+  ],
+  [
+   "prende la regla y mide el gateway a la persona dos",
+   "Prende la regla y mide del Gateway a la Persona 2"
+  ],
+  [
+   "diseña una red de 5 km de radio al rededor del gateway",
+   "Diseña una red de 5 km de radio alrededor del Gateway"
+  ],
+  [
+   "diseña una red para 300 hectárea en Granada",
+   "Diseña una red para 300 hectáreas en Granada"
+  ],
+  [
+   "diséñame una red pa todo el municipio de Tauramena",
+   "Diséñame una red para todo el municipio de Tauramena"
+  ],
+  [
+   "diseña una red sostenible para paraté bueno con un por supuesto de 20 millones",
+   "Diseña una red sostenible para Paratebueno con un presupuesto de 20 millones"
+  ],
+  [
+   "diseña una red de 3 km alrededor de Cumaral y las simulas",
+   "Diseña una red de 3 km alrededor de Cumaral y la simulas"
+  ],
+  [
+   "hágame el favor me diseña una red sostenible en Restrepo",
+   "Hágame el favor y me diseña una red sostenible en Restrepo"
+  ],
+  [
+   "diseña una red para el municipio de barranca de opía con 40 millones",
+   "Diseña una red para el municipio de Barranca de Upía con 40 millones"
+  ],
+  [
+   "siembra la maya",
+   "Siembra la malla"
+  ],
+  [
+   "conecta las personas que falta",
+   "Conecta las personas que faltan"
+  ],
+  [
+   "de una aplique la optimización",
+   "De una, aplica la optimización"
+  ],
+  [
+   "vote esa optimización",
+   "Bote esa optimización"
+  ],
+  [
+   "descártala optimización",
+   "Descarta la optimización"
+  ],
+  [
+   "recomiéndame antenas de a pollo",
+   "Recomiéndame antenas de apoyo"
+  ],
+  [
+   "has el ajuste automático",
+   "Haz el ajuste automático"
+  ],
+  [
+   "pon el área objetiva en 200 hectáreas",
+   "Pon el área objetivo en 200 hectáreas"
+  ],
+  [
+   "optimiza y después simulo",
+   "Optimiza y después simula"
+  ],
+  [
+   "puebla la zona con 200 persona",
+   "Puebla la zona con 200 personas"
+  ],
+  [
+   "pon cincuenta personas alrededor del repetido uno",
+   "Pon 50 personas alrededor del Repetidor 1"
+  ],
+  [
+   "muéstrame la densidad de la población",
+   "Muéstrame la densidad de población"
+  ],
+  [
+   "as una prueba de estrés",
+   "Haz una prueba de estrés"
+  ],
+  [
+   "prueba de carga con 100 pagos a tiempo",
+   "Prueba de carga con 100 pagos al tiempo"
+  ],
+  [
+   "manda 500 mensajes de wasap en 10 segundos",
+   "Manda 500 mensajes de WhatsApp en 10 segundos"
+  ],
+  [
+   "llena el repetidor 2 asta el límite",
+   "Llena el Repetidor 2 hasta el límite"
+  ],
+  [
+   "cuánta gente aguanta el repetido uno",
+   "¿Cuánta gente aguanta el Repetidor 1?"
+  ],
+  [
+   "hágale una prueba de carga al geiwey con 300 mensajes de WhatsApp al mismo tiempo",
+   "Hágale una prueba de carga al Gateway con 300 mensajes de WhatsApp al mismo tiempo"
+  ],
+  [
+   "qué distancia ahí entre la persona 1 y el gateway",
+   "¿Qué distancia hay entre la Persona 1 y el Gateway?"
+  ],
+  [
+   "cuánto cuesta la re",
+   "¿Cuánto cuesta la red?"
+  ],
+  [
+   "porque la persona 2 no tiene señal",
+   "¿Por qué la Persona 2 no tiene señal?"
+  ],
+  [
+   "cuáles nodos han quedao sin señal",
+   "¿Cuáles nodos han quedado sin señal?"
+  ],
+  [
+   "qué es la lora",
+   "¿Qué es LoRa?"
+  ],
+  [
+   "qué es el ese efe",
+   "¿Qué es el SF?"
+  ],
+  [
+   "qué significa debe eme",
+   "¿Qué significa dBm?"
+  ],
+  [
+   "qué es un alto",
+   "¿Qué es un salto?"
+  ],
+  [
+   "hasta dónde llegan repetidor",
+   "¿Hasta dónde llega un repetidor?"
+  ],
+  [
+   "pille me la cobertura de la torre 2",
+   "Pílleme la cobertura de la Torre 2"
+  ],
+  [
+   "oiga y por qué la persona 1 quedó si señal",
+   "Oiga, ¿y por qué la Persona 1 quedó sin señal?"
+  ],
+  [
+   "qué tan lejos queda la torre 2 de ejemplo",
+   "¿Qué tan lejos queda la Torre 2 del Ejemplo?"
+  ],
+  [
+   "será que me dice que no dos se quedaron sin señal",
+   "¿Será que me dice qué nodos se quedaron sin señal?"
+  ],
+  [
+   "exporta el ka eme zeta",
+   "Exporta el KMZ"
+  ],
+  [
+   "exporta en c s b",
+   "Exporta en CSV"
+  ],
+  [
+   "mire exportó el escenario",
+   "Mire, exporte el escenario"
+  ],
+  [
+   "déjame el proyecto guardao",
+   "Déjame el proyecto guardado"
+  ],
+  [
+   "venga abran proyecto",
+   "Venga, abra un proyecto"
+  ],
+  [
+   "carga le ejemplo",
+   "Carga el ejemplo"
+  ],
+  [
+   "crean escenario nuevo",
+   "Crea un escenario nuevo"
+  ],
+  [
+   "des has eso",
+   "Deshaz eso"
+  ],
+  [
+   "bueno guarde el proyecto pue",
+   "Bueno, guarde el proyecto pues"
+  ],
+  [
+   "vea lleva me a Puerto Gaitán",
+   "Vea, llévame a Puerto Gaitán"
+  ],
+  [
+   "busca barranca de utopía",
+   "Busca Barranca de Upía"
+  ],
+  [
+   "lléveme a yo pal",
+   "Lléveme a Yopal"
+  ],
+  [
+   "dónde queda para te bueno",
+   "¿Dónde queda Paratebueno?"
+  ],
+  [
+   "vamos pa Villavicencio",
+   "Vamos para Villavicencio"
+  ],
+  [
+   "me hace el favor y me entra la torre 2",
+   "Me hace el favor y me centra la Torre 2"
+  ],
+  [
+   "llévame a Granada y pon un gateway haya",
+   "Llévame a Granada y pon un gateway allá"
+  ],
+  [
+   "pon el espreding factor en 12",
+   "Pon el spreading factor en 12"
+  ],
+  [
+   "cambia LSF a 9",
+   "Cambia el SF a 9"
+  ],
+  [
+   "cambia la frecuencia 915 megahertz",
+   "Cambia la frecuencia a 915 megahertz"
+  ],
+  [
+   "pon la contabilidad en 95%",
+   "Pon la confiabilidad en 95%"
+  ],
+  [
+   "cambia el clima lluvioso",
+   "Cambia el clima a lluvioso"
+  ],
+  [
+   "pon la vegetación en palma aceite",
+   "Pon la vegetación en palma de aceite"
+  ],
+  [
+   "usa el terreno real envés del plano",
+   "Usa el terreno real en vez del plano"
+  ],
+  [
+   "ponte reno plano",
+   "Pon terreno plano"
+  ],
+  [
+   "cambia a meshcor",
+   "Cambia a MeshCore"
+  ],
+  [
+   "usa mestástic en vez de mesh core",
+   "Usa Meshtastic en vez de MeshCore"
+  ],
+  [
+   "pon la ganancia del receptor en 5 debe",
+   "Pon la ganancia del receptor en 5 dB"
+  ],
+  [
+   "pon una yagui en la torre 2 apuntando al repetidor 1",
+   "Pon una Yagi en la Torre 2 apuntando al Repetidor 1"
+  ],
+  [
+   "orienta la antena del geiwey a 90°",
+   "Oriente la antena del Gateway a 90 grados"
+  ],
+  [
+   "inclina la antena 5 grados pa bajo",
+   "Inclina la antena 5 grados para abajo"
+  ],
+  [
+   "ponle una lla gui al repetidor 2 mirando asia el gateway",
+   "Ponle una Yagi al Repetidor 2 mirando hacia el Gateway"
+  ],
+  [
+   "apunta la yogui de la persona 1 al norte",
+   "Apunta la Yagi de la Persona 1 al norte"
+  ],
+  [
+   "agrega un repetidor a 2 km al sur de la persona 2 y dime si le llega seña",
+   "Agrega un repetidor a 2 km al sur de la Persona 2 y dime si le llega señal"
+  ],
+  [
+   "lleva el geiwey a Puerto López y diseña una red de 10 km alrededor",
+   "Lleva el Gateway a Puerto López y diseña una red de 10 km alrededor"
+  ],
+  [
+   "borra la persona 2 y simula otra ves",
+   "Borra la Persona 2 y simula otra vez"
+  ],
+  [
+   "sube el repetidor 2 35 metros y mira como queda la cobertura",
+   "Sube el Repetidor 2 a 35 metros y mira cómo queda la cobertura"
+  ],
+  [
+   "mueve el repetidor 1 al lado de la persona 2 y su velo a 20 metros",
+   "Mueve el Repetidor 1 al lado de la Persona 2 y súbelo a 20 metros"
   ]
  ],
  "charla": {
@@ -5218,7 +7874,93 @@
    "the antenna on the roof broke",
    "what a great day",
    "I love this song",
-   "let me think about it"
+   "let me think about it",
+   "my phone has no signal here",
+   "let's go to Cumaral this weekend",
+   "the coverage in this house is terrible I can't even send a WhatsApp",
+   "did you see the new tower they built next to the church",
+   "the TV signal goes out every time it rains",
+   "help me move the sofa before your mom gets here",
+   "raising kids is not easy",
+   "delete that photo I look horrible",
+   "my cousin is driving to Villavicencio tomorrow morning",
+   "she has a big network of friends in Yopal",
+   "can you pass me the ruler and a pencil",
+   "Laura called she says she's running late",
+   "I still have to send two payments to the bank before Friday",
+   "there were like 300 people at the wedding",
+   "my doctor wants me to do a stress test next week",
+   "my uncle has an oil palm farm near Puerto Lopez",
+   "the road to Granada is a disaster after all that rain",
+   "the river is really high this week",
+   "turn on the light I can't see anything",
+   "hide the cookies before the kids find them",
+   "show me the pictures from the trip",
+   "how much did the bus tickets to Yopal cost",
+   "the satellite dish on the roof is broken again",
+   "my Zoom meeting starts in 5 minutes",
+   "the TV antenna fell down with the wind last night",
+   "we're moving to Restrepo next year",
+   "that's a good example of what I was saying",
+   "save me a seat I'll be right there",
+   "can you load the dishwasher when you're done",
+   "raise the volume a little I can't hear the news",
+   "they renamed the street in front of the school",
+   "the internet at the office is down again",
+   "who's that person at the door",
+   "the Wi-Fi repeater in the living room stopped working",
+   "the point is we're going to be late",
+   "why doesn't my phone have signal in the kitchen",
+   "I want to go to Barranca de Upia for the festival",
+   "the solar panels are making more energy this month",
+   "my sister lives like 2 km north of town",
+   "hey Mel can you help me with the dishes",
+   "close the gate the dog is going to get out",
+   "put the kettle on I want some coffee",
+   "lower your voice the baby is sleeping",
+   "what's the distance from here to your grandma's farm",
+   "the price of rice went up again",
+   "move your car it's blocking the garage",
+   "my phone has no signal in the kitchen again",
+   "the TV antenna on the roof fell down with all that wind",
+   "we are moving to a new house in Granada next month",
+   "they put a new cell tower next to the church in town",
+   "my network of friends from the university is meeting on Saturday",
+   "I need to delete some photos my phone is full",
+   "did the bank payment go through or not",
+   "we're taking a trip to Yopal for the holidays",
+   "the doctor ordered a stress test for my dad next week",
+   "can you measure the living room I want to buy a new rug",
+   "zoom in on that photo I can't see the baby's face",
+   "lower the volume please I'm on a call",
+   "the river is really high after all the rain",
+   "they still haven't fixed the road to the farm",
+   "the satellite dish stopped working after the storm",
+   "where did you put the car keys",
+   "the wifi keeps dropping can you restart the router",
+   "how much is the bus ticket to Villavicencio",
+   "I'll send you the payment by WhatsApp later",
+   "load the dishwasher before you go to bed",
+   "the ruler is in the second drawer of my desk",
+   "do the drawing with the pencil first and then use the pen",
+   "the weather in Puerto Lopez is way too hot for me",
+   "the palm oil company in Puerto Gaitan is hiring again",
+   "my insurance coverage doesn't include the dentist",
+   "help me move the sofa closer to the window",
+   "delete that message before mom sees it",
+   "how many people fit in your truck",
+   "the old clock tower in the main square looks beautiful at night",
+   "the antenna of my car radio is broken",
+   "the meeting got moved to three o'clock",
+   "give me five minutes and I'll be ready",
+   "the repeater on the hill for the radio station is down again",
+   "my cousin from Cumaral is coming to visit this weekend",
+   "look at the map that's where grandpa's farm is",
+   "the gateway to the farm is full of mud after the rain",
+   "raise your hand if you want more coffee",
+   "the person at the store said they don't have any more bread",
+   "can you save me a seat at the meeting",
+   "how far is it from here to the supermarket"
   ],
   "es": [
    "pásame el café",
@@ -5265,7 +8007,93 @@
    "me encanta esta canción",
    "déjame pensarlo",
    "estás ahí",
-   "nuevo modo de juego"
+   "nuevo modo de juego",
+   "se me fue la señal del celular",
+   "ayer subí a la torre de la iglesia",
+   "mañana nos vamos pa Villavicencio a visitar a la abuela",
+   "este fin de semana vamos a Cumaral a comer mamona",
+   "aquí no entra la señal de Claro toca salir al patio",
+   "la señal del televisor se va cada vez que llueve",
+   "ayúdame a mover el sofá pa la sala",
+   "criar hijos no es nada fácil",
+   "borra esa foto que salí horrible",
+   "mi mamá tiene una red de amigas enorme",
+   "préstame la regla y un lápiz",
+   "la lora de mi abuela habla todo el día",
+   "tengo que hacer dos pagos en el banco antes del viernes",
+   "había como 300 personas en el matrimonio",
+   "el médico me mandó a hacer una prueba de esfuerzo",
+   "mi tío tiene una plantación de palma por Puerto López",
+   "la vía a Granada quedó horrible después del aguacero",
+   "el río está muy crecido no se puede pasar",
+   "prende la luz que no veo nada",
+   "esconde las galletas que los niños se las comen",
+   "muéstrame las fotos del paseo",
+   "cuánto costaron los pasajes a Yopal",
+   "la antena del televisor se cayó con el viento",
+   "nos vamos a pasar a vivir a Restrepo el otro año",
+   "por ejemplo mi hermana siempre llega tarde",
+   "guárdame un puesto que ya llego",
+   "carga el celular que se me murió",
+   "súbele el volumen a la radio",
+   "le cambiaron el nombre a la calle del colegio",
+   "el internet de la oficina se cayó otra vez",
+   "quién es esa persona que está en la puerta",
+   "el repetidor de la emisora queda en el cerro",
+   "la malla del gallinero está rota",
+   "el mapa del carro está viejísimo",
+   "quiero ir a Barranca de Upía pal festival",
+   "los paneles solares están dando más energía este mes",
+   "mi hermana vive como a 2 km al norte del pueblo",
+   "por qué mi celular no tiene señal en la cocina",
+   "baja la voz que el bebé está dormido",
+   "oiga Melquisedec venga un momento",
+   "cierra la puerta que se sale el perro",
+   "a qué hora sale el bus pa Villanueva",
+   "se subió otra vez el precio del arroz",
+   "quita esa música que me duele la cabeza",
+   "pon el agua pal tinto",
+   "mueve el carro que está tapando el garaje",
+   "no tengo señal en el celular qué fastidio",
+   "se cayó la antena del televisor con el ventarrón de anoche",
+   "nos vamos a pasar de casa el otro mes",
+   "pusieron una torre de celular al lado del colegio",
+   "mi red de amigos del colegio se reúne el sábado",
+   "toca borrar fotos que el celular está lleno",
+   "ya te llegó el pago del banco o todavía no",
+   "el puente festivo nos vamos pa Yopal",
+   "el médico le mandó una prueba de estrés al abuelo",
+   "mide la sala que vamos a comprar un tapete",
+   "hazle zoom a esa foto que no se ve la cara del niño",
+   "parce me pasa el cargador porfa",
+   "esa vaina está carísima",
+   "cuánto cuesta el pasaje a Villavicencio",
+   "súbale el volumen a la radio que va a empezar el partido",
+   "bájele a la música que estoy en una llamada",
+   "el río está crecido por el aguacero de anoche",
+   "la carretera a Puerto Gaitán está cerrada por un derrumbe",
+   "qué hay de almuerzo hoy",
+   "apaga la luz cuando salgas",
+   "mamá dónde dejaste las llaves",
+   "el internet está muy lento hoy",
+   "esa persona me cae muy bien",
+   "hágale pues nos vemos a las tres",
+   "en Granada hay festival de música el fin de semana",
+   "pásame el lápiz y la regla que tengo tarea de geometría",
+   "la palma de aceite está pagando bien este año",
+   "viste el clima dicen que va a llover toda la semana",
+   "ya renombré la carpeta de las fotos del bautizo",
+   "el repetidor de la emisora se dañó otra vez",
+   "toca guardar plata pal viaje de diciembre",
+   "le mandaste el mensaje por WhatsApp a tu tía",
+   "la cobertura del seguro no cubre odontología",
+   "están construyendo la torre nueva del parque principal",
+   "qué calor tan berraco hace en Puerto López",
+   "córrase un poquito que no quepo",
+   "voy a hacer la transferencia por Nequi ahorita",
+   "el doctor dice que tengo que bajar de peso",
+   "mi hermano trabaja instalando antenas en Acacías",
+   "cuántas personas caben en la camioneta"
   ]
  }
 }
