@@ -305,6 +305,35 @@ ve la simulación detrás) y un botón para que hable en voz alta o no, a mano.
   nadie escribió en una regla («feel» por «fill», «coast» por «cost», «be twin» por «between», «maya» por «malla»). Lo
   cambiado solo por cómo suena tiene que seguir pareciendo una orden de Melki, no contesta preguntas, y sin su nombre
   solo cuenta si se nombra algo del simulador (pruebas: `tests/melki/oido.mjs` con `frases-pronunciacion.json`)
+- **Lo que se oye mal, todavía más** (v17.5): Melki reconoce los nombres de los nodos del mapa aunque el reconocimiento
+  los escriba de otro modo, comparando por cómo suenan (también con el acento del otro idioma y con la pieza en el otro
+  idioma): «Delete Tory to» es borrar la Torre 2 (con «¿lo hago?»), «point a hemp low northeast» apunta Ejemplo y «how
+  many people can repeat or 2 handle» pregunta por el Repeater 2; una pieza nueva a una distancia sigue siendo nueva
+  («add a person 1.5 km north…» no es «Person 1»), y el número de un nodo pegado a la medida se separa («mueve el
+  repetidor 1500 metros» es el Repetidor 1, 500 m). Corrige más palabras en los dos idiomas («yogi», «yagui» o «yeah
+  gee» por Yagi, «mesh corp» por MeshCore, «mess tactic» por Meshtastic, «decay MZ» por KMZ, «what's up messages» por
+  WhatsApp, «Joe Paul» o «your pal» por Yopal; «pongo una persona…», «llevar el gateway…», «gire Ejemplo…» o «quíteme…»
+  por la orden, «pon le», «actívala regla», «debo pone más torres», «cuánta persona aguanta…», «toa la red», «pa'
+  Cumaral», «a mismo tiempo») y las coordenadas dichas de otro modo («4:25 -73.40», «4.5 1 2 3 minus 73.1 2 3 4», «4,22
+  menos 73,4»). Una pregunta con una palabra mal oída se corrige por cómo suena si lo que queda sigue siendo la
+  pregunta y solo consulta («what's the distant from the gateway to Repeater 1» es la distancia; «how much con it
+  handle»), y lo que contesta el cerebro también lleva las correcciones seguras («what's mesh core»). Por voz, los
+  nombres nuevos quedan con mayúscula («renombra el Repetidor 2 como loma alta» → «Loma Alta», «Cerro de la Cruz»), y
+  el presupuesto dictado en cifras se muestra como se dice («120 millones»). Si el reconocimiento propone varias
+  versiones de una frase y ninguna se entiende tal cual, gana la que se entiende corrigiendo lo mal oído; se le
+  sugieren también Yagi, KMZ, LoRa y los nombres de los nodos del mapa. Con el Asistente sin su nombre, la charla con
+  alguien más pasa sin hacerse aunque nombre algo del simulador («let's go to Cumaral this weekend», «my doctor wants
+  me to do a stress test next week», «préstame la regla y un lápiz», «le cambiaron el nombre a la calle del colegio»);
+  con su nombre o por escrito, sí, y lo que también es del simulador no se toma por charla («en un radio de 3 km»,
+  «dame un lápiz», «renombra el Repetidor 2 como La Mesa»). «Desactiva la regla» y «turn off the ruler» ahora la
+  sueltan (antes la activaban), «point Ejemplo toward the gateway» apunta, «siembra una malla alrededor del gateway»
+  siembra y «rename the scenario to Finca Uno» ya no deja el nombre a medias. Medido con frases dictadas escritas a
+  ciegas, cada tanda medida antes de tocar nada por ella: con la cuarta (213 en inglés y 163 en español) la v17.4
+  entendía el 80 % y el 78 %, y la v17.5 el 85 % y el 80 % (el 96 % y el 96 % después de afinar con ella); con la
+  quinta (149 y 116), escrita después, la v17.4 el 72 % y el 80 % y la v17.5 el 77 % y el 83 % (el 92 % y el 95 %
+  después). Con las cinco tandas juntas (1.123 y 804 frases), la v17.4 entiende el 83 % y el 87 %, y la v17.5 el 96 % y
+  el 97 %; de la charla cercana (131 y 131 frases), la v17.4 tomaba 13 y 18 como pedidos, y la v17.5 ninguna, sin que
+  ninguna de las 3.794 órdenes de las pruebas (dichas bien y mal) parezca charla
 - **«Cerca de…» y alturas relativas** (v17.4): «pon el Repetidor 1 cerca del gateway», «acerca la Persona 2 al Repetidor
   2», «move Repeater 1 next to the gateway» o «bring Repeater 2 closer to the gateway» lo dejan a 200 m del nodo
   nombrado, del lado por donde venía (o del lado más libre); «mueve el repetidor al gateway» mueve el repetidor (el
@@ -685,7 +714,10 @@ src/
                             nombres de los nodos del otro idioma; ortografia-en.ts, los errores de tecleo y de dictado
                             del inglés; melki.tsx, el idioma de cada mensaje y el Modelo Melki de ese idioma; v17.4:
                             oido.ts, lo que se oyó mal en los dos idiomas: las correcciones seguras, las versiones de lo
-                            dicho y cuál usar, con «¿quiso decir…?» y «¿lo hago?»)
+                            dicho y cuál usar, con «¿quiso decir…?» y «¿lo hago?»; v17.5: oido.ts, los nombres del mapa
+                            por cómo suenan, las preguntas que solo consultan, los nombres dictados con mayúscula y la
+                            charla con alguien más (pareceCharla); manos-libres.ts, la versión del reconocimiento que se
+                            entiende corrigiendo lo mal oído)
   datos/geo/                límites, nombres y ríos de referencia (ver LEEME.md: fuentes y licencias)
   datos/modelo/melki.json   los pesos del Modelo Melki (enteros de 8 bits en base64), su vocabulario, sus umbrales y su
                             evaluación; se carga aparte, cuando el navegador está desocupado (melki-en.json: el mismo
