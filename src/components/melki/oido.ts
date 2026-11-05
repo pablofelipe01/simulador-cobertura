@@ -129,6 +129,7 @@ const REGLAS_EN: Regla[] = [
   regla(/(?<=\b(?:the|its|it's|his|a|antenna|tower|repeater|gateway|node|person)\s+)(?:hide|hight|hate|high|eight|heights|hi)\b/gi, "height", 0.8),
   regla(/\b(?:stimulation|emulation)\b/gi, "simulation", 0.7),
   regla(/\b(?:liars|players|lawyers|layer's)\b/gi, "layers", 1),
+  segura(/(?<=\b(?:show|so|hide|without)\s+(?:the\s+)?)(?:rhodes|rose|roses|road's)\b(?=\s+and\b|\s*$|\s*[.,!?])/gi, "roads", 0.4),
   regla(/(?<=\b(?:the|show|hide|no|without)\s+)(?:rhodes|rose|rows|roots|road's)\b/gi, "roads", 0.9),
   regla(/\b(?:municipal\s+it|municipal\s+at|municipal\s+tea|municipality's)\b/gi, "municipality", 0.8),
   regla(/(?<=\b(?:the|an|load|show|open)\s+)(?:sample|exam\s+pull|egg\s+sample)\b/gi, "example", 1.1),
@@ -277,12 +278,12 @@ const REGLAS_EN: Regla[] = [
   regla(new RegExp(`${INICIO_EN}(?:kinect|connected|connects|kinnect|connector)\\b`, "i"), "$1connect", 0.7),
   regla(new RegExp(`${INICIO_EN}(?:sender)\\b(?=\\s+(?:test|a|the))`, "i"), "$1send a", 0.8),
   regla(new RegExp(`${INICIO_EN}(?:sent|sand|cent)\\b(?=\\s+\\S)`, "i"), "$1send", 0.8),
-  regla(new RegExp(`${INICIO_EN}(?:chance|chain|changed|changes)\\b(?=\\s+(?:the|it|to)\\b)`, "i"), "$1change", 0.7),
+  regla(new RegExp(`${INICIO_EN}(?:chance|chain|chains|changed|changes)\\b(?=\\s+(?:the|it|to|its|his|eats|is)\\b)`, "i"), "$1change", 0.7),
   regla(new RegExp(`${INICIO_EN}(?:optimist|optimism|optimus)\\b`, "i"), "$1optimize", 0.7),
   regla(new RegExp(`${INICIO_EN}(?:cole|coal|col|cool)\\b(?=\\s+(?:repeater|person|node|tower|antenna|gateway|it|the)\\b)`, "i"), "$1call", 0.8),
   regla(new RegExp(`${INICIO_EN}(?:it's\\s+start|its\\s+start|estart|start\\s+it)\\b`, "i"), "$1start", 0.7),
   regla(new RegExp(`${INICIO_EN}(?:loaded|lowered\\s+the\\s+sample)\\b`, "i"), "$1load", 0.8),
-  regla(new RegExp(`${INICIO_EN}(?:so|sew|sow)\\b(?=\\s+(?:the\\s+)?(?:roads|rods|rows|layers|results|coverage|map|signal|network|panel|people|repeaters|nodes|path|profile|pad|pat)\\b)${SIN_VERBO_EN}`, "i"), "$1show", 0.7),
+  regla(new RegExp(`${INICIO_EN}(?:so|sew|sow)\\b(?=\\s+(?:the\\s+)?(?:roads|rods|rows|rose|roses|layers|results|coverage|map|signal|network|panel|people|repeaters|nodes|path|profile|pad|pat)\\b)${SIN_VERBO_EN}`, "i"), "$1show", 0.7),
   regla(new RegExp(`${INICIO_EN}(?:sue\\s+be|super|sube)\\b(?=\\s+(?:repeater|person|node|tower|antenna|gateway|el|la|it)\\b)`, "i"), "$1sube", 0.8),
   regla(/\bwanna\b(?=\s+(?:a\s+)?(?:repeater|person|node|gateway|antenna|tower|network))/gi, "want a", 0.6),
   regla(/\ba\s+very\b(?=\s+(?:node|repeater|person|antenna|tower|one))/gi, "every", 0.6),
@@ -294,6 +295,7 @@ const REGLAS_EN: Regla[] = [
   regla(/\bmessage\s+for\b/gi, "message from", 0.7),
   regla(/(?<=\bthe\s+)(?:rule|roller|rula|rooler)\b/gi, "ruler", 0.7),
   regla(/^(?:(?:okay|ok|so|um)[\s,]+)*(?:roller|rula|rooler|rule\s+her)$/i, "ruler", 0.6),
+  segura(/(?<=\b(?:show|give|see|check|open)\s+(?:me\s+)?(?:the\s+)?)links\b(?=\s+between\b)/gi, "link", 0.4),
   regla(/\blinks\b(?=\s+between\b)/gi, "link", 0.6),
   // Más palabras que el acento cambia (de la segunda tanda de frases dictadas)
   segura(/(?<=\b(?:a|an|on|the|another|one|new|each|every)\s+)repeat\s+(?:or|it\s+or|err|a\s+door|it\s+a\s+door)\b/gi, "repeater", 0.5),
@@ -376,6 +378,163 @@ const REGLAS_EN: Regla[] = [
   regla(/(?<=\busers?\s+(?:are|is)\s+)(?:feeling|filling|felling|fading|feeding)\b/gi, "failing", 0.6),
   regla(/(?<=\b(?:doesn't|does not|not|it)\s+)walk\b/gi, "work", 0.6),
   regla(/\btour\s+(?=\d|two\b|to\b|too\b)/gi, "tower ", 0.8),
+
+  // ── v17.5 · Lo que todavía se oía mal en inglés (frases dictadas con acento) ──
+  // Los rumbos de dos palabras, también sin una distancia antes («point Ejemplo north east»)
+  segura(/\b(north|south)\s+(east|west)\b/gi, "$1$2", 0.3),
+  // Entre dos nodos, «end» es «and» («the link between Repeater one end Repeater two»)
+  segura(/(?<=\b(?:repeater|person|tower|node|antenna|gateway|torre)(?:\s+(?:\d+|one|two|three|four|five))?\s+)end(?=\s+(?:the\s+)?(?:repeat\w*|person|tower|node|antenna|gateway|torre|ejemplo|example)\b)/gi, "and", 0.4),
+  // Un número no va antes de «its», «his», «their»…: «fill the gateway two its limit» es «to its limit»
+  segura(/(?<!\b(?:repeater|person|tower|torre|node|antenna|repetidor|persona|nodo|antena|gateway)s?\s+)\b(?:two|too|2)\s+(?=(?:its|his|her|their|my|your|our)\b)/gi, "to ", 0.4),
+  regla(/(?<=\bto\s+)his\b(?=\s+(?:limit|max|maximum|capacity)\b)/gi, "its", 0.6),
+  regla(/\bapp\s+to\b/gi, "up to", 0.6),
+  // «Export two PDF», «save it too KMZ»: el formato
+  segura(/(?<=\b(?:export|save|download|convert)(?:\s+(?:it|this|that|them|the\s+\w+))?\s+)(?:two|too|2)\s+(?=(?:a\s+|an\s+)?(?:pdf|kmz|kml|csv|json|png|jpe?g|image|picture|excel|google)\b)/gi, "to ", 0.4),
+  regla(new RegExp(`${INICIO_EN}(?:a\\s+sport|a\\s+spot|is\\s+sport|ex\\s+sport|ex\\s+port|a\\s+sports)\\b(?=\\s+(?:to|two|too|2|as|in|the|a|an)\\b)`, "i"), "$1export", 0.6),
+  // Después de «at most», «at least», «only»…, «to» es el número («at most to support antennas»)
+  segura(/(?<=\b(?:at\s+most|at\s+least|no\s+more\s+than|maximum\s+of|maximum|max|only|just|exactly)\s+)(?:to|too)\b(?=\s+(?:\w+\s+)?(?:repeaters|antennas|gateways|towers|nodes|people|persons|users|sites)\b)/gi, "2", 0.4),
+  // El mapa: «clear them up», «clean that map», «why the map clean» («wipe the map clean»)
+  regla(/(?<=\b(?:clear|clean|wipe|erase|reset)\s+)(?:them|then|the|that)\s+(?:up|mop|mob|nap)\b/gi, "the map", 0.7),
+  segura(/(?<=\b(?:clear|clean|wipe|erase|reset|show|hide|center|centre|zoom)\s+)that\s+(?=map\b)/gi, "the ", 0.4),
+  regla(/^(?:why|white|wife|whip|wide)\s+(?=the\s+map\s+clean\b)/i, "wipe ", 0.6),
+  // «Show my whole network», «show me the old network», «the whole mess»
+  segura(/(?<=^(?:(?:hey|ok|okay|so|please|melki|can you|could you)[\s,]+)*(?:show|give)\s+)my\s+(?=(?:whole|entire|full|complete)\s+(?:network|net\s+work|mesh|map)\b)/i, "me the ", 0.4),
+  regla(/(?<=\bthe\s+)(?:old|hold|hole|holy)\s+(?=(?:network|net\s+work|mesh|map)\b)/gi, "whole ", 0.7),
+  segura(/(?<=\b(?:whole|entire|full)\s+)(?:mess|mash|match)\b/gi, "mesh", 0.4),
+  // Ir a un lugar, lanzar gente, cambiar de modo: «had to Villavicencio», «through 400 users», «is which to…»
+  regla(new RegExp(`${INICIO_EN}(?:had|hat|hit)\\s+to\\b(?=\\s+(?!the\\b|do\\b|go\\b|be\\b|get\\b|make\\b|say\\b)\\S)`, "i"), "$1head to", 0.6),
+  regla(new RegExp(`${INICIO_EN}(?:through|threw|thru)\\b(?=\\s+(?:\\d|a\\b|an\\b|some\\b|more\\b))`, "i"), "$1throw", 0.6),
+  regla(new RegExp(`${INICIO_EN}(?:is\\s+which|its\\s+which|it's\\s+which|is\\s+switch|which)\\b(?=\\s+(?:to|on|off|it)\\b)`, "i"), "$1switch", 0.6),
+  segura(/(?<=\bchange\s+)(?:his|eats|it's|it\s+is|is)\s+(?=name\b)/gi, "its ", 0.5),
+  // «But a Yagi on Example…», «but a repeater 2 km north…»: al empezar la orden, sin otro verbo, es «put»
+  segura(new RegExp(`${INICIO_EN}but\\s+(?=(?:a|an|the|another|\\d+)\\s+(?:repeaters?|gateways?|persons?|people|nodes?|towers?|antennas?|yagi|yeah\\s+gee|yogi)\\b)${SIN_VERBO_EN}`, "i"), "$1put ", 0.5),
+  segura(/(?<=\b(?:show|hide|open|close|display)\s+(?:the\s+|all\s+the\s+|both\s+)?)panel\b(?!\s+(?:of|de)\b)/gi, "panels", 0.3),
+  // MeshCore, Yagi y KMZ como los escribe el reconocimiento
+  segura(/\b(?:mesh|mess|mash)\s*(?:core|corp|corps|cor)\b/gi, "MeshCore", 0.4),
+  regla(new RegExp(`${INICIO_EN}used\\b(?=\\s+(?:the\\s+)?(?:mesh\\w*|meshcore|meshtastic|lora|sf\\s*\\d+|protocol|real|actual|flat|terrain|example|economic|cheap|optimi[sz]ed|recommended|maximum)\\b)`, "i"), "$1use", 0.6),
+  segura(/\b(?:yogi|yogis|jaggi|jagi|jaggy|yagui|yaqui|yaggi|yagy|yeah\s+gee|ya\s+gee|yah\s+gee|yahgi)\b(?=\s+(?:antennas?|on|onto|to|at|pointing|aimed|facing|for)\b)|(?<=\b(?:a|an|the|another|one|with|put|add|use|install|mount|place)\s+)(?:yogi|jaggi|jagi|jaggy|yagui|yaqui|yaggi|yagy|yeah\s+gee|ya\s+gee|yah\s+gee)\b/gi, "Yagi", 0.4),
+  regla(/\b(?:yogi|jaggi|jagi|jaggy|yagui|yaqui|yaggi|yeah\s+gee|ya\s+gee)\b/gi, "Yagi", 0.7),
+  segura(/\bdecay\s+m\.?\s*z\b/gi, "the KMZ", 0.4),
+  segura(/\b(?:kay|k)\s+m\.?\s*z\b|\bkm\s+z\b/gi, "KMZ", 0.4),
+  segura(/\bdown\s+load\b/gi, "download", 0.3),
+  // «Pointing a Tower 2»: apuntar a un nodo
+  segura(/(?<=\b(?:pointing|point(?:ed)?(?:\s+it)?|aim(?:ed|ing)?(?:\s+it)?|facing)\s+)a\s+(?=(?:(?:tower|repeater|person|node|torre|repetidor)\s+(?:\d|one|two|three|to|too)\b|(?:the\s+)?gateway\b))/gi, "at ", 0.4),
+  // El ajuste automático, la ganancia del receptor y los números antes de dBi, grados o por ciento
+  segura(/\ba\s+just\s*(?:meant|mint|ment|men|man)\b|\bajust\s*ment\b/gi, "adjustment", 0.4),
+  regla(/^(?:to|two|too)\s+(?=the\s+(?:automatic|stress|load|optimi|simulation|test|adjustment))/i, "do ", 0.6),
+  segura(/\breceive\s+her\b(?=\s+(?:gain|height|antenna|sensitivity|side|end)\b)/gi, "receiver", 0.4),
+  segura(new RegExp(String.raw`\b(?:${NUMEROS_OIDOS_EN})(?=\s+(?:dbi|db|dbm|degrees|percent)\b)`, "gi"), (n: string) => NUMERO_EN[n.toLowerCase()] ?? n, 0.5),
+  // «Itch repeater», «its repeater» (cada uno), «hole up», «see if it holes»
+  segura(/\bitch\b(?=\s+(?:repeater|person|node|tower|antenna|gateway|one)\b)/gi, "each", 0.4),
+  regla(/\bits\s+(?=(?:repeater|node|tower|antenna|gateway|person)\b(?!\s+\d))/gi, "each ", 0.7),
+  segura(/\bhole\s+up\b/gi, "hold up", 0.4),
+  segura(/(?<=\bif\s+(?:it|eat|its|it's)\s+)(?:holes|halls)\b/gi, "holds", 0.4),
+  segura(/(?<=\b(?:see|check|test)\s+if\s+)eat\b/gi, "it", 0.4),
+  // La imagen, la gente poblada, quitar todo, abrir un ejemplo
+  segura(/(?<=\b(?:export|save|download)\s+(?:as\s+)?(?:an?|the)\s+)imagine\b/gi, "image", 0.4),
+  segura(/\bpopulate\s+(?=(?:people|persons|users|nodes)\b)/gi, "populated ", 0.4),
+  regla(new RegExp(`${INICIO_EN}removal\\b(?=\\s+(?:the\\s+)?(?:people|persons|users|nodes|repeaters|antennas|measurements)\\b)`, "i"), "$1remove all", 0.6),
+  segura(/(?<=\b(?:delete|remove|erase|clear)\s+all\s+)those\b/gi, "the", 0.4),
+  segura(/(?<=\b(?:open|load)\s+)(?:and|in|on)\s+(?=example\b)/gi, "an ", 0.4),
+  regla(new RegExp(`${INICIO_EN}opening(?:\\s+(?:an?|the))?\\b(?=\\s+example\\b)`, "i"), "$1open an", 0.6),
+  // WhatsApp, los mensajes y el segundo de la prueba de carga
+  segura(/\bwhat(?:'?s|\s+is)\s*up\b(?=\s+(?:messages?|payments?|texts?|chats?)\b)|\bwhats\s*app\b/gi, "WhatsApp", 0.4),
+  segura(/\bin\s+(?:one|a)\s+second\b/gi, "in 1 second", 0.3),
+  segura(/(?<=\bhow\s+many\s+)(payment|message|user|person|repeater|node|antenna|tower|gateway)\b(?!s)/gi, (_m: string, p: string) => (p.toLowerCase() === "person" ? "people" : `${p}s`), 0.3),
+  segura(/(?<=\bat\s+once\s+)(?:and|an|on|un)\s+(?=(?:one|1|a|\d+(?:\.\d+)?)\s+seconds?\b)/gi, "in ", 0.4),
+  segura(/(?<=\d\s+)massages?\b/gi, (m: string) => (/s$/i.test(m) ? "messages" : "message"), 0.4),
+  // Preguntas: «how far his…», «how match…», «what does the network cause», «how much is the network cost», «can I handle»
+  segura(/(?<=\bhow\s+(?:far|much|many|high|tall|long|big|strong|good)\s+)his\b/gi, "is", 0.4),
+  segura(/\bhow\s+(?:match|mach|mutch|march)\b/gi, "how much", 0.4),
+  segura(/(?<=\b(?:does|do|did|will|would)\s+(?:the\s+|my\s+|this\s+|our\s+|a\s+)?(?:network|mesh|net\s+work|repeater|gateway|antenna|node|tower|it|that|this|design|solution|deployment)\s+)(?:cause|coast|cast|caused|costs)\b/gi, "cost", 0.4),
+  segura(/\bhow\s+much\s+is\s+the\s+(network|mesh)\s+cost\b/gi, "how much does the $1 cost", 0.4),
+  segura(/(?<=\b(?:for|in|of|to|from|at)\s+(?:the\s+)?)(?:metta|meta's|medda)\b/gi, "Meta", 0.4),
+  regla(/(?<=\b(?:for|in|of|to|from|at)\s+(?:the\s+)?)meda\b/gi, "Meta", 0.6),
+  // «With as sparse density», «north off Example», «4.4 minus 73» (la longitud sin decimales)
+  segura(/(?<=\bwith\s+)as\s+(?=(?:sparse|dense|low|high|medium|normal|uniform)\s+density\b)/gi, "a ", 0.4),
+  segura(/(?<=\d\s*(?:km|kms|kilomet\w*|meters?|metres?|m|miles?)\s+(?:north|south|east|west|northeast|northwest|southeast|southwest)\s+)off\b/gi, "of", 0.4),
+  segura(/(?<=\b\d{1,2}\.\d+\s*,?\s*)(?:-|minus\s+|negative\s+)\s*(\d{2,3})(?![\d.,]|\s*(?:km|m|meters?|metres?|%|percent)\b)/gi, "-$1.0", 0.4),
+  regla(/(?<=\bcan\s+)i\s+(?=(?:handle|hold|take|support|serve)\b)/gi, "it ", 0.6),
+  regla(/\b(?:handel|hand\s+el|hand\s+all)\b(?=\s*[?.!]?\s*$)/gi, "handle", 0.6),
+  segura(/(?<=\bhow\s+many\s+)(?:uses|juicers|losers|youzers)\b/gi, "users", 0.4),
+  segura(/(?<=\bhow\s+(?:much|many\s+\w+)\s+)con\b(?=\s+(?:it|i|we|you|they|the|each|this|that)\b)/gi, "can", 0.4),
+  regla(/\bcon\b(?=\s+(?:it|i|we|you|they)\s+(?:handle|hold|support|reach|cover|take|connect|see)\b)/gi, "can", 0.6),
+  segura(/^(?:to|two|too)\s+(?=i\b(?!-))/i, "do ", 0.4),
+  segura(/(?<=\bwhy\s+(?:not|don't\s+(?:i|we|you)|do\s+not\s+(?:i|we|you)|do\s+(?:i|we)\s+not)\s+)(?:at|had|and|ad|odd)\b(?=\s+(?:more|another|a|an|some|extra|one|\d))/gi, "add", 0.4),
+  // La zona, la malla otra vez, simular al final, «of that gateway», «turn it into…», «grab that pencil»
+  segura(/(?<=\bpopulate\s+(?:the|this|that)\s+)(?:sun|son|soon|zon)\b/gi, "zone", 0.4),
+  segura(/(?<=\b(?:seed|reseed|sow|plant|optimi[sz]e|simulate)\s+(?:the|my|this|a)\s+)(?:match|mash|mess|mush)\b/gi, "mesh", 0.4),
+  segura(/(?<=\b(?:mesh|match|mash|mess|network)\s+)a\s+gain\b/gi, "again", 0.3),
+  segura(/(?<=\b(?:and|then)\s+)(?:stimulate|emulate|simulator|simulated)\b(?=\s*[.!]?\s*$)/gi, "simulate", 0.4),
+  segura(/(?<=\b(?:of|from|to|near|around)\s+)that\s+(?=(?:gateway|repeater|tower|person|node|antenna)\b)/gi, "the ", 0.4),
+  regla(new RegExp(`${INICIO_EN}turned\\s+(?=in\\s*to\\b)`, "i"), "$1turn it ", 0.6),
+  segura(/\bin\s+to\b(?=\s+(?:an?|the)\s+(?:repeat\w*|gateway|person|node|tower|antenna|router|client)\b)/gi, "into", 0.4),
+  segura(/(?<=\b(?:grab|take|use|drop|release|activate)\s+)that\s+(?=(?:pencil|ruler|tool|hand|eraser)\b)/gi, "the ", 0.4),
+  // Los ríos y los nombres: «hide the reverse and then names»
+  segura(/(?<=\b(?:show|hide|without|no)\s+(?:the\s+)?)(?:reverse|revers|rivals|rivets)\b/gi, "rivers", 0.5),
+  regla(/(?<=\bthe\s+)reverse\b/gi, "rivers", 0.7),
+  segura(/(?<=\b(?:and|or|with|without)\s+)then\s+(?=(?:names|roads|rivers|layers|labels|towns|municipalities|hills|nodes|links)\b)/gi, "the ", 0.4),
+  segura(/\b(?:settle|satel|saddle|sadder)\s+light\b/gi, "satellite", 0.4),
+  // Las coordenadas dichas de otro modo: «4:25 -73.40», «4.5 1 2 3 minus 73.1 2 3 4», «4.51 23 - 73.12 34», «comma»
+  segura(/\b(\d{1,2}):(\d{1,6})(?=\s*,?\s*(?:-|minus\s+|negative\s+)\s*\d{2,3}(?:[.:]\d+)?\b)/gi, "$1.$2", 0.4),
+  segura(/(?<=(?:-|minus\s+|negative\s+)\s*\d{2,3}):(\d{1,6})\b/gi, ".$1", 0.4),
+  segura(/\b(\d{1,2}\.\d{1,5})((?:\s\d{1,4}(?![\d.]))+)(?=\s*,?\s*(?:-|minus\b|negative\b)\s*\d{2,3}\b)/gi, (_m: string, a: string, b: string) => a + b.replace(/\s+/g, ""), 0.4),
+  segura(/((?:-|minus\s+|negative\s+)\s*\d{2,3}\.\d{1,5})((?:\s\d{1,4}(?![\d.]))+)(?=\s*$|\s*[,;.!?]|\s+(?:at|with|and|pointing|facing|height|to|for)\b)/gi, (_m: string, a: string, b: string) => a + b.replace(/\s+/g, ""), 0.4),
+  segura(/(?<=\d)\s+comma\s+(?=-|minus\b|negative\b|\d)/gi, ", ", 0.3),
+  segura(/\b([2-9])0\s+(?:tree|three|free)(?=\s+point\b|\s*\.\d)/gi, "$13", 0.4),
+  segura(/(?<=\b(?:node|repeater|antenna|person|tower|gateway|scenario|project|it)\s+)(?:cold|coled|cult|culled)\b(?=\s+\S)/gi, "called", 0.4),
+  // La optimización, la prueba de carga y el costo como los escribe el reconocimiento
+  segura(/\b(?:up|op|opt)\s+(?:to|ti|tea|in)\s+(?:my|mi|me|mice)\s*(?:station|zation|sation|session|sations)\b/gi, "optimization", 0.4),
+  regla(new RegExp(`${INICIO_EN}(?:lowest|low\\s+test|lo\\s+test|load\\s+est|low\\s+dest)\\b(?=\\s+(?:the|my|this|our)\\s+(?:network|mesh|net\\s+work|gateway|repeaters?)\\b)`, "i"), "$1load test", 0.6),
+  // Medio kilómetro, números con «point» dichos en palabras, el zoom, las capas, los nodos y las herramientas
+  segura(/\bhave\s+a\s+(?=(?:km|kms|kilomet\w*|miles?|meters?|metres?|block)\b)/gi, "half a ", 0.4),
+  segura(/\b(zero|one|two|three|four|five|six|seven|eight|nine|ten)\s+point\s+(\d+)\b/gi, (_m: string, n: string, d: string) => `${{ zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 }[n.toLowerCase()]}.${d}`, 0.4),
+  segura(/^(?:(?:hey|ok|okay|melki|please)[\s,]+)*zooming\s*$/i, "zoom in", 0.4),
+  regla(new RegExp(`${INICIO_EN}(?:some|sum|soon|zoo|zone|zoomed)\\b(?=\\s+(?:in|out)\\s*[.!]?\\s*$)`, "i"), "$1zoom", 0.6),
+  segura(/(?<=\b(?:rivers?|roads?|terrain|satellite|names|municipalit(?:y|ies)|towns|hills|contours?|labels)\s+)(?:later|lawyer|liar|player|lair)\b/gi, "layer", 0.4),
+  segura(/(?<=\b(?:show|hide|delete|remove|select|connect|list|count)\s+(?:me\s+)?(?:all\s+)?(?:the\s+)?)notes\b/gi, "nodes", 0.4),
+  segura(/(?<=\b(?:show|hide|open|close|display)\s+(?:the\s+)?)tool\b(?!\s+(?:called|named|bar))/gi, "tools", 0.3),
+  segura(/^((?:(?:hey|ok|okay|melki|please)[\s,]+)*)but\s+(?=down\s+the\s+(?:pencil|ruler)\b)/i, "$1put ", 0.4),
+  segura(/(?<=\b(?:turn\s+(?:on|off)|use|grab|drop|release|activate|deactivate|disable|enable)\s+the\s+)rule\b(?!\s+(?:of|for|that|is)\b)/gi, "ruler", 0.4),
+  segura(/(?<=\bcan\s+(?:\S+\s+){1,3})and\s+all\b(?=\s*[?.!]?\s*$)/gi, "handle", 0.4),
+  regla(new RegExp(`${INICIO_EN}saturated\\b(?=\\s+\\S)`, "i"), "$1saturate", 0.6),
+  // LoRa, SF, el rango, «is their signal», «what the…», el factor de propagación, «reach»
+  segura(/(?<=\bwhat(?:'s|\s+is)\s+)laura\b|\blaura\b(?=\s+(?:network|protocol|modulation|radio|nodes?|signal|mesh|technology)\b)/gi, "LoRa", 0.4),
+  segura(/\bas\s+f\b(?=\s*(?:\d|mean|stand|is|$|[?.!]))/gi, "SF", 0.4),
+  segura(/\bdis\s+(able|connect)\b|\bde\s+(activate)\b/gi, (_m: string, a: string, b: string) => (a ? `dis${a}` : `de${b}`), 0.3),
+  segura(/(?<=\bthe\s+)(?:rains|reins|rings|ranch|rage|ranges)\b(?=\s+of\b)/gi, "range", 0.4),
+  segura(/^is\s+their\s+(?=(?:signal|coverage|a\s+link|any|enough)\b)/i, "is there ", 0.4),
+  regla(/^what\s+the\s+(?=(?:total\s+)?(?:cost|distance|range|coverage|signal|height|budget|price|capacity|limit)\b)/i, "what's the ", 0.6),
+  segura(/\bspread\s+in\s+factor\b|\bspreading\s+fact\w*\b|\bspread\s+factor\b/gi, "spreading factor", 0.4),
+  segura(/(?<=\bcan\s+(?:\S+\s+){1,3})rich\b(?=\s+(?:the|a|an|it|repeater|gateway|person|tower|node)\b)/gi, "reach", 0.4),
+  // Lugares que el reconocimiento escribe en inglés: «Joe Paul» (Yopal), «casa Nare» (Casanare), «fine Villanueva»
+  segura(/\b(?:joe|jo|yo)\s+(?:paul|pal|pool|paw)\b/gi, "Yopal", 0.4),
+  segura(/\bcasa\s+nare\b/gi, "Casanare", 0.4),
+  regla(new RegExp(`${INICIO_EN}(?:fine|fined|faint)\\b(?=\\s+\\S)`, "i"), "$1find", 0.6),  // v17.5 (quinta tanda) · Rumbos, verbos y palabras del simulador que el acento cambia
+  segura(/(?<=\d\s*)meters?\s+(?:seats|eats|east's)\b/gi, "meters east", 0.4),
+  regla(/^((?:okay|ok|so|alright)[\s,]+)no\s+(?=(?:move|put|add|delete|show|raise|lower|set|place)\b)/i, "$1now ", 0.6),
+  regla(new RegExp(`${INICIO_EN}ship\\b(?=\\s+(?:repeater|person|tower|node|antenna|the|it|gateway)\\b)`, "i"), "$1shift", 0.6),
+  regla(new RegExp(`${INICIO_EN}low\\b(?=\\s+(?:the|it|repeater|person|tower|node|gateway|antenna|all)\\b)`, "i"), "$1lower", 0.6),
+  segura(/\bmelky\b/gi, "Melki", 0.4),
+  segura(/(?<=\b(?:set|change|raise|lower|increase|reduce|what's|what\s+is)\s+the\s+)(?:hide|hight|hate|high)\s+(?=of\b)/gi, "height ", 0.4),
+  segura(/(?<=\b(?:to|in|for|near|of|from|around)\s+)your\s+pal\b/gi, "Yopal", 0.4),
+  segura(/\bthis\s+is\s+(?=scenario\b)/gi, "this ", 0.4),
+  segura(/(?<=\b(?:show|hide|display|the)\s+)the\s+rain\b(?!\s+(?:forecast|today|tomorrow))/gi, "the terrain", 0.4),
+  segura(/(?<=\b(?:see|view|show|hide)\s+(?:me\s+)?(?:all\s+)?(?:the\s+)?)notes\b/gi, "nodes", 0.4),
+  segura(/(?<=\bbut\s+)(?:height|hi|high|hyde|hid)\s+(?=the\b)/gi, "hide ", 0.4),
+  segura(/(?<=\d\s+)(?:actors|hectors|hector's|hectors'|hectare's)\b/gi, "hectares", 0.4),
+  segura(/(?<=\b(?:network|mesh|design|plan|it)\s+)4\s+(?=[A-Z])/g, "for ", 0.4),
+  segura(new RegExp(`${INICIO_EN}(?:see|seat|sit)\\s+(?=the\\s+(?:mesh|network)\\b)`, "i"), "$1seed ", 0.5),
+  segura(/\bpeoples\b/gi, "people", 0.3),
+  segura(/\bsport\s+(?=antennas?\b)/gi, "support ", 0.4),
+  segura(/\besf\b/gi, "SF", 0.4),
+  segura(/(?<=\bwhat(?:'s|\s+is)\s+)the\s+bm\b/gi, "dBm", 0.4),
+  segura(/\bspending\s+factor\b/gi, "spreading factor", 0.4),
+  regla(new RegExp(`${INICIO_EN}(?:is\\s+port|its\\s+port|it's\\s+port)\\b(?=\\s+(?:to|two|too|2|as|in|the|a|an)\\b)`, "i"), "$1export", 0.6),
+  segura(/(?<=\bexport(?:\s+(?:to|2|the|a|as|in))?\s+)km'?s\b/gi, "KMZ", 0.4),
+  segura(/\b(?:mess|mesh|mash)\s+(?:tactic|tactics|fantastic|tastik)\b/gi, "Meshtastic", 0.4),
+  segura(/\boil\s+(?:pam|pom|palms?|bomb|pal)\b/gi, "oil palm", 0.4),
+  segura(/\byoga\b(?=\s+antennas?\b)/gi, "Yagi", 0.4),
 ];
 
 /**
@@ -413,6 +572,71 @@ CORTAS_EN.push({ re: /(?<=\b(?:apply|use|accept|load|open|show|export|save|run|s
 /** Verbos con su pronombre pegado («sube lo» → «súbelo»), sin la tilde: el intérprete las quita. */
 const VERBOS_CLITICO_ES = "sube|baja|mueve|borra|pon|quita|lleva|acerca|elimina|renombra|selecciona|duplica|apaga|activa|desactiva|corre|ubica|coloca|llama|cambia|deja|arrima";
 
+/** El infinitivo de los verbos de las órdenes («¿debo pone…?» → «poner»). */
+const INFINITIVO_ES: Record<string, string> = {
+  pone: "poner", quita: "quitar", borra: "borrar", sube: "subir", baja: "bajar", mueve: "mover", agrega: "agregar", simula: "simular", cambia: "cambiar",
+  activa: "activar", apaga: "apagar", muestra: "mostrar", oculta: "ocultar", arma: "armar", disena: "diseñar", crea: "crear", carga: "cargar",
+  exporta: "exportar", guarda: "guardar", siembra: "sembrar", optimiza: "optimizar", reparte: "repartir", puebla: "poblar", prueba: "probar",
+  envia: "enviar", manda: "mandar", conecta: "conectar", aumenta: "aumentar", reduce: "reducir",
+};
+/**
+ * El imperativo de los verbos de las órdenes, desde la primera persona, el infinitivo o la forma de «usted» («pongo»,
+ * «poner», «ponga» → «pon»). Sin tildes.
+ */
+const IMPERATIVO_ES: Record<string, string> = Object.fromEntries(
+  (
+    [
+      ["pon", "pongo poner ponga"],
+      ["mueve", "muevo mover mueva"],
+      ["lleva", "llevo llevar lleve"],
+      ["quita", "quito quitar quite"],
+      ["borra", "borro borrar borre"],
+      ["sube", "subo subir suba"],
+      ["agrega", "agrego agregar agregue"],
+      ["simula", "simulo simular simule"],
+      ["muestra", "muestro mostrar muestre"],
+      ["elimina", "elimino eliminar elimine"],
+      ["renombra", "renombro renombrar renombre"],
+      ["coge", "cojo coger coja"],
+      ["agarra", "agarro agarrar agarre"],
+      ["arrima", "arrimo arrimar arrime"],
+      ["acerca", "acerco acercar acerque"],
+      ["esconde", "escondo esconder esconda"],
+      ["oculta", "oculto ocultar oculte"],
+      ["busca", "busco buscar busque"],
+      ["exporta", "exporto exportar exporte"],
+      ["activa", "activo activar active"],
+      ["apaga", "apago apagar apague"],
+      ["envia", "envio enviar envie"],
+      ["guarda", "guardo guardar guarde"],
+      ["gira", "giro girar gire"],
+      ["disena", "diseno disenar disene"],
+      ["arma", "armo armar arme"],
+      ["siembra", "siembro sembrar siembre"],
+      ["manda", "mando mandar mande"],
+      ["ubica", "ubico ubicar ubique"],
+      ["coloca", "coloco colocar coloque"],
+      ["conecta", "conecto conectar conecte"],
+      ["optimiza", "optimizo optimizar optimice"],
+    ] as [string, string][]
+  ).flatMap(([imp, formas]) => formas.split(" ").map((f) => [f, imp])),
+);
+
+/** El imperativo de «usted» con el pronombre pegado, en el de «tú» («quíteme» → «quítame»). Sin tildes. */
+const USTED_PEGADO_ES: Record<string, string> = {
+  quiteme: "quítame", quitenos: "quítanos", quitele: "quítale", muestreme: "muéstrame", muestrenos: "muéstranos", lleveme: "llévame",
+  llevenos: "llévanos", busqueme: "búscame", expliqueme: "explícame", expliquenos: "explícanos", recomiendeme: "recomiéndame",
+  digame: "dime", hagame: "hazme", traigame: "tráeme", dejeme: "déjame", pongame: "ponme", pongale: "ponle", cambiele: "cámbiale",
+  subale: "súbele", bajele: "bájale", borreme: "bórrame", armeme: "ármame", diseneme: "diséñame", calculeme: "calcúlame",
+  ubiqueme: "ubícame", acerqueme: "acércame", mandeme: "mándame", agreguele: "agrégale", pasele: "pásale", deme: "dame",
+}
+
+/** Una palabra sin tildes como expresión que también las acepta («envio» → «[eé][nñ]v[ií][oó]»). */
+const conTildes = (w: string) => w.replace(/a/g, "[aá]").replace(/e/g, "[eé]").replace(/i/g, "[ií]").replace(/o/g, "[oó]").replace(/u/g, "[uú]").replace(/n/g, "[nñ]");
+
+/** El plural de las piezas («más torre» → «más torres»). */
+const PLURAL_PIEZA_ES: Record<string, string> = { torre: "torres", antena: "antenas", persona: "personas", repetidor: "repetidores", nodo: "nodos", gateway: "gateways" };
+
 const REGLAS_ES: Regla[] = [
   // (también antes de un número de varias cifras: «sube lo 15 metros»)
   regla(new RegExp(String.raw`\b(${VERBOS_CLITICO_ES})\s+(lo|la|los|las)\b(?=\s+(?:(?:a|al|en|cerca|junto|hacia|como|mas|menos)\b|\d)|$)`, "gi"), "$1$2", 0.4),
@@ -441,7 +665,7 @@ const REGLAS_ES: Regla[] = [
   segura(/\bterreno\s+llano\b/gi, "terreno plano", 0.4),
   segura(/\b(a|de|para)\s+qui[eé]n\s+es\b(?=\s+(?:no|les|le|se)\b)/gi, "$1 quiénes", 0.4),
   segura(/\banima\s+a\s+la\s+(red|malla)\b/gi, "anima la $1", 0.4),
-  segura(/\b[aá]rea\s+de\s+objetivo\b/gi, "área objetivo", 0.4),
+  segura(/(?<![\wáéíóúñü])[aá]rea\s+de\s+objetivo\b/gi, "área objetivo", 0.4),
   segura(/\b(?:similar|simula)\s+al\s+cambiar\b/gi, "simular al cambiar", 0.5),
   segura(/(?<=\b(?:ajusta|centra|cambia|mueve)\s+la\s+)lista\b(?=\s+(?:a|al|en|sobre|hacia)\b)/gi, "vista", 0.5),
   segura(/\bvegetaci[oó]n\s+tensa\b/gi, "vegetación densa", 0.4),
@@ -472,16 +696,16 @@ const REGLAS_ES: Regla[] = [
   regla(/\bget\s*away\b/gi, "gateway", 0.7),
   regla(/\bmodo\b(?=\s+(?:antena|de campo|\d))/gi, "nodo", 0.8),
   regla(/\b(un|el|este|ese|cada|otro|nuevo)\s+modo\b(?!\s+(?:avanzado|sembrar|siembra|oscuro|claro|completo|experto|sencillo|facil|fácil|simple|trama|privado|navegador|manos|jarvis|nocturno|diurno))/gi, "$1 nodo", 0.9),
-  regla(/^(?:s[ií]\s+mula|simular|estimula|simul[aá]|simulo|simul[eé])\b/i, "simula", 0.6),
+  regla(/^(?:s[ií]\s+mula|simular|estimula|simul[aá]|simulo|simul[eé])(?![\wáéíóúñü])/i, "simula", 0.6),
   regla(/^(?:por|pan|son|bon)\s+(?=(?:un|una|el|la|otro|otra|dos|tres|cuatro|cinco|\d+)\b)/i, "pon ", 0.7),
   regla(/^(?:a\s+grega|agreda|agregue)\b/i, "agrega", 0.6),
-  regla(/^(?:ilumina|elimine|elimin[eé])\b/i, "elimina", 0.7),
+  regla(/^(?:ilumina|elimine|elimin[eé])(?![\wáéíóúñü])/i, "elimina", 0.7),
   regla(/^(?:vaya|baje|bajá)\s+(?=(?:el|la|lo|los|las|a|todos|todas)\b)/i, "baja ", 0.8),
   regla(/^(?:sobre|suba|sub[ií]|sub)\s+(?=(?:el|la|lo|los|las|a|todos|todas)\b)/i, "sube ", 0.8),
   regla(/^(?:muebe|mueva|muere|nueve)\s+(?=(?:el|la|lo|los|las|a|todos|todas)\b)/i, "mueve ", 0.8),
   segura(/\b(?:kilo\s+metros|quil[oó]metros)\b/gi, "kilómetros", 0.5),
 
-  segura(/\b(?:melqui|mel\s+qui|melky|mel\s+ki|melqu[ií])\b/gi, "Melki", 0.5),
+  segura(/\b(?:melqui|mel\s+qui|melky|mel\s+ki|melqu[ií])(?![\wáéíóúñü])/gi, "Melki", 0.5),
   regla(/\b(?:es\s+tr[eé]s|extr[eé]s)\b/gi, "estrés", 0.7),
   // ── Lo que el reconocimiento escribe mal del español dicho rápido (medido con frases dictadas) ──
   segura(/\bstress\b(?!\s+tests?\b)/gi, "estrés", 0.4),
@@ -528,6 +752,107 @@ const REGLAS_ES: Regla[] = [
   segura(/\bk\.?\s+m\.?\s+z\b|\bka\s+eme\s+(?:zeta|seta)\b/gi, "KMZ", 0.4),
   segura(/\bc\.?\s+s\.?\s+v\b|\bce\s+ese\s+uve\b/gi, "CSV", 0.4),
   segura(/\b(?:mes|mesh|mech)\s+(?:tastic|tástic|tastik)\b/gi, "Meshtastic", 0.4),
+
+  // ── v17.5 · Lo que todavía se oía mal en español (frases dictadas rápido) ──
+  segura(/(?<=\bprueba\s+de\s+)es\s*(?:3|tres)\b/gi, "estrés", 0.4),
+  segura(/\b(?:yagui|yaqui|llagui|llaqui|jagui|yogui|yaggi|yaghi)\b/gi, "Yagi", 0.4),
+  segura(/\b(?:mesh|mes|mech)\s*(?:core|cor|corp)\b/gi, "MeshCore", 0.4),
+  // El pronombre partido antes de un artículo: «pon le una Yagi», «cambia le el nombre», «vuelve me a hacerlo»
+  segura(new RegExp(String.raw`\b(${VERBOS_CLITICO_ES}|vuelve|haz|muestra|ensena|enseña|dibuja|arma|calcula)\s+(le|les|me|nos)\b(?=\s+(?:el|la|los|las|un|una|unos|unas|a|al|otra|otro)\b)`, "gi"), "$1$2", 0.4),
+  // Al empezar la orden, el «me» o el «nos» partido del verbo: «recomienda me antenas de soporte», «explica nos la red»
+  segura(/^((?:(?:oye|oiga|bueno|listo|melki|por\s+favor|ahora)[\s,]+)*)(recomienda|explica|ensena|enseña|muestra|busca|lleva|acerca|ubica|arma|dise[nñ]a|calcula|crea|simula|agrega|abre|exporta|guarda|trae|manda|env[ií]a|prepara|organiza|lista|cuenta|dibuja|optimiza|ajusta|siembra|conecta|indica|marca|se[nñ]ala|resume|compara|revisa|analiza|reparte|puebla)\s+(me|nos)\b(?=\s+\S)/i, "$1$2$3", 0.4),
+  // …y el pegado de más: «actívala regla» es «activa la regla»
+  segura(/(?<![\wáéíóúñü])(act[ií]va|desact[ií]va|qu[ií]ta|m[uú]estra|oc[uú]lta|ap[aá]ga|enci[eé]nde|su[eé]lta|t[oó]ma|[uú]sa|[aá]bre|ci[eé]rra|b[oó]rra|s[uú]be|b[aá]ja)la\s+(?=(?:regla|herramienta|vista|capa|barra|malla|red|cobertura|simulaci[oó]n|mano|l[aá]piz|leyenda|tabla|lista|zona|persona|antena|torre|gente)\b)/gi, (_m: string, v: string) => `${sinTildes(v)} la `, 0.4),
+  // Después de «debo», «puedo», «hay que»…, el verbo va en infinitivo («¿debo pone más torres?», «puedo quita…»)
+  segura(/(?<=\b(?:debo|debemos|deber[ií]a|deber[ií]amos|puedo|podemos|podr[ií]a|podr[ií]amos|tengo\s+que|tenemos\s+que|hay\s+que|quiero|queremos|necesito|necesitamos|voy\s+a|vamos\s+a)\s+)(pone|quita|borra|sube|baja|mueve|agrega|simula|cambia|activa|apaga|muestra|oculta|arma|dise[nñ]a|crea|carga|exporta|guarda|siembra|optimiza|reparte|puebla|prueba|env[ií]a|manda|conecta|aumenta|reduce)\b/gi, (_m: string, v: string) => INFINITIVO_ES[sinTildes(v)] ?? v, 0.4),
+  // Después de «más», «menos», «varias»…, la pieza en plural («más torre» → «más torres»)
+  segura(/(?<=\b(?:m[aá]s|menos|varias|varios|otras|otros|algunas|algunos|muchas|muchos|pocas|pocos)\s+)(torre|antena|persona|repetidor|nodo|gateway)\b(?!\s+\d)/gi, (_m: string, p: string) => PLURAL_PIEZA_ES[p.toLowerCase()] ?? p, 0.4),
+  // La barra de arriba, «donde haya señal», la densidad dicha («una persona por kilómetro cuadrado»)
+  segura(/\b(herramientas|barra)\s+(?:arriba|derriba|de\s+riba)\b/gi, "$1 de arriba", 0.4),
+  segura(/\bd[oó]nde\s+halla\b/gi, "donde haya", 0.4),
+  segura(/(?<=\b(?:haya|hay|sin|con|buena|mala|poca|mucha|tenga|tiene|tienen|tengan)\s+)se[nñ]a\b/gi, "señal", 0.4),
+  segura(/\bkil[oó]metros?\s+cuadrados?\b/gi, "km2", 0.4),
+  segura(/\buna\s+(persona|antena|torre|nodo)\s+(?=por\s+(?:km|kil[oó]metro|hect[aá]rea|ha)\b)/gi, "1 $1 ", 0.4),
+  regla(/^repartir\b/i, "reparte", 0.6),
+  // Pagos al tiempo, «todo el país», antenas de más, «¿cuánto cuesta la red?»
+  segura(/\btodo\s+pa[ií]s\b/gi, "todo el país", 0.3),
+  segura(/(?<=\b(?:pagos|mensajes|guasaps?|whatsapps?|textos)\s+)a\s+tiempo\b/gi, "al tiempo", 0.4),
+  segura(/(?<=\bal\s+tiempo\s+)(?:un|1)\s+segundo\b/gi, "en 1 segundo", 0.4),
+  segura(/^envi[oó]\s+(?=\d+\s+(?:pagos|mensajes|guasaps?|whatsapps?|textos)\b)/i, "envía ", 0.4),
+  segura(/\b(antenas|repetidores|nodos|torres|gateways|personas)\s+dem[aá]s\b/gi, "$1 de más", 0.4),
+  segura(/\bcuestan\s+(?=(?:la|el|mi|esta|esa|nuestra)\s+(?:red|malla|antena|torre|gateway|repetidor)\b)/gi, "cuesta ", 0.4),
+  segura(/\bpal\b(?=\s+\S)/gi, "para el", 0.4),
+  // A la redonda, la hora pico, el guasap, los dBm, los colores, el clima templado
+  segura(/\ba\s+la\s+ronda\b/gi, "a la redonda", 0.3),
+  regla(/^(?:cobre|cubra|cobra)\s+(?=\d|un\b|una\b|dos\b|tres\b|cuatro\b|cinco\b|diez\b|todo|toda|el\b|la\b)/i, "cubre ", 0.6),
+  segura(/\bahora\s+pico\b/gi, "la hora pico", 0.4),
+  segura(/(?<=\b(?:un|una|el|del|por)\s+)guas[aá](?![\wáéíóúñü])/gi, "WhatsApp", 0.4),
+  segura(/(?<=-?\d+\s*)(?:de\s*b\s*m|d\s*b\s*m|db\s+m|de\s+bm)\b/gi, "dBm", 0.4),
+  segura(/\bcalores\s+(?=arco|del?\s+(?:mapa|la\s+escala|la\s+se[nñ]al)|de\s+-?\d)/gi, "colores ", 0.4),
+  segura(/\bcontinental\s+templada\b/gi, "continental templado", 0.3),
+  // Las coordenadas con coma decimal («4,5123 -73,1234») y «coma» dicha entre las dos
+  segura(/\b(\d{1,2}),(\d{1,6})\s*,?\s*(?:-\s*|menos\s+)(\d{2,3}),(\d{1,6})\b/g, "$1.$2, -$3.$4", 0.4),
+  segura(/(?<=\d)\s+coma\s+(?=menos\b|-|\d)/gi, ", ", 0.3),
+  // «Que todos los repetidores que den a 15 m», «red sostenible económico Cumaral», «mueve el gateway Restrepo»
+  regla(/\bque\s+den\b/gi, "queden", 0.6),
+  segura(/(?<=\bred\s+(?:\p{L}+\s+)?)econ[oó]mico\b/giu, "económica", 0.4),
+  segura(/(?<=\becon[oó]mica\s+)([A-ZÁÉÍÓÚÑ][\p{L}]+)/gu, "en $1", 0.5),
+  // (el verbo y la pieza en mayúscula o minúscula; el lugar, con mayúscula)
+  regla(/(?<=\b(?:[Mm]ueve|[Mm]uevo|[Ll]leva|[Ll]levo|[Pp]on|[Uu]bica|[Cc]oloca|[Tt]raslada)\s+(?:el|la)\s+(?:[Gg]ateway|[Rr]epetidor(?:\s+\d+)?|[Pp]ersona(?:\s+\d+)?|[Tt]orre(?:\s+\d+)?|[Aa]ntena|[Nn]odo(?:\s+\d+)?)\s+)([A-ZÁÉÍÓÚÑ][\p{L}]+)/gu, "a $1", 0.6),
+  // El verbo de la orden dicho en primera persona, en infinitivo o con «usted»: «pongo una persona…», «llevar el gateway
+  // a Restrepo», «gire Ejemplo 45 grados» (solo si lo dicho tal cual no se entendió)
+  regla(new RegExp(String.raw`^((?:(?:oye|oiga|bueno|listo|melki|por favor|ahora)[\s,]+)*)(${Object.keys(IMPERATIVO_ES).map(conTildes).join("|")})(?![\p{L}])`, "iu"), (_m: string, antes: string, v: string) => `${antes}${IMPERATIVO_ES[sinTildes(v)] ?? v}`, 0.6),
+  // El rumbo sin «al», «ala» por «a la», «toa», «toda la persona», «lo río», «es conde», «as zoom», «a garra»
+  segura(/(?<=\d\s*(?:km|kil[oó]metros?|metros|m|millas?)\s+)(norte|sur|este|oeste|oriente|occidente|noreste|noroeste|sureste|suroeste|nororiente|noroccidente|suroriente|suroccidente)\b/gi, "al $1", 0.4),
+  segura(/\bala\s+(?=(?:persona|torre|antena|red|malla|zona|regla|derecha|izquierda|v[ií]a|redonda)\b)/gi, "a la ", 0.4),
+  segura(/\btoa\s+(?=(?:la|el|mi|esta|esa)\b)/gi, "toda ", 0.4),
+  segura(/\btoas\s+(?=(?:las|mis|estas|esas)\b)/gi, "todas ", 0.4),
+  segura(/\btoda\s+la\s+(persona|antena|torre)\b(?!\s+\d)/gi, "todas las $1s", 0.4),
+  segura(/(?<=\b(?:quita|muestra|oculta|esconde|pon|activa|desactiva|sin|con)\s+)lo\s+r[ií]os?\b/gi, "los ríos", 0.4),
+  segura(/(?<=\b(?:r[ií]os|capas|nombres|municipios|curvas|relieve|mapa)\s+(?:y|e|con|sin)\s+)la\s+v[ií]a\b/gi, "las vías", 0.4),
+  segura(/^es\s+conde\b|\bes\s+conde\s+(?=(?:la|las|el|los)\b)/gi, "esconde ", 0.4),
+  segura(/^as\s+(?=zoom\b|un\b|una\b|la\b|el\b)/i, "haz ", 0.4),
+  segura(/^a\s+garr(a|e)\b/i, "agarr$1", 0.4),
+  segura(/(?<=\b(?:mapa|vista|capa|relieve)\s+)tipogr[aá]fico\b/gi, "topográfico", 0.4),
+  // «Pa'» es «para»; «la re» al final, «la red»; «qué no dos», «qué nodos»; «cuánta persona», «cuántas personas»
+  segura(/\bpa'?\s+(?=[A-ZÁÉÍÓÚÑ]|el\b|la\b|los\b|las\b|un\b|una\b|cumaral|restrepo|granada|yopal|villavicencio|villanueva|acac[ií]as|puerto)/g, "para ", 0.4),
+  segura(/\b(la|una|mi|esta|toda\s+la)\s+re\b(?=\s*[?.!]?\s*$)/gi, "$1 red", 0.4),
+  segura(/(?<=\b(?:qu[eé]|cu[aá]les|los|cu[aá]ntos|esos|estos|todos\s+los)\s+)no\s+dos\b/gi, "nodos", 0.4),
+  segura(/\bcu[aá]nta\s+(persona|antena|torre)\b/gi, (_m: string, p: string) => `cuántas ${p}s`, 0.4),
+  segura(/\bcu[aá]nto\s+(pago|nodo|repetidor|mensaje)\b(?!s)/gi, (_m: string, p: string) => `cuántos ${p === "repetidor" ? "repetidores" : `${p}s`}`, 0.4),
+  segura(/(?<=\b(?:pagos|mensajes|guasaps?|whatsapps?|textos)\s+)a\s+mismo\s+tiempo\b/gi, "al mismo tiempo", 0.4),
+  regla(/\bsiempre\s+(?=la\s+(?:malla|red)\s*(?:otra\s+vez|de\s+nuevo|$))/gi, "siembra ", 0.6),
+  // LoRa, el factor de dispersión, el KMZ y el PDF dichos, el escenario nuevo, «vea Yopal»
+  segura(/(?<=\b(?:qu[eé]\s+es|red|protocolo|modulaci[oó]n|radio|nodo|nodos|tecnolog[ií]a|con)\s+)laura\b/gi, "LoRa", 0.4),
+  segura(/\bfactor\s+(?=(?:dispersi[oó]n|propagaci[oó]n|expansi[oó]n|esparcimiento)\b)/gi, "factor de ", 0.4),
+  segura(/\b(?:ka|ca|k)\s+eme\s+(?:zeta|seta|ceta)\b/gi, "KMZ", 0.4),
+  segura(/\bp\s+d\s+f\b|\bpe\s+de\s+efe\b/gi, "PDF", 0.4),
+  segura(/\bescenario\s+de\s+nuevo\b/gi, "escenario nuevo", 0.4),
+  regla(/^vea\s+(?=[A-ZÁÉÍÓÚÑ])/g, "ve a ", 0.6),
+  segura(/\b(?:gate|gueit|geit)\s+(?:wey|güey|guey|wei)\b/gi, "gateway", 0.4),
+  segura(/\b(?:yo|llo)\s+pal\b(?=\s*$|\s*[,.?!]|\s+(?:casanare|y|en|a)\b)/gi, "Yopal", 0.4),  // El prefijo partido: «des activa la regla», «des conecta», «re calcula»
+  segura(/\bdes\s+(activ\w*|conect\w*|marc\w*|carg\w*|hac\w*|haz)\b/gi, "des$1", 0.3),
+  segura(/\bre\s+(calcul\w*|simul\w*|nombr\w*|inici\w*|ubic\w*|conect\w*)\b/gi, "re$1", 0.3),  // El «usted» con el pronombre pegado, en el de «tú» que entiende el intérprete: «quíteme» → «quítame», «dígame» → «dime»
+  segura(new RegExp(String.raw`(?<![\p{L}])(${Object.keys(USTED_PEGADO_ES).map(conTildes).join("|")})(?![\p{L}])`, "giu"), (m: string) => {
+    const tu = USTED_PEGADO_ES[sinTildes(m)] ?? m;
+    return /^\p{Lu}/u.test(m) ? tu.charAt(0).toUpperCase() + tu.slice(1) : tu;
+  }, 0.4),
+  // El «usted» con el pronombre partido al empezar: «quite me todos los repetidores», «muestre me el relieve», «ponga le…»
+  segura(/^((?:(?:oye|oiga|bueno|listo|melki|por\s+favor|ahora|de\s+una)[\s,]+)*)(quite|muestre|ponga|mueva|lleve|borre|suba|baje|agregue|cambie|deje|traiga|diga|haga|busque|ubique|acerque|explique|mande|env[ií]e|recomiende|dibuje|calcule|arme|dise[nñ]e|simule|aplique|active|ense[nñ]e)\s+(me|nos|le|les)\b(?=\s+\S)/i, "$1$2$3", 0.4),
+  // Los colores, «ahorita», el zoom, la regla, el SF, el CSV, el ejemplo, el factor de propagación, el terreno plano
+  segura(/(?<=\b(?:los|sus|unos|cambia\s+los|pon\s+los|prende\s+los|muestra\s+los|quita\s+los)\s+)calores\b/gi, "colores", 0.4),
+  segura(/\borita\b/gi, "ahorita", 0.3),
+  segura(/\bzum\b/gi, "zoom", 0.3),
+  segura(/^has\s+(?=zoom\b|zum\b)/i, "haz ", 0.4),
+  segura(/\bpa\s+(fuera|afuera|dentro|adentro|arriba|abajo|atr[aá]s|adelante)\b/gi, (_m: string, x: string) => `para ${/^a/.test(x) ? x : `a${x}`}`, 0.4),
+  segura(/(?<=\b(?:activa|desactiva|suelta|usa|toma|prende|apaga|quita|coge|agarra)\s+la\s+)reja\b/gi, "regla", 0.4),
+  segura(/\b(?:el\s+)?ese\s+efe\b(?!\s*\d)/gi, (m: string) => (/^el\s/i.test(m) ? "el SF" : "SF"), 0.4),
+  segura(/\bc\s+s\s+b\b|\bce\s+ese\s+be\b/gi, "CSV", 0.4),
+  segura(/\b(carga|abre|muestra|pon|quita)\s+le\s+(?=(?:ejemplo|escenario|proyecto|mapa)\b)/gi, "$1 el ", 0.4),
+  segura(/\b(?:espreding|espredin|espreading|spredin|spreding)\s+factor\b/gi, "spreading factor", 0.4),
+  segura(/\bte\s+reno\b/gi, "terreno", 0.4),
+  segura(/^ponte\s+(?=terreno\b)/i, "pon ", 0.4),
+  segura(/\bacerca\s+de\s+(?=(?:la|el)\s+(?:persona|repetidor|torre|antena|gateway|nodo|ejemplo)\b[^.]*\b(?:al|a\s+la)\s+(?:persona|repetidor|torre|antena|gateway|nodo|ejemplo)\b)/gi, "acerca ", 0.4),
 ];
 
 /* ───────────── Parecido por cómo suena (lo que no está en las listas) ───────────── */
@@ -768,7 +1093,7 @@ export function pareceOrdenDeMelki(texto: string, lengua: LenguaOido, nombres: s
 
 /* ───────────── Las variantes ───────────── */
 
-type Cambio = { inicio: number; fin: number; por: string; costo: number; dicho: string; generico?: boolean; parecido?: boolean };
+type Cambio = { inicio: number; fin: number; por: string; costo: number; dicho: string; generico?: boolean; parecido?: boolean; nombre?: boolean };
 
 /**
  * Los nombres de los nodos en minúsculas y sin tildes, una vez por lista (con miles de personas pobladas, normalizarlos en
@@ -795,12 +1120,192 @@ function zonasIntocables(texto: string, nombres: string[]): [number, number][] {
     const re = new RegExp(`(^|[^\\p{L}\\p{N}])(${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})(?=$|[^\\p{L}\\p{N}])`, "gu");
     for (const m of bajo.matchAll(re)) {
       const i = (m.index ?? 0) + m[1].length;
-      // «add a repeater 2 km north» no nombra al «Repeater 2»: el número es de la distancia
-      if (/\d$/.test(n) && /^\s*(?:km|kms|kilomet|kil[oó]met|met(?:er|re|ro)s?\b|m\b|mts?\b|miles?\b|millas?\b|mi\b|feet\b|foot\b|ft\b|pies\b|yards?\b|yardas?\b|blocks?\b|cuadras?\b)/.test(bajo.slice(i + m[2].length))) continue;
+      // «add a repeater 2 km north» no nombra al «Repeater 2»: el número es de la distancia (también «a person 1.5 km
+      // north»: «Person 1» seguido de «.5» no es el nombre)
+      if (/\d$/.test(n) && /^(?:[.,]\d|\s*(?:km|kms|kilomet|kil[oó]met|met(?:er|re|ro)s?\b|m\b|mts?\b|miles?\b|millas?\b|mi\b|feet\b|foot\b|ft\b|pies\b|yards?\b|yardas?\b|blocks?\b|cuadras?\b))/.test(bajo.slice(i + m[2].length))) continue;
       zonas.push([i, i + m[2].length]);
     }
   }
   return zonas;
+}
+
+/**
+ * Lo que sigue al nombre de un nodo dicho («Person 2 1 km north», «Repeater 1 handle», «Tower 2 to the gateway»): el
+ * final, una cifra, un rumbo, una medida, una relación o una preposición seguida de un artículo.
+ */
+const CLARO_DESPUES_DE_NOMBRE =
+  /^\s*(?:$|[.,;:!?)]|-?\d|(?:to|too)\s+(?:the|a|an|its|it)\b|(?:north|south|east|west|northeast|northwest|southeast|southwest|norte|sur|este|oeste|oriente|occidente|km|kms|kilomet\w*|meters?|metres?|m|ft|feet|miles?|metros?|kil[oó]metros?|by|up|down|higher|lower|'s|close|closer|near|nearer|next|beside|toward|towards|at|in|on|onto|into|from|over|under|above|below|and|or|is|was|has|its|handle|hold|holds|support|serve|cover|covers|reach|reaches|connect|see|hear|signal|coverage|height|antenna|pointing|facing|have|has|get|gets|receive|receives|a|al|en|con|y|cerca|junto|apuntando)\b|(?:to|too|two)\s+-?\d)/i;
+
+/* ───────────── v17.5 · Los nombres del mapa, por cómo suenan ───────────── */
+
+/** Las piezas (y el nodo de ejemplo) con su nombre en el otro idioma: «Tory to» puede ser «Torre 2» o «Tower 2». */
+const PIEZA_OTRO_IDIOMA: Record<string, string> = {
+  repetidor: "repeater",
+  repeater: "repetidor",
+  persona: "person",
+  person: "persona",
+  torre: "tower",
+  tower: "torre",
+  nodo: "node",
+  node: "nodo",
+  antena: "antenna",
+  antenna: "antena",
+  ejemplo: "example",
+  example: "ejemplo",
+};
+
+/** Cómo escribe el reconocimiento en inglés un nombre en español («Ejemplo» → «a hemp low», «Torre» → «Tory»). */
+const espanolOidoEnIngles = (t: string) =>
+  t
+    .replace(/(?<!c)h/g, "")
+    .replace(/ll/g, "y")
+    .replace(/j|g(?=[ei])/g, "h")
+    .replace(/gu(?=[ei])/g, "g")
+    .replace(/qu(?=[ei])/g, "k")
+    .replace(/c(?=[ei])/g, "s")
+    .replace(/z/g, "s")
+    .replace(/v/g, "b")
+    .replace(/(?<=[^aeiou ])e\b/g, "ey");
+
+/** Cómo escribe el reconocimiento en español un nombre en inglés («Tower» → «tauer», «North» → «nort»). */
+const inglesOidoEnEspanol = (t: string) =>
+  t
+    .replace(/ow/g, "au")
+    .replace(/th/g, "t")
+    .replace(/ee|ea/g, "i")
+    .replace(/oo/g, "u")
+    .replace(/ay|ai|ey/g, "ei")
+    .replace(/sh/g, "ch")
+    .replace(/ph/g, "f")
+    .replace(/ck/g, "k")
+    .replace(/w/g, "u")
+    .replace(/(?<=[^aeiou ])e\b/g, "");
+
+/**
+ * Un nombre del mapa para buscarlo por cómo suena: sin su número («Torre 2» → «torre», con los números que hay), o
+ * entero si no tiene («Ejemplo», «Loma Alta»). `claves`: cómo suena en el idioma de lo dicho (también dicho con el otro
+ * acento y con el nombre de la pieza en el otro idioma).
+ */
+type BaseNombre = { base: string; claves: string[]; numeros: Map<string, string> | null; nombre: string };
+const BASES_NOMBRES = new WeakMap<string[], Partial<Record<LenguaOido, BaseNombre[]>>>();
+function basesDeNombres(nombres: string[], lengua: LenguaOido): BaseNombre[] {
+  let porLengua = BASES_NOMBRES.get(nombres);
+  if (!porLengua) {
+    porLengua = {};
+    BASES_NOMBRES.set(nombres, porLengua);
+  }
+  const ya = porLengua[lengua];
+  if (ya) return ya;
+  const bases = new Map<string, BaseNombre>();
+  const normales = nombresNormalizados(nombres);
+  nombres.forEach((nombre, i) => {
+    const n = normales[i].replace(/\s+/g, " ");
+    const m = n.match(/^(\p{L}[\p{L} ]*?)\s+(\d+)$/u);
+    const base = m ? m[1] : n;
+    if (!/^[\p{L} ]+$/u.test(base) || base.replace(/ /g, "").length < 3) return;
+    const llave = `${m ? "#" : "="}${base}`;
+    let b = bases.get(llave);
+    if (!b) {
+      const claves = new Set<string>();
+      for (const f of [base, PIEZA_OTRO_IDIOMA[base]]) {
+        if (!f) continue;
+        claves.add(claveDe(f.replace(/ /g, ""), lengua));
+        claves.add(claveDe((lengua === "en" ? espanolOidoEnIngles(f) : inglesOidoEnEspanol(f)).replace(/ /g, ""), lengua));
+      }
+      b = { base, claves: [...claves].filter((k) => k.length >= 3), numeros: m ? new Map() : null, nombre };
+      bases.set(llave, b);
+    }
+    if (m && b.numeros && !b.numeros.has(m[2])) b.numeros.set(m[2], nombre);
+  });
+  const lista = [...bases.values()].filter((b) => b.claves.length);
+  porLengua[lengua] = lista;
+  return lista;
+}
+
+/** Los números dichos con palabras después del nombre de una pieza («Tory two», «torre dos»). */
+const NUMERO_DICHO: Record<LenguaOido, Record<string, string>> = {
+  en: { ...NUMERO_EN, one: "1", juan: "1", two: "2", three: "3", four: "4", five: "5", six: "6", seven: "7", eight: "8", nine: "9", ten: "10" },
+  es: { uno: "1", una: "1", dos: "2", tres: "3", cuatro: "4", cinco: "5", seis: "6", siete: "7", ocho: "8", nueve: "9", diez: "10" },
+};
+
+type PalabraDicha = { w: string; i: number; norm: string };
+
+/**
+ * Los nombres del mapa dichos de otro modo («Delete Tory to» → «Tower 2», «point a hemp low northeast» → «Ejemplo»,
+ * «how many people can repeat or 2 handle» → «Repeater 2»): una, dos o tres palabras que suenan casi como un nombre que
+ * existe (o como su pieza, seguida de un número que existe). Seguro solo si la pieza se partió en dos palabras o es una
+ * palabra que Melki no conoce, con su número en cifra y lo que sigue al nombre de un nodo; si no, una variante.
+ */
+function cambiosDeNombres(texto: string, lengua: LenguaOido, nombres: string[], palabras: PalabraDicha[], conocida: boolean[], seguras: boolean, agregar: (c: Cambio) => void, cubierto: (i: number, f: number) => boolean) {
+  const bases = basesDeNombres(nombres, lengua);
+  if (!bases.length) return;
+  const distancia = lengua === "en" ? distanciaIngles : distanciaFonetica;
+  for (let k = 0; k < palabras.length; k++) {
+    for (let largo = 1; largo <= 3 && k + largo <= palabras.length; largo++) {
+      const inicio = palabras[k].i;
+      const ultima = palabras[k + largo - 1];
+      const fin = ultima.i + ultima.w.length;
+      const dicho = texto.slice(inicio, fin);
+      if (!/^[\p{L}']+(?:\s[\p{L}']+)*$/u.test(dicho)) continue;
+      const grupo = palabras.slice(k, k + largo);
+      // (no empieza con una palabra corta: «a repeater 2» no es «Repeater 2»; el «a» de «a hemp low» va aparte)
+      if (FUNCION[lengua].has(palabras[k].norm)) continue;
+      if (cubierto(inicio, fin)) continue;
+      const norm = grupo.map((p) => p.norm).join(" ");
+      const clave = claveDe(norm.replace(/ /g, ""), lengua);
+      if (clave.length < 3) continue;
+      const todasConocidas = grupo.every((p, j) => conocida[k + j]);
+      const primera = clave.charCodeAt(0) & 127;
+      const antes = k > 0 ? palabras[k - 1].norm : "";
+      for (const b of bases) {
+        // (la pieza tal cual, o en plural, no es un nombre mal oído: «set all repeaters 2 25 m»)
+        const sinPlural = norm.replace(/(?:es|s)$/, "");
+        if ([norm, sinPlural].some((x) => x === b.base || x === PIEZA_OTRO_IDIOMA[b.base])) continue;
+        // (ni lo que ya trae la pieza o el nombre entero con otras palabras: «the mess example» no es «Ejemplo»)
+        const palabrasBase = b.base.split(" ").length;
+        if (largo > palabrasBase && grupo.some((p) => p.norm === b.base || p.norm === PIEZA_OTRO_IDIOMA[b.base])) continue;
+        // «Add a repeat her 2 km north», «otro repetidor 3»: con un artículo antes, la pieza es una nueva (no un nombre)
+        if (b.numeros && /^(?:a|an|another|one|some|each|every|any|all|new|no|per|un|una|otro|otra|cada|nuevo|nueva)$/.test(antes)) continue;
+        let parecido = 0;
+        for (const c of b.claves) {
+          if (!mismoComienzo(primera, c.charCodeAt(0) & 127, lengua)) continue;
+          const largoMax = Math.max(clave.length, c.length);
+          if (Math.abs(clave.length - c.length) * 0.3 > largoMax * 0.25) continue;
+          parecido = Math.max(parecido, 1 - distancia(clave, c) / largoMax);
+        }
+        const n = Math.max(clave.length, b.claves[0].length);
+        // (más palabras que el nombre, más exigente: juntar palabras acerca cualquier cosa)
+        const umbral = (n <= 3 ? 0.86 : n <= 5 ? 0.82 : 0.78) + (lengua === "es" ? 0.03 : 0) + (todasConocidas ? 0.08 : 0) + Math.max(0, largo - b.base.split(" ").length) * 0.04;
+        if (parecido < umbral) continue;
+        let finCambio = fin;
+        let por = b.nombre;
+        let segura = false;
+        if (b.numeros) {
+          const sigue = texto.slice(fin).match(/^(\s+)(\d+|\p{L}+)\b/u);
+          if (!sigue) continue;
+          const palabra = sigue[2].toLowerCase();
+          const numero = /^\d+$/.test(palabra) ? palabra : NUMERO_DICHO[lengua][palabra];
+          const nombreNodo = numero ? b.numeros.get(numero) : undefined;
+          if (!nombreNodo) continue;
+          finCambio = fin + sigue[0].length;
+          const despues = texto.slice(finCambio);
+          // (el número de una distancia o una altura no es el del nombre: «repeat her 2 km north»)
+          if (/^\s*(?:km|kms|kilomet|kil[oó]met|met(?:er|re|ro)s?\b|m\b|mts?\b|miles?\b|millas?\b|mi\b|feet\b|foot\b|ft\b|pies\b|yards?\b|blocks?\b|cuadras?\b|%|percent|por\s*ciento)/i.test(despues)) continue;
+          // («move tory to Cumaral»: «to» seguido de otra palabra es la preposición)
+          if (/^(?:to|too|tu|for|fore)$/.test(palabra) && !CLARO_DESPUES_DE_NOMBRE.test(despues)) continue;
+          por = nombreNodo;
+          // (una palabra que Melki conoce, como «repeat», solo si no es el verbo de una orden: «repeat 1 handle»)
+          segura = /^\d+$/.test(palabra) && parecido >= 0.85 && CLARO_DESPUES_DE_NOMBRE.test(despues) && (largo >= 2 || !conocida[k] || !esVerboDeOrden(norm, lengua));
+        }
+        if (segura !== seguras) continue;
+        // Un nombre que empieza por vocal se oye con un «a» delante («a hemp low» → «Ejemplo», no «a Ejemplo»)
+        const conArticulo = k > 0 && /^(?:a|an)$/.test(palabras[k - 1].norm) && /^[aeiou]/.test(b.base) && /^\s+$/.test(texto.slice(palabras[k - 1].i + palabras[k - 1].w.length, inicio));
+        const desde = conArticulo ? palabras[k - 1].i : inicio;
+        const costo = 0.75 + (1 - parecido) * 2.5 + (largo - 1) * 0.1;
+        agregar({ inicio: desde, fin: finCambio, por, costo: Math.round(costo * 100) / 100, dicho: texto.slice(desde, finCambio), generico: !segura, parecido: !segura, nombre: true });
+      }
+    }
+  }
 }
 
 /** Los cambios posibles en lo dicho (cada uno por su cuenta; después se combinan). */
@@ -831,11 +1336,11 @@ function cambiosPosibles(texto: string, lengua: LenguaOido, nombres: string[], s
   // «Person to», «Repeater won»: el número de un nodo que existe (sin artículo antes: «add a person to the map» es otra cosa)
   // («each repeater to its limit», «send Person 1 to the gateway»: con «to» de preposición sigue un artículo o un pronombre)
   const DESPUES_PREPOSICION = String.raw`(?!\s+(?:the|its|his|her|a|an|my|our|their|your|this|that|these|those|every|each|all|some|any|no|it|them|him|me|us|el|la|los|las|su)\b)`;
-  for (const m of texto.matchAll(new RegExp(String.raw`(^|[^\p{L}])((?:repeater|person|pearson|parson|node|tower|antenna|gateway|repetidor|persona|nodo|torre|antena)\s+)(${NUMEROS_OIDOS_EN}|juan|one|two|three|four|five)\b${DESPUES_PREPOSICION}`, "giu"))) {
+  for (const m of texto.matchAll(new RegExp(String.raw`(^|[^\p{L}])((?:repeater|person|pearson|parson|node|tower|antenna|gateway|repetidor|repetido|persona|nodo|torre|antena)\s+)(${NUMEROS_OIDOS_EN}|juan|one|two|three|four|five|uno|dos|tres|cuatro|cinco)\b${DESPUES_PREPOSICION}`, "giu"))) {
     const inicio = (m.index ?? 0) + m[1].length;
     const antes = texto.slice(0, inicio).trimEnd().toLowerCase();
-    const pieza = m[2].trim().toLowerCase().replace(/^(?:pearson|parson)$/, "person");
-    const numero = NUMERO_EN[m[3].toLowerCase()] ?? { juan: "1", one: "1", two: "2", three: "3", four: "4", five: "5" }[m[3].toLowerCase()] ?? m[3];
+    const pieza = m[2].trim().toLowerCase().replace(/^(?:pearson|parson)$/, "person").replace(/^repetido$/, "repetidor");
+    const numero = NUMERO_EN[m[3].toLowerCase()] ?? { juan: "1", one: "1", two: "2", three: "3", four: "4", five: "5", uno: "1", dos: "2", tres: "3", cuatro: "4", cinco: "5" }[m[3].toLowerCase()] ?? m[3];
     const nombre = `${pieza} ${numero}`;
     const existe = nombresNormalizados(nombres).includes(sinTildes(nombre));
     // «the» sí va con un nombre («delete the Person 1»); con «a», «each», «another»… es otra cosa («add a person to the map»)
@@ -844,8 +1349,7 @@ function cambiosPosibles(texto: string, lengua: LenguaOido, nombres: string[], s
     const fin = inicio + m[2].length + m[3].length;
     // Seguro solo si después viene lo que sigue al nombre de un nodo (el final, una cifra, un rumbo, una medida, «by», «to
     // 25»): «move person to Cumaral» es llevar a una persona a Cumaral, no «Person 2 Cumaral» (eso, solo una variante)
-    const claroDespues =
-      /^\s*(?:$|[.,;:!?)]|-?\d|(?:to|too)\s+(?:the|a|an|its|it)\b|(?:north|south|east|west|northeast|northwest|southeast|southwest|norte|sur|este|oeste|oriente|occidente|km|kms|kilomet\w*|meters?|metres?|m|ft|feet|miles?|metros?|kil[oó]metros?|by|up|down|higher|lower|'s|close|closer|near|nearer|next|beside|toward|towards|at|in|on|onto|into|from|over|under|above|below|and|or|is|was|has|its|handle|hold|holds|support|serve|cover|covers|reach|reaches|connect|see|hear|signal|coverage|height|antenna|a|al|en|con|y|cerca|junto)\b|(?:to|too|two)\s+-?\d)/i.test(texto.slice(fin));
+    const claroDespues = CLARO_DESPUES_DE_NOMBRE.test(texto.slice(fin));
     // («to», «for»… seguidos de otra palabra son la preposición: «move person to Cumaral» no es «Person 2 Cumaral»; con otro
     // «to» o al nombrar, sí es el número: «connect person to to the network», «call repeater to Loma Alta». «Rename
     // repeater to Loma Alta» puede ser el repetidor de siempre: solo una variante)
@@ -853,16 +1357,46 @@ function cambiosPosibles(texto: string, lengua: LenguaOido, nombres: string[], s
     const renombrar = nombrar || /\b(?:rename|re\s+name)\b/i.test(texto.slice(0, inicio));
     const segura = !conArticulo && (claroDespues || nombrar || (renombrar && /^\s+(?:to|too|as)\b/i.test(texto.slice(fin))));
     const preposicion = !claroDespues && !renombrar && /^(?:to|too|tu|two|for|fore)$/i.test(m[3]) && /^\s+(?!(?:to|too|into)\b)\p{L}/iu.test(texto.slice(fin));
-    if (existe && !preposicion && segura === seguras && nombre !== sinTildes(dicho).replace(/\s+/g, " ").trim()) agregar({ inicio, fin, por: `${m[2].replace(/(?:pearson|parson)/i, "person")}${numero}`, costo: segura ? 0.6 : 0.8, dicho });
+    if (existe && !preposicion && segura === seguras && nombre !== sinTildes(dicho).replace(/\s+/g, " ").trim()) agregar({ inicio, fin, por: `${m[2].replace(/(?:pearson|parson)/i, "person").replace(/repetido(?=\s)/i, "repetidor")}${numero}`, costo: segura ? 0.6 : 0.8, dicho });
   }
+  // v17.5 · El número del nodo pegado a lo que sigue: «mueve el repetidor 1500 metros» (Repetidor 1, 500 m), «baja la torre
+  // 25 metros» (Torre 2, 5 m), «rename repeater 12 Cumaral» (Repeater 1 to Cumaral). Solo si no hay un nodo con todo el
+  // número y sí con sus primeras cifras
+  if (seguras)
+    for (const m of texto.matchAll(/\b(repeater|person|tower|node|antenna|repetidor|persona|torre|nodo|antena)\s+(\d{2,5})\b/giu)) {
+      const normales = nombresNormalizados(nombres);
+      const nombreDe = (n: string) => `${sinTildes(m[1])} ${n}`;
+      if (normales.includes(nombreDe(m[2]))) continue;
+      const i = (m.index ?? 0) + m[0].length - m[2].length;
+      const despues = texto.slice(i + m[2].length);
+      const unidad = /^\s*(?:km|kms|kilomet|kil[oó]met|met(?:er|re|ro)s?\b|m\b|mts?\b|miles?\b|millas?\b|feet\b|ft\b|pies\b)/i.test(despues);
+      const renombrar = lengua === "en" && /\b(?:rename|call|name)\b/i.test(texto.slice(0, m.index ?? 0)) && /^\s+\S/.test(despues);
+      for (let k = 1; k < m[2].length; k++) {
+        const a = m[2].slice(0, k);
+        const b = m[2].slice(k);
+        if (b.startsWith("0") || !normales.includes(nombreDe(a))) continue;
+        if (unidad) agregar({ inicio: i, fin: i + m[2].length, por: `${a} ${b}`, costo: 0.5, dicho: m[2] });
+        else if (renombrar && b === "2") agregar({ inicio: i, fin: i + m[2].length, por: `${a} to`, costo: 0.5, dicho: m[2] });
+        break;
+      }
+    }
+  // «Fill the gateway 2 its limit»: después de una pieza, el «2» antes de «its» es «to» si no hay un nodo con ese número
+  if (seguras && lengua === "en")
+    for (const m of texto.matchAll(/\b(repeater|person|tower|node|antenna|gateway)\s+(2)(?=\s+(?:its|his|her|their)\b)/gi)) {
+      const i = (m.index ?? 0) + m[1].length + 1;
+      if (!nombresNormalizados(nombres).includes(`${m[1].toLowerCase()} 2`)) agregar({ inicio: i, fin: i + 1, por: "to", costo: 0.4, dicho: "2" });
+    }
+  const palabras = [...texto.matchAll(/\p{L}+(?:'\p{L}+)?/gu)].map((m) => ({ w: m[0], i: m.index ?? 0, norm: sinTildes(m[0]) }));
+  const conocida = palabras.map((p) => FUNCION[lengua].has(p.norm) || enVocabulario(p.norm, lengua));
+  // (donde una regla ya cambia esas palabras, ni el nombre ni el parecido compiten: «borra el repetido» es «repetidor»)
+  const cubierto = (i: number, f: number) => cambios.some((c) => !c.generico && !c.nombre && c.inicio <= i && c.fin >= f);
+  cambiosDeNombres(texto, lengua, nombres, palabras, conocida, seguras, agregar, cubierto);
   if (seguras) return cambios;
   // Por cómo suena, contra todo lo que Melki entiende: una palabra (o dos seguidas, que el dictado partió o juntó mal) que
   // suena casi como una del vocabulario de sus órdenes («feel» → «fill», «coast» → «cost», «be twin» → «between», «maya» →
   // «malla»). Cuesta más que una regla, y más si lo dicho ya era una palabra que Melki conoce («see» → «seed»: entonces
   // tiene que sonar casi igual y no ser de la misma familia); dos palabras se juntan solo si alguna no la conoce
   // («hasta la» no es «ajústala»)
-  const palabras = [...texto.matchAll(/\p{L}+(?:'\p{L}+)?/gu)].map((m) => ({ w: m[0], i: m.index ?? 0, norm: sinTildes(m[0]) }));
-  const conocida = palabras.map((p) => FUNCION[lengua].has(p.norm) || enVocabulario(p.norm, lengua));
   for (let k = 0; k < palabras.length; k++) {
     for (let largo = 1; largo <= 2 && k + largo <= palabras.length; largo++) {
       const inicio = palabras[k].i;
@@ -874,9 +1408,11 @@ function cambiosPosibles(texto: string, lengua: LenguaOido, nombres: string[], s
       const partido = largo === 2 && conocida[k] && conocida[k + 1];
       if ((largo === 2 && (!/^\S+ \S+$/.test(dicho) || (partido && !PEDAZO_DEL_VERBO[lengua].test(palabras[k].norm)))) || !libre(inicio, fin)) continue;
       // (donde una regla ya cambia esas palabras, el parecido no compite: «borra el repetido» es «repetidor», no «repartida»)
-      if (cambios.some((c) => !c.generico && c.inicio <= inicio && c.fin >= fin)) continue;
+      if (cubierto(inicio, fin)) continue;
       const norm = sinTildes(dicho);
       if (largo === 1 && FUNCION[lengua].has(norm)) continue;
+      // (lo que otros hicieron no es una orden mal oída: «le cambiaron el nombre…» no es «cámbiale»)
+      if (lengua === "es" && /(?:aron|ieron)$/.test(norm)) continue;
       if (norm.split(" ").some((w) => NUNCA_POR_PARECIDO[lengua].has(w))) continue;
       const estricto = largo === 1 && conocida[k];
       for (const p of parecidas(norm, lengua, largo === 2, estricto)) {
@@ -895,37 +1431,47 @@ function cambiosPosibles(texto: string, lengua: LenguaOido, nombres: string[], s
  * tres cambios a la vez, sin tocar los nombres de los nodos ni lo que va entre comillas.
  */
 export function variantesOidas(texto: string, lengua: LenguaOido, opciones: { nombres?: string[]; max?: number; maxCambios?: number } = {}): Variante[] {
-  const t = texto.replace(/\s+/g, " ").trim();
-  if (!t || t.length > 240) return [];
-  const cambios = cambiosPosibles(t, lengua, opciones.nombres ?? [], false).sort((a, b) => a.costo - b.costo || a.inicio - b.inicio);
-  if (!cambios.length) return [];
+  const dicho = texto.replace(/\s+/g, " ").trim();
+  if (!dicho || dicho.length > 240) return [];
+  const nombres = opciones.nombres ?? [];
   const maxCambios = opciones.maxCambios ?? 3;
   const salida = new Map<string, Variante>();
-  // Combinaciones sin cambios que se pisen, de las más baratas a las más caras
-  const combinar = (desde: number, elegidos: Cambio[]) => {
-    if (elegidos.length) {
-      const ordenados = [...elegidos].sort((a, b) => a.inicio - b.inicio);
-      let nuevo = "";
-      let i = 0;
-      for (const c of ordenados) {
-        nuevo += t.slice(i, c.inicio) + c.por;
-        i = c.fin;
+  /** Las versiones de un texto: sus cambios dudosos, combinados sin pisarse, de los más baratos a los más caros. */
+  const versionesDe = (t: string) => {
+    const cambios = cambiosPosibles(t, lengua, nombres, false).sort((a, b) => a.costo - b.costo || a.inicio - b.inicio);
+    let nuevas = 0;
+    const combinar = (desde: number, elegidos: Cambio[]) => {
+      if (elegidos.length) {
+        const ordenados = [...elegidos].sort((a, b) => a.inicio - b.inicio);
+        let nuevo = "";
+        let i = 0;
+        for (const c of ordenados) {
+          nuevo += t.slice(i, c.inicio) + c.por;
+          i = c.fin;
+        }
+        nuevo = (nuevo + t.slice(i)).replace(/\s+/g, " ").trim();
+        const costo = elegidos.reduce((s, c) => s + c.costo, 0) + (elegidos.length - 1) * 0.2;
+        const previa = salida.get(nuevo.toLowerCase());
+        if (nuevo.toLowerCase() !== t.toLowerCase() && nuevo.toLowerCase() !== dicho.toLowerCase() && (!previa || previa.costo > costo)) {
+          if (!previa) nuevas++;
+          salida.set(nuevo.toLowerCase(), { texto: nuevo, costo: Math.round(costo * 100) / 100, cambios: ordenados.map((c) => `${c.dicho} → ${c.por}`), generica: ordenados.some((c) => c.generico), porParecido: ordenados.filter((c) => c.parecido).map((c) => [c.dicho, c.por] as [string, string]) });
+        }
       }
-      nuevo = (nuevo + t.slice(i)).replace(/\s+/g, " ").trim();
-      const costo = elegidos.reduce((s, c) => s + c.costo, 0) + (elegidos.length - 1) * 0.2;
-      const previa = salida.get(nuevo.toLowerCase());
-      if (nuevo.toLowerCase() !== t.toLowerCase() && (!previa || previa.costo > costo))
-        salida.set(nuevo.toLowerCase(), { texto: nuevo, costo: Math.round(costo * 100) / 100, cambios: ordenados.map((c) => `${c.dicho} → ${c.por}`), generica: ordenados.some((c) => c.generico), porParecido: ordenados.filter((c) => c.parecido).map((c) => [c.dicho, c.por] as [string, string]) });
-    }
-    if (elegidos.length >= maxCambios) return;
-    for (let k = desde; k < cambios.length; k++) {
-      const c = cambios[k];
-      if (elegidos.some((x) => c.inicio < x.fin && c.fin > x.inicio)) continue;
-      combinar(k + 1, [...elegidos, c]);
-      if (salida.size > 400) return;
-    }
+      if (elegidos.length >= maxCambios) return;
+      for (let k = desde; k < cambios.length; k++) {
+        const c = cambios[k];
+        if (elegidos.some((x) => c.inicio < x.fin && c.fin > x.inicio)) continue;
+        combinar(k + 1, [...elegidos, c]);
+        if (nuevas > 400) return;
+      }
+    };
+    combinar(0, []);
   };
-  combinar(0, []);
+  versionesDe(dicho);
+  // v17.5 · …y también sobre lo dicho con las correcciones seguras ya hechas (como lo lee Melki): así lo dudoso que va
+  // después de una corrección también se prueba («2 kilo meters nor» → «2 kilometers nor» → «… north»)
+  const corregido = corregirOido(dicho, lengua, nombres).replace(/\s+/g, " ").trim();
+  if (corregido.toLowerCase() !== dicho.toLowerCase()) versionesDe(corregido);
   return [...salida.values()].sort((a, b) => a.costo - b.costo || a.cambios.length - b.cambios.length).slice(0, opciones.max ?? 48);
 }
 
@@ -1046,16 +1592,94 @@ const esVerboDeOrden = (palabra: string, lengua: LenguaOido) => ES_VERBO_DE_ORDE
  * cobertura»), y la versión sí empieza como una orden («feel each repeater to its limit» → «fill…», «subo todos los
  * repetidores a 20 m» → «sube…»).
  */
+/** ¿Lo cambiado por cómo suena puso el verbo de una orden? (de la misma familia no lo crea: «tests» → «test») */
+const creaVerbo = (v: Variante, lengua: LenguaOido) => (v.porParecido ?? []).some(([de, por]) => esVerboDeOrden(por, lengua) && !mismaRaiz(sinTildes(de), sinTildes(por)));
+
 function parecidaContraTema(v: Variante, dicho: string, lengua: LenguaOido): boolean {
-  // (de la misma familia no crea un verbo: «tests» → «test»)
-  const creaVerbo = (v.porParecido ?? []).some(([de, por]) => esVerboDeOrden(por, lengua) && !mismaRaiz(sinTildes(de), sinTildes(por)));
-  if (!creaVerbo || empiezaComoOrden(dicho)) return true;
+  if (!creaVerbo(v, lengua) || empiezaComoOrden(dicho)) return true;
   const t = limpioParaVer(dicho).replace(RELLENO_INICIO, "");
   // (lo de después de la primera palabra, con sus tildes; si sigue «de», «sin», «of»…, la primera era una cosa: «sombra
   // de la torre», «celular sin cobertura»)
   const resto = dicho.toLowerCase().replace(/[¿?¡!.,;:«»"]/g, " ").replace(/\s+/g, " ").trim().replace(RELLENO_INICIO, "").replace(/^\S+\s*/, "");
   if (/^(?:de|del|sin|que|y|o|es|son|of|and|or|that|is|are)(?:\s|$)/.test(resto)) return false;
   return !EMPIEZA_CONTANDO[lengua].test(t) && !VERBO_CONJUGADO.test(resto) && empiezaComoOrden(v.texto);
+}
+
+/* ───────────── v17.5 · La charla cercana ───────────── */
+
+/** Lo que dice que una frase es charla con alguien más (planes, la familia, el celular, un paseo), en inglés y español. */
+const CHARLA_CERCANA = new RegExp(
+  [
+    // Cuándo: «this weekend», «next week», «tomorrow», «in 5 minutes», «before Friday»
+    String.raw`\b(?:this|next|last)\s+(?:weekend|week|month|year|summer|winter|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b`,
+    String.raw`\b(?:tomorrow|yesterday|tonight)\b`,
+    String.raw`\b(?:in|for)\s+\d+\s+(?:minutes|hours|days|weeks)\b`,
+    String.raw`\b(?:before|after|on|by)\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b`,
+    // Lo de uno: «my doctor», «my phone», «my Zoom meeting»
+    String.raw`\bmy\s+(?:doctor|wife|husband|mom|mother|dad|father|son|daughter|kids?|children|brother|sister|friends?|boss|cousin|uncle|aunt|grandma|grandpa|neighbou?r|girlfriend|boyfriend|phone|cell(?:phone)?|car|family|computer|laptop|tv|dog|cat|meeting|zoom)\b`,
+    // Un paseo, una fiesta, la cocina…
+    String.raw`\b(?:the|our|that)\s+(?:trip|vacation|holidays?|festival|party|wedding|birthday|concert|bus|tickets?|restaurant|lunch|dinner|breakfast|movie|pictures|photos|kitchen|bathroom)\b`,
+    String.raw`\bthey\s+(?:built|made|said|told|went|came|got|took|brought|changed|moved|put|fixed|opened|closed)\b`,
+    // (el lápiz y la regla también son herramientas del simulador —«give me a pencil»—: lo de prestar sí es charla)
+    String.raw`\b(?:a|an)\s+(?:pen|eraser|notebook)\b`,
+    String.raw`\b(?:lend|hand|pass)\s+me\b`,
+    // En español: «este fin de semana», «el otro año», «mañana», «antes del viernes»
+    String.raw`\b(?:este|esta|el|la|el\s+otro|la\s+otra|el\s+proximo|la\s+proxima)\s+(?:fin\s+de\s+semana|semana\s+(?:que\s+viene|entrante|pasada)|mes\s+(?:que\s+viene|entrante|pasado)|ano\s+(?:que\s+viene|entrante|pasado)|otro\s+ano|lunes|martes|miercoles|jueves|viernes|sabado|domingo|navidad)\b`,
+    String.raw`\bel\s+otro\s+ano\b|\beste\s+mes\b`,
+    // («la mañana» es la de la hora pico, no «mañana»)
+    String.raw`(?<!\bla\s+)\b(?:manana|ayer|anoche|anteayer)\b`,
+    String.raw`\bantes\s+del?\s+(?:lunes|martes|miercoles|jueves|viernes|sabado|domingo|mediodia)\b`,
+    // Lo de uno: «mi celular», «mi esposa»…
+    String.raw`\bmi\s+(?:medico|doctor|esposa|esposo|mama|papa|hijo|hija|hijos|hermano|hermana|amigo|amiga|amigos|jefe|primo|prima|tio|tia|abuela|abuelo|vecino|vecina|novia|novio|celular|telefono|carro|moto|familia|computador|portatil|perro|gato)\b`,
+    // Un paseo, una fiesta, el banco, la cocina… y para qué se va («a comer», «a vivir»)
+    String.raw`\b(?:el|la|los|las|del|al|pal|pa'l)\s+(?:paseo|fotos|festival|fiesta|banco|matrimonio|cumpleanos|concierto|pasajes|almuerzo|desayuno|comida|restaurante|cocina|bano|novela|partido)\b`,
+    String.raw`\ba\s+(?:comer|almorzar|desayunar|cenar|bailar|nadar|pasear|vivir|trabajar|estudiar)\b`,
+    String.raw`\b(?:nos|me|se)\s+(?:vamos|voy|va|van)\s+a\s+(?:pasar|vivir|mudar)\b`,
+    // Lo que otros hicieron: «le cambiaron el nombre a la calle», «ya construyeron la torre» (lo que pasa en la red se
+    // pregunta así: «¿a cuántas les llegaron los pagos?», «¿ya llegaron todos?»)
+    String.raw`\b(?:le|les|lo|la|los|las|ya|ayer)\s+(?!(?:quedaron|faltaron|fallaron|llegaron|recibieron|alcanzaron|sirvieron|funcionaron|cubrieron|conectaron|salieron|respondieron|contestaron|perdieron|pasaron|saturaron|colapsaron)\b)\p{L}+(?:aron|ieron)\b`,
+    String.raw`\b(?:un|una)\s+(?:lapicero|esfero|borrador|cuaderno)\b|\b(?:prestame|presteme|prestenme)\b`,
+    // v17.5 (quinta tanda) · Las fotos, la casa, los muebles, el carro, la familia y la plata de todos los días
+    String.raw`\b(?:that|this|the|my|your|a)\s+(?:photo|picture|pic|video|selfie)\b`,
+    // («export the table»: la tabla en CSV; la de la casa es «on the table»)
+    String.raw`\b(?:the|your|my|his|her|our|their)\s+(?:sofa|couch|window|door|chair|fridge|bed|truck|car|van|bus|house|apartment|living\s+room|bedroom|office|boat|baby|kids?)\b|\b(?:on|under)\s+the\s+table\b`,
+    String.raw`\b(?:mom|mommy|dad|daddy|grandma|grandpa|honey|sweetie|bro|dude)\b`,
+    String.raw`\b(?:homework|math\s+class)\b`,
+    String.raw`\b(?:esa|esta|la|una|mi|tu|su)\s+(?:foto|fotico|fotos|video|selfie)\b`,
+    // (la plaza y el parque son sitios donde se ponen nodos: «pon un repetidor en la plaza»)
+    String.raw`\b(?:el|la|al|del|mi|tu|su)\s+(?:sofa|ventana|puerta|mesa|silla|nevera|cama|camioneta|carro|bus|sala|comedor|patio|garaje|cuarto)\b`,
+    String.raw`\b(?:un|una)\s+(?:tapete|mueble|sofa|cama|mesa|silla|nevera|televisor|carro|moto)\b`,
+    String.raw`\b(?:el|la|al|del|mi|tu|su)\s+(?:medico|medica|doctor|doctora|abuelo|abuela|abuelito|abuelita|tio|tia|nino|nina|bebe|profe|profesor|profesora|vecino|vecina|jefe|jefa|mama|papa)\b`,
+    String.raw`\b(?:tarea|tareas|geometria|matematicas|examen|parcial)\b`,
+    // («radio» es del simulador: «en un radio de 3 km», «the radio settings»; la emisora no)
+    String.raw`\b(?:la|el|una|un|esa|esta)\s+(?:musica|cancion|emisora|tele|television|volumen|llamada|videollamada|reunion|novela|serie|pelicula)\b`,
+    String.raw`\b(?:the|a|my|that|this)\s+(?:music|song|tv|volume|phone\s+call|video\s+call|meeting|movie)\b|\bradio\s+station\b`,
+    String.raw`\b(?:nequi|daviplata|bancolombia|davivienda|la\s+transferencia|el\s+cajero|la\s+cuenta\s+de\s+ahorros)\b`,
+    // Lo que otros hacen o hicieron: «están construyendo…», «le mandaste…», «vamos a comprar…» (lo que hace la red se
+    // pregunta así: «¿qué nodos están fallando?», «¿cuántas personas están usando la red?»)
+    String.raw`\b(?:estan|estaban|estamos|estoy|estaba)\s+(?!(?:usando|fallando|llegando|funcionando|conectando|recibiendo|enviando|mandando|transmitiendo|retransmitiendo|repitiendo|cubriendo|perdiendo|saturando|colapsando|esperando|saltando|rebotando|buscando|cayendo)\b)\p{L}+(?:ando|iendo|yendo)\b`,
+    String.raw`\bvamos\s+a\s+(?:comprar|almorzar|comer|salir|pasear|ver\s+la\s+novela)\b`,
+  ].join("|"),
+  "u",
+);
+
+/** v17.5 · Dónde empieza el nombre nuevo de una orden de renombrar (lo que sigue no se mira para la charla). */
+const NOMBRE_NUEVO = /(?<![\p{L}])(?:re\s?nombr(?:a|e|ar|alo|ala|ale)|re\s?n[oó]mbr(?:alo|ala|ale|elo|ela)|re\s?name|(?:name|call)\s+(?:it|him|her)|(?:change|set)\s+(?:the\s+|its\s+)?name|ll[aá]m(?:alo|ala|elo|ela)|p[oó]n(?:le|gale)\s+(?:de\s+|por\s+|como\s+)?nombre|c[aá]mbi(?:a|e)(?:le)?\s+(?:el\s+)?nombre)(?![\p{L}])/iu;
+
+/**
+ * v17.5 · ¿Lo dicho es charla con alguien más, aunque nombre algo del simulador? («let's go to Cumaral this weekend», «my
+ * doctor wants me to do a stress test next week», «préstame la regla y un lápiz», «le cambiaron el nombre a la calle
+ * del colegio»). Con el asistente escuchando sin su nombre, eso pasa sin hacerse (con su nombre o por escrito, sí).
+ */
+export function pareceCharla(texto: string): boolean {
+  // El nombre nuevo de una orden de renombrar puede ser cualquier cosa («renombra el Repetidor 2 como La Mesa», «name it
+  // The Office»): no cuenta
+  const nombre = NOMBRE_NUEVO.exec(texto);
+  const visto = nombre ? texto.slice(0, nombre.index) : texto;
+  // (el pasado con tilde, en lo dicho tal cual: «el médico le mandó…»; sin tildes sería «mando», una orden)
+  // («se cayó la red», «¿qué me dijiste?», «¿a la Persona 2 le llegó?», «¿qué le pasó al Repetidor 1?» sí pueden ser
+  // para Melki: solo lo que otro le hizo a alguien más)
+  return CHARLA_CERCANA.test(limpioParaVer(visto)) || /(?<![\p{L}])(?:le|les)\s+(?!(?:llegó|sirvió|funcionó|alcanzó|falló|cubrió|pasó|quedó|faltó|respondió|contestó|conectó|cayó|salió|tocó)(?![\p{L}]))\p{L}+ó(?![\p{L}])|(?<![\p{L}])(?:le|les|me)\s+(?:dijo|hizo|puso|trajo|dio|regaló)(?![\p{L}])/iu.test(visto);
 }
 
 /* ───────────── Cuál versión usar ───────────── */
@@ -1123,7 +1747,15 @@ export function variantesEntendidas<O>(
 export function variantesParaUsar<O>(
   dicho: string,
   lengua: LenguaOido,
-  o: { orden: O | null; incompleta: (orden: O) => boolean; respuesta: { noEntendido?: boolean; fueraDeTema?: boolean } | null; evaluar: (t: string) => Evaluacion<O>; nombres?: string[] },
+  o: {
+    orden: O | null;
+    incompleta: (orden: O) => boolean;
+    respuesta: { noEntendido?: boolean; fueraDeTema?: boolean } | null;
+    evaluar: (t: string) => Evaluacion<O>;
+    nombres?: string[];
+    /** v17.5 · Una orden que solo consulta (la distancia, el costo, cuánto aguanta un nodo): no cambia nada del mapa. */
+    consulta?: (orden: O) => boolean;
+  },
 ): VarianteEntendida<O>[] {
   if (o.orden && !o.incompleta(o.orden)) return [];
   const r = o.orden ? null : o.respuesta;
@@ -1138,11 +1770,53 @@ export function variantesParaUsar<O>(
   // («el celular no tiene cobertura» → «simular», «la sombra de la torre» → «siembra»). Las reglas sí valen
   const enCharla = tema || charla;
   const pregunta = esPregunta(dicho);
+  // v17.5 · Una pregunta con una palabra mal oída sí se corrige por cómo suena si lo que queda sigue siendo la pregunta y
+  // solo consulta («what's the distant from the gateway to Repeater 1» → la distancia; «how much con it handle»): sin
+  // poner el verbo de una orden y cambiando solo palabras que Melki no conoce (o los nombres del mapa)
+  const nombresMapa = new Set(nombresNormalizados(o.nombres ?? []));
+  const consultaDicha = (v: VarianteEntendida<O>) =>
+    v.orden !== undefined &&
+    o.consulta?.(v.orden) === true &&
+    esPregunta(v.texto) &&
+    !creaVerbo(v, lengua) &&
+    (v.porParecido ?? []).every(([de, por]) => nombresMapa.has(sinTildes(por)) || sinTildes(de).split(/\s+/).every((w) => !enVocabulario(w, lengua) && !FUNCION[lengua].has(w)));
   const sirve = (v: VarianteEntendida<O>) =>
     (!(o.orden || enCharla) || (v.nivel === 2 && v.orden !== undefined && v.completa)) &&
     (v.nivel === 2 || pregunta) &&
-    !(enCharla && v.generica && (pregunta || !parecidaContraTema(v, dicho, lengua)));
+    !(enCharla && v.generica && (pregunta ? !consultaDicha(v) : !parecidaContraTema(v, dicho, lengua)));
   return variantesEntendidas(dicho, lengua, o.evaluar, { nombres: o.nombres, base, sirve });
+}
+
+/* ───────────── v17.5 · Los nombres dictados ───────────── */
+
+/** Las palabras que van en minúscula dentro de un nombre («Cerro de la Cruz», «Bank of the Hills»). */
+const MINUSCULA_EN_NOMBRE = new Set(["de", "del", "y", "e", "o", "u", "a", "al", "en", "por", "para", "con", "of", "and", "the", "on", "at", "in", "for", "to"]);
+
+/**
+ * Un nombre dictado, con mayúsculas: el reconocimiento escribe en minúscula lo que no conoce («renombra el repetidor 1
+ * como loma alta» → «Loma Alta», «call this scenario Finca la esperanza» → «Finca La Esperanza»). «De», «del», «of»… van
+ * en minúscula, y el artículo después de ellos también («Cerro de la Cruz»); lo que ya trae mayúsculas queda igual.
+ */
+export function nombreDictado(nombre: string): string {
+  const palabras = nombre.trim().split(/\s+/);
+  if (!palabras[0]) return nombre.trim();
+  // (las que ya traen mayúsculas quedan como vienen: «piloto Granada» → «Piloto Granada»)
+  return palabras
+    .map((w, i) => {
+      const bajo = w.toLowerCase();
+      const tras = i > 0 && /^(?:de|del|a|al|en|por|para|con|of|on|at|in|to)$/i.test(palabras[i - 1]);
+      if (i > 0 && (MINUSCULA_EN_NOMBRE.has(bajo) || (tras && /^(?:el|la|los|las|the)$/.test(bajo)))) return bajo;
+      return /^\p{Ll}/u.test(w) ? w.charAt(0).toUpperCase() + w.slice(1) : w;
+    })
+    .join(" ");
+}
+
+/** La orden con el nombre dictado con mayúsculas (al renombrar, al nombrar el escenario o un nodo nuevo). */
+export function ordenConNombreDictado<O extends { tipo: string }>(o: O): O {
+  const x = o as unknown as { tipo: string; nombre?: unknown; datos?: { nombre?: unknown } };
+  if ((x.tipo === "renombrar" || x.tipo === "nombre-escenario") && typeof x.nombre === "string") return { ...o, nombre: nombreDictado(x.nombre) };
+  if ((x.tipo === "agregar" || x.tipo === "pieza") && x.datos && typeof x.datos.nombre === "string") return { ...o, datos: { ...x.datos, nombre: nombreDictado(x.datos.nombre) } };
+  return o;
 }
 
 /** Qué hacer con las versiones entendidas: preguntar «¿quiso decir…?», confirmar lo que borra, o hacerla. */

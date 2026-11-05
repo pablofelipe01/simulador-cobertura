@@ -313,6 +313,9 @@ const PIDE_PLATA = /\b(presupuesto|invertir|inversion|gastar|plata|dinero|capita
  * El presupuesto del pedido, en pesos: «con un presupuesto de 80 millones», «invertir máximo $120.000.000», «que no
  * pase de 1.200 millones», «presupuesto de USD 25.000» (a la TRM del cotizador). Exige palabras de plata.
  */
+/** Una cifra grande de plata como se dice: «120 millones», «1.200 millones», «$2.500.000». */
+const enMillones = (v: number) => (v % 1e6 === 0 ? `${(v / 1e6).toLocaleString("es-CO")} millones` : `$${v.toLocaleString("es-CO")}`);
+
 export function presupuestoEnTexto(bajo: string): Presupuesto | null {
   if (!PIDE_PLATA.test(bajo) && !/\$|\b(pesos|cop|usd|dolares)\b/.test(bajo)) return null;
   const re = new RegExp(String.raw`(us\$|usd|\$|cop)?\s*${NUMERO}\s*(mil\s+millones|millones|millon|mm?(?![a-z0-9²])|k(?![a-z]))?\s*(?:de\s+)?(pesos|cop|dolares|usd)?`, "g");
@@ -341,7 +344,9 @@ export function presupuestoEnTexto(bajo: string): Presupuesto | null {
     // Sin escala ni moneda clara, menos de un millón de pesos no es un presupuesto de red (es otra cifra)
     if (!dolares && v < 1e6) continue;
     const cop = dolares ? v * COTIZADOR.trm : v;
-    return { cop, dicho: m[0].trim(), ...(dolares ? { dolares: v } : {}) };
+    // v17.5 · La cifra dictada se muestra como se dice: «120000000» → «120 millones»
+    const dicho = cifraGrande && !moneda && !despues ? enMillones(v) : m[0].trim();
+    return { cop, dicho, ...(dolares ? { dolares: v } : {}) };
   }
   return null;
 }

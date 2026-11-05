@@ -111,7 +111,8 @@ function proteger(texto: string, nombres: string[]): { texto: string; piezas: st
     t = t.replace(re, (_m, a: string, nombre: string, cola: string) => `${a}${guardar(nombre)}${cola}`);
   };
   nombrar(new RegExp(String.raw`^(${ANTES_DEL_NOMBRE}(?:rename|change the name of)\s+.+?\s+(?:to|as)\s+)(?!⟦)(.+?)(${DESPUES_DEL_NOMBRE})$`, "i"));
-  nombrar(new RegExp(String.raw`^(${ANTES_DEL_NOMBRE}(?:call|name|rename)\s+(?:the\s+)?scenario\s+(?:to\s+|as\s+)?)(?!⟦)(.+?)(${DESPUES_DEL_NOMBRE})$`, "i"));
+  // (v17.5 · sin volver a guardar «to ⟦0⟧» cuando el nombre ya quedó guardado: «rename the scenario to Finca Uno»)
+  nombrar(new RegExp(String.raw`^(${ANTES_DEL_NOMBRE}(?:call|name|rename)\s+(?:the\s+)?scenario\s+(?:to\s+|as\s+)?)(?!⟦|(?:to|as)\s+⟦)(.+?)(${DESPUES_DEL_NOMBRE})$`, "i"));
   nombrar(new RegExp(String.raw`^(${ANTES_DEL_NOMBRE}(?:call|name)\s+(?:⟦\d+⟧|${PRONOMBRE})\s+)(?!⟦)(?!(?:it\s+)?(?:a day|a night|quits|off|done|even)\b)(.+?)(${DESPUES_DEL_NOMBRE})$`, "i"));
   nombrar(new RegExp(String.raw`^(${ANTES_DEL_NOMBRE}change\s+(?:⟦\d+⟧'?s|its)\s+name\s+to\s+)(?!⟦)(.+?)(${DESPUES_DEL_NOMBRE})$`, "i"));
   t = t.replace(new RegExp(String.raw`\b((?:called|named)\s+)(?!⟦)(.+?)(?=\s+(?:at|in|on|near|with|to|by)\b|[,;]|${DESPUES_DEL_NOMBRE}$)`, "i"), (_m, a: string, nombre: string) => `${a}${guardar(nombre)}`);
@@ -195,7 +196,12 @@ function arreglarFalsos(t: string, falsos: Set<number>): string {
   );
 }
 
-const restaurar = (t: string, piezas: string[]) => t.replace(/⟦(\d+)⟧|⟨(\d+)⟩/g, (_m, a: string, b: string) => piezas[Number(a ?? b)] ?? "");
+const restaurar = (t: string, piezas: string[]) => {
+  // (v17.5 · también lo guardado dentro de otra pieza, si quedara)
+  let r = t;
+  for (let i = 0; i < 3 && /⟦\d+⟧|⟨\d+⟩/.test(r); i++) r = r.replace(/⟦(\d+)⟧|⟨(\d+)⟩/g, (_m, a: string, b: string) => piezas[Number(a ?? b)] ?? "");
+  return r;
+};
 
 /* ───────────── Palabras ───────────── */
 
@@ -343,8 +349,8 @@ const ENTEROS: Regla[] = [
   [/^(?:the )?third(?: one| option)?$|^option (?:3|three)$/i, "la tercera"],
   [/^(?:the )?last(?: one| option)?$/i, "la última"],
   // Paneles
-  [/^(?:clean|clear) (?:the |up the )?screen$|^(?:hide|close) (?:all |both |the )?(?:panels|sidebars)$|^(?:just|only) the map$|^full ?screen(?: map)?$|^map only$/i, "pantalla limpia"],
-  [/^(?:show|open|bring back) (?:all |both |the )?(?:panels|sidebars)$/i, "muestra los paneles"],
+  [/^(?:clean|clear) (?:the |up the )?screen$|^(?:hide|close) (?:all |both |the )?(?:panels?|sidebars?)$|^(?:just|only) the map$|^full ?screen(?: map)?$|^map only$/i, "pantalla limpia"],
+  [/^(?:show|open|bring back) (?:all |both |the )?(?:panels?|sidebars?)$/i, "muestra los paneles"],
   [/^(?:show|open|display|bring back) (?:me )?(?:the )?(?:top bar|top toolbar|toolbar|tool bar|menu bar|top menu)$/i, "muestra la barra de arriba"],
   [/^(?:hide|close) (?:the )?(?:top bar|top toolbar|toolbar|tool bar|menu bar|top menu)$/i, "oculta la barra de arriba"],
   [/^(?:show|open|display) (?:me )?(?:the )?results panel$|^open (?:the )?results$/i, "abre el panel de resultados"],
@@ -354,7 +360,9 @@ const ENTEROS: Regla[] = [
   [/^(?:show|give|tell)(?: me)? (?:the )?results$|^results$|^(?:let me see|see|view|check) (?:the )?results$/i, "muéstrame los resultados"],
   // Modo
   [/^(?:switch|go|change) (?:to )?(?:the )?advanced mode$|^advanced mode$/i, "pasa al modo avanzado"],
-  [/^(?:switch|go|change) (?:to )?(?:the )?(?:seed(?:ing)?|simple) mode$|^seed (?:the )?mesh again$|^(?:back to )?seed the mesh$/i, "vuelve a sembrar la malla"],
+  [/^(?:switch|go|change) (?:to )?(?:the )?(?:seed(?:ing)?|simple) mode$|^seed (?:the )?(?:mesh|network) again$|^(?:back to )?seed the mesh$/i, "vuelve a sembrar la malla"],
+  // v17.5 · «Seed a mesh around the gateway»: sembrar desde el gateway
+  [/^seed (?:a |the )?(?:mesh|network|repeaters) (?:around|near|from|at|next to) (?:the )?gateway$/i, "siembra la malla alrededor del gateway"],
   // Empezar de cero y ejemplos
   [/^(?:start (?:over|again|fresh|anew|from scratch|from zero|from 0|again from (?:scratch|zero|0|the beginning)|over from (?:scratch|zero|0|the beginning))|begin (?:again|from scratch|anew)|restart(?: everything| from scratch)?|clear (?:everything|it all|all|the (?:whole )?map|the scenario)|delete (?:everything|it all|all)|remove (?:everything|it all)|erase (?:everything|it all|all)|wipe (?:everything|it all|the (?:whole )?map|it|the slate)(?: clean)?|reset (?:everything|it all|the (?:whole )?map|the scenario)|clean (?:the (?:whole )?map|everything|it all)(?: up)?|new (?:scenario|map)|empty the map|blank (?:map|slate))$/i, "empieza de cero"],
   [/^load (?:the )?mesh example$|^load (?:the )?example (?:of the )?mesh$/i, "carga el ejemplo de malla"],
@@ -516,6 +524,8 @@ const FRASES: Regla[] = [
   [/\banimate the (?:network|mesh)\b/gi, "anima la red"],
   [/\b(?:stop|remove|turn off) the animation\b/gi, "quita la animación"],
   [/\b(?:show|fit|zoom to|frame|see) (?:me )?(?:the )?(?:whole|entire|full) (?:network|mesh)\b|\bfit (?:the )?(?:map|view) to (?:the )?(?:network|mesh)\b|\bzoom to fit\b/gi, "muéstrame toda la red"],
+  // v17.5 · Soltar la regla («turn off the ruler», «put down the ruler»)
+  [/\b(?:turn off|switch off|deactivate|disable|close|put away|put down|drop|release|stop using|let go of) (?:the )?ruler\b(?: tool)?|\bstop measuring\b/gi, "suelta la regla"],
   [/\b(?:turn on|activate|enable|open|use|give me|grab|get|pick up|take|bring up) (?:the )?ruler\b(?: tool)?|\bmeasure with the ruler\b/gi, "activa la regla"],
   // v17.4 · Borrar lo medido con la regla («delete the measurements», «clear the ruler»)
   [/\b(?:delete|remove|clear|erase|wipe|reset|trash|get rid of)(?: all)?(?: of)? (?:the |my |these |those )?(?:ruler )?(?:measurements?|measures|measured lines|ruler lines)\b|\b(?:clear|erase|wipe|reset) (?:the )?ruler\b/gi, "borra las mediciones"],
@@ -765,6 +775,8 @@ const FRASES: Regla[] = [
   // Antenas y roles
   [/\bpoint (.+?) (?:to(?:wards?)? (?:the )?|at (?:the )?)?(north-?east|north-?west|south-?east|south-?west|north|south|east|west)\b/gi, (_m, x: string, r: string) => `apunta ${x} al ${rumbo(r)}`],
   [/\b(?:orient|aim|rotate|turn) (.+?) (?:to|at|toward|towards) (\d+(?:\.\d+)?) ?(?:°|grados)/gi, "orienta $1 a $2 grados"],
+  // v17.5 · «Point Ejemplo toward the gateway», «aim Repeater 1 at Tower 2» (hacia un nodo, no un rumbo ni grados)
+  [/\b(?:point|aim) (.+?) (?:toward|towards|at|to) (?:the )?(?!(?:north|south|east|west|northeast|northwest|southeast|southwest|north-east|north-west|south-east|south-west)\b)(?!-?\d)(.+?)$/gi, "apunta $1 hacia $2"],
   [/\btilt (.+?) (\d+(?:\.\d+)?) ?(?:°|grados) (down|downward|downwards|up|upward|upwards)\b/gi, (_m, x: string, g: string, d: string) => `inclina ${x} ${g}° hacia ${/down/i.test(d) ? "abajo" : "arriba"}`],
   [/\b(?:give|put on|fit) (.+?) (?:an? )?omni(?:directional)?(?: antenna)?\b/gi, "ponle a $1 una antena omnidireccional"],
   [/\b(?:put|give|fit|add) (?:a |an )?yagi(?: antenna)? (?:on|to) (.+?) pointing (?:at|to|toward|towards) (.+?)$/gi, "ponle una antena yagi a $1 apuntando a $2"],

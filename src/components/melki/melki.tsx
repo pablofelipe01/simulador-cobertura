@@ -49,7 +49,7 @@ import { cifrasInventadas, ESQUEMA_PENSAR, leerPensamiento, mensajesPensar } fro
 import { medidasEnCifras } from "./medidas";
 import { numerosEnPalabras, numerosEnPalabrasEn } from "./numeros";
 import { espanolDeMezcla, traducirPedido } from "./ingles";
-import { anclaDelSimulador, decidirVariante, esPregunta, pareceParaMelki, variantesEntendidas as variantesDeLoOido, variantesParaUsar, type Evaluacion, type VarianteEntendida as VarianteOida } from "./oido";
+import { anclaDelSimulador, decidirVariante, esPregunta, ordenConNombreDictado, pareceCharla, pareceParaMelki, variantesEntendidas as variantesDeLoOido, variantesParaUsar, type Evaluacion, type VarianteEntendida as VarianteOida } from "./oido";
 import { avisoCambio, cambioDeIdioma, sinNombres } from "./idioma-melki";
 import { PresentacionPitch, type ControlPitch, type Narrador } from "./presentacion";
 import { RecorridoRed, type ControlRecorrido } from "./recorrido-red";
@@ -91,7 +91,7 @@ import {
   type EstadoDictado,
   type ModoDictado,
 } from "./dictado";
-import { accionAjuste, cuestionarNodo, dividirEnPasos, ejecutarOrden, interpretarOrden, textoCoberturaUtil, textoRed, type Api, type ContextoOrden, type LlegadaMelki, type Orden, type Pendiente, type ResultadoOrden } from "./ordenes";
+import { accionAjuste, cuestionarNodo, dividirEnPasos, ejecutarOrden, esConsulta, interpretarOrden, textoCoberturaUtil, textoRed, type Api, type ContextoOrden, type LlegadaMelki, type Orden, type Pendiente, type ResultadoOrden } from "./ordenes";
 import type { IdTour } from "./tours";
 import { hablaNatural } from "./habla";
 import { alCargarVoces, callar, fijarGeneroVoz, fijarRitmoVoz, fijarVozPreferida, hablar, puntajeVoz, sonando, vocesEspanol, vozDisponible, type GeneroVoz } from "./voz";
@@ -1393,7 +1393,11 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     // cercana, un saludo a otra persona, la hora) pasa sin interrumpir, y tampoco va a la IA. Lo que no se entendió, el
     // doble oído lo vuelve a oír en español y en inglés (Whisper, en el navegador)
     const entiende = entiendeDicho(texto);
-    if (!conNombre && sinNombre() && entiende !== "si") {
+    // v17.5 · Sin su nombre, la charla con alguien más pasa aunque se entienda como orden o pregunta («let's go to Cumaral
+    // this weekend», «my doctor wants me to do a stress test next week», «préstame la regla y un lápiz»)
+    const charlaCercana = !conNombre && sinNombre() && pareceCharla(texto);
+    if (!conNombre && sinNombre() && (entiende !== "si" || charlaCercana)) {
+      if (charlaCercana) return pasarSinOrden(texto);
       if (entiende === "no" && dobleOidoListo()) {
         void oirDeNuevo(texto, m.comandoDesde, m.comandoHasta, conNombre);
         return;
@@ -1453,7 +1457,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     const pasos = dividirEnPasos(traducido);
     if (pasos.length > 1 && entiendeFrase(pasos[0])) return "si";
     const r1 = responder(t, contextoMelki(true, lengua));
-    const r2 = traducido !== t ? responder(traducido, contextoMelki(true, "es")) : null;
+    const r2 = traducido !== t ? responder(traducido, { ...contextoMelki(true, "es"), traducido: true }) : null;
     const sirve = (r: Respuesta | null) => r !== null && !r.noEntendido && !r.fueraDeTema;
     if (sirve(r1) || sirve(r2)) return "si";
     let fuera = Boolean(r1.fueraDeTema || r2?.fueraDeTema);
@@ -1549,7 +1553,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       const [t1] = await plazo(transcribirEnIdiomas(audio, [ahora === "en" ? "english" : "spanish"]));
       if (!sigue()) return soltar();
       const x1 = limpiarComando(t1 ?? "", ahora);
-      if (x1 && x1 !== texto && entiendeDicho(x1) === "si") {
+      if (x1 && x1 !== texto && entiendeDicho(x1) === "si" && (conNombre || !pareceCharla(x1))) {
         setAvisoPaso(null);
         return pedirPorVoz(x1);
       }
@@ -1558,7 +1562,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       const x2 = limpiarComando(t2 ?? "", otro);
       // Al español, solo una orden (como en la v17.2): Whisper a veces traduce lo dicho, y un tema suelto cambiaría el idioma
       // de toda la pantalla sin que nadie lo pidiera
-      if (x2 && (otro === "es" ? nivelEnIdioma(x2, otro) === 2 : entiendeEnIdioma(x2, otro))) {
+      if (x2 && (otro === "es" ? nivelEnIdioma(x2, otro) === 2 : entiendeEnIdioma(x2, otro)) && (conNombre || !pareceCharla(x2))) {
         setAvisoPaso(null);
         // Con el cambio automático, todo el simulador pasa al otro idioma; sin él, la orden se hace sin cambiarlo (Melki la
         // entiende en el idioma en que vino y contesta en el de la pantalla)
@@ -1578,7 +1582,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     // repeater…», «take me to…»): entonces contesta (lo que entendió, «¿quiso decir…?» o que se lo repitan), sin cambiar
     // el idioma de la pantalla
     if (!conNombre && sinNombre()) {
-      if (!pareceParaMelki(texto) || !anclaDelSimulador(texto, idiomaDelMensaje(texto), nombresNodos())) return pasarSinOrden(texto);
+      if (!pareceParaMelki(texto) || pareceCharla(texto) || !anclaDelSimulador(texto, idiomaDelMensaje(texto), nombresNodos())) return pasarSinOrden(texto);
       return pedirPorVoz(texto, false);
     }
     pedirPorVoz(texto);
@@ -1606,6 +1610,41 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       return 0;
     }
   };
+
+  /**
+   * v17.5 · Cuánto se entendería lo dicho corrigiendo lo que pudo oírse mal (como `atender`): una versión que se hace
+   * vale un poco menos que lo entendido tal cual; una con duda («¿quiso decir…?») o que hay que confirmar, algo menos.
+   */
+  const puntosConOido = (pedido: string): number => {
+    try {
+      const lengua = idiomaDelMensaje(pedido);
+      let entera: Orden | null = null;
+      try {
+        entera = interpretarOrden(enPalabrasDeMelki(pedido, lengua), actual.current.api, pendiente.current, contextoOrden());
+      } catch {
+        entera = null;
+      }
+      if (entera && entera.tipo !== "coordenada-sola" && !ordenIncompleta(entera)) return 3;
+      const vs = variantesParaUsar<Orden>(pedido, lengua, {
+        orden: entera,
+        incompleta: ordenIncompleta,
+        respuesta: entera ? null : responder(pedido, contextoMelki(true, lengua)),
+        evaluar: (x) => evaluarFrase(x, lengua),
+        nombres: nombresNodos(),
+        consulta: esConsulta,
+      });
+      const d = vs.length ? decidirVariante<Orden>(vs, { clave: (x) => (x.orden ? JSON.stringify({ ...x.orden, nota: undefined, descripcion: undefined }) : x.frase), destructiva: varianteDestructiva }) : null;
+      if (!d) return 0;
+      const v = d.tipo === "dudas" ? d.opciones[0] : d.variante;
+      const valor = v.nivel === 2 ? (v.completa ? 2.6 : 1.8) : 0.8;
+      return d.tipo === "hacer" ? valor : valor - 0.4;
+    } catch {
+      return 0;
+    }
+  };
+
+  /** Los nombres de los nodos que se le sugieren al reconocimiento (sin las personas pobladas ni los repetidos). */
+  const nombresParaReconocer = (): string[] => [...new Set(nombresNodos().filter((n) => !/^(?:persona|person)\s+\d+$/i.test(n.trim())))].slice(0, 40);
 
   /** El departamento que se ve en el centro del mapa (para sugerirle al reconocimiento sus municipios). */
   const departamentoVista = (): string | null => {
@@ -1639,8 +1678,10 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
           onNivel: (nivel, voz) => !c.cancelado && vozRef.current.oirNivel(nivel, voz),
           // Entre las versiones que propone el reconocimiento, la que trae su nombre y la que el simulador entiende
           // como orden (con un lugar que existe); y los nombres de los municipios que se ven, para entenderlos mejor
-          elegir: (alternativas) => elegirAlternativa(alternativas, (pedido) => vozRef.current.puntosComprension(pedido)),
-          frases: [...frasesReconocimiento(), ...nombresParaVoz(departamentoVista())],
+          // (v17.5 · y si ninguna se entiende tal cual, la que se entiende corrigiendo lo mal oído)
+          elegir: (alternativas) => elegirAlternativa(alternativas, (pedido) => vozRef.current.puntosComprension(pedido), (pedido) => vozRef.current.puntosConOido(pedido)),
+          // (v17.5 · también los nombres de los nodos del mapa: «Loma Alta», «Torre 2»; sin las personas pobladas)
+          frases: [...frasesReconocimiento(), ...nombresParaVoz(departamentoVista()), ...nombresParaReconocer()],
           onEstado: (e, detalle) => {
             if (c.cancelado) return;
             if (e === "preparando" && detalle) setAvisoVoz(detalle);
@@ -2246,7 +2287,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     if (entiendeFrase(frase) || entiendeFrase(dividirEnPasos(frase)[0] ?? "")) return 2;
     if (pedidoDeTour(t, lengua) || pedidoDeTour(frase, "es")) return 2;
     const delSimulador = (r: Respuesta) => !r.noEntendido && !r.fueraDeTema && !CHARLA.has(r.tema ?? "");
-    const r = responder(frase, { ...contextoMelki(true), lengua: "es" });
+    const r = responder(frase, { ...contextoMelki(true), lengua: "es", traducido: true });
     const r2 = lengua === "en" ? responder(t, { ...contextoMelki(true), lengua }) : r;
     return delSimulador(r) || delSimulador(r2) ? 1 : 0;
   };
@@ -2447,7 +2488,9 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     // Varias órdenes en un mismo mensaje
     const pasos = dividirEnPasos(pregunta);
     // Un diseño (con lo que se hace después) o una pregunta por el lugar es una sola orden aunque traiga «y luego»
-    const entera = interpretarOrden(pregunta, api, pendiente.current, contextoOrden());
+    // (v17.5 · por voz, el nombre nuevo con mayúsculas: el reconocimiento escribe «loma alta»)
+    const leida = interpretarOrden(pregunta, api, pendiente.current, contextoOrden());
+    const entera = leida && deVoz ? ordenConNombreDictado(leida) : leida;
     if (pasos.length > 1 && !(entera && ["disenar", "elegir", "pedir-diseno", "pedir-lugar", "aviso"].includes(entera.tipo))) {
       const primera = interpretarOrden(pasos[0], api, pendiente.current, contextoOrden());
       if (primera) {
@@ -2467,6 +2510,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
         respuesta: entera ? null : responder(dicho, contextoMelki(deVoz, lengua)),
         evaluar: (x) => evaluarFrase(x, lengua),
         nombres: nombresNodos(),
+        consulta: esConsulta,
       });
       if (vs.length) {
         usarVariantes(vs, dicho, deVoz);
@@ -2487,7 +2531,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     // entiende, lo traducido
     let r = responder(dicho, contextoMelki(deVoz, lengua));
     if (traducido && r.noEntendido) {
-      const otra = responder(pregunta, contextoMelki(deVoz, "es"));
+      const otra = responder(pregunta, { ...contextoMelki(deVoz, "es"), traducido: true });
       if (!otra.noEntendido) r = otra;
     }
     // Un tema elegido con pocas palabras clave: si el Modelo Melki está muy seguro de que se pregunta otro, gana el modelo
@@ -2535,7 +2579,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     if (o && o.tipo !== "coordenada-sola") return { nivel: 2, completa: !ordenIncompleta(o), orden: o, frase };
     if (pedidoDeIdioma(t) || entiendeFrase(frase)) return { nivel: 2, completa: true, frase };
     const sirve = (r: Respuesta | null) => r !== null && !r.noEntendido && !r.fueraDeTema && !CHARLA.has(r.tema ?? "");
-    if (sirve(responder(t, contextoMelki(true, lengua))) || (frase !== t && sirve(responder(frase, contextoMelki(true, "es"))))) return { nivel: 1, completa: true, frase };
+    if (sirve(responder(t, contextoMelki(true, lengua))) || (frase !== t && sirve(responder(frase, { ...contextoMelki(true, "es"), traducido: true })))) return { nivel: 1, completa: true, frase };
     return { nivel: 0, completa: false, frase };
   };
 
@@ -3813,13 +3857,13 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     avisos.current = { preguntar, mostrarTours, cerrarOferta, oferta, ejecutar };
   });
   // Lo que llama el reconocimiento de voz siempre usa la versión de ahora (con el escenario de ahora)
-  const vozRef = useRef({ oirFrase, oirParcial, oirNivel, sigueHablando, ejecutarVoz, preguntar, pulsarAccion, arrancarEscucha, reanudar, listoParaEscuchar, bloqueoVoz, desbloquearVoz, iniciarPasiva, apagarTodo, puntosComprension, escucharDeNuevo });
+  const vozRef = useRef({ oirFrase, oirParcial, oirNivel, sigueHablando, ejecutarVoz, preguntar, pulsarAccion, arrancarEscucha, reanudar, listoParaEscuchar, bloqueoVoz, desbloquearVoz, iniciarPasiva, apagarTodo, puntosComprension, puntosConOido, escucharDeNuevo });
   // Encender y apagar el asistente
   const manosRef = useRef({ iniciarManosLibres, detenerManosLibres, apagarTodo });
   // La IA y la presentación siempre usan la versión de ahora de estas funciones
   const iaRef = useRef({ iniciarIA, terminarIA, terminarTurnoIA, alAudioIA, alTurnoIA, alInterrumpirIA, alHerramientasIA, vigilarIA, reconectarIA, enviarMicIA, nivelMicIA, reabrirMicIA });
   useEffect(() => {
-    vozRef.current = { oirFrase, oirParcial, oirNivel, sigueHablando, ejecutarVoz, preguntar, pulsarAccion, arrancarEscucha, reanudar, listoParaEscuchar, bloqueoVoz, desbloquearVoz, iniciarPasiva, apagarTodo, puntosComprension, escucharDeNuevo };
+    vozRef.current = { oirFrase, oirParcial, oirNivel, sigueHablando, ejecutarVoz, preguntar, pulsarAccion, arrancarEscucha, reanudar, listoParaEscuchar, bloqueoVoz, desbloquearVoz, iniciarPasiva, apagarTodo, puntosComprension, puntosConOido, escucharDeNuevo };
     manosRef.current = { iniciarManosLibres, detenerManosLibres, apagarTodo };
     iaRef.current = { iniciarIA, terminarIA, terminarTurnoIA, alAudioIA, alTurnoIA, alInterrumpirIA, alHerramientasIA, vigilarIA, reconectarIA, enviarMicIA, nivelMicIA, reabrirMicIA };
   });
