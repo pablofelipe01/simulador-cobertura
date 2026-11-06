@@ -30,16 +30,18 @@ de "Pitch". La primera vez abre en el idioma del navegador y después
 recuerda el último que usó. Y la página abre con los paneles ocultos,
 para ver el mapa completo: las herramientas y los resultados se abren
 cuando usted quiera.
-En esta entrega: Melki le entiende aunque se le pronuncie mal, en
-inglés con acento o en español rápido. El reconocimiento de voz escribe
-otras palabras ("at a repeater" por "add a repeater", "por un
-repetidor" por "pon un repetidor") y Melki entiende lo que usted quiso
-decir, lo hace y le cuenta qué entendió; si duda, le pregunta, y si lo
-que entendió borra algo, le pregunta antes. También acerca un nodo a
-otro ("pon el Repetidor 1 cerca del gateway") y sube o baja la altura
-sobre la que ya tiene ("súbelo 5 m más"). En la entrega anterior Melki
-empezó a entender el inglés y el español por igual (sección 2, cc).
-Antes: el "Lápiz" de la barra del mapa dibuja la malla a mano,
+En esta entrega: Melki le entiende todavía mejor aunque se le
+pronuncie mal, en inglés con acento o en español rápido. Reconoce los
+nombres de los nodos aunque se oigan distinto ("Tory to" es la Torre 2,
+"a hemp low" es Ejemplo), corrige más palabras ("yogi" por Yagi,
+"pongo una persona" por "pon una persona"), contesta las preguntas
+aunque una palabra se oiga mal, escribe con mayúscula los nombres que
+usted le dicta ("loma alta" queda "Loma Alta") y, con la barra del
+Asistente abierta, deja pasar la conversación con otras personas
+("este fin de semana vamos a Cumaral") (sección 2, ee).
+En la entrega anterior Melki empezó a entender lo que se le pronuncia
+mal (sección 2, dd), y antes, el inglés y el español por igual
+(sección 2, cc). Antes: el "Lápiz" de la barra del mapa dibuja la malla a mano,
 como en Paint (una figura cerrada es una zona; una línea, una franja a
 lo largo de una vía o un río), y Melki arma ahí la red óptima, que no
 es la de más antenas sino la del equilibrio entre la estabilidad de la
@@ -734,6 +736,29 @@ con un punto.
     todos los repetidores 5 m" (sobre la altura que tienen) y, en
     inglés, "raise it 5 m", "move Repeater 1 next to the gateway",
     "why doesn't Person 2 have signal?" o "what does SF mean?".
+ ee) Lo que se oye mal, todavía más (esta entrega): Melki reconoce
+    los nombres de los nodos aunque el dictado los escriba de otro
+    modo ("Delete Tory to" es borrar la Torre 2, con su "¿lo hago?";
+    "point a hemp low northeast" es apuntar Ejemplo al noreste),
+    corrige más palabras en los dos idiomas ("yogi" o "yagui" por
+    Yagi, "mesh corp" por MeshCore, "decay MZ" por KMZ, "pongo una
+    persona en Restrepo", "cuánta persona aguanta el Repetidor 2",
+    "actívala regla", "debo pone más torres") y entiende las
+    coordenadas dichas de otro modo ("4,22 menos 73,4", "4.5 1 2 3").
+    Contesta las preguntas aunque una palabra se oiga mal ("how much
+    con it handle?" es "how much can it handle?"), y los nombres que
+    usted le dicta quedan con mayúscula ("renombra el Repetidor 2 como
+    loma alta" lo deja "Loma Alta"; lo que usted escribe queda como lo
+    escribe). "Desactiva la regla" o "turn off the ruler" ahora la
+    sueltan. Con la barra del Asistente abierta, sin decir su nombre,
+    la conversación con otras personas pasa sin hacerse aunque nombre
+    algo del simulador ("este fin de semana vamos a Cumaral",
+    "préstame la regla y un lápiz", "my doctor wants me to do a stress
+    test next week"); con su nombre ("Melki, ...") o por escrito, sí
+    lo hace. Lo que también es del simulador no se toma por charla
+    ("en un radio de 3 km", "dame un lápiz", "renombra el Repetidor 2
+    como La Mesa"). Si el navegador propone varias versiones de lo que
+    oyó, Melki escoge la que entiende, también corrigiendo lo mal oído.
 
 
 3. BUENO SABER

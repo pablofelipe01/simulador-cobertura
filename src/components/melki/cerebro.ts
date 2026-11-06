@@ -24,6 +24,7 @@ import type { ModoApp } from "../simulador/estado";
 
 import { accionAjuste, textoCoberturaUtil, textoRed, type Orden } from "./ordenes";
 import { TOURS, type IdTour } from "./tours";
+import { corregirOido } from "./oido";
 
 /** «recorrido» empieza el tour indicado; «tours» muestra el menú de tours; «manos-libres» activa la escucha por voz; «acerca» abre la autoría y la licencia. */
 export type AccionMelki =
@@ -111,6 +112,12 @@ export type ContextoMelki = {
   modeloMelki?: { activo: boolean; frases?: number; aciertos?: number; ciega?: number; aprendidas: number; intenciones?: number };
   /** v17.3 · El idioma en que vino el mensaje, si ya se sabe (la respuesta sale en el idioma de la pantalla). */
   lengua?: Idioma;
+  /**
+   * v17.5 · Lo que se pregunta ya es lo dicho puesto en las palabras de Melki (la traducción del inglés o el español con
+   * palabras del inglés), que ya trae corregido lo mal oído: no se le vuelve a corregir (en una traducción, «get away de
+   * aquí» no es «gateway»).
+   */
+  traducido?: boolean;
 };
 
 /** «señor», «señora» o nada, según el trato elegido (por defecto, señor). En inglés, «sir» o «ma'am». */
@@ -1531,8 +1538,12 @@ export function responderTema(id: string, c: ContextoMelki): Respuesta | null {
  * claramente en español, en español); si en inglés no la entiende y trae palabras del español («gracias», «hola Melki»),
  * la intenta en español. La respuesta sale en el idioma de la pantalla.
  */
-export function responder(pregunta: string, c: ContextoMelki): Respuesta {
-  if (!entenderEnIngles(pregunta, c.lengua)) return responderCon(pregunta, c, KIT_ES);
+export function responder(dicha: string, c: ContextoMelki): Respuesta {
+  // v17.5 · Con lo mal oído que es seguro corregir («what's mesh core» → «MeshCore», «qué es Laura» → «LoRa», «how match
+  // does the network cost» → «how much…»), como en las órdenes
+  const enIngles = entenderEnIngles(dicha, c.lengua);
+  const pregunta = c.traducido ? dicha : corregirOido(dicha, enIngles ? "en" : "es", c.antenas.map((a) => a.nombre));
+  if (!enIngles) return responderCon(pregunta, c, KIT_ES);
   const r = responderCon(pregunta, c, KIT_EN);
   if (!r.noEntendido || detectarIdioma(pregunta).es === 0) return r;
   const enEspanol = responderCon(pregunta, c, KIT_ES);

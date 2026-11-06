@@ -1666,6 +1666,12 @@ function crearApi(antenas) {
   caso("«Heymelki» pegado también lo llama", ((a) => a.activado && a.resto === "ubícame en Cumaral")(m.detectarActivacion("heymelki ubícame en Cumaral")));
   caso("Las muletillas del comienzo se quitan («o sea, eh, ubícame…»)", m.limpiarComando("o sea, eh, ubícame en Cumaral") === "Ubícame en Cumaral");
   caso("Entre las versiones del reconocimiento gana la que el simulador entiende como orden", m.elegirAlternativa(["ubícame en barranco loco xyz", "ubícame en Barranca de Upía Meta"], (p) => (/Barranca de Upía/.test(p) ? 3 : 0)) === "ubícame en Barranca de Upía Meta");
+  caso(
+    "v17.5: si ninguna versión se entiende tal cual, gana la que se entiende corrigiendo lo mal oído (y si alguna sí se entiende, eso no se mira)",
+    m.elegirAlternativa(["pon el yeti en Cumaral", "pon el zeti en Cumaral"], () => 0) === "pon el yeti en Cumaral" &&
+      m.elegirAlternativa(["pon el yeti en Cumaral", "pon el zeti en Cumaral"], () => 0, (p) => (/zeti/.test(p) ? 2.6 : 0)) === "pon el zeti en Cumaral" &&
+      m.elegirAlternativa(["pon el gateway en Cumaral", "pon el get way en cumaral"], (p) => (/gateway en Cumaral/.test(p) ? 3 : 0), () => 99) === "pon el gateway en Cumaral",
+  );
 
   // Conversación
   const cV = { antenas: [], parametros: PARAMETROS, resultado: null, desactualizado: false, relieve: "teselas", modo: "sembrar", porVoz: true, vista: "Cumaral (Meta)" };

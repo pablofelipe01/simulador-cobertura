@@ -179,8 +179,9 @@ export function limpiarComando(frase: string, lengua: Idioma = idioma()): string
   t = numerosEnPalabras(t);
   t = normalizarDictado(t);
   // Muletillas al empezar o al terminar («eh», «este», «o sea», «bueno», «mmm»), también repetidas al hablar rápido
-  for (let i = 0; i < 3; i++) t = t.replace(/^(eh+|em+|m+|este|bueno|pues|a ver|mira|oye|o sea|osea|entonces|digamos|ehm+|listo|vale|okey|ok)[, ]+(?=\S)/i, "");
-  t = t.replace(/[, ]+(eh+|por favor|porfa|porfavor|gracias|pues|o sea|ya)$/i, "");
+  // (v17.5 · también «de una» y «ahorita», que no cambian la orden)
+  for (let i = 0; i < 3; i++) t = t.replace(/^(eh+|em+|m+|este|bueno|pues|a ver|mira|oye|o sea|osea|entonces|digamos|ehm+|listo|vale|okey|ok|de una)[, ]+(?=\S)/i, "");
+  t = t.replace(/[, ]+(eh+|por favor|porfa|porfavor|gracias|pues|o sea|ya|de una|ahorita|orita)$/i, "");
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
 
@@ -410,37 +411,85 @@ const TERMINOS_EN =
 /**
  * Elige, entre las versiones que propone el reconocimiento para una frase, la que mejor se entiende en el simulador:
  * la que trae el nombre de Melki y más palabras del simulador, sin olvidar el orden del reconocedor (la primera suele
- * ser la más probable).
+ * ser la más probable). v17.5 · `conOido`: lo que entendería Melki corrigiendo lo mal oído («at a repeater…» → «add a
+ * repeater…»); solo se mira si ninguna versión se entiende tal cual como una orden completa (es más lento).
  */
-export function elegirAlternativa(alternativas: string[], entiende?: (pedido: string) => number): string {
+export function elegirAlternativa(alternativas: string[], entiende?: (pedido: string) => number, conOido?: (pedido: string) => number): string {
+  const opciones = alternativas
+    .map((t, i) => {
+      if (!t.trim()) return null;
+      const n = normal(t);
+      let p = -i * 0.75;
+      const a = detectarActivacion(t);
+      if (a.activado) p += 4;
+      p += (n.match(TERMINOS)?.length ?? 0) * 1;
+      p += (n.match(TERMINOS_EN)?.length ?? 0) * 1;
+      if (/\d/.test(n)) p += 0.5;
+      // Lo que el simulador entiende como orden (con un lugar que existe) pesa más que las palabras sueltas
+      const pedido = entiende || conOido ? limpiarComando(a.activado ? a.resto : t) : "";
+      const directo = entiende && pedido ? entiende(pedido) : 0;
+      return { t, p, pedido, directo };
+    })
+    .filter((x): x is { t: string; p: number; pedido: string; directo: number } => x !== null);
+  const mirarOido = Boolean(conOido) && !opciones.some((o) => o.directo >= 3);
   let mejor = alternativas[0] ?? "";
   let puntos = -Infinity;
-  alternativas.forEach((t, i) => {
-    if (!t.trim()) return;
-    const n = normal(t);
-    let p = -i * 0.75;
-    const a = detectarActivacion(t);
-    if (a.activado) p += 4;
-    p += (n.match(TERMINOS)?.length ?? 0) * 1;
-    p += (n.match(TERMINOS_EN)?.length ?? 0) * 1;
-    if (/\d/.test(n)) p += 0.5;
-    // Lo que el simulador entiende como orden (con un lugar que existe) pesa más que las palabras sueltas
-    if (entiende) {
-      const pedido = limpiarComando(a.activado ? a.resto : t);
-      if (pedido) p += entiende(pedido);
+  for (const o of opciones) {
+    const corregido = mirarOido && o.pedido && conOido ? conOido(o.pedido) : 0;
+    const total = o.p + Math.max(o.directo, corregido);
+    if (total > puntos) {
+      puntos = total;
+      mejor = o.t;
     }
-    if (p > puntos) {
-      puntos = p;
-      mejor = t;
-    }
-  });
+  }
   return mejor;
 }
 
 /** Las frases que se le sugieren al reconocimiento, en el idioma de la pantalla. */
 export const frasesReconocimiento = (): string[] =>
   idioma() === "en"
-    ? ["Melki", "Hey Melki", "Hello Melki", "gateway", "repeater", "MeshCore", "mesh network", "hectares", "Trama", "Starlink", "WhatsApp", "Barranca de Upía", "Cumaral", "Villavicencio", "take me to", "the whole municipality", "popularity zones", "how much can it handle", "stable signal", "walk me through the network"]
+    ? [
+        "Melki",
+        "Hey Melki",
+        "Hello Melki",
+        "gateway",
+        "repeater",
+        "MeshCore",
+        "Meshtastic",
+        "LoRa",
+        "mesh network",
+        "hectares",
+        "Trama",
+        "Starlink",
+        "WhatsApp",
+        "Barranca de Upía",
+        "Cumaral",
+        "Villavicencio",
+        "take me to",
+        "the whole municipality",
+        "popularity zones",
+        "how much can it handle",
+        "stable signal",
+        "walk me through the network",
+        // v17.5 · Lo que más se oía mal con acento
+        "Yagi",
+        "KMZ",
+        "simulate",
+        "coverage",
+        "populate",
+        "stress test",
+        "load test",
+        "satellite view",
+        "northeast",
+        "northwest",
+        "southeast",
+        "southwest",
+        "dBi",
+        "dBm",
+        "Ejemplo",
+        "link report",
+        "optimization",
+      ]
     : FRASES_RECONOCIMIENTO;
 
 /** Frases que se le sugieren al reconocimiento en el equipo (si el navegador lo permite) para que las entienda mejor. */
@@ -467,5 +516,23 @@ export const FRASES_RECONOCIMIENTO = [
   "hasta dónde aguanta",
   "señal media",
   "señal estable",
+  // v17.5 · Lo que más se oía mal al hablar rápido
+  "Yagi",
+  "KMZ",
+  "LoRa",
+  "Meshtastic",
+  "súbelo",
+  "bájalo",
+  "ponle",
+  "prueba de estrés",
+  "hora pico",
+  "a la redonda",
+  "área objetivo",
+  "barra de herramientas",
+  "dBm",
+  "noreste",
+  "noroeste",
+  "sureste",
+  "suroeste",
 ];
 

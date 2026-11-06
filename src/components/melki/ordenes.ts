@@ -122,6 +122,15 @@ export type OpcionLugar = { texto: string; orden: Orden; lugar?: Lugar };
  */
 export type Orden = OrdenSola & { nota?: string; lugarUsado?: Lugar };
 
+/** v17.5 · Las órdenes que solo consultan (no cambian nada del mapa): la distancia, el costo, el informe de un enlace… */
+const CONSULTAS = new Set<string>(["distancia", "perfil", "senal", "donde", "listar", "informe", "costo-red", "optimo", "que-hago", "usuarios-estres", "trama-departamento", "trama-dimensionar", "cobertura-area"]);
+
+/**
+ * ¿La orden solo consulta? (también cuánto aguanta un punto sin llenarlo y la curva de carga). Una pregunta mal oída
+ * puede corregirse por cómo suena hacia una de estas, nunca hacia una que cambie el mapa.
+ */
+export const esConsulta = (o: Orden) => CONSULTAS.has(o.tipo) || (o.tipo === "limite" && !o.llenar) || (o.tipo === "carga" && o.curva);
+
 type OrdenSola =
   | { tipo: "agregar"; coord?: Coordenada; datos: DatosNodo }
   | { tipo: "mover"; id: string; coord?: Coordenada }
@@ -2132,6 +2141,9 @@ export const LAPIZ = new RegExp(
 /** v17.2 · Soltar el lápiz de malla por orden: «suelta el lápiz», «desactiva el pincel», «ya no quiero dibujar». */
 export const SOLTAR_LAPIZ =
   /\b(suelta\w*|soltar|quita\w*|quitar|desactiva\w*|desactivar|apaga\w*|apagar|cierra\w*|cerrar|guarda\w*|guardar|deja|dejar|termina\w*|terminar|sal de|salir de)( el| del| mi)? (lapiz|lapicito|pincel)\b|\b(ya )?no (quiero|voy a) dibujar\b|\b(deja|dejar|para|parar|termina|terminar) de dibujar\b/;
+/** v17.5 · Soltar la regla por orden: «suelta la regla», «desactiva la regla», «ya no quiero medir». */
+export const SOLTAR_REGLA =
+  /\b(suelta\w*|soltar|quita\w*|quitar|desactiva\w*|desactivar|apaga\w*|apagar|cierra\w*|cerrar|guarda\w*|guardar|deja|dejar|termina\w*|terminar|sal de|salir de)( la| de la| mi)? regla\b|\b(ya )?no (quiero|voy a) medir\b|\b(deja|dejar|para|parar|termina|terminar) de medir\b/;
 /** Un pedido de armar o ajustar la red («ármame una malla en Cumaral con menos repetidores», «ajústala con menos torres»). */
 const ARMAR_O_AJUSTAR = /\b(constru\w*|hazme|hagamos|arma|armame|armamela|armala|armalo|armar|arme|armemos|disena\w*|disenar|crea|creame|crear|planifica\w*|montame|monta|montar|levantame|levanta|propon\w*|ajust\w*|reajust\w*|optimiz\w*)\b/;
 /**
@@ -2208,7 +2220,7 @@ function interpretarOrdenBase(dicho: string, api: Api, pendiente: Pendiente, con
   const ejemploEsNodo = antenas.some((a) => /\b(ejemplo|example)\b/.test(n(a.nombre))) && !/\b(carga\w*|muestra\w*|abre|abrir|ver|pon)\s+(?:me\s+)?(?:el |un |otro |los )?(ejemplo|demostracion|demo)\b/.test(tn);
   if (!ejemploEsNodo && /\b(carga\w*|muestra\w*|abre|abrir|ver|pon)\b.*\b(ejemplo|demostracion|demo)\b/.test(tn)) return /\b(malla|sembr\w*|siembra|trama|gateway|repetidor\w*|personas?|gente)\b/.test(tn) ? { tipo: "ejemplo-malla" } : { tipo: "ejemplo" };
 
-  const nombreEsc = texto.match(/(?:(?:ll[aá]ma|nombra|renombra|ponle (?:de )?nombre|nombre)\s+(?:al|el)\s+escenario|escenario\s+(?:se llama|llamado))\s*(?:como|a|:)?\s*["“«]?([^"”»]{2,60}?)["”»]?\s*$/i);
+  const nombreEsc = texto.match(/(?:(?:ll[aá]ma|nombra|renombra|ponle (?:de )?nombre|nombre)\s+(?:al|el)\s+escenario|escenario\s+(?:se llama|llamado))\s*(?:como|a|por|:)?\s*["“«]?([^"”»]{2,60}?)["”»]?\s*$/i);
   if (nombreEsc) return { tipo: "nombre-escenario", nombre: nombreEsc[1].trim() };
   const recep = texto.match(/(?:ganancia del? receptor|receptor (?:con|de))\D{0,14}(\d{1,2}(?:[.,]\d+)?)\s*dbi\b/i);
   if (recep) return { tipo: "parametros", cambios: { gananciaRxDbi: num(recep[1]) }, descripcion: tx(`la ganancia del receptor a ${recep[1]} dBi`, `the receiver gain to ${recep[1].replace(",", ".")} dBi`) };
@@ -2217,6 +2229,8 @@ function interpretarOrdenBase(dicho: string, api: Api, pendiente: Pendiente, con
   // y «suelta el lápiz» lo suelta (vuelve a mover el mapa)
   if (SOLTAR_LAPIZ.test(tn) && !/\bregla\b/.test(tn) && !PREGUNTA_COMO.test(tn)) return { tipo: "herramienta", herramienta: "mover" };
   if (LAPIZ.test(tn) && !/\bregla\b/.test(tn) && !PREGUNTA_COMO.test(tn)) return { tipo: "herramienta", herramienta: "lapiz" };
+  // v17.5 · «Suelta la regla», «desactiva la regla» («turn off the ruler»): vuelve a mover el mapa (antes la activaba)
+  if (SOLTAR_REGLA.test(tn) && !/\b(lapiz|pincel|mediciones|medidas)\b/.test(tn) && !PREGUNTA_COMO.test(tn)) return { tipo: "herramienta", herramienta: "mover" };
   // v17.2 · El criterio de óptimo: «¿necesito más antenas?», «¿sobran repetidores?», «¿por qué no pongo más?» (sin un
   // sitio dicho: «necesito más antenas en Cumaral» o con una coordenada es otro pedido; «ármame una malla… con menos
   // repetidores» o «ajústala con menos torres» es armar o ajustar la red)
@@ -2601,6 +2615,8 @@ function interpretarMalla(texto: string, tn: string, api: Api, coord: Coordenada
     if (coord) return { tipo: "sembrar", destino: { coord, nombre: tx("El punto pedido", "The requested point") } };
     const persona = nodosMencionados(tn, antenas).find((a) => !a.pasarela);
     if (persona) return { tipo: "sembrar", destino: { id: persona.id } };
+    // v17.5 · «Siembra una malla alrededor del gateway»: desde el gateway, hacia los que faltan (no un lugar llamado así)
+    if (/\b(gateway|gateways|pasarela)\b/.test(tn)) return { tipo: "sembrar", destino: "faltantes" };
     const consulta = tn.replace(/.*\b(hacia|hasta|a)\b\s+/, "").replace(/\b(el|la|los|las|municipio de|por favor|porfa)\b/g, " ").replace(/\s+/g, " ").trim();
     if (consulta.length >= 3) {
       const { lugar } = lugarDeConsulta(consulta, api);
