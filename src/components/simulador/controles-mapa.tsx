@@ -366,10 +366,25 @@ function BloqueUsuarios({ r }: { r: ResumenUsuarios }) {
   );
 }
 
-export function Leyenda({ estado, resultado, antenas, usuarios }: { estado: Estado; resultado: ResultadoSimulacion | null; antenas: Antena[]; usuarios?: ResumenUsuarios | null }) {
+export function Leyenda({
+  estado,
+  despachar,
+  resultado,
+  antenas,
+  usuarios,
+}: {
+  estado: Estado;
+  despachar: Dispatch<Accion>;
+  resultado: ResultadoSimulacion | null;
+  antenas: Antena[];
+  usuarios?: ResumenUsuarios | null;
+}) {
   useIdioma();
-  // En pantallas pequeñas la leyenda empieza plegada para no tapar el mapa
-  const [abierta, setAbierta] = useState(() => typeof window === "undefined" || window.matchMedia("(min-width: 640px)").matches);
+  // En pantallas pequeñas la leyenda empieza plegada para no tapar el mapa. v17.6 · Abierta o plegada queda en la vista,
+  // para que Melki la abra o la pliegue por voz («muestra la leyenda», «hide the legend»)
+  const [alEmpezar] = useState(() => typeof window === "undefined" || window.matchMedia("(min-width: 640px)").matches);
+  const abierta = estado.vista.leyenda ?? alEmpezar;
+  const setAbierta = (x: boolean) => despachar({ tipo: "vista", cambios: { leyenda: x } });
   if (!resultado) return null;
   const modo = estado.vista.modo;
   const v = estado.vista;

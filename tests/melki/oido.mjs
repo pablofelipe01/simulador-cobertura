@@ -629,5 +629,25 @@ function procesar(dicho0, lengua, porVoz = false) {
   console.log(`  (corpus en ${((Date.now() - t0) / 1000).toFixed(1)} s)`);
 }
 
+/* ───────────── v17.6 · El zoom, la leyenda y el relieve como los escribe el reconocimiento ───────────── */
+{
+  const casos = [
+    ["su min", "en", "zoom in"], ["some in a little", "en", "zoom in a little"], ["soon out one lever", "en", "zoom out one lever"], ["get close her", "en", "get closer"],
+    ["show the lechen", "en", "show the legend"], ["close the the gen", "en", "close the legend"], ["show the tea rain really", "en", "show the terrain relief"],
+    ["turn off the tree de", "en", "turn off the 3D"], ["sad a light", "en", "satellite"], ["switch to open top o map", "en", "switch to OpenTopoMap"],
+    ["quita la llenda", "es", "quita la leyenda"], ["ale jalo un poquito", "es", "alejalo un poquito"], ["pon el mapa en tres de", "es", "pon el mapa en 3D"],
+    ["des pliega la leyenda", "es", "despliega la leyenda"], ["muestrame los serros", "es", "muestrame los cerros"], ["en cuadra toda la red", "es", "encuadra toda la red"],
+  ];
+  const mal = casos.filter(([t, l, esperado]) => m.corregirOido(t, l, []).toLowerCase() !== esperado.toLowerCase());
+  // Lo que se parece pero es charla no se toca
+  const quietas = [["the rain is coming", "en"], ["i like three d movies", "en"], ["close her eyes", "en"], ["acércate que no te oigo", "es"], ["la leyenda del silbón", "es"], ["tres de la tarde", "es"]];
+  const tocadas = quietas.filter(([t, l]) => m.corregirOido(t, l, []) !== t);
+  caso(
+    "v17.6 · Lo mal oído del mapa se corrige («su min» → zoom in, «the lechen» → legend, «tea rain really» → terrain relief, «la llenda», «ale jalo», «en tres de» → 3D); la charla parecida no se toca",
+    mal.length === 0 && tocadas.length === 0,
+    [...mal.map(([t, l]) => `«${t}» → «${m.corregirOido(t, l, [])}»`), ...tocadas.map(([t, l]) => `«${t}» → «${m.corregirOido(t, l, [])}»`)].join(" | "),
+  );
+}
+
 console.log(fallos ? `\n${fallos} prueba(s) fallaron` : "\nTodas las pruebas de lo oído pasaron");
 process.exit(fallos ? 1 : 0);

@@ -293,7 +293,7 @@ type Regla = [RegExp, string | ((...m: string[]) => string)];
 // 1. Muletillas y cortesía (se quitan)
 const CORTESIA: Regla[] = [
   [/^\s*(?:hey|hi|hello) there\b[\s,]*/i, ""],
-  [/^\s*(?:(?:hey|hi|hello|ok(?:ay)?|so|well|alright|all right|right|now|um+|uh+|er+|erm|please|melki)\b[\s,]*)+/i, ""],
+  [/^\s*(?:(?:hey|hi|hello|ok(?:ay)?|so|well|alright|all right|right|now|um+|uh+|er+|erm|please|melki|and)\b[\s,]*)+/i, ""],
   [/[\s,]*\b(?:melki|please|thanks|thank you|thank you very much|thanks a lot|cheers)\s*[.!?]*\s*$/i, ""],
   // v17.3 · «would you mind simulating?», «do you mind adding…»: el verbo, como orden
   [/^\s*(?:would|do) you mind\s+([a-z]+ing)\b/i, (_m, v: string) => `${verboDeGerundio(v)}`],
@@ -305,6 +305,28 @@ const CORTESIA: Regla[] = [
   [/^\s*(?:i (?:want|need|would like) you to|i want to|i would like to|i need to|let us(?: go ahead and)?|go ahead and|try to|help me|just(?! the map\b)|quickly|now)\s+/i, ""],
   [/^\s*(?:i (?:want|need|would like)|give me|get me)\s+(?=(?:a|an)\s+(?:new\s+)?(?:[\w.-]+\s+){0,3}(?:network|mesh)\b)/i, "build "],
 ];
+
+/** Lo que va antes del acercamiento («a little closer», «a bit farther»). */
+const PREVIO_ZOOM_EN = String.raw`(?:a (?:little|bit) )`;
+/** v17.6 · Cuánto se acerca o se aleja el mapa («a little», «a lot», «2 levels»), en las palabras del español. */
+const CUANTO_ZOOM_EN = String.raw`(?:\s+((?:a|da|the) (?:little|tiny|wee)(?: bit)?(?: more)?|a (?:tiny )?(?:bit|bid|beat)(?: more)?|slightly|a tad|(?:a )?(?:little|bit) more|a lot(?: more)?|a bunch|way (?:more|in|out)|much more|some more|more|all the way(?: in| out)?|as (?:much|far) as (?:you|it) can|(?:\d+|one|won|two|to|too|three|tree|four|for|five|six) (?:levels?|levers?|times|steps|notches|clicks)))?`;
+const ZOOM_EN = new RegExp(
+  String.raw`^(?:${PREVIO_ZOOM_EN})?(?:zoom(?: (?:the )?(?:map|view|it))? (?:in|out|back)(?: (?:on|into) (?:the )?(?:map|view))?|zoom(?: (?:on|into) (?:the )?(?:map|view))?|zoom closer|(?:get|come|go|move|bring (?:it|the map|the view|us)|take (?:it|the map|us))(?: (?:a little|a bit|a lot|much))? closer(?: to (?:the )?(?:map|view))?|closer|magnify(?: (?:the )?(?:map|view))?|enlarge (?:the )?(?:map|view)|make (?:the map|the view|it) (?:bigger|smaller|larger|more (?:big|small))|(?:get|go|move|pull|take (?:it|the map|the view|us)) (?:away|back|farther|further)(?: away| out)?|(?:a (?:little|bit) )?(?:farther|further)(?: away| out)?|back out)${CUANTO_ZOOM_EN}(?: again| now)?$`,
+  "i",
+);
+/** «a little» → «un poco», «a lot» → «mucho», «2 levels» → «2 niveles». */
+function cuantoZoom(c: string): string {
+  const t = c.toLowerCase().trim();
+  if (!t || t === "more" || t === "some more") return "";
+  const n = t.match(/^(\d+|one|won|two|to|too|three|tree|four|for|five|six) /);
+  if (n) {
+    const k = ({ one: 1, won: 1, two: 2, to: 2, too: 2, three: 3, tree: 3, four: 4, for: 4, five: 5, six: 6 } as Record<string, number>)[n[1]] ?? Number(n[1]);
+    return k === 1 ? "" : ` ${k} niveles`;
+  }
+  if (/all the way|as (?:much|far)/.test(t)) return " al máximo";
+  if (/a lot|a bunch|way|much more/.test(t)) return " mucho";
+  return " un poco";
+}
 
 // 2. Pedidos enteros (voz, paneles, deshacer, sí/no)
 const ENTEROS: Regla[] = [
@@ -321,6 +343,21 @@ const ENTEROS: Regla[] = [
   [/^(?:yes|yeah|yep|yup|sure|of course|ok(?:ay)? do it|do it|go ahead|go for it|confirm|confirmed|apply it|apply|correct|exactly|right)$/i, "sí"],
   [/^(?:no|nope|cancel(?: it| that)?|never ?mind|forget it|leave it|not now|no thanks)$/i, "no"],
   [/^(?:none|none of them|none of those|neither|neither of them|not any of them)$/i, "ninguna"],
+  // v17.6 · Acercar y alejar el mapa («zoom in», «zoom out a little», «get closer», «zoom in 2 levels», «all the way out»)
+  [ZOOM_EN, (m: string, cuanto?: string) => {
+    const base = cuanto ? m.slice(0, m.toLowerCase().lastIndexOf(cuanto.toLowerCase())) : m;
+    const fuera = /\b(?:out|back|away|farther|further|smaller|small)\b/i.test(base) || /\bout$/i.test(cuanto ?? "");
+    const poco = !cuanto && /^a (?:little|bit) /i.test(m);
+    return `${fuera ? "aleja" : "acerca"} el mapa${poco ? " un poco" : cuantoZoom(cuanto ?? "")}`;
+  }],
+  // v17.6 · La leyenda («show the legend», «open the map key», «hide the legend», «show me the colors»)
+  [/^(?:show|display|open|bring up|bring back|pull up|expand|turn on|let me see|i want to see|see|view|give me|put|put back)(?: me)?(?: the| de| da)? (?:map |color |colour )?(?:legend|key|legend of the colou?rs|colou?r legend|colou?rs(?: of the map)?)(?: again| of the map| back| on)?$|^(?:the )?legend on$|^turn (?:the )?legend on$/i, "muestra la leyenda"],
+  [/^(?:hide|close|collapse|minimi[sz]e|fold|turn off|remove|take away|get rid of|put away|shrink)(?: the| de| da)? (?:map |color |colour )?(?:legend|key)$|^(?:the )?legend off$|^turn (?:the )?legend off$/i, "oculta la leyenda"],
+  // v17.6 · El relieve en 3D a la vista («show the terrain relief», «show me the hills», «turn on 3D», «hide the relief»);
+  // «turn on the terrain» y «turn off the terrain» siguen siendo el relieve de la simulación
+  [/^(?:show|display|see|view|let me see|i want to see|give me|bring up|put)(?: me)?(?: the| de| da)? (?:terrain relief|relief of the terrain|terrain in (?:3d|relief)|3d terrain|3d view|3d map|map in 3d|relief map|relief|terrain|hills(?: and (?:the )?valleys)?|mountains|elevation in 3d|3d)(?: view| mode| on the map)?$/i, "muestra el relieve en 3d"],
+  [/^(?:turn on|switch on|enable|activate|put on|switch to|go to|use)(?: the)? (?:terrain relief|terrain in 3d|3d terrain|3d view|3d map|map in 3d|relief map|3d)(?: view| mode)?$|^(?:make|put|turn) (?:the map|it) (?:in(?:to)? )?3d$|^(?:the )?(?:terrain relief|3d terrain|3d view|3d)(?: view| mode)? on$|^put (?:the )?(?:terrain )?relief on$/i, "muestra el relieve en 3d"],
+  [/^(?:hide|remove|take away|get rid of|flatten)(?: the)? (?:terrain relief|relief of the terrain|terrain in 3d|3d terrain|3d view|3d map|relief map|relief|hills|3d)(?: view| mode)?$|^(?:turn off|switch off|disable|exit|leave)(?: the)? (?:terrain relief|terrain in 3d|3d terrain|3d view|3d map|3d mode|3d)$|^flatten (?:the map|it)$|^make (?:the map|it) flat$|^(?:back to|go back to) (?:2d|flat|the flat map)$|^(?:the )?(?:terrain relief|3d terrain|3d view|3d)(?: view| mode)? off$/i, "quita el relieve en 3d"],
   [/^what (?:should|do|can) (?:i|we) do (?:next|now)$|^what(?:'s| is) next$|^what now$/i, "¿qué hago ahora?"],
   [/^(?:adjust|tune)(?: it| this| the network| the mesh)?$/i, "ajústamelo"],
   [/^(?:how much|how many(?: payments)?) can (?:the whole|the entire|all the|the) (?:mesh|network) (?:handle|take|hold|withstand)\??$/i, "¿hasta dónde aguanta toda la malla?"],
@@ -510,8 +547,18 @@ const FRASES: Regla[] = [
   // v17.3 · «turn off the roads», «disable the roads», «get rid of the roads»
   [/\b(?:turn off|switch off|disable|get rid of|take away|take off|kill|remove|hide|delete|erase|clear) (?:the )?(?:roads|road layer|roads layer|streets)\b(?: layer)?/gi, "quita las vías"],
   [/\b(?:switch|change|go|set|flip)(?: the)?(?: base)?(?: map)? (?:to|into)(?: the)? satellite(?: view| map| imagery| mode)?\b|\b(?:use|show|put|give me)(?: the)? satellite (?:view|map|imagery|mode)\b|\bsatellite (?:view|map|imagery|mode)\b/gi, "pon el mapa satelital"],
+  // v17.6 · «switch to OpenTopoMap», «put the map with contour lines», «change to streets», «back to the street map»
+  [/\b(?:use|switch(?: the map)? to|change(?: the map)? to|go(?: back)? to|back to|put(?: the map)?(?: with| on)?|show|give me)(?: the)? (?:open ?topo ?map|contour lines|contours|map with contour lines)\b|\bput the map with contour lines\b/gi, "pon el mapa OpenTopoMap"],
   [/\b(?:use|switch to|change to|go to|put|show|give me)(?: the)? topo(?:graphic(?:al)?)?(?: map| view)?\b|\btopo map\b/gi, "pon el mapa topográfico"],
   [/\b(?:use|switch to|change to|go to|put|show|give me)(?: the)? streets? map\b/gi, "pon el mapa de calles"],
+  [/\b(?:switch|change|go|go back|back)(?: the map)? to (?:the )?streets?(?: map| view)?\b/gi, "pon el mapa de calles"],
+  [/\b(?:town|place|village) names?\b/gi, "nombres de poblados"],
+  [/\bwhere(?: there)?(?:'s| is| are) no (?:service|signal|coverage)\b/gi, "las zonas sin servicio"],
+  [/\b(?:change|switch|set|put) (?:the )?colou?rs? (?:mode )?to signal\b|\bcolou?rs? (?:it )?by (?:the )?signal\b|^signal mode$/gi, "colorea por señal"],
+  [/\b(?:change|switch|set|put) (?:the )?colou?rs? (?:mode )?to (?:the )?best (?:antenna|server)\b|\bcolou?r (?:it )?by (?:the )?best (?:antenna|server)\b/gi, "colorea por mejor antena"],
+  [/^(?:the )?(?:backup|redundancy) mode$|\b(?:change|switch|set|put) (?:the )?colou?rs? (?:mode )?to (?:backup|redundancy)\b/gi, "muestra el respaldo"],
+  [/\b(?:the )?antenna directions?\b|\bthe direction of the antennas\b/gi, "la dirección de las antenas"],
+  [/^(?:set |put |change |make )?(?:the )?(?:coverage )?opacity (?:to |at |of |in )?(\d{1,3}) ?(?:%|percent)?$/gi, "pon la opacidad en $1 %"],
   [/\b(?:hide|remove|turn off|disable) (?:the )?rivers(?: and (?:the )?(?:names|labels))?\b/gi, (m) => (/names|labels/i.test(m) ? "quita los ríos y los nombres" : "quita los ríos")],
   [/\b(?:show|display) (?:me )?(?:the )?backup(?: map)?\b|\bshow (?:the )?redundancy\b/gi, "muestra el respaldo"],
   [/\b(?:show|display) (?:me )?(?:the )?best (?:antenna|server)\b/gi, "muestra la mejor antena"],
@@ -523,7 +570,7 @@ const FRASES: Regla[] = [
   [/\b(?:paint|color|colour) only with (?:a )?threshold of (-?\d+) ?dbm\b/gi, "pinta solo con umbral de $1 dBm"],
   [/\banimate the (?:network|mesh)\b/gi, "anima la red"],
   [/\b(?:stop|remove|turn off) the animation\b/gi, "quita la animación"],
-  [/\b(?:show|fit|zoom to|frame|see) (?:me )?(?:the )?(?:whole|entire|full) (?:network|mesh)\b|\bfit (?:the )?(?:map|view) to (?:the )?(?:network|mesh)\b|\bzoom to fit\b/gi, "muéstrame toda la red"],
+  [/\b(?:show|fit|zoom to|frame|see) (?:me )?(?:the )?(?:whole|entire|full) (?:network|mesh)\b|\b(?:show|see|view) (?:me )?all (?:of )?the (?:network|mesh)\b|^zoom out to see (?:everything|it all|all of it|all|the whole (?:network|mesh|thing))$|\bfit (?:the )?(?:map|view) to (?:the )?(?:network|mesh)\b|\bzoom to fit\b/gi, "muéstrame toda la red"],
   // v17.5 · Soltar la regla («turn off the ruler», «put down the ruler»)
   [/\b(?:turn off|switch off|deactivate|disable|close|put away|put down|drop|release|stop using|let go of) (?:the )?ruler\b(?: tool)?|\bstop measuring\b/gi, "suelta la regla"],
   [/\b(?:turn on|activate|enable|open|use|give me|grab|get|pick up|take|bring up) (?:the )?ruler\b(?: tool)?|\bmeasure with the ruler\b/gi, "activa la regla"],
@@ -552,7 +599,7 @@ const FRASES: Regla[] = [
   [/\b(?:turn off|deactivate|disable|stop) (?:the )?(?:automatic simulation|simulate on change|auto[- ]?simulat(?:e|ion))\b/gi, "apaga simular al cambiar"],
   [/\b(?:use|with) (?:the )?real terrain\b|\buse (?:the )?real elevation\b/gi, "usa el relieve real"],
   // v17.3 · «use actual terrain», «turn on the terrain», «use the elevation»
-  [/\b(?:use|turn on|enable|switch on|switch to|activate|apply)(?: the)? (?:real |actual |true )?(?:terrain|elevation|relief|topography|elevation data|terrain data)\b(?! (?:map|profile|in 3d|view))/gi, "usa el relieve real"],
+  [/\b(?:use|turn on|enable|switch on|switch to|activate|apply)(?: the)? (?:real |actual |true )?(?:terrain|elevation|relief|topography|elevation data|terrain data)\b(?! (?:map|profile|in 3d|view|relief))/gi, "usa el relieve real"],
   [/\b(?:simulate )?with flat terrain\b|\b(?:use )?flat terrain\b/gi, "simula con terreno plano"],
   [/\b(?:assume|consider|treat)(?: that)? the (?:ground|terrain|earth|land) (?:is|as) flat\b|^the (?:ground|terrain) is flat$|\b(?:use|assume|with|simulate with|simulate on)(?: a)? flat (?:ground|earth|land|surface)(?: model)?\b|\bignore (?:the )?(?:terrain|elevation|relief|topography)\b|\bwithout (?:the )?(?:terrain|elevation|relief)\b|\bturn off (?:the )?(?:terrain|relief|elevation)\b/gi, "simula con terreno plano"],
   // Parámetros
@@ -856,7 +903,7 @@ const FRASES: Regla[] = [
   [/^(?:set|place|locate|situate|position|install|plant|stick|drop) (?:the |our |my )?gateway (?:in|at|on|near) (.+)$/i, "pon el gateway en $1"],
   [/^(?:the |our |my )?gateway (?:in|at) (.+)$|^(?:the |our |my )?gateway (?:goes|should go|will go|must go|has to go|needs to go|belongs) (?:in|at|to|on) (.+)$/i, (_m, a: string, b: string) => `pon el gateway en ${a ?? b}`],
   // Llevar el mapa
-  [/^(?:take me to|go to|fly to|fly me to|navigate to|head to|move the map to|pan to|zoom (?:in )?(?:to|on|into)|zoom into|center (?:the map )?on|centre (?:the map )?on|show me|find me|find|locate|where is|let us go to|bring me to) (.+?)\??$/i, "llévame a $1"],
+  [/^(?:take me to|go to|fly to|fly me to|navigate to|head to|move the map to|pan to|zoom (?:in )?(?:to|on|into)|zoom into|center (?:the map )?(?:on|in|at)|centre (?:the map )?(?:on|in|at)|focus on|show me|find me|find|locate|where is|let us go to|bring me to) (.+?)\??$/i, "llévame a $1"],
   // «take me Villavicencio» (sin el «to»)
   [/^take me (?!to\b|on\b|through\b|around\b|back\b|home\b)(.+?)\??$/i, "llévame a $1"],
   // Simular (v17.3: «run a simulation», «start/kick off/redo the simulation», «update the coverage», «simulation»)

@@ -334,6 +334,23 @@ ve la simulación detrás) y un botón para que hable en voz alta o no, a mano.
   después). Con las cinco tandas juntas (1.123 y 804 frases), la v17.4 entiende el 83 % y el 87 %, y la v17.5 el 96 % y
   el 97 %; de la charla cercana (131 y 131 frases), la v17.4 tomaba 13 y 18 como pedidos, y la v17.5 ninguna, sin que
   ninguna de las 3.794 órdenes de las pruebas (dichas bien y mal) parezca charla
+- **El mapa y la vista, por voz** (v17.6): Melki acerca y aleja el mapa sin moverlo («acerca el mapa», «aléjalo un
+  poquito», «más cerca», «haz zoom», «quítale zoom», «acércalo dos niveles», «zoom in», «zoom out a little», «get
+  closer»), abre y pliega la leyenda («muestra la leyenda», «quita la leyenda», «muéstrame los colores», «show the
+  legend», «hide the legend») y muestra o quita el relieve en 3D («muestra el relieve del terreno», «quiero ver los
+  cerros», «quítale el 3D», «show the terrain relief», «turn on 3D»); «simula con terreno plano» y «usa el relieve real»
+  siguen siendo el relieve de la simulación. Con un nodo o un lugar es otra orden («acerca el Repetidor 1 al gateway»
+  lo mueve, «acércate a Cumaral» o «haz zoom en Restrepo» llevan el mapa allá, «aléjalo para ver todo» muestra toda la
+  red), y la charla no («acércate que no te oigo» o «the zoom meeting with the bank» ya no preguntan por un lugar).
+  También entiende más capas y fondos dichos de otro modo («pon el satélite», «cambia a OpenTopoMap», «baja la opacidad
+  a 40 %», «colorea por señal», «muestra dónde no hay servicio», «ve pa Villavo»), y «muestra las zonas sin servicio»
+  ahora las muestra (antes las ocultaba). Lo que el reconocimiento escribe mal: «su min» y «some in» por zoom in, «the
+  lechen» o «the gen» por legend, «tea rain really» por terrain relief, «tree de» por 3D, «sad a light» por satellite,
+  «la llenda», «ale jalo», «en tres de», «des pliega», «los serros», «en cuadra toda la red». Medido con una sexta tanda
+  de frases dictadas escritas a ciegas sobre el mapa y la vista (150 en inglés y 126 en español), medida antes de
+  afinar con ella: la v17.5 entendía el 33 % y el 41 %, la v17.6 hecha solo con lo pedido el 56 % y el 75 %, y la v17.6
+  afinada el 99 % y el 100 %; de su charla cercana (62 y 61 frases), la v17.5 tomaba 3 y 1 como pedidos, y la v17.6
+  ninguna. Con las cinco tandas anteriores, ninguna frase se entiende peor que en la v17.5
 - **«Cerca de…» y alturas relativas** (v17.4): «pon el Repetidor 1 cerca del gateway», «acerca la Persona 2 al Repetidor
   2», «move Repeater 1 next to the gateway» o «bring Repeater 2 closer to the gateway» lo dejan a 200 m del nodo
   nombrado, del lado por donde venía (o del lado más libre); «mueve el repetidor al gateway» mueve el repetidor (el

@@ -32,7 +32,9 @@ import { piezaDe } from "./piezas";
 export type SolicitudVista =
   | { n: number; tipo: "encuadrar" }
   | { n: number; tipo: "centrar"; lat: number; lon: number; zoom?: number }
-  | { n: number; tipo: "caja"; caja: [number, number, number, number] };
+  | { n: number; tipo: "caja"; caja: [number, number, number, number] }
+  /** v17.6 · Acercar (pasos > 0) o alejar (pasos < 0) el mapa sin moverlo («zoom in», «aléjalo un poco»). */
+  | { n: number; tipo: "zoom"; pasos: number };
 
 export type PuntoMapa = { lat: number; lon: number; x: number; y: number };
 
@@ -1037,6 +1039,10 @@ export function Mapa({ estado, despachar, resultado, inspeccion, onInspeccionar,
     if (!m || !solicitud) return;
     if (solicitud.tipo === "centrar") {
       m.easeTo({ center: [solicitud.lon, solicitud.lat], zoom: solicitud.zoom ?? Math.max(m.getZoom(), 12), duration: 700 });
+      return;
+    }
+    if (solicitud.tipo === "zoom") {
+      m.easeTo({ zoom: Math.min(m.getMaxZoom(), Math.max(m.getMinZoom(), m.getZoom() + solicitud.pasos)), duration: 500 });
       return;
     }
     if (solicitud.tipo === "caja") {

@@ -59,6 +59,11 @@ export type Vista = {
   mostrarHaces: boolean;
   /** Modo «Sembrar la malla»: animar el flujo de la información hacia el gateway (pulsos, destellos y ondas). */
   animarRed: boolean;
+  /**
+   * v17.6 · La leyenda abierta o plegada (también por voz: «muestra la leyenda», «hide the legend»). null: como empieza
+   * según la pantalla (abierta en el computador, plegada en el celular). No se guarda entre sesiones.
+   */
+  leyenda: boolean | null;
 };
 
 export type Estado = {
@@ -121,6 +126,7 @@ export const VISTA_DEFECTO: Vista = {
   colorUmbral: "#1E7B34",
   mostrarHaces: true,
   animarRed: true,
+  leyenda: null,
 };
 
 /** Nombre de cada tipo de nodo en el idioma de la pantalla (solo para mostrar). */
@@ -422,6 +428,8 @@ export function leerGuardado(): Partial<Estado> | null {
     for (const k of ["escalaMinDbm", "escalaMaxDbm", "umbralDbm"] as const) if (!Number.isFinite(vista[k])) vista[k] = VISTA_DEFECTO[k];
     if (vista.escalaMaxDbm <= vista.escalaMinDbm) vista.escalaMaxDbm = vista.escalaMinDbm + 10;
     if (!/^#[0-9a-f]{6}$/i.test(vista.colorUmbral)) vista.colorUmbral = VISTA_DEFECTO.colorUmbral;
+    // v17.6 · La leyenda empieza como siempre (según la pantalla)
+    vista.leyenda = null;
     return {
       escenario,
       vista,
