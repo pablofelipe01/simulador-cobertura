@@ -489,6 +489,14 @@ export const frasesReconocimiento = (): string[] =>
         "Ejemplo",
         "link report",
         "optimization",
+        // v17.6 · El mapa y la vista
+        "zoom in",
+        "zoom out",
+        "legend",
+        "terrain relief",
+        "3D",
+        "OpenTopoMap",
+        "opacity",
       ]
     : FRASES_RECONOCIMIENTO;
 
@@ -534,5 +542,14 @@ export const FRASES_RECONOCIMIENTO = [
   "noroeste",
   "sureste",
   "suroeste",
+  // v17.6 · El mapa y la vista
+  "acerca el mapa",
+  "aléjalo",
+  "zoom",
+  "leyenda",
+  "relieve",
+  "3D",
+  "OpenTopoMap",
+  "opacidad",
 ];
 

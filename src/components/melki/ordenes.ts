@@ -89,6 +89,7 @@ export type CambiosVista = Partial<
     | "mostrarSinServicio"
     | "mostrarAnillos"
     | "mostrarHaces"
+    | "leyenda"
   >
 >;
 
@@ -211,6 +212,8 @@ type OrdenSola =
   | { tipo: "editar-varios"; ids: string[]; cambios: Partial<Antena>; descripcion: string; deltaAlturaM?: number }
   | { tipo: "auto"; valor: boolean }
   | { tipo: "encuadrar" }
+  /** v17.6 · Acercar (pasos > 0) o alejar (pasos < 0) el mapa sin moverlo: «acerca el mapa», «zoom out a little». */
+  | { tipo: "zoom"; pasos: number }
   | { tipo: "cobertura-area"; id: string; margenDb: number }
   | { tipo: "relieve"; valor: "teselas" | "plano" }
   | { tipo: "nombre-escenario"; nombre: string }
@@ -320,6 +323,8 @@ export type Api = {
   eliminarVarias(ids: string[]): void;
   restaurar(e: Escenario): void;
   encuadrarTodo(): void;
+  /** v17.6 · Acerca (pasos > 0) o aleja (pasos < 0) el mapa sin moverlo. */
+  zoom?(pasos: number): void;
   autoSimular(): boolean;
   fijarAutoSimular(v: boolean): void;
   /** Centro del mapa que está viendo el usuario. */
@@ -1869,6 +1874,80 @@ function equipoEnTexto(tn: string): EquipoId | null {
  * «Pantalla limpia», «deja solo el mapa», «oculta los paneles», «cierra el panel izquierdo», «oculta los resultados»,
  * «muestra los paneles», «abre el panel de resultados», «muéstrame las herramientas».
  */
+/* ───────────── v17.6 · Acercar y alejar el mapa ───────────── */
+
+/** Lo que aleja el mapa: «aléjalo», «zoom out», «más lejos», «quítale zoom», «menos zoom», «reduce la vista». */
+const ZOOM_MENOS =
+  /\b(?:alej\w*|zoom (?:out|afuera|para afuera|hacia afuera)|menos zoom|quit\w* (?:el |un poco de |algo de |un poquito de )?zoom|mas (?:lejos|lejitos|lejecitos)|(?:reduc|achic|disminu)\w* (?:el |la )?(?:mapa|vista|imagen|zoom))\b/;
+/** Lo que lo acerca: «acerca el mapa», «acércate más», «zoom», «zoom in», «más cerca», «amplía la vista». */
+const ZOOM_MAS = /\b(?:acerc\w*|acerq\w*|zoom|mas (?:cerca|cerquita|cerquitica)|(?:ampli|agrand)\w* (?:el |la )?(?:mapa|vista|imagen))\b/;
+/** Lo único que puede acompañar la orden: el mapa, cuánto, la cortesía y las muletillas (con un nodo o un lugar es otra). */
+const ZOOM_RELLENO = new Set(
+  (
+    "el la lo los las le les me se nos un una uno mapa vista imagen camara pantalla zoom poco poquito poquitico poquitin tantico tantito tris pelo algo " +
+    "mas aun todavia otro otra otros otras vez veces de nuevo por favor porfa porfis porfavor melki oye hey ok okay bueno ahi ahora ahorita pues ya " +
+    "hagale hagame dele dale sumerce mijo mija senor senora don mi bastante mucho muchisimo harto full al maximo tope todo que pueda puedas se " +
+    "nivel niveles paso pasos punto puntos y hacia para adentro afuera dentro in out haz hazle hazme pon ponle ponme mete metele metale dame da quita " +
+    "quitale quitele menos cerca cerquita cerquitica lejos lejitos lejecitos ver mejor rapido dos tres cuatro cinco seis"
+  ).split(" "),
+);
+const VERBO_ZOOM = /^(?:acerc\w*|acerq\w*|alej\w*|ampli\w*|agrand\w*|reduc\w*|achic\w*|disminu\w*|\d{1,2})$/;
+
+/**
+ * v17.6 · «Acerca el mapa», «aléjalo un poquito», «más cerca», «haz zoom», «zoom out dos niveles» (y en inglés, «zoom in»,
+ * «get closer», que el traductor deja así). Solo si no nombra otra cosa: «acerca el Repetidor 1 al gateway» lo mueve y
+ * «acércate a Cumaral» lleva el mapa a Cumaral.
+ */
+export function interpretarZoom(tn: string): Orden | null {
+  const t = tn.replace(/[^a-z0-9ñ ]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!t || t.length > 80) return null;
+  const menos = ZOOM_MENOS.test(t);
+  const mas = ZOOM_MAS.test(t.replace(ZOOM_MENOS, " "));
+  if (menos === mas) return null;
+  if (!t.split(" ").every((w) => ZOOM_RELLENO.has(w) || VERBO_ZOOM.test(w))) return null;
+  // «Aléjalo para ver todo» es ver toda la red (encuadrar)
+  if (/\bver\b.*\btod[oa]s?\b/.test(t)) return null;
+  const n = t.match(/\b(\d{1,2}|un|una|dos|tres|cuatro|cinco|seis) (?:niveles?|veces|pasos?|puntos?)\b/);
+  const cifra = n ? ({ un: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6 } as Record<string, number>)[n[1]] ?? Number(n[1]) : 0;
+  const pasos = n
+    ? Math.min(6, Math.max(1, cifra))
+    : /\b(?:maximo|tope|todo lo que)\b/.test(t)
+      ? 5
+      : /\b(?:bastante|mucho|muchisimo|harto|full)\b/.test(t)
+        ? 2
+        : /\b(?:poco|poquito|poquitico|poquitin|tantico|tantito|tris|pelo|algo)\b/.test(t)
+          ? 0.5
+          : 1;
+  return { tipo: "zoom", pasos: menos ? -pasos : pasos };
+}
+
+/**
+ * v17.6 · La leyenda («muestra la leyenda», «quita la leyenda», «muéstrame los colores») y el relieve en 3D a la vista
+ * («muestra el relieve del terreno», «quiero ver los cerros», «quítale el 3D»). Va antes que las órdenes de los nodos:
+ * «quítale el 3D» no borra el último nodo. Con otras capas en la misma frase lo resuelve la pantalla (más abajo).
+ */
+export function interpretarLeyendaRelieve(tn: string): Orden | null {
+  if (PREGUNTA.test(tn) && !/\b(puedes|podrias)\b/.test(tn)) return null;
+  if (/\b(vias|carreteras|caminos|rios|quebradas|limites|municipios|departamentos|nombres|etiquetas|poblados|enlaces|alcance|circulos|anillos|haces|sin servicio|satelit\w*|topografic\w*|calles)\b/.test(tn)) return null;
+  // La leyenda (no «la leyenda del Silbón» ni «qué significan los colores», que contesta el cerebro)
+  const leyenda = /\b(?:leyenda|convenciones|simbologia)\b/.test(tn) && !/\bleyendas? (?:del?|de la|de los|de las) (?!mapa|simulador|cobertura|senal|colores|red|malla)/.test(tn);
+  const losColores = /^(?:(?:melki|oye|bueno|por favor) )*(?:muestra\w*|ensena\w*|abre|pon\w*|quiero ver|dejame ver|deja ver) (?:la leyenda de )?los colores(?: del mapa| de la cobertura| de la senal)?(?: por favor)?$/.test(tn);
+  if (leyenda || losColores) {
+    const quitar = /\b(?:quita\w*|oculta\w*|cierra\w*|pliega\w*|esconde\w*|apaga\w*|desactiva\w*|recoge\w*|minimi[sz]\w*|colapsa\w*|guarda\w*|sin)\b/.test(tn);
+    const ver = losColores || /\b(?:muestra\w*|mostrar|abre|abrir|abrela|despliega\w*|desplega\w*|ensena\w*|pon\w*|activa\w*|saca\w*|quiero ver|ver|veo|deja\w* ver|vuelve\w*|trae\w*|prende\w*|enciende|maximi[sz]\w*|expande\w*)\b/.test(tn);
+    if (quitar !== ver) return { tipo: "vista", cambios: { leyenda: ver }, descripcion: ver ? tx("muestra la leyenda", "shows the legend") : tx("pliega la leyenda", "collapses the legend") };
+    return null;
+  }
+  // El relieve en 3D a la vista. Sin «real», «plano» ni «sin relieve», que son el relieve de la simulación
+  const tresD = /\b(?:3d|3 d|(?:tres|3) dimensiones|tridimensional)\b/.test(tn);
+  if ((tresD || /\b(?:relieve|relieves|montanas|cerros|lomas|colinas|serrania)\b/.test(tn)) && !/\b(?:simul\w*|calcul\w*|usa\w*|real|plano|plana|terreno plano)\b/.test(tn)) {
+    const quitar = /\b(?:quita\w*|oculta\w*|esconde\w*|aplana\w*)\b/.test(tn) || (tresD && /\b(?:apaga\w*|desactiva\w*|sin)\b/.test(tn));
+    const ver = /\b(?:muestra\w*|mostrar|ensena\w*|quiero ver|ver|veo|deja\w* ver|pon\w*|saca\w*)\b/.test(tn) || (tresD && /\b(?:activa\w*|enciende|prende\w*|cambia\w*|pasa\w*)\b/.test(tn));
+    if (quitar !== ver) return { tipo: "vista", cambios: { relieve3d: ver }, descripcion: ver ? tx("muestra el relieve en 3D", "shows the terrain in 3D") : tx("ya no muestra el relieve en 3D", "no longer shows the terrain in 3D") };
+  }
+  return null;
+}
+
 export function interpretarPaneles(tn: string): Orden | null {
   const ocultar = /\b(oculta\w*|esconde\w*|quita\w*|cierra\w*|pliega\w*|recoge\w*|minimiza\w*|colapsa\w*|sin)\b/.test(tn);
   const mostrar = /\b(muestra\w*|mostrar|abre|abrir|despliega\w*|vuelve\w*|pon\w*|devuelve\w*|quiero ver|ver)\b/.test(tn);
@@ -1900,15 +1979,16 @@ function interpretarPantalla(tn: string): Orden | null {
   if (/\b(terreno plano|sin relieve|relieve plano|tierra plana)\b/.test(tn) && !/\b(alcance|referencia)\b/.test(tn)) return { tipo: "relieve", valor: "plano" };
   if (/\b(relieve real|con relieve|terreno real|elevacion real|usa el relieve|usa la elevacion)\b/.test(tn)) return { tipo: "relieve", valor: "teselas" };
   // Ver toda la red
-  if (/\b(muestrame|ensename|ver|veo|encuadra\w*|ajusta\w*|centra\w*|zoom)\b.*\b(toda la (red|malla)|todos los nodos|todas las antenas|todo)\b/.test(tn) && !/\b(antena|nodo|repetidor|persona) \d/.test(tn))
+  if (/\b(muestrame|muestra|ensename|ensena|ver|veo|encuadra\w*|ajusta\w*|centra\w*|zoom|alej\w*)\b.*\b(toda la (red|malla)|todos los nodos|todas las antenas|todo)\b/.test(tn) && !/\b(antena|nodo|repetidor|persona) \d/.test(tn))
     return { tipo: "encuadrar" };
   const on = /\b(muestra\w*|mostrar|activa\w*|enciende|prende|pon\w*|quiero ver|ver|ensena\w*|agrega\w*)\b/.test(tn);
-  const off = /\b(quita\w*|oculta\w*|apaga\w*|esconde\w*|desactiva\w*|sin|no quiero ver)\b/.test(tn);
+  // («sin servicio» es el nombre de una capa, no «quítala»; v17.6: «elimina los anillos» también la quita)
+  const off = /\b(quita\w*|oculta\w*|apaga\w*|esconde\w*|desactiva\w*|elimina\w*|retira\w*|sin|no quiero ver)\b/.test(tn.replace(/\bsin (?:servicio|senal|cobertura|enlace)\b/g, " "));
   // Fondo del mapa
-  if (/\b(mapa|fondo|vista|capa|base)\b/.test(tn) && (on || /\b(cambia\w*|usa\w*)\b/.test(tn))) {
+  if ((/\b(mapa|fondo|vista|capa|base)\b/.test(tn) || /\b(satelit\w*|opentopomap|open ?topo ?map|topografic\w*|curvas? de nivel)\b/.test(tn)) && (on || /\b(cambia\w*|usa\w*|pasa\w*)\b/.test(tn))) {
     const fondo = /\b(satelit\w*|imagenes satelitales|satelite)\b/.test(tn)
       ? "satelite"
-      : /\bopentopomap|curvas de nivel\b/.test(tn)
+      : /\b(?:opentopomap|open ?topo ?map|curvas? de nivel)\b/.test(tn)
         ? "opentopomap"
         : /\btopografic\w*/.test(tn)
           ? "topografico"
@@ -1927,6 +2007,19 @@ function interpretarPantalla(tn: string): Orden | null {
         }[fondo],
       };
   }
+  // v17.6 · La opacidad dicha con cualquier verbo («baja la opacidad a 40 %», «pon la opacidad de la cobertura en 60 %»)
+  const opacidad = tn.match(/\b(opacidad|transparencia)\b\D{0,30}?(\d{1,3})\s*(?:%|por ciento)?(?!\s*(?:km|m|metros?)\b)/);
+  if (opacidad && !/\d\s*(km|kilometros?|metros?|millas?|db|dbm|dbi|mhz)\b/.test(tn)) {
+    const v = Math.min(100, Math.max(5, Number(opacidad[2]))) / 100;
+    const o = opacidad[1] === "transparencia" ? Math.max(0.05, 1 - v) : v;
+    return { tipo: "vista", cambios: { opacidad: o }, descripcion: tx(`ahora muestra la cobertura con ${Math.round(o * 100)} % de opacidad`, `now shows the coverage at ${Math.round(o * 100)}% opacity`) };
+  }
+  // v17.6 · El color de la cobertura («colorea por señal», «cambia los colores a mejor antena», «pinta por respaldo»)
+  const colorPor = tn.match(/\b(?:colorea\w*|pinta\w*|cambia\w* (?:los )?colores|colores)\b.*\b(?:por|a|pa|para|de|segun|con)\b (?:la |el )?(senal|mejor antena|mejor servidor|respaldo|redundancia)\b/);
+  if (colorPor) {
+    const modo = colorPor[1] === "senal" ? "senal" : /respaldo|redundancia/.test(colorPor[1]) ? "redundancia" : "servidor";
+    return { tipo: "vista", cambios: { modo }, descripcion: { senal: tx("ahora muestra el mapa de señal", "now shows the signal map"), servidor: tx("ahora muestra cuál nodo antena atiende cada zona", "now shows which antenna node serves each area"), redundancia: tx("ahora muestra el respaldo (cuántos nodos antena llegan a cada punto)", "now shows the backup (how many antenna nodes reach each point)") }[modo] };
+  }
   if (!on && !off) return null;
   // Con cantidades («radio de 12 km», «20 m», «-100 dBm») es un parámetro o un nodo, no una capa
   if (/\d\s*(km|kilometros?|m|metros?|millas?|yardas?|pies|cuadras?|db|dbm|dbi|mhz)\b/.test(tn)) return null;
@@ -1939,8 +2032,8 @@ function interpretarPantalla(tn: string): Orden | null {
     [/\benlaces\b/, "mostrarEnlaces", tx("los enlaces entre nodos", "links between nodes")],
     [/\b(alcance|rango de alcance|contorno\w*)\b/, "mostrarAlcance", tx("el rango de alcance", "the range")],
     [/\b(circulos|circulos de estudio)\b/, "mostrarCirculos", tx("los círculos de estudio", "the study circles")],
-    [/\b(3d|tres dimensiones|relieve en 3d|relieve 3d)\b/, "relieve3d", tx("el relieve en 3D", "the terrain in 3D")],
-    [/\b(zonas? sin servicio|areas? sin servicio|lo rojo)\b/, "mostrarSinServicio", tx("las zonas sin servicio", "areas with no service")],
+    [/\b(3d|(?:tres|3) dimensiones|relieve en 3d|relieve 3d)\b/, "relieve3d", tx("el relieve en 3D", "the terrain in 3D")],
+    [/\b(zonas? sin servicio|areas? sin servicio|lo rojo|donde no hay (?:servicio|senal|cobertura))\b/, "mostrarSinServicio", tx("las zonas sin servicio", "areas with no service")],
     [/\banillos\b/, "mostrarAnillos", tx("los anillos de distancia", "distance rings")],
     [/\b(haces|direccion de las antenas)\b/, "mostrarHaces", tx("la dirección de las antenas direccionales", "the direction of directional antennas")],
   ];
@@ -2202,6 +2295,11 @@ function interpretarOrdenBase(dicho: string, api: Api, pendiente: Pendiente, con
   if (/\b(deshace\w*|deshaz|revierte|revertir|anula lo ultimo)\b/.test(tn)) return null; // lo maneja Melki (necesita la instantánea)
   const paneles = interpretarPaneles(tn);
   if (paneles) return paneles;
+  // v17.6 · Acercar o alejar el mapa («acerca el mapa», «aléjalo un poco», «zoom in»)
+  const zoom = interpretarZoom(tn);
+  if (zoom) return zoom;
+  const leyendaRelieve = interpretarLeyendaRelieve(tn);
+  if (leyendaRelieve) return leyendaRelieve;
 
   // Completar un pedido que esperaba coordenadas (v17.4: también «cerca del Repetidor 1», donde el nodo es la referencia)
   if (pendiente && coord && !OBJETO.test((iDestino >= 0 ? tn.slice(0, iDestino) : tn).replace(/\b(en|a)\b/g, ""))) {
@@ -2505,14 +2603,29 @@ function interpretarOrdenBase(dicho: string, api: Api, pendiente: Pendiente, con
     if (mencionados[0] && !coord) return { tipo: "donde", ref: ref(mencionados[0]) };
     if (coord) return { tipo: "donde", ref: { tipo: "coord", coord } };
   }
-  if (/\b(ve a|ir a|vamos a|llevame|lleva el mapa|muestrame|mostrar|ubicame|centra\w*|acerca(?!\s+del?\b)\w*|zoom|busca\w*|encuentra|localiza\w*)\b/.test(tn)) {
+  if (/\b(ve a|ve para|ir a|vamos a|vaya a|vaya para|llevame|lleva el mapa|muestrame|mostrar|ubicame|centra\w*|acerca(?!\s+del?\b)\w*|zoom|busca\w*|encuentra|localiza\w*)\b/.test(tn)) {
     if (coord) return { tipo: "ir", coord };
     if (mencionados[0]) return { tipo: "ir", id: mencionados[0].id };
     const consulta = tn
-      .replace(/.*\b(ve a|ir a|vamos a|lleva el mapa a|lleva el mapa hasta|llevame hasta|llevame a|llevame|muestrame|mostrar|ubicame en|ubicame|centra el mapa en|centra en|centrar en|acercate a|busca|buscar|encuentra|localiza)\b/, "")
+      .replace(/.*\b(ve a|ve para|ir a|vamos a|vaya a|vaya para|lleva el mapa a|lleva el mapa hasta|llevame hasta|llevame a|llevame|muestrame|mostrar|ubicame en|ubicame|centra el mapa en|centra en|centrar en|acercate a|acercame a|acerca el mapa (?:a|hasta|sobre|en)|acerca la vista (?:a|hasta|sobre|en)|(?:haz |hazle |dale |pon |ponle )?zoom (?:a|al|en|sobre|hasta)|busca|buscar|encuentra|localiza)\b/, "")
       .replace(/\b(el|la|los|las|municipio de|departamento de|por favor|porfa|porfavor|en el mapa|mapa)\b/g, " ")
+      // v17.6 · Como se dice en el Llano: «Villavo» es Villavicencio
+      .replace(/\bvillavo\b/g, "villavicencio")
       .replace(/\s+/g, " ")
       .trim();
+    // v17.6 · Con solo «acércate» o «zoom» (sin «ve a», «llévame», «busca»…) tiene que ser un lugar seguro: «acércate que no
+    // te oigo» o «the zoom meeting with the bank» son charla, no un lugar por preguntar
+    const soloAcercar = !/\b(ve a|ve para|ir a|vamos a|vaya a|vaya para|llevame|lleva el mapa|muestrame|mostrar|ubicame|centra\w*|busca\w*|encuentra|localiza\w*)\b/.test(tn);
+    if (soloAcercar && consulta.length >= 3 && !(ESE_LUGAR.test(consulta) && contexto.ultimoLugar)) {
+      const dudasAntes = sesionLugares?.dudas.length ?? 0;
+      const { lugar } = lugarDeConsulta(consulta, api);
+      // Un lugar dudoso no se pregunta: lo dicho no era un lugar
+      if (sesionLugares && sesionLugares.dudas.length > dudasAntes) {
+        sesionLugares.dudas.length = dudasAntes;
+        return null;
+      }
+      return lugar ? { tipo: "ir", lugar } : null;
+    }
     if (consulta.length >= 3) {
       // «Ahí», «ese municipio»: el último lugar del que se habló
       if (ESE_LUGAR.test(consulta) && contexto.ultimoLugar) {
@@ -3080,6 +3193,21 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
               ),
         };
       if (o.cambios.unidad || o.cambios.escala) return { texto: tx(`Listo: el mapa de señal se ve ${o.descripcion}. Lo puede ajustar en Capas → Escala de la señal.`, `Done: the signal map is now shown ${o.descripcion}. You can adjust it in Layers → Signal scale.`) };
+      // v17.6 · La leyenda y el relieve en 3D, por voz
+      if (o.cambios.leyenda !== undefined && o.cambios.leyenda !== null)
+        return {
+          texto: !o.cambios.leyenda
+            ? tx("Listo, plegué la leyenda. Para volver a verla, dígame «muestra la leyenda» o toque «Leyenda», abajo a la izquierda del mapa.", "Done, I collapsed the legend. To see it again, tell me “show the legend” or tap “Legend” at the bottom left of the map.")
+            : api.resultado()
+              ? tx("Listo, abrí la leyenda: está abajo a la izquierda del mapa y dice qué significa cada color.", "Done, I opened the legend: it's at the bottom left of the map and shows what each color means.")
+              : tx("Listo, la leyenda queda abierta: aparece abajo a la izquierda del mapa en cuanto haya una simulación.", "Done, the legend stays open: it shows up at the bottom left of the map as soon as there's a simulation."),
+        };
+      if (o.cambios.relieve3d !== undefined && Object.keys(o.cambios).length === 1)
+        return {
+          texto: o.cambios.relieve3d
+            ? tx("Listo, el mapa muestra el relieve en 3D, inclinado para ver las lomas y los valles. Para girarlo o inclinarlo más, Ctrl + arrastrar (en el celular, con dos dedos).", "Done, the map shows the terrain in 3D, tilted so you can see the hills and valleys. To rotate or tilt it more, Ctrl + drag (on a phone, with two fingers).")
+            : tx("Listo, el mapa vuelve a verse plano, desde arriba. La simulación no cambia; para simular sin lomas, dígame «simula con terreno plano».", "Done, the map is flat again, seen from above. The simulation doesn't change; to simulate without hills, tell me “simulate with flat terrain”."),
+        };
       return { texto: tx(`Listo: el mapa ${o.descripcion}. Todo esto también está en «Capas».`, `Done: the map ${o.descripcion}. All of this is also under “Layers”.`) };
     case "informe": {
       const a = porId.get(o.a);
@@ -3875,6 +4003,13 @@ function ejecutarOrdenBase(o: Orden, api: Api): ResultadoOrden {
           ? tx(`Listo, oculté ${cual}. Para volver a verlo, dígamelo o use el botón de la barra de arriba (la despliega la flechita de la esquina).`, `Done, I hid ${cual}. To see ${ambos ? "them" : "it"} again, tell me or use the button in the top bar (the little arrow in the corner shows it).`)
           : tx(`Listo, ${ambos ? "ya están los paneles" : `ya está ${cual}`} a la vista.`, `Done, ${ambos ? "the panels are" : `${cual} is`} in view.`),
       };
+    }
+    case "zoom": {
+      if (!api.zoom) return { texto: tx("Acerque o aleje el mapa con la rueda del ratón (en el celular, con dos dedos).", "Zoom the map in or out with the mouse wheel (on a phone, with two fingers).") };
+      api.zoom(o.pasos);
+      const k = Math.abs(o.pasos);
+      const cuanto = k < 1 ? tx(" un poco", " a little") : k >= 5 ? tx(" al máximo", " all the way") : k > 2 ? tx(` ${k} niveles`, ` ${k} levels`) : k === 2 ? tx(" bastante", " a lot") : "";
+      return { texto: o.pasos > 0 ? tx(`Listo, acerqué el mapa${cuanto}.`, `Done, I zoomed the map in${cuanto}.`) : tx(`Listo, alejé el mapa${cuanto}.`, `Done, I zoomed the map out${cuanto}.`) };
     }
     case "encuadrar":
       if (!antenas.length) return { texto: tx("Aún no hay nodos en el mapa.", "There are no nodes on the map yet.") };

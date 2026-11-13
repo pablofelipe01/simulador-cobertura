@@ -96,6 +96,44 @@ const RUMBO_EN: [string, string, string][] = [
 const DISTANCIA_EN = String.raw`(\b(?:\d+(?:\.\d+)?|a|one|half a|a half)\s*${UNIDAD_EN}\s+(?:to the\s+|due\s+|towards?(?: the)?\s+|in the\s+|more\s+)?)`;
 
 const REGLAS_EN: Regla[] = [
+  // v17.6 · «Zoom in» y «zoom out» dichos con acento («su min», «some in», «soon out»): solo si es lo único que se dijo
+  segura(
+    new RegExp(String.raw`${INICIO_EN}(?:soon|some|sum|su|sue|zoo|zum|sun|soom|zoom)\s*(in|inn|min|out|aut|mount|mout)\b(?=(?:\s+(?:a|da|the|little|bit|bid|lot|more|again|please|\d+|one|won|two|to|too|tree|three|for|four|five|levels?|levers?|times|steps))*\s*[.!?]*$)`, "gi"),
+    (_m, ini: string, dir: string) => `${ini}zoom ${/^(?:out|aut|mount|mout)$/i.test(dir) ? "out" : "in"}`,
+    0.5,
+  ),
+  segura(/\b(?:soom|zoom|sum|zum|su)\s+(?:de|the|da)\s+map\s+(in|out)\b/gi, "zoom the map $1", 0.5),
+  segura(/\b(?:close|clothes)\s+her\b(?=\s*(?:please|a little|a bit)?\s*[.!?]*$)/gi, "closer", 0.5),
+  // v17.6 · La leyenda, el relieve y el 3D como los escribe el reconocimiento con acento
+  segura(/(?<=\b(?:the|de|da|a)\s+)(?:lechen|lejend|lijen|legent|legen|leyend|leggend|ledgend|lagend|lejen|leyenda)\b/gi, "legend", 0.5),
+  segura(/^(?:lijen|lejend|lechen|legent|lejen|leyend)\b(?=\s+(?:on|off)\s*[.!?]*$)/gi, "legend", 0.5),
+  segura(/(?<=\b(?:show|close|hide|open|remove|collapse)\s+(?:the\s+)?)(?:the|de|da)\s+gen\b(?=\s*[.!?]*$)/gi, "legend", 0.5),
+  segura(/\bcolaps\b/gi, "collapse", 0.4),
+  segura(/\b(?:the|tea|to|te|tear|tee|da)\s+rain\s+(?=(?:relief|really|believe|re\s?leaf|relive)\b)/gi, "terrain ", 0.5),
+  segura(/(?<=\bterrain\s+)(?:really|believe|re\s?leaf|relive)\b/gi, "relief", 0.5),
+  segura(/(?<=\b(?:show|hide|see|view|display|remove)\s+(?:the|de|da)\s+)(?:tea|to|te|tear|tee)\s+rain\b/gi, "terrain", 0.5),
+  segura(/(?<=\b(?:the|de|da)\s+)(?:really|re\s?leaf|relive)\b(?=\s*(?:$|on\b|off\b|of the terrain\b))/gi, "relief", 0.5),
+  segura(/\b(?:tree|three|3)\s+(?:d|de|dee|di|the)\b(?=\s*(?:$|terrain\b|view\b|map\b|mode\b|off\b|on\b))/gi, "3D", 0.5),
+  segura(/^and\s+able\b(?=\s+(?:the\s+)?(?:terrain|relief|3d|legend|roads|rivers)\b)/gi, "enable", 0.5),
+  segura(/\bsad\s+a\s+light\b/gi, "satellite", 0.5),
+  segura(/\b(?:a|o)\s+pacity\b|\bopa\s+city\b/gi, "opacity", 0.5),
+  segura(/(?<=\b(?:the|and)\s+)rots\b/gi, "roads", 0.6),
+  segura(/(?<=\b(?:show|hide|the)\s+)(?:beans|bims|beems)\b(?=\s*[.!?]*$)/gi, "beams", 0.6),
+  segura(/\b(?:the|di|de|da)\s+rection\b/gi, "direction", 0.5),
+  segura(/\banime\s+ated\b/gi, "animated", 0.5),
+  segura(/\bmore\s+close\b/gi, "closer", 0.5),
+  segura(/\bmore\s+far\b/gi, "farther", 0.5),
+  segura(/\bzoom\s+inn\b/gi, "zoom in", 0.4),
+  segura(/\bzoom(\s+in)?\s+(?:2|two|too)\b(?!\s+(?:levels?|levers?|times|steps|notches|clicks)\b)(?=\s+[a-z])/gi, "zoom$1 to", 0.5),
+  segura(/(?<=\bmake\s+(?:the\s+map|it)\s+)flag\b/gi, "flat", 0.5),
+  segura(/(?<=\b(?:show|hide|remove|open|close|see|display|put|bring back|turn on|turn off|switch to|change to)\s+)de\b(?=\s+[a-z])/gi, "the", 0.4),
+  segura(/\bopen\s*top\s*o\s*map\b|\bopen\s+topo\s+map\b/gi, "OpenTopoMap", 0.4),
+  segura(/(?<=\b(?:change|switch|go|back)\s+)(?:two|too|2)\b(?=\s+(?:the\s+)?(?:streets?|satellite|topo\w*|openTopoMap|open)\b)/gi, "to", 0.5),
+  segura(/\bthe\s+rain\s+(contours?)\b/gi, "the range $1", 0.5),
+  segura(/\ba\s+pass\s+city\b/gi, "opacity", 0.5),
+  segura(/\bseen\s+all\b(?=\s*[.!?]*$)|\bsig\s+nal\b/gi, "signal", 0.5),
+  segura(/\bback\s+(?:of|off)\s+mode\b/gi, "backup mode", 0.5),
+  segura(/^the\s+activate\b/gi, "deactivate", 0.5),
   // Las piezas del simulador
   segura(/\b(?:repeat\s+hers|repeat\s+ers|rip\s+eaters|re\s+peters|repeaters')\b/gi, "repeaters", 0.6),
   segura(/\b(?:repeat\s+err|rip\s+eater|re\s+peter|rapid\s+her|rip\s+it\s+her|rip\s+ether|repeater's)\b/gi, "repeater", 0.6),
@@ -638,6 +676,26 @@ const conTildes = (w: string) => w.replace(/a/g, "[aá]").replace(/e/g, "[eé]")
 const PLURAL_PIEZA_ES: Record<string, string> = { torre: "torres", antena: "antenas", persona: "personas", repetidor: "repetidores", nodo: "nodos", gateway: "gateways" };
 
 const REGLAS_ES: Regla[] = [
+  // v17.6 · La leyenda y el zoom como los escribe el reconocimiento en español («la llenda», «su min», «sum out»)
+  segura(/\b(?:la|le)\s+(?:llenda|yenda|lleyenda|lle\s+yenda|ye\s+nda)\b/gi, "la leyenda", 0.4),
+  segura(/^(?:su|sum|zum|zoo|soon)\s*(in|min|out|aut)(?=\s*$)/gi, (_m, dir: string) => `zoom ${/^(?:out|aut)$/i.test(dir) ? "out" : "in"}`, 0.5),
+  segura(/\bale\s+ja(lo|la|los|las)?\b/gi, "aleja$1", 0.4),
+  segura(/\ba\s+leja(lo|la|los|las)\b/gi, "aleja$1", 0.4),
+  segura(/\bacer\s+ca(lo|la|te|me)?\b/gi, "acerca$1", 0.4),
+  segura(/\ba\s+cerca(lo|la|te|me)\b/gi, "acerca$1", 0.4),
+  segura(/^a\s+cerca\s+(?=el mapa|la vista|m[aá]s|un poco|un poquito)/gi, "acerca ", 0.4),
+  segura(/(?<=\b(?:dale|dele|hazle|haz|ponle|m[aá]s|menos|qu[ií]tale)\s+(?:m[aá]s\s+)?)su\b(?=\s*$)/gi, "zoom", 0.5),
+  segura(/\b(?:asle|azle|asele|hasle)\b/gi, "hazle", 0.4),
+  segura(/\bdes\s+plieg(a|ue|uen|ala)\b/gi, "desplieg$1", 0.4),
+  segura(/\b(?:tres|3)\s*(?:d|de|d[eé])\b(?=\s*$|\s+(?:del|el|mapa|vista|terreno|relieve|por favor)\b)/gi, "3D", 0.5),
+  segura(/\b(?:reliebe|relleve|reliev|re\s+lieve|re\s+liebe)\b/gi, "relieve", 0.4),
+  segura(/\bserros\b/gi, "cerros", 0.4),
+  segura(/\bsirculo(s?)\b/gi, "círculo$1", 0.4),
+  segura(/(?<=\blos\s+)aces\b(?=\s+de\s+las\s+antenas)/gi, "haces", 0.4),
+  segura(/(?<=\bmapa\s+de\s+)ca(?:ies|yes)\b/gi, "calles", 0.4),
+  segura(/\bres\s+paldo\b/gi, "respaldo", 0.4),
+  segura(/\ben\s+cuadra\b(?=\s+(?:toda|todo|la|el|los|las)\b)/gi, "encuadra", 0.4),
+  segura(/\bopen\s*top\s*o\s*map\b|\bopen\s+topo\s+map\b/gi, "OpenTopoMap", 0.4),
   // (también antes de un número de varias cifras: «sube lo 15 metros»)
   regla(new RegExp(String.raw`\b(${VERBOS_CLITICO_ES})\s+(lo|la|los|las)\b(?=\s+(?:(?:a|al|en|cerca|junto|hacia|como|mas|menos)\b|\d)|$)`, "gi"), "$1$2", 0.4),
   // «Agrega un repetido…», «otro repetido», «el repetido 1»: es el repetidor (seguro). «Borra el repetido», «borra los
@@ -815,7 +873,7 @@ const REGLAS_ES: Regla[] = [
   segura(/^a\s+garr(a|e)\b/i, "agarr$1", 0.4),
   segura(/(?<=\b(?:mapa|vista|capa|relieve)\s+)tipogr[aá]fico\b/gi, "topográfico", 0.4),
   // «Pa'» es «para»; «la re» al final, «la red»; «qué no dos», «qué nodos»; «cuánta persona», «cuántas personas»
-  segura(/\bpa'?\s+(?=[A-ZÁÉÍÓÚÑ]|el\b|la\b|los\b|las\b|un\b|una\b|cumaral|restrepo|granada|yopal|villavicencio|villanueva|acac[ií]as|puerto)/g, "para ", 0.4),
+  segura(/\bpa'?\s+(?=[A-ZÁÉÍÓÚÑ]|el\b|la\b|los\b|las\b|un\b|una\b|cumaral|restrepo|granada|yopal|villavicencio|villavo|villanueva|acac[ií]as|puerto)/g, "para ", 0.4),
   segura(/\b(la|una|mi|esta|toda\s+la)\s+re\b(?=\s*[?.!]?\s*$)/gi, "$1 red", 0.4),
   segura(/(?<=\b(?:qu[eé]|cu[aá]les|los|cu[aá]ntos|esos|estos|todos\s+los)\s+)no\s+dos\b/gi, "nodos", 0.4),
   segura(/\bcu[aá]nta\s+(persona|antena|torre)\b/gi, (_m: string, p: string) => `cuántas ${p}s`, 0.4),
