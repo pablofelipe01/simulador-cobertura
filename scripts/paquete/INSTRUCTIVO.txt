@@ -30,18 +30,16 @@ de "Pitch". La primera vez abre en el idioma del navegador y después
 recuerda el último que usó. Y la página abre con los paneles ocultos,
 para ver el mapa completo: las herramientas y los resultados se abren
 cuando usted quiera.
-En esta entrega: Melki le entiende todavía mejor aunque se le
-pronuncie mal, en inglés con acento o en español rápido. Reconoce los
-nombres de los nodos aunque se oigan distinto ("Tory to" es la Torre 2,
-"a hemp low" es Ejemplo), corrige más palabras ("yogi" por Yagi,
-"pongo una persona" por "pon una persona"), contesta las preguntas
-aunque una palabra se oiga mal, escribe con mayúscula los nombres que
-usted le dicta ("loma alta" queda "Loma Alta") y, con la barra del
-Asistente abierta, deja pasar la conversación con otras personas
-("este fin de semana vamos a Cumaral") (sección 2, ee).
-En la entrega anterior Melki empezó a entender lo que se le pronuncia
-mal (sección 2, dd), y antes, el inglés y el español por igual
-(sección 2, cc). Antes: el "Lápiz" de la barra del mapa dibuja la malla a mano,
+En esta entrega: el mapa y la vista, por voz, en inglés y en español.
+Melki acerca y aleja el mapa ("acerca el mapa", "aléjalo un poquito",
+"zoom in", "zoom out a little"), abre y pliega la leyenda ("muestra la
+leyenda", "quita la leyenda", "show the legend") y muestra el relieve
+en 3D ("muestra el relieve del terreno", "show the terrain relief"),
+también cuando el reconocimiento lo escribe mal ("su min", "la
+llenda", "tea rain really") (sección 2, ff).
+En las entregas anteriores Melki empezó a entender lo que se le
+pronuncia mal (sección 2, dd y ee), y antes, el inglés y el español
+por igual (sección 2, cc). Antes: el "Lápiz" de la barra del mapa dibuja la malla a mano,
 como en Paint (una figura cerrada es una zona; una línea, una franja a
 lo largo de una vía o un río), y Melki arma ahí la red óptima, que no
 es la de más antenas sino la del equilibrio entre la estabilidad de la
@@ -736,7 +734,7 @@ con un punto.
     todos los repetidores 5 m" (sobre la altura que tienen) y, en
     inglés, "raise it 5 m", "move Repeater 1 next to the gateway",
     "why doesn't Person 2 have signal?" o "what does SF mean?".
- ee) Lo que se oye mal, todavía más (esta entrega): Melki reconoce
+ ee) Lo que se oye mal, todavía más: Melki reconoce
     los nombres de los nodos aunque el dictado los escriba de otro
     modo ("Delete Tory to" es borrar la Torre 2, con su "¿lo hago?";
     "point a hemp low northeast" es apuntar Ejemplo al noreste),
@@ -759,6 +757,27 @@ con un punto.
     ("en un radio de 3 km", "dame un lápiz", "renombra el Repetidor 2
     como La Mesa"). Si el navegador propone varias versiones de lo que
     oyó, Melki escoge la que entiende, también corrigiendo lo mal oído.
+ ff) El mapa y la vista, por voz (esta entrega): pídale a Melki, por
+    escrito o hablando, "acerca el mapa", "aléjalo un poquito", "más
+    cerca", "haz zoom", "quítale zoom" o "acércalo dos niveles" (en
+    inglés, "zoom in", "zoom out a little", "get closer"): acerca o
+    aleja el mapa sin moverlo. "Muestra la leyenda", "quita la leyenda"
+    o "muéstrame los colores" ("show the legend", "hide the legend")
+    abren o pliegan la leyenda de abajo a la izquierda. "Muestra el
+    relieve del terreno", "quiero ver los cerros" o "show the terrain
+    relief" inclinan el mapa en 3D para ver las lomas y los valles, y
+    "quita el relieve" o "quítale el 3D" lo dejan plano otra vez (la
+    simulación no cambia: para simular sin lomas, "simula con terreno
+    plano"). Con un nodo o un lugar es otra orden: "acerca el
+    Repetidor 1 al gateway" lo mueve, "acércate a Cumaral" o "haz zoom
+    en Restrepo" llevan el mapa allá y "aléjalo para ver todo" muestra
+    toda la red; la charla ("acércate que no te oigo") no hace nada.
+    También entiende "pon el satélite", "cambia a OpenTopoMap", "baja
+    la opacidad a 40 %", "colorea por señal", "muestra dónde no hay
+    servicio" y "ve pa Villavo", y "muestra las zonas sin servicio"
+    ahora sí las muestra. Pruebe escribir "ale jalo un poquito" o "la
+    llenda" (como lo escribe a veces el reconocimiento): Melki entiende
+    "aléjalo un poquito" y "la leyenda".
 
 
 3. BUENO SABER
