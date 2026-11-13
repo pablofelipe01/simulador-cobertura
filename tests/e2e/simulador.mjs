@@ -3772,6 +3772,57 @@ await flujo(
   },
 );
 
+// v17.6 · Acercar y alejar el mapa, la leyenda y el relieve en 3D: por la barra de Melki (como lo escribe el
+// reconocimiento) y por voz con la barra abierta y sin su nombre
+await flujo(
+  "melki-mapa-vista",
+  async (page, foto) => {
+    await esperarSimulacion(page);
+    const { chat, decir } = await abrirMelki(page);
+    const pedir = pedirA(page, chat, decir);
+    const mapa = (q) => page.evaluate((x) => window.__simuladorPruebas.mapa[x](), q);
+    await page.waitForTimeout(1000);
+    const z0 = await mapa("getZoom");
+    await pedir("acerca el mapa", /acerqué el mapa/);
+    await page.waitForFunction((z) => window.__simuladorPruebas.mapa.getZoom() > z + 0.8, z0, { timeout: 5000 });
+    const z1 = await mapa("getZoom");
+    // «Ale jalo un poquito» es «aléjalo un poquito»: medio nivel
+    await pedir("ale jalo un poquito", /alejé el mapa un poco/);
+    await page.waitForFunction((z) => window.__simuladorPruebas.mapa.getZoom() < z - 0.3, z1, { timeout: 5000 });
+    // La leyenda: «quita la llenda» la pliega y «muestra la leyenda» la abre
+    await page.locator("div[data-tour=leyenda]").waitFor();
+    await pedir("quita la llenda", /plegué la leyenda/);
+    await page.locator("button[data-tour=leyenda][aria-expanded=false]").waitFor({ timeout: 5000 });
+    await pedir("muestra la leyenda", /abrí la leyenda/);
+    await page.locator("div[data-tour=leyenda]").waitFor({ timeout: 5000 });
+    // El relieve en 3D inclina el mapa; «quita el relieve» lo deja plano otra vez (la simulación no cambia)
+    await pedir("muestra el relieve del terreno", /el mapa muestra el relieve en 3D/);
+    await page.waitForFunction(() => window.__simuladorPruebas.mapa.getPitch() > 30, null, { timeout: 5000 });
+    await foto("relieve");
+    await pedir("quita el relieve", /vuelve a verse plano/);
+    await page.waitForFunction(() => window.__simuladorPruebas.mapa.getPitch() < 1, null, { timeout: 5000 });
+    // «Acércate que no te oigo» es charla: no lleva el mapa a ningún lado ni pregunta un lugar
+    const z2 = await mapa("getZoom");
+    const c2 = await mapa("getCenter");
+    await pedir("acércate que no te oigo", /.+/);
+    await page.waitForTimeout(800);
+    const c3 = await mapa("getCenter");
+    afirmar(Math.abs((await mapa("getZoom")) - z2) < 0.01 && Math.abs(c3.lat - c2.lat) < 1e-6 && Math.abs(c3.lng - c2.lng) < 1e-6, "La charla no debería mover el mapa");
+    afirmar((await chat.getByText(/¿Se refiere a/).count()) === 0, "La charla no debería preguntar un lugar");
+    // Por voz, con la barra abierta y sin su nombre: «más cerca» acerca el mapa
+    const { hud, esperarEstado, callado, decir: hablar } = asistenteDeMentira(page);
+    await page.getByRole("button", { name: "Activar el Asistente Melki" }).first().click();
+    await hud.waitFor();
+    await esperarEstado(/^atento$/);
+    await callado();
+    const z4 = await mapa("getZoom");
+    await hablar("más cerca");
+    await page.waitForFunction((z) => window.__simuladorPruebas.mapa.getZoom() > z + 0.8, z4, { timeout: 15000 });
+    await foto("voz");
+  },
+  { hablar: true, preparar: (page) => page.addInitScript(manosLibresDeMentira) },
+);
+
 let fallos = 0;
 for (const r of resultados) {
   console.log(`${r.ok ? "✓" : "✗"} ${r.nombre}${r.ok ? "" : ` — ${r.error}`}`);
