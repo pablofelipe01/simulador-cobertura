@@ -549,6 +549,7 @@ export function Simulador() {
   const centrar = useCallback((lat: number, lon: number, zoom?: number) => setSolicitud({ n: nSolicitud.current++, tipo: "centrar", lat, lon, zoom }), []);
   const encuadrar = useCallback(() => setSolicitud({ n: nSolicitud.current++, tipo: "encuadrar" }), []);
   const encuadrarCaja = useCallback((caja: [number, number, number, number]) => setSolicitud({ n: nSolicitud.current++, tipo: "caja", caja }), []);
+  const zoomMapa = useCallback((pasos: number) => setSolicitud({ n: nSolicitud.current++, tipo: "zoom", pasos }), []);
 
   const inspeccionar = useCallback((lat: number, lon: number) => {
     const m = motor.current;
@@ -1449,6 +1450,7 @@ export function Simulador() {
       },
       simular,
       centrar,
+      zoom: zoomMapa,
       encuadrarCaja,
       marcar: (lat, lon, titulo, tarjeta = true) => setPunto({ lat, lon, titulo, tarjeta }),
       medir: (m, seleccionar = true) => {
@@ -1654,7 +1656,7 @@ export function Simulador() {
         };
       },
     }),
-    [inscribirNodo, pedirSimulacion, simular, centrar, encuadrar, encuadrarCaja, abrirPerfil, inspeccionar, cambiarModo, sembrarHacia, aceptarSiembra, enviarMensaje, disenarArea, aplicarDiseno, esperarResultado, pedirAjuste, aplicarAjuste, poblarPersonas, quitarPobladas, probarCarga, poblarZonas, quitarZonas, probarEstres, evaluarPunto, evaluarPuntos, optimizarRed, aplicarOptimizacion],
+    [inscribirNodo, pedirSimulacion, simular, centrar, zoomMapa, encuadrar, encuadrarCaja, abrirPerfil, inspeccionar, cambiarModo, sembrarHacia, aceptarSiembra, enviarMensaje, disenarArea, aplicarDiseno, esperarResultado, pedirAjuste, aplicarAjuste, poblarPersonas, quitarPobladas, probarCarga, poblarZonas, quitarZonas, probarEstres, evaluarPunto, evaluarPuntos, optimizarRed, aplicarOptimizacion],
   );
 
   const restaurar = useCallback((e: Escenario) => despachar({ tipo: "cargar", escenario: e }), []);
@@ -2288,7 +2290,7 @@ export function Simulador() {
               if (a && inspeccion) abrirPerfil(a, { lat: inspeccion.lat, lon: inspeccion.lon }, tx(`${a.nombre} → punto medido`, `${a.nombre} → measured point`));
             }}
           />
-          <Leyenda estado={estado} resultado={resultado} antenas={escenario.antenas} usuarios={resumenUsuarios} />
+          <Leyenda estado={estado} despachar={despachar} resultado={resultado} antenas={escenario.antenas} usuarios={resumenUsuarios} />
           {perfil && (
             <PerfilEnlace key={perfil.n} perfil={perfil.perfil} titulo={perfil.titulo} frecuenciaMhz={escenario.parametros.frecuenciaMhz} informe={perfil.informe} onCerrar={() => setPerfil(null)} />
           )}
