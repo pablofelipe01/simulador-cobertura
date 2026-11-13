@@ -2483,5 +2483,60 @@ function crearApi(antenas) {
   caso("v17.2: sin red, explica que no hay qué revisar y ofrece el lápiz", /Todavía no hay red que revisar/.test(vacia.texto) && !vacia.luego, vacia.texto);
 }
 
+/* ───────────── v17.6 · Acercar y alejar el mapa, la leyenda y el relieve en 3D, por voz ───────────── */
+{
+  await m.cargarReferencia();
+  const antenas = [base("g", "Gateway", 4.2, -73.4, { pasarela: true }), base("r1", "Repetidor 1", 4.25, -73.3)];
+  const api = crearApi(antenas);
+  api.zoom = (p) => api.llamadas.push(["zoom", p]);
+  // Los lugares de verdad (la referencia geográfica del simulador)
+  api.buscarLugar = (t) => m.buscarLugares(t, 6);
+  api.reconocerLugar = (t) => m.reconocerLugares(t, { max: 6, departamento: "Meta" });
+  const orden = (t) => m.interpretarOrden(t, api, null, { ultimoNodo: "r1" });
+  const muestra = (t) => `«${t}» → ${JSON.stringify(orden(t))?.slice(0, 90)}`;
+  const zooms = [
+    ["acerca el mapa", 1], ["aléjalo", -1], ["más cerca", 1], ["más lejos", -1], ["haz zoom", 1], ["dale más zoom", 1], ["quítale zoom", -1], ["zoom out", -1],
+    ["aléjalo un poquito", -0.5], ["acércalo dos niveles", 2], ["acércate más", 1], ["acércalo bastante", 2], ["aleja el mapa al máximo", -5],
+  ];
+  const malZoom = zooms.filter(([t, p]) => { const o = orden(t); return o?.tipo !== "zoom" || o.pasos !== p; });
+  caso("v17.6 · Acercar y alejar el mapa por voz («acerca el mapa», «aléjalo un poquito», «acércalo dos niveles», «quítale zoom»)", malZoom.length === 0, malZoom.map(([t]) => muestra(t)).join(" | "));
+  const otras = [["acerca el Repetidor 1 al gateway", "mover"], ["acércate a Cumaral", "ir"], ["acerca el mapa a Cumaral", "ir"], ["haz zoom en Restrepo", "ir"], ["aléjalo para ver todo", "encuadrar"], ["muestra toda la red", "encuadrar"], ["ve para Villavo", "ir"]];
+  const malOtras = otras.filter(([t, tipo]) => orden(t)?.tipo !== tipo);
+  caso("v17.6 · Con un nodo o un lugar no es el zoom: «acerca el Repetidor 1 al gateway» lo mueve, «acércate a Cumaral» lleva el mapa, «aléjalo para ver todo» muestra toda la red", malOtras.length === 0 && orden("ve para Villavo")?.lugar?.nombre === "Villavicencio", malOtras.map(([t]) => muestra(t)).join(" | "));
+  const charla = ["acércate que no te oigo", "acércate pa' que te cuente", "me alejé del pueblo", "el zoom de la reunión es a las tres"];
+  const malCharla = charla.filter((t) => orden(t));
+  caso("v17.6 · La charla con «acércate» o «zoom» no es una orden ni pregunta un lugar («acércate que no te oigo»)", malCharla.length === 0, malCharla.map(muestra).join(" | "));
+  const leyendas = [["muestra la leyenda", true], ["abre la leyenda", true], ["despliega la leyenda", true], ["muéstrame los colores", true], ["quita la leyenda", false], ["pliega la leyenda", false], ["minimiza la leyenda", false], ["cierra la leyenda", false]];
+  const malLey = leyendas.filter(([t, v]) => { const o = orden(t); return o?.tipo !== "vista" || o.cambios.leyenda !== v || Object.keys(o.cambios).length !== 1; });
+  const noLey = ["cuéntame la leyenda del Silbón", "¿qué significan los colores?"].filter((t) => orden(t)?.cambios?.leyenda !== undefined);
+  caso("v17.6 · La leyenda por voz: «muestra la leyenda», «muéstrame los colores», «quita la leyenda» (no «la leyenda del Silbón» ni «¿qué significan los colores?»)", malLey.length === 0 && noLey.length === 0, [...malLey.map(([t]) => muestra(t)), ...noLey].join(" | "));
+  const relieves = [["muestra el relieve del terreno", true], ["muestra el relieve", true], ["quiero ver los cerros", true], ["pon el mapa en tres dimensiones", true], ["quita el relieve", false], ["quítale el 3D", false], ["apaga el 3D", false]];
+  const malRel = relieves.filter(([t, v]) => { const o = orden(t); return o?.tipo !== "vista" || o.cambios.relieve3d !== v; });
+  const sim = orden("simula con terreno plano")?.valor === "plano" && orden("usa el relieve real")?.valor === "teselas";
+  caso("v17.6 · El relieve en 3D a la vista: «muestra el relieve del terreno», «quítale el 3D» (que no borra el último nodo); «simula con terreno plano» sigue siendo la simulación", malRel.length === 0 && sim, malRel.map(([t]) => muestra(t)).join(" | "));
+  const capas = [
+    ["muestra las zonas sin servicio", { mostrarSinServicio: true }], ["quita los anillos de distancia", { mostrarAnillos: false }], ["elimina los anillos", { mostrarAnillos: false }], ["baja la opacidad a 40 %", { opacidad: 0.4 }],
+    ["pon la opacidad de la cobertura en 60 %", { opacidad: 0.6 }], ["colorea por señal", { modo: "senal" }], ["cambia los colores a respaldo", { modo: "redundancia" }], ["pon el satélite", { fondo: "satelite" }],
+    ["cambia a OpenTopoMap", { fondo: "opentopomap" }], ["ponme el mapa con curva de nivel", { fondo: "opentopomap" }], ["muestra dónde no hay servicio", { mostrarSinServicio: true }],
+  ];
+  const malCapas = capas.filter(([t, c]) => { const o = orden(t); return o?.tipo !== "vista" || JSON.stringify(o.cambios) !== JSON.stringify(c); });
+  caso("v17.6 · Capas y fondo dichos de otro modo («muestra las zonas sin servicio» las muestra, «baja la opacidad a 40 %», «colorea por señal», «pon el satélite»)", malCapas.length === 0, malCapas.map(([t]) => muestra(t)).join(" | "));
+  // Lo que hace y lo que dice
+  const z = m.ejecutarOrden({ tipo: "zoom", pasos: -0.5 }, api);
+  const zz = m.ejecutarOrden({ tipo: "zoom", pasos: 2 }, api);
+  const l = m.ejecutarOrden({ tipo: "vista", cambios: { leyenda: true }, descripcion: "" }, api);
+  const lq = m.ejecutarOrden({ tipo: "vista", cambios: { leyenda: false }, descripcion: "" }, api);
+  const r3 = m.ejecutarOrden({ tipo: "vista", cambios: { relieve3d: true }, descripcion: "" }, api);
+  const llamadas = JSON.stringify(api.llamadas.slice(-5));
+  caso(
+    "v17.6 · Acerca o aleja el mapa y lo dice («alejé el mapa un poco»); la leyenda se abre o se pliega (sin simulación, avisa que aparece al simular); el relieve en 3D explica cómo inclinarlo",
+    /alejé el mapa un poco/.test(z.texto) && /acerqué el mapa bastante/.test(zz.texto) && /aparece abajo a la izquierda del mapa en cuanto haya una simulación/.test(l.texto) && /plegué la leyenda/.test(lq.texto) && /relieve en 3D/.test(r3.texto) && llamadas === JSON.stringify([["zoom", -0.5], ["zoom", 2], ["vista", { leyenda: true }], ["vista", { leyenda: false }], ["vista", { relieve3d: true }]]),
+    `${z.texto} | ${l.texto} | ${llamadas}`,
+  );
+  const e0 = m.estadoInicial();
+  const e1 = m.reductor(e0, { tipo: "vista", cambios: { leyenda: false } });
+  caso("v17.6 · La leyenda empieza como siempre (según la pantalla) y queda abierta o plegada en la vista", e0.vista.leyenda === null && e1.vista.leyenda === false);
+}
+
 console.log(fallos ? `\n✗ ${fallos} prueba(s) fallaron` : "\n✓ Melki verificado");
 process.exit(fallos ? 1 : 0);

@@ -1,5 +1,5 @@
 {
- "descripcion": "v17.5 · Frases dichas con mala pronunciación, como las escribe el reconocimiento de voz (en-US con acento colombiano; es-CO rápido), con la frase bien dicha: [lo oído, lo que se quiso decir]. Las escribieron a ciegas, sin ver el código, en cinco tandas (la tercera, la cuarta y la quinta se midieron antes de tocar nada por ellas). «charla»: conversación cercana que no debe volverse una orden (con el asistente sin su nombre, como la deja pasar). «minimo»: el porcentaje que debe entenderse.",
+ "descripcion": "v17.6 · Frases dichas con mala pronunciación, como las escribe el reconocimiento de voz (en-US con acento colombiano; es-CO rápido), con la frase bien dicha: [lo oído, lo que se quiso decir]. Las escribieron a ciegas, sin ver el código, en seis tandas (de la tercera a la sexta se midieron antes de tocar nada por ellas; la sexta, sobre el mapa y la vista). «charla»: conversación cercana que no debe volverse una orden (con el asistente sin su nombre, como la deja pasar). «minimo»: el porcentaje que debe entenderse.",
  "minimo": {
   "en": 94,
   "es": 95
@@ -4540,6 +4540,590 @@
   [
    "export the CSV and then open a news scenario",
    "Export the CSV and then open a new scenario"
+  ],
+  [
+   "zoo in a little",
+   "zoom in a little"
+  ],
+  [
+   "su mout a little bit",
+   "zoom out a little bit"
+  ],
+  [
+   "get closer",
+   "get closer"
+  ],
+  [
+   "get close her",
+   "get closer"
+  ],
+  [
+   "closer",
+   "closer"
+  ],
+  [
+   "clothes her please",
+   "closer please"
+  ],
+  [
+   "soon and a lot",
+   "zoom in a lot"
+  ],
+  [
+   "zoom out to levels",
+   "zoom out two levels"
+  ],
+  [
+   "some in tree levels",
+   "zoom in three levels"
+  ],
+  [
+   "go father",
+   "go farther"
+  ],
+  [
+   "a little more far",
+   "a little farther"
+  ],
+  [
+   "soom de map in",
+   "zoom the map in"
+  ],
+  [
+   "make the map bigger",
+   "make the map bigger"
+  ],
+  [
+   "make the map more small",
+   "make the map smaller"
+  ],
+  [
+   "zoom inn on the map",
+   "zoom in on the map"
+  ],
+  [
+   "sumin",
+   "zoom in"
+  ],
+  [
+   "a zoom out please",
+   "zoom out please"
+  ],
+  [
+   "zoom out a lot",
+   "zoom out a lot"
+  ],
+  [
+   "get a little more close",
+   "get a little closer"
+  ],
+  [
+   "move a way a little",
+   "move away a little"
+  ],
+  [
+   "zoom in one level",
+   "zoom in one level"
+  ],
+  [
+   "zoo mount",
+   "zoom out"
+  ],
+  [
+   "soon out one lever",
+   "zoom out one level"
+  ],
+  [
+   "sum in a little more",
+   "zoom in a little more"
+  ],
+  [
+   "zum out da little",
+   "zoom out a little"
+  ],
+  [
+   "zoom and two times",
+   "zoom in two times"
+  ],
+  [
+   "come more close to the map",
+   "come closer to the map"
+  ],
+  [
+   "zoom out a bid more",
+   "zoom out a bit more"
+  ],
+  [
+   "zoom in a lot more",
+   "zoom in a lot more"
+  ],
+  [
+   "show me the legent",
+   "show me the legend"
+  ],
+  [
+   "show the lechen",
+   "show the legend"
+  ],
+  [
+   "hide the legend",
+   "hide the legend"
+  ],
+  [
+   "high the legend",
+   "hide the legend"
+  ],
+  [
+   "close the the gen",
+   "close the legend"
+  ],
+  [
+   "open the leyend",
+   "open the legend"
+  ],
+  [
+   "open the leyenda",
+   "open the legend"
+  ],
+  [
+   "colaps the legend",
+   "collapse the legend"
+  ],
+  [
+   "remove de lejend",
+   "remove the legend"
+  ],
+  [
+   "put the legend on",
+   "put the legend on"
+  ],
+  [
+   "chow the color legend",
+   "show the color legend"
+  ],
+  [
+   "minimize the legend",
+   "minimize the legend"
+  ],
+  [
+   "legend of",
+   "legend off"
+  ],
+  [
+   "lijen on",
+   "legend on"
+  ],
+  [
+   "i want to see de legend",
+   "I want to see the legend"
+  ],
+  [
+   "close a legend box",
+   "close the legend box"
+  ],
+  [
+   "get read of the legend",
+   "get rid of the legend"
+  ],
+  [
+   "bring back de legend",
+   "bring back the legend"
+  ],
+  [
+   "show the legends",
+   "show the legend"
+  ],
+  [
+   "clothes the legend",
+   "close the legend"
+  ],
+  [
+   "take the legend a way",
+   "take the legend away"
+  ],
+  [
+   "expand the lejent",
+   "expand the legend"
+  ],
+  [
+   "show the rain relief",
+   "show the terrain relief"
+  ],
+  [
+   "show the tea rain really",
+   "show the terrain relief"
+  ],
+  [
+   "turn on 3d",
+   "turn on 3D"
+  ],
+  [
+   "turn on tree d",
+   "turn on 3D"
+  ],
+  [
+   "turn off the tree de",
+   "turn off 3D"
+  ],
+  [
+   "show the hills",
+   "show the hills"
+  ],
+  [
+   "show the heels and the ballets",
+   "show the hills and the valleys"
+  ],
+  [
+   "hide the to rain",
+   "hide the terrain"
+  ],
+  [
+   "put the map in tree the",
+   "put the map in 3D"
+  ],
+  [
+   "the rain believe on",
+   "terrain relief on"
+  ],
+  [
+   "remove the really",
+   "remove the relief"
+  ],
+  [
+   "turn of the terrain relief",
+   "turn off the terrain relief"
+  ],
+  [
+   "activate the tree d terrain",
+   "activate the 3D terrain"
+  ],
+  [
+   "the activate the relief",
+   "deactivate the relief"
+  ],
+  [
+   "make the map flag",
+   "make the map flat"
+  ],
+  [
+   "three the off",
+   "3D off"
+  ],
+  [
+   "train on",
+   "terrain on"
+  ],
+  [
+   "show de relief of the terrain",
+   "show the relief of the terrain"
+  ],
+  [
+   "see the terrain in tree de",
+   "see the terrain in 3D"
+  ],
+  [
+   "and able terrain relief",
+   "enable terrain relief"
+  ],
+  [
+   "this able the 3d",
+   "disable the 3D"
+  ],
+  [
+   "hide the heels",
+   "hide the hills"
+  ],
+  [
+   "put the relieve",
+   "put the relief on"
+  ],
+  [
+   "show the mountains in 3d",
+   "show the mountains in 3D"
+  ],
+  [
+   "sad a light",
+   "satellite"
+  ],
+  [
+   "change to sad alight",
+   "change to satellite"
+  ],
+  [
+   "put the satelite map",
+   "put the satellite map"
+  ],
+  [
+   "satellite view",
+   "satellite view"
+  ],
+  [
+   "topo graphic map",
+   "topographic map"
+  ],
+  [
+   "change to top graphic",
+   "change to topographic"
+  ],
+  [
+   "switch to open top o map",
+   "switch to OpenTopoMap"
+  ],
+  [
+   "put the map with counter lines",
+   "put the map with contour lines"
+  ],
+  [
+   "change two streets",
+   "change to streets"
+  ],
+  [
+   "back to the street mop",
+   "back to the street map"
+  ],
+  [
+   "put the mapa topografico",
+   "put the topographic map"
+  ],
+  [
+   "show the rots",
+   "show the roads"
+  ],
+  [
+   "hide the rows",
+   "hide the roads"
+  ],
+  [
+   "show the reverse",
+   "show the rivers"
+  ],
+  [
+   "hide the rivers",
+   "hide the rivers"
+  ],
+  [
+   "show the municipal bound reez",
+   "show the municipal boundaries"
+  ],
+  [
+   "show the the part meant boundaries",
+   "show the department boundaries"
+  ],
+  [
+   "hide the department limits",
+   "hide the department limits"
+  ],
+  [
+   "show the town name",
+   "show the town names"
+  ],
+  [
+   "hide down names",
+   "hide the town names"
+  ],
+  [
+   "show the mess links",
+   "show the mesh links"
+  ],
+  [
+   "hide the mash links",
+   "hide the mesh links"
+  ],
+  [
+   "show the rain contours",
+   "show the range contours"
+  ],
+  [
+   "hide the range counters",
+   "hide the range contours"
+  ],
+  [
+   "show the steady circles",
+   "show the study circles"
+  ],
+  [
+   "hide the studies circles",
+   "hide the study circles"
+  ],
+  [
+   "show the distance rinks",
+   "show the distance rings"
+  ],
+  [
+   "remove the distance rings",
+   "remove the distance rings"
+  ],
+  [
+   "show the areas with no servis",
+   "show the areas with no service"
+  ],
+  [
+   "show where is no service",
+   "show where there is no service"
+  ],
+  [
+   "show the beans",
+   "show the beams"
+  ],
+  [
+   "hide the bims",
+   "hide the beams"
+  ],
+  [
+   "show the antenna the rection",
+   "show the antenna direction"
+  ],
+  [
+   "set the coverage a pass city to sixty percent",
+   "set the coverage opacity to 60%"
+  ],
+  [
+   "opacity forty per cent",
+   "opacity 40%"
+  ],
+  [
+   "a pacity eighty",
+   "opacity 80%"
+  ],
+  [
+   "show the flow to the gate way",
+   "show the flow to the Gateway"
+  ],
+  [
+   "turn off the anime ated flow",
+   "turn off the animated flow"
+  ],
+  [
+   "put the rivers and the rots",
+   "put the rivers and the roads"
+  ],
+  [
+   "colors by seen all",
+   "color by signal"
+  ],
+  [
+   "color by signal",
+   "color by signal"
+  ],
+  [
+   "color mode vest antenna",
+   "color mode best antenna"
+  ],
+  [
+   "show the vest an tena",
+   "show the best antenna"
+  ],
+  [
+   "color by redundant see",
+   "color by redundancy"
+  ],
+  [
+   "color by back up",
+   "color by backup"
+  ],
+  [
+   "change the color to seen al",
+   "change the color to signal"
+  ],
+  [
+   "back of mode",
+   "backup mode"
+  ],
+  [
+   "center on the gate way",
+   "center on the Gateway"
+  ],
+  [
+   "center in repeater one",
+   "center on Repeater 1"
+  ],
+  [
+   "go to repeat er too",
+   "go to Repeater 2"
+  ],
+  [
+   "center the map on per son one",
+   "center the map on Person 1"
+  ],
+  [
+   "go to persona two",
+   "go to Person 2"
+  ],
+  [
+   "center on tower to",
+   "center on Tower 2"
+  ],
+  [
+   "center in torre 2",
+   "center on Tower 2"
+  ],
+  [
+   "go to come a rawl",
+   "go to Cumaral"
+  ],
+  [
+   "center on via vicente o",
+   "center on Villavicencio"
+  ],
+  [
+   "take me to rest repo",
+   "take me to Restrepo"
+  ],
+  [
+   "go to a casias",
+   "go to Acacías"
+  ],
+  [
+   "center on porto lopes",
+   "center on Puerto López"
+  ],
+  [
+   "go to yo pal",
+   "go to Yopal"
+  ],
+  [
+   "center on para they bueno",
+   "center on Paratebueno"
+  ],
+  [
+   "go to barranca the oopia",
+   "go to Barranca de Upía"
+  ],
+  [
+   "center in granada",
+   "center on Granada"
+  ],
+  [
+   "go to agua sool",
+   "go to Aguazul"
+  ],
+  [
+   "soon to the gate way",
+   "zoom to the Gateway"
+  ],
+  [
+   "zoom in on repeat or one",
+   "zoom in on Repeater 1"
+  ],
+  [
+   "center on the repeater number two",
+   "center on Repeater 2"
+  ],
+  [
+   "see all the network",
+   "see the whole network"
+  ],
+  [
+   "soon out to see everything",
+   "zoom out to see everything"
+  ],
+  [
+   "fit all the nose in the screen",
+   "fit all the nodes on the screen"
+  ],
+  [
+   "show the whole network",
+   "show the whole network"
   ]
  ],
  "es": [
@@ -7826,6 +8410,510 @@
   [
    "mueve el repetidor 1 al lado de la persona 2 y su velo a 20 metros",
    "Mueve el Repetidor 1 al lado de la Persona 2 y súbelo a 20 metros"
+  ],
+  [
+   "a cerca el mapa",
+   "acerca el mapa"
+  ],
+  [
+   "alejalo",
+   "aléjalo"
+  ],
+  [
+   "ale jalo un poquito",
+   "aléjalo un poquito"
+  ],
+  [
+   "mas cerca",
+   "más cerca"
+  ],
+  [
+   "un poquito mas lejos",
+   "un poquito más lejos"
+  ],
+  [
+   "acercate mas",
+   "acércate más"
+  ],
+  [
+   "acerquese mas pues",
+   "acérquese más, pues"
+  ],
+  [
+   "hagale zoom al mapa",
+   "hágale zoom al mapa"
+  ],
+  [
+   "dale mas su",
+   "dale más zoom"
+  ],
+  [
+   "quitale zoom",
+   "quítale zoom"
+  ],
+  [
+   "quitale un poquito de zoom",
+   "quítale un poquito de zoom"
+  ],
+  [
+   "acerquelo harto",
+   "acérquelo harto"
+  ],
+  [
+   "alejese dos niveles",
+   "aléjese 2 niveles"
+  ],
+  [
+   "acercate tres niveles",
+   "acércate 3 niveles"
+  ],
+  [
+   "mas cerquita",
+   "más cerquita"
+  ],
+  [
+   "un tris mas lejos",
+   "un tris más lejos"
+  ],
+  [
+   "agrandame el mapa",
+   "agrándame el mapa"
+  ],
+  [
+   "achica el mapa",
+   "achica el mapa"
+  ],
+  [
+   "mijo alejelo un poquito",
+   "mijo, aléjelo un poquito"
+  ],
+  [
+   "sumerce acerquelo un nivel",
+   "sumercé, acérquelo un nivel"
+  ],
+  [
+   "zum para afuera",
+   "zoom hacia afuera"
+  ],
+  [
+   "aleja el mapa",
+   "aleja el mapa"
+  ],
+  [
+   "ahorita acercame el mapa",
+   "ahorita acércame el mapa"
+  ],
+  [
+   "asle mas zoom",
+   "hazle más zoom"
+  ],
+  [
+   "mas lejitos pues",
+   "más lejitos, pues"
+  ],
+  [
+   "quita la llenda",
+   "quita la leyenda"
+  ],
+  [
+   "muestra la le yenda",
+   "muestra la leyenda"
+  ],
+  [
+   "abre la leyenda",
+   "abre la leyenda"
+  ],
+  [
+   "cierra la lellenda",
+   "cierra la leyenda"
+  ],
+  [
+   "o culta la leyenda",
+   "oculta la leyenda"
+  ],
+  [
+   "esconde la yenda",
+   "esconde la leyenda"
+  ],
+  [
+   "ponme la leienda",
+   "ponme la leyenda"
+  ],
+  [
+   "minimisa la leyenda",
+   "minimiza la leyenda"
+  ],
+  [
+   "colapsa la lleyenda",
+   "colapsa la leyenda"
+  ],
+  [
+   "des pliega la leyenda",
+   "despliega la leyenda"
+  ],
+  [
+   "quitame esa leyenda de ahi",
+   "quítame esa leyenda de ahí"
+  ],
+  [
+   "sumerce abrame la leyenda",
+   "sumercé, ábrame la leyenda"
+  ],
+  [
+   "muestrame la leyenda de los colores",
+   "muéstrame la leyenda de los colores"
+  ],
+  [
+   "guarda la leyenda",
+   "guarda la leyenda"
+  ],
+  [
+   "buelve a poner la leyenda",
+   "vuelve a poner la leyenda"
+  ],
+  [
+   "cierre el cuadrito de la leyenda",
+   "cierre el cuadrito de la leyenda"
+  ],
+  [
+   "hagale quite la leyenda",
+   "hágale, quite la leyenda"
+  ],
+  [
+   "ensename la le yenda",
+   "enséñame la leyenda"
+  ],
+  [
+   "muestra el relleve",
+   "muestra el relieve"
+  ],
+  [
+   "muestra el relieve del te reno",
+   "muestra el relieve del terreno"
+  ],
+  [
+   "quita el re lieve",
+   "quita el relieve"
+  ],
+  [
+   "pon el mapa en tres de",
+   "pon el mapa en 3D"
+  ],
+  [
+   "ponlo en 3d",
+   "ponlo en 3D"
+  ],
+  [
+   "quitale el tres d",
+   "quítale el 3D"
+  ],
+  [
+   "activa el reliebe",
+   "activa el relieve"
+  ],
+  [
+   "des activa el relieve",
+   "desactiva el relieve"
+  ],
+  [
+   "muestrame los serros",
+   "muéstrame los cerros"
+  ],
+  [
+   "muestra las lomas y los balles",
+   "muestra las lomas y los valles"
+  ],
+  [
+   "apaga el tres d",
+   "apaga el 3D"
+  ],
+  [
+   "prende el relieve",
+   "prende el relieve"
+  ],
+  [
+   "deja el mapa plano",
+   "deja el mapa plano"
+  ],
+  [
+   "pon el mapa en tres dimensiones",
+   "pon el mapa en tres dimensiones"
+  ],
+  [
+   "quita el relieve del ter reno",
+   "quita el relieve del terreno"
+  ],
+  [
+   "hagale muestre el relieve",
+   "hágale, muestre el relieve"
+  ],
+  [
+   "ahorita quitame el relieve",
+   "ahorita quítame el relieve"
+  ],
+  [
+   "dejalo sin relieve",
+   "déjalo sin relieve"
+  ],
+  [
+   "ponle el re lieve al mapa",
+   "ponle el relieve al mapa"
+  ],
+  [
+   "muestra los cerros en 3d",
+   "muestra los cerros en 3D"
+  ],
+  [
+   "pon el satelite",
+   "pon el satélite"
+  ],
+  [
+   "cambia a sate lital",
+   "cambia a satelital"
+  ],
+  [
+   "pon el mapa topo grafico",
+   "pon el mapa topográfico"
+  ],
+  [
+   "cambia a open topo map",
+   "cambia a OpenTopoMap"
+  ],
+  [
+   "ponme el mapa con curva de nivel",
+   "ponme el mapa con curvas de nivel"
+  ],
+  [
+   "mapa de caies",
+   "mapa de calles"
+  ],
+  [
+   "vuelve al de calles",
+   "vuelve al mapa de calles"
+  ],
+  [
+   "pongale la vista de satelite",
+   "póngale la vista de satélite"
+  ],
+  [
+   "ponga el topografico",
+   "ponga el topográfico"
+  ],
+  [
+   "muestra las vias",
+   "muestra las vías"
+  ],
+  [
+   "quita las carretera",
+   "quita las carreteras"
+  ],
+  [
+   "muestra los rios",
+   "muestra los ríos"
+  ],
+  [
+   "quitalos rios",
+   "quita los ríos"
+  ],
+  [
+   "muestra los limites munisipales",
+   "muestra los límites municipales"
+  ],
+  [
+   "pon los limites departa mentales",
+   "pon los límites departamentales"
+  ],
+  [
+   "muestra los nombre de los pueblos",
+   "muestra los nombres de los pueblos"
+  ],
+  [
+   "quita los nombres de los municipios",
+   "quita los nombres de los municipios"
+  ],
+  [
+   "muestra los enlaces mes",
+   "muestra los enlaces mesh"
+  ],
+  [
+   "quita los en laces mesh",
+   "quita los enlaces mesh"
+  ],
+  [
+   "muestra los con tornos de alcance",
+   "muestra los contornos de alcance"
+  ],
+  [
+   "muestra los circulos de estudio",
+   "muestra los círculos de estudio"
+  ],
+  [
+   "quita los sirculos de estudio",
+   "quita los círculos de estudio"
+  ],
+  [
+   "pon los anillos de distansia",
+   "pon los anillos de distancia"
+  ],
+  [
+   "muestra las sonas sin servicio",
+   "muestra las zonas sin servicio"
+  ],
+  [
+   "muestra donde no ay servicio",
+   "muestra dónde no hay servicio"
+  ],
+  [
+   "muestra la direccion de las antenas",
+   "muestra la dirección de las antenas"
+  ],
+  [
+   "quita los aces de las antenas",
+   "quita los haces de las antenas"
+  ],
+  [
+   "pon la opasidad de la cobertura en sesenta",
+   "pon la opacidad de la cobertura en 60 %"
+  ],
+  [
+   "baja la opacidad a cuarenta",
+   "baja la opacidad a 40 %"
+  ],
+  [
+   "muestra el flujo hacia el geiguey",
+   "muestra el flujo hacia el Gateway"
+  ],
+  [
+   "quita la animasion del flujo",
+   "quita la animación del flujo"
+  ],
+  [
+   "prendeme las vias y los rios",
+   "préndeme las vías y los ríos"
+  ],
+  [
+   "colorea por senal",
+   "colorea por señal"
+  ],
+  [
+   "modo mejor antena",
+   "modo mejor antena"
+  ],
+  [
+   "pon el color por la mejor an tena",
+   "pon el color por la mejor antena"
+  ],
+  [
+   "modo res paldo",
+   "modo respaldo"
+  ],
+  [
+   "color por redundansia",
+   "color por redundancia"
+  ],
+  [
+   "cambia los colores pa señal",
+   "cambia los colores a señal"
+  ],
+  [
+   "muestra el re spaldo",
+   "muestra el respaldo"
+  ],
+  [
+   "centra en el geitwey",
+   "centra en el Gateway"
+  ],
+  [
+   "centra en el repeti dor 1",
+   "centra en el Repetidor 1"
+  ],
+  [
+   "llevame al repetidor dos",
+   "llévame al Repetidor 2"
+  ],
+  [
+   "ve a la persona uno",
+   "ve a la Persona 1"
+  ],
+  [
+   "centra en la persona 2",
+   "centra en la Persona 2"
+  ],
+  [
+   "centra en la torre dos",
+   "centra en la Torre 2"
+  ],
+  [
+   "vamos a cumarall",
+   "vamos a Cumaral"
+  ],
+  [
+   "centra en villavo",
+   "centra en Villavicencio"
+  ],
+  [
+   "ve pa villavo",
+   "ve a Villavo"
+  ],
+  [
+   "llevame a restrepo",
+   "llévame a Restrepo"
+  ],
+  [
+   "centra en acasias",
+   "centra en Acacías"
+  ],
+  [
+   "ve pa puerto lopes",
+   "ve a Puerto López"
+  ],
+  [
+   "centra el mapa en llopal",
+   "centra el mapa en Yopal"
+  ],
+  [
+   "muestrame para te bueno",
+   "muéstrame Paratebueno"
+  ],
+  [
+   "vamos a barranca de hupia",
+   "vamos a Barranca de Upía"
+  ],
+  [
+   "ve a agua azul",
+   "ve a Aguazul"
+  ],
+  [
+   "acercate a la torre 2",
+   "acércate a la Torre 2"
+  ],
+  [
+   "ponme el gate way en el centro",
+   "ponme el Gateway en el centro"
+  ],
+  [
+   "centra en granada",
+   "centra en Granada"
+  ],
+  [
+   "muestra toda la re",
+   "muestra toda la red"
+  ],
+  [
+   "que se vea todos los nodos",
+   "que se vean todos los nodos"
+  ],
+  [
+   "alejate pa ver toda la red",
+   "aléjate para ver toda la red"
+  ],
+  [
+   "en cuadra toda la red",
+   "encuadra toda la red"
+  ],
+  [
+   "muestrame toda la red pues",
+   "muéstrame toda la red, pues"
   ]
  ],
  "charla": {
@@ -7960,7 +9048,69 @@
    "raise your hand if you want more coffee",
    "the person at the store said they don't have any more bread",
    "can you save me a seat at the meeting",
-   "how far is it from here to the supermarket"
+   "how far is it from here to the supermarket",
+   "did you get the link for the zoom meeting",
+   "the zoom meeting with the bank is at three",
+   "the soon meeting starts at nine tomorrow",
+   "zoom in on the photo so i can see the calf",
+   "my phone camera has a terrible zoom",
+   "you zoomed in too much now i look fat",
+   "my grandma always tells the legend of the silbon",
+   "the legend of the sill bone scares the kids",
+   "they say la llorona walks by the river at night",
+   "that story is just a legend nobody ever saw it",
+   "it rained all night and the road is pure mud",
+   "the rain is coming from the side of the mountains",
+   "the terrain on my uncle's farm is too wet to plant",
+   "that terrain is good for rice not for cattle",
+   "the hills behind the farm look so green today",
+   "casanare is flat there are almost no hills",
+   "we drove through a valley full of fog",
+   "i printed a map for the trip to yopal",
+   "the map on my phone says two more hours",
+   "come closer i can't hear you with the generator",
+   "get closer to your sister for the picture",
+   "we cancelled the satellite tv it was too expensive",
+   "the satellite dish fell with the wind last night",
+   "they are repairing the road to villavicencio again",
+   "the road to restrepo is full of potholes",
+   "the river is rising near puerto lopez",
+   "the river took the little bridge in aguazul",
+   "my cousin moved to acacias last month",
+   "in cumaral they sell the best mamona",
+   "we passed barranca de upia really late",
+   "granada is like three hours from here",
+   "paratebueno was so hot this weekend",
+   "what a relief the cattle truck finally arrived",
+   "it was a big relief when the vet said the cow was fine",
+   "we saw a 3d movie in villavo on sunday",
+   "the kids loved the 3d glasses",
+   "my mom is coming for christmas with the whole family",
+   "how is your dad doing after the surgery",
+   "we need to vaccinate the cattle next week",
+   "the price of palm oil went down again",
+   "the palm needs fertilizer before the rains",
+   "did you watch the game last night",
+   "llaneros lost again on sunday",
+   "i need to send money to my mom",
+   "they still owe me the money for the heifers",
+   "my cell phone has no signal out here",
+   "my phone fell in the river yesterday",
+   "the coverage of the phone company is horrible at the farm",
+   "there's no service in the whole village",
+   "my aunt lives in tower two of the apartments",
+   "the antenna on the roof is crooked again",
+   "the network at the office is down again",
+   "the boundary between the two farms is the creek",
+   "the department of meta has the best sunsets",
+   "my daughter drew a map of colombia for school",
+   "the streets in yopal are flooded after the storm",
+   "my son plays legend of zelda all day",
+   "the teacher said the classes are on zoom tomorrow",
+   "the horses are far away in the other pasture",
+   "i was far from town when the truck broke down",
+   "look at the colors of the sunset over the savanna",
+   "the person at the bank was very rude"
   ],
   "es": [
    "pásame el café",
@@ -8093,7 +9243,68 @@
    "voy a hacer la transferencia por Nequi ahorita",
    "el doctor dice que tengo que bajar de peso",
    "mi hermano trabaja instalando antenas en Acacías",
-   "cuántas personas caben en la camioneta"
+   "cuántas personas caben en la camioneta",
+   "mi abuela contaba la leyenda de la llorona",
+   "la llenda del silbon me daba miedo de chiquito",
+   "dicen que la sayona sale por los caminos",
+   "la leyenda de florentino y el diablo es la mejor",
+   "acercate que no te oigo",
+   "acerquese pa la foto mijo",
+   "mas cerquita que no salen todos en la foto",
+   "alejate del caballo que patea",
+   "no me funciona el zoom de la reunion",
+   "el sum de la reunion es a las tres",
+   "ponle zoom a la foto pa ver la vaca",
+   "esa foto quedo muy de lejos",
+   "el relieve de la finca es muy plano",
+   "el terreno de mi papa es puro llano",
+   "la topografia del lote la hizo un ingeniero",
+   "esa loma es muy empinada pa la moto",
+   "los cerros de restrepo se ven bonitos",
+   "estoy mirando el mapa del viaje a yopal",
+   "el mapa del celular dice que son tres horas",
+   "se crecio el rio anoche",
+   "el rio meta esta muy crecido",
+   "la via esta mala por el invierno",
+   "la carretera a puerto lopez la estan arreglando",
+   "las calles de yopal estan inundadas",
+   "uy que lejos queda esa finca",
+   "me aleje del pueblo como dos horas",
+   "el ganado esta flaco por el verano",
+   "hay que vacunar el ganado la otra semana",
+   "la palma esta pagando mal este año",
+   "el fruto de palma todavia no lo han recogido",
+   "vamos a ver el partido de millos",
+   "llaneros perdio otra vez",
+   "mijo me presta plata pa la gasolina",
+   "la plata no alcanza pa nada",
+   "se me descargo el celular",
+   "el celular se me mojo con el aguacero",
+   "la familia de mi mujer llega el sabado",
+   "mi primo vive en acacias",
+   "en cumaral venden buena carne a la llanera",
+   "en villavo esta lloviendo durisimo",
+   "en paratebueno hace un calor tenaz",
+   "pase por barranca de upia muy de noche",
+   "en granada venden buen queso",
+   "aguazul esta creciendo mucho",
+   "la torre dos del conjunto es la de mi tia",
+   "el repetidor de la emisora se daño otra vez",
+   "no hay señal aqui en la finca",
+   "la cobertura de claro es malisima por aca",
+   "la antena de directv se cayo con el viento",
+   "anoche vimos una pelicula en 3d",
+   "que alivio que llego el camion del ganado",
+   "el limite entre meta y casanare es el rio upia",
+   "hay que arreglar la cerca del limite con el vecino",
+   "abre la puerta que viene el veterinario",
+   "cierra esa ventana que se entran los zancudos",
+   "muestrale las fotos del viaje a tu abuela",
+   "esa foto satelital de la finca salio borrosa",
+   "el circulo de estudio es los jueves",
+   "los anillos del matrimonio salieron carisimos",
+   "uy la vista desde esa loma es espectacular",
+   "mire esa nube tan negra va a llover"
   ]
  }
 }
