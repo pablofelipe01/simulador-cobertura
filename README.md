@@ -351,6 +351,30 @@ ve la simulación detrás) y un botón para que hable en voz alta o no, a mano.
   afinar con ella: la v17.5 entendía el 33 % y el 41 %, la v17.6 hecha solo con lo pedido el 56 % y el 75 %, y la v17.6
   afinada el 99 % y el 100 %; de su charla cercana (62 y 61 frases), la v17.5 tomaba 3 y 1 como pedidos, y la v17.6
   ninguna. Con las cinco tandas anteriores, ninguna frase se entiende peor que en la v17.5
+- **Melki oye mejor** (v17.7, días 2 a 6 de las mejoras de la voz): con la barra del Asistente abierta y sin su nombre,
+  un tema del cerebro solo cuenta si nombra algo del simulador y no es algo que se cuenta («the weather is really nice
+  today», «el celular no me coge señal en la casa» o «cuánto te cobraron por la moto» pasan; «dime cuánto cuesta la
+  red», «tell me how much the network costs» o «explain why Repeater 2 doesn't connect» se contestan, como pregunta).
+  Lo que Melki mismo responde, si vuelve por los parlantes («Listo, agregué un repetidor…», «I understood: delete
+  Person 2. Shall I go ahead?»), no se toma como pedido. El inglés con acento: cifras dentro de un número («four point
+  two tree minus seventy tree point four», «tirty meters»), «repiter», «pipol», «lejend», «meshur», «chein de es ef» y
+  los municipios mal oídos («tower mena», «cue maral», «monte rey», «port o lopez»). El español del llano: «oiga»,
+  «vea», «sumercé», «mijo», «hágale pues», los diminutivos («repetidorcito», «al ladito», «cerquita»), «coloque»,
+  «meta una persona», «muévame», «súbame», «un kilómetro doscientos», «Villavo». Las respuestas a «¿lo hago?» y
+  «¿quiso decir…?» como se dicen («sí, hágale», «dele pues», «listo pues», «la primerita», «la de abajo», «no, deje
+  así», «ninguna», «jes plis», «sure thing», «the fur stone», «nope», «never mind»). Lo corregido a mitad de la frase
+  («sube la Torre 2 a 40 metros, no, a 45», «move Repeater 1, I mean Repeater 2, north 1 km») se hace con lo corregido
+  y se muestra («Le entendí: …»); si borra, pregunta antes; un «no» sin pausa («al norte, no al sur») puede decir lo
+  contrario, y entonces pregunta cuál. Una frase partida por una pausa espera la segunda parte si la primera quedó a
+  medias («add a repeater», «mueve el Repetidor 1»); el «uh», los puntos sueltos y la palabra repetida al titubear no
+  estorban, y las respuestas cortas no esperan. Medido con cinco tandas nuevas escritas a ciegas (la charla, el inglés,
+  el llano, la recepción y una de control), cada una antes de tocar nada por ella: la de control, escrita después de
+  afinar con las otras, pasó del 83 % y el 89 % (v17.6) al 95 % y el 90 % sin afinar con ella. Con las once tandas
+  (1.725 frases en inglés y 1.340 en español), la v17.5 entiende el 89 % y el 92 %, la v17.6 el 92 % y el 94 % y la
+  v17.7 el 97 % y el 98 %; de la charla cercana (1.081 frases), sin su nombre la v17.5 tomaba 249 y la v17.7 8; de las
+  respuestas cortas (170), entendía 66 y ahora todas; de lo que dice Melki (100), tomaba 87 como pedido y ahora 3. La
+  revisión independiente del código encontró 11 problemas (el «no» que dice lo contrario, las cifras repetidas, el «to»
+  de un rango, órdenes tomadas por charla o por la voz de Melki): todos corregidos, cada uno con su prueba
 - **«Cerca de…» y alturas relativas** (v17.4): «pon el Repetidor 1 cerca del gateway», «acerca la Persona 2 al Repetidor
   2», «move Repeater 1 next to the gateway» o «bring Repeater 2 closer to the gateway» lo dejan a 200 m del nodo
   nombrado, del lado por donde venía (o del lado más libre); «mueve el repetidor al gateway» mueve el repetidor (el
