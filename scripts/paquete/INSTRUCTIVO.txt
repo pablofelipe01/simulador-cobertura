@@ -30,16 +30,21 @@ de "Pitch". La primera vez abre en el idioma del navegador y después
 recuerda el último que usó. Y la página abre con los paneles ocultos,
 para ver el mapa completo: las herramientas y los resultados se abren
 cuando usted quiera.
-En esta entrega: el mapa y la vista, por voz, en inglés y en español.
-Melki acerca y aleja el mapa ("acerca el mapa", "aléjalo un poquito",
-"zoom in", "zoom out a little"), abre y pliega la leyenda ("muestra la
-leyenda", "quita la leyenda", "show the legend") y muestra el relieve
-en 3D ("muestra el relieve del terreno", "show the terrain relief"),
-también cuando el reconocimiento lo escribe mal ("su min", "la
-llenda", "tea rain really") (sección 2, ff).
-En las entregas anteriores Melki empezó a entender lo que se le
-pronuncia mal (sección 2, dd y ee), y antes, el inglés y el español
-por igual (sección 2, cc). Antes: el "Lápiz" de la barra del mapa dibuja la malla a mano,
+En esta entrega: Melki oye mejor, en inglés y en español (sección 2,
+gg). Con la barra del Asistente abierta y sin decir su nombre, la
+conversación de todos los días ya no la toma como pregunta ("qué
+bonito está el día", "el celular no me coge señal en la casa"), ni lo
+que él mismo responde si vuelve por los parlantes; entiende las
+preguntas dichas como pedido ("dime cuánto cuesta la red", "tell me
+how much the network costs"), el inglés con acento con cifras,
+coordenadas y municipios ("four point two tree minus seventy tree",
+"tower mena"), el español del llano ("oiga mijo, póngame un
+repetidorcito al ladito de la Torre 2"), las respuestas cortas ("sí,
+hágale", "dele pues", "la primerita", "no, deje así", "nope") y lo
+que se corrige a mitad de la frase ("súbala a 40 metros, no, a 45").
+En la entrega anterior: el mapa y la vista, por voz (sección 2, ff);
+antes, lo que se le pronuncia mal (dd y ee) y el inglés y el español
+por igual (cc). Antes: el "Lápiz" de la barra del mapa dibuja la malla a mano,
 como en Paint (una figura cerrada es una zona; una línea, una franja a
 lo largo de una vía o un río), y Melki arma ahí la red óptima, que no
 es la de más antenas sino la del equilibrio entre la estabilidad de la
@@ -778,6 +783,38 @@ con un punto.
     ahora sí las muestra. Pruebe escribir "ale jalo un poquito" o "la
     llenda" (como lo escribe a veces el reconocimiento): Melki entiende
     "aléjalo un poquito" y "la leyenda".
+ gg) Melki oye mejor (esta entrega, los seis días de mejoras de la
+    voz). Pruébelo con la barra del Asistente Melki abierta, hablando
+    sin decir su nombre:
+    - La charla de todos los días no la toma: "qué bonito está el día",
+      "el celular no me coge señal en la casa", "cuánto te cobraron
+      por la moto", "the weather is really nice today". Lo que él mismo
+      responde, si vuelve por los parlantes ("Listo, agregué un
+      repetidor…"), tampoco. Pero "dime cuánto cuesta la red", "tell
+      me how much the network costs" o "explícame por qué la Persona 2
+      no tiene señal" sí los contesta.
+    - El inglés con acento: "put a person at four point two tree minus
+      seventy tree point four", "raise repiter one to tirty meters",
+      "design a network for the whole municipality of tower mena".
+    - El español del llano: "oiga mijo, póngame un repetidorcito al
+      ladito de la Torre 2", "coloque un repetidor a un kilómetro
+      doscientos al occidente del gateway", "ponga el gateway en
+      Villavo pues".
+    - Lo que se corrige a mitad de la frase: "sube la Torre 2 a 40
+      metros, no, a 45" (Melki muestra "Le entendí: …" y lo hace);
+      "elimina la Persona 1, digo, la Persona 2" pregunta "¿lo hago?"
+      antes de borrar. Si dice "al norte, no al sur" sin la pausa
+      después del "no", Melki pregunta cuál de las dos quiso decir.
+    - Las respuestas a "¿lo hago?" o "¿quiso decir…?": "sí, hágale",
+      "dele pues", "listo pues", "la primerita", "la de abajo", "no,
+      deje así", "ninguna"; en inglés "yes please do it", "sure
+      thing", "the first one", "nope", "never mind".
+    - Una frase partida por una pausa ("add a repeater" … "2 km north
+      of the gateway"): si la primera parte queda a medias, Melki
+      espera la segunda. Los "eh", "uh" y las palabras repetidas al
+      titubear ("envía envía quince pagos") no estorban.
+    Si alguna frase no la entiende, anote cómo la escribió el
+    reconocimiento (aparece en la barra) para sumarla a las pruebas.
 
 
 3. BUENO SABER
