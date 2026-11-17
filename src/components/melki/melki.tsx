@@ -49,7 +49,7 @@ import { cifrasInventadas, ESQUEMA_PENSAR, leerPensamiento, mensajesPensar } fro
 import { medidasEnCifras } from "./medidas";
 import { numerosEnPalabras, numerosEnPalabrasEn } from "./numeros";
 import { espanolDeMezcla, traducirPedido } from "./ingles";
-import { anclaDelSimulador, decidirVariante, esPregunta, ordenConNombreDictado, pareceCharla, pareceParaMelki, variantesEntendidas as variantesDeLoOido, variantesParaUsar, type Evaluacion, type VarianteEntendida as VarianteOida } from "./oido";
+import { anclaDelSimulador, autocorreccion, correccionDudosa, decidirVariante, esPregunta, ordenConNombreDictado, pareceCharla, pareceParaMelki, pareceVozDeMelki, quedaAMedias, temaSinNombre, variantesEntendidas as variantesDeLoOido, variantesParaUsar, type Evaluacion, type VarianteEntendida as VarianteOida } from "./oido";
 import { avisoCambio, cambioDeIdioma, sinNombres } from "./idioma-melki";
 import { PresentacionPitch, type ControlPitch, type Narrador } from "./presentacion";
 import { RecorridoRed, type ControlRecorrido } from "./recorrido-red";
@@ -127,9 +127,9 @@ const MARGEN_ECO = 800;
 const VENTANA_ECO = 2500;
 /** Melki no repite en voz la misma respuesta a un pedido por voz antes de este tiempo: así no entra en un bucle con su eco. */
 const NO_REPETIR_MS = 25000;
-const COLGANDO = /\b(en|de|del|a|al|y|o|para|con|que|la|el|los|las|un|una|hasta|por|sobre|entre|cerca|ubicame|llevame|muestrame|pon|ponme|arma|armame|disena|disename|hazme|crea|creame|agrega|busca|vamos|cubre|cubra|municipio|departamento|coordenadas)$/;
+
 /** Lo mismo en inglés («take me to…», «build a network of…»). */
-const COLGANDO_EN = /\b(in|of|to|at|on|and|or|for|with|that|the|a|an|near|between|from|by|around|within|me|put|place|build|design|make|create|add|find|cover|show|take|move|municipality|department|coordinates)$/;
+
 
 const CLAVE = "simulador-cobertura-melki-v1";
 const f1 = (x: number, d = 1) => decimalLocal(x, d);
@@ -1286,8 +1286,14 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     window.clearTimeout(m.atento);
     window.clearTimeout(m.espera);
     fijarEstadoVoz("atento");
-    // Si la frase quedó a medias («ubícame en…», «arma una red de…»), espera un poco más a que termine
-    const aMedias = (idioma() === "en" ? COLGANDO_EN : COLGANDO).test(m.comando.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[.,;:!?¿¡]+$/g, "").trim());
+    // Si la frase quedó a medias («ubícame en…», «arma una red de…», v17.7: «add a repeater», «mueve el Repetidor 1»),
+    // espera un poco más a que termine; una orden completa se hace enseguida
+    // (una respuesta corta —«sí», «no», «para», «la segunda»— no espera; y solo se evalúa lo corto, que con miles de nodos
+    // en el mapa evaluar cuesta)
+    const lengua = idioma();
+    const corta = m.comando.trim().split(/\s+/).length <= 7 && !controlDeVoz(m.comando);
+    const ev = corta ? evaluarFrase(limpiarComando(m.comando, lengua), lengua) : null;
+    const aMedias = !controlDeVoz(m.comando) && quedaAMedias(m.comando, lengua, ev !== null && (ev.nivel === 0 || (ev.nivel === 2 && !ev.completa)));
     esperarFin(aMedias ? ESPERA_A_MEDIAS_MS : ESPERA_FIN_MS);
   };
 
@@ -1350,7 +1356,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
         // «Ok», «vale» o «listo» después de una pregunta de Melki con un botón es un sí
         const previo = [...actual.current.mensajes].reverse().find((x) => x.de === "melki");
         const conBoton = previo?.acciones?.some((x) => x.accion !== "deshacer") && (idioma() === "en" ? /\?\s*$/ : /¿[^?]*\?\s*$/).test(previo.texto.split("\n")[0] ?? "");
-        if (conBoton && /^(ok|okey|vale|listo|perfecto|de acuerdo|okay|perfect|great|got it|alright|all right|fine)$/i.test(dicho.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[.,!¡]/g, "").trim()))
+        if (conBoton && /^(ok|okey|vale|listo|perfecto|de acuerdo|okay|perfect|great|got it|alright|all right|fine)(?: (?:pues|pue|mijo|mija|sumerce|senor|sir))?$/i.test(dicho.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[.,!¡]/g, "").trim()))
           return ejecutarVozComo(tx("sí", "yes"));
         return encolarVoz(fr().gracias, false, "esperando", false);
       }
@@ -1389,10 +1395,13 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       }
     }
     const texto = limpiarComando(dicho);
+    // v17.7 · Sin su nombre, lo que suena a la propia respuesta de Melki («Listo, agregué un repetidor…», «I understood:
+    // delete Person 2. Shall I go ahead?») es su voz que volvió por los parlantes: no es un pedido
+    if (!conNombre && sinNombre() && (pareceVozDeMelki(dicho) || pareceVozDeMelki(texto))) return pasarSinOrden(texto);
     // Sin su nombre (con la barra abierta) solo cuenta una orden o una pregunta del simulador: lo demás (una conversación
     // cercana, un saludo a otra persona, la hora) pasa sin interrumpir, y tampoco va a la IA. Lo que no se entendió, el
     // doble oído lo vuelve a oír en español y en inglés (Whisper, en el navegador)
-    const entiende = entiendeDicho(texto);
+    const entiende = entiendeDicho(texto, conNombre);
     // v17.5 · Sin su nombre, la charla con alguien más pasa aunque se entienda como orden o pregunta («let's go to Cumaral
     // this weekend», «my doctor wants me to do a stress test next week», «préstame la regla y un lápiz»)
     const charlaCercana = !conNombre && sinNombre() && pareceCharla(texto);
@@ -1447,7 +1456,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
    * entiende el Modelo Melki, un pedido de idioma o la respuesta a «¿quiso decir…?» (en inglés también con las palabras de
    * Melki). «fuera»: se entendió, pero no es del simulador (un saludo, la charla, la hora, el clima). «no»: no se entendió.
    */
-  const entiendeDicho = (texto: string): "si" | "fuera" | "no" => {
+  const entiendeDicho = (texto: string, conNombre = true): "si" | "fuera" | "no" => {
     const t = texto.trim();
     if (!t) return "no";
     const lengua = idiomaDelMensaje(t);
@@ -1459,8 +1468,11 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     const r1 = responder(t, contextoMelki(true, lengua));
     const r2 = traducido !== t ? responder(traducido, { ...contextoMelki(true, "es"), traducido: true }) : null;
     const sirve = (r: Respuesta | null) => r !== null && !r.noEntendido && !r.fueraDeTema;
-    if (sirve(r1) || sirve(r2)) return "si";
-    let fuera = Boolean(r1.fueraDeTema || r2?.fueraDeTema);
+    // v17.7 · Sin su nombre (con la barra abierta), un tema del cerebro solo cuenta si nombra algo del simulador: «the
+    // weather is really nice today» no es una pregunta por la lluvia («dime cuánto cuesta la red» sí cuenta)
+    const temaVale = conNombre || !sinNombre() || temaSinNombre(t, lengua, nombresNodos()) || (traducido !== t && temaSinNombre(traducido, "es", nombresNodos()));
+    if ((sirve(r1) || sirve(r2)) && temaVale) return "si";
+    let fuera = Boolean(r1.fueraDeTema || r2?.fueraDeTema) || ((sirve(r1) || sirve(r2)) && !temaVale);
     const mm = actual.current.modeloPref.activo ? modeloMelki(lengua) : null;
     if (mm) {
       try {
@@ -1475,7 +1487,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
         // orden; lo demás que entiende (un tema, una confirmación o una aclaración del simulador) sí cuenta
         const deCharla = (o: Opcion) => o.tema !== undefined && TEMAS_DE_CHARLA.has(o.tema);
         if (d.tipo === "fuera" || (d.tipo === "tema" && deCharla(d.opcion)) || (d.tipo === "aclarar" && d.opciones.length > 0 && d.opciones.every(deCharla))) fuera = true;
-        else if (!fuera && (d.tipo === "tema" || d.tipo === "confirmar" || d.tipo === "aclarar" || d.tipo === "falta")) return "si";
+        else if (!fuera && (d.tipo === "tema" || d.tipo === "confirmar" || d.tipo === "aclarar" || d.tipo === "falta") && (d.tipo !== "tema" || temaVale)) return "si";
       } catch {
         // Sin el modelo: lo deciden las reglas
       }
@@ -1553,7 +1565,7 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
       const [t1] = await plazo(transcribirEnIdiomas(audio, [ahora === "en" ? "english" : "spanish"]));
       if (!sigue()) return soltar();
       const x1 = limpiarComando(t1 ?? "", ahora);
-      if (x1 && x1 !== texto && entiendeDicho(x1) === "si" && (conNombre || !pareceCharla(x1))) {
+      if (x1 && x1 !== texto && entiendeDicho(x1, conNombre) === "si" && (conNombre || !pareceCharla(x1))) {
         setAvisoPaso(null);
         return pedirPorVoz(x1);
       }
@@ -2491,6 +2503,34 @@ export function Melki({ contexto, api, suscribir, restaurar, onAccion, onTour, v
     // (v17.5 · por voz, el nombre nuevo con mayúsculas: el reconocimiento escribe «loma alta»)
     const leida = interpretarOrden(pregunta, api, pendiente.current, contextoOrden());
     const entera = leida && deVoz ? ordenConNombreDictado(leida) : leida;
+    // v17.7 · Lo corregido a mitad de la frase por voz («sube la Torre 2 a 40 metros, no, a 45», «move Repeater 1, I mean
+    // Repeater 2, north 1 km»): si lo que queda es una orden completa, Melki la muestra («Le entendí: …») y la hace; si
+    // borra o reemplaza algo, pregunta antes («¿lo hago?»)
+    const corregido = deVoz && !desdeModelo && !desdeOido ? autocorreccion(dicho, lengua) : null;
+    if (corregido) {
+      const ev = evaluarFrase(corregido, lengua);
+      if (ev.nivel === 2 && ev.completa && ev.orden) {
+        usarVariantes([{ texto: corregido, costo: 0, cambios: [], nivel: 2, completa: true, frase: ev.frase, orden: ev.orden }], dicho, deVoz);
+        return;
+      }
+    }
+    // v17.7 · Un «no» sin pausa («… west no east», «… al norte, no al sur»): puede corregir o decir lo contrario. Si las
+    // dos lecturas son órdenes completas y distintas, Melki pregunta «¿quiso decir…?» con las dos
+    const dudosa = deVoz && !desdeModelo && !desdeOido && !corregido && entera && !ordenIncompleta(entera) ? correccionDudosa(dicho, lengua) : null;
+    if (dudosa && entera) {
+      const ev = evaluarFrase(dudosa, lengua);
+      if (ev.nivel === 2 && ev.completa && ev.orden && JSON.stringify(ev.orden) !== JSON.stringify(entera)) {
+        usarVariantes(
+          [
+            { texto: dicho, costo: 0, cambios: [], nivel: 2, completa: true, frase: pregunta, orden: entera },
+            { texto: dudosa, costo: 0, cambios: [], nivel: 2, completa: true, frase: ev.frase, orden: ev.orden },
+          ],
+          dicho,
+          deVoz,
+        );
+        return;
+      }
+    }
     if (pasos.length > 1 && !(entera && ["disenar", "elegir", "pedir-diseno", "pedir-lugar", "aviso"].includes(entera.tipo))) {
       const primera = interpretarOrden(pasos[0], api, pendiente.current, contextoOrden());
       if (primera) {

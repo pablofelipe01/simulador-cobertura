@@ -3823,6 +3823,49 @@ await flujo(
   { hablar: true, preparar: (page) => page.addInitScript(manosLibresDeMentira) },
 );
 
+// v17.7 · La recepción por voz con la barra abierta y sin su nombre: la charla de todos los días y la propia voz de Melki
+// pasan en silencio; lo corregido a mitad de la frase se hace con lo corregido; lo que borra pregunta y «sí, hágale» lo hace
+await flujo(
+  "melki-voz-recepcion",
+  async (page, foto) => {
+    await esperarSimulacion(page);
+    const { chat } = await abrirMelki(page);
+    const { hud, esperarEstado, decir, callado, sinProgreso, dichos } = asistenteDeMentira(page);
+    await page.getByRole("button", { name: "Activar el Asistente Melki" }).first().click();
+    await hud.waitFor();
+    await esperarEstado(/^atento$/);
+    await callado();
+    const n0 = await nodosEnLista(page);
+    // La charla con un tema del simulador («la señal del celular») y lo que Melki mismo diría pasan sin hacerse
+    for (const t of ["el celular no me coge señal en la casa", "Listo, agregué un repetidor a 2 km al norte del gateway"]) {
+      const antes = await dichos();
+      await decir(t);
+      await hud.getByText(/No lo tomé como orden/).waitFor({ timeout: 10000 });
+      await page.waitForTimeout(1200);
+      afirmar((await dichos()) === antes && (await nodosEnLista(page)) === n0, `«${t}» debería pasar en silencio`);
+      await callado();
+    }
+    // «…al sur de Ejemplo, no, al norte»: el repetidor queda al norte, y Melki dice lo que entendió
+    await decir("pon un repetidor a 3 km al sur de Ejemplo, no, al norte");
+    await page.waitForFunction((n) => document.querySelectorAll("[data-tour=lista-antenas] > li").length === n + 1, n0, { timeout: 20000 });
+    await sinProgreso();
+    await chat.getByText(/Le entendí: «Pon un repetidor a 3 km al norte de Ejemplo»/).first().waitFor({ timeout: 15000 });
+    await foto("corregido");
+    await esperarEstado(/^(atento|esperando)$/);
+    await callado();
+    // Lo que borra, corregido a mitad de la frase, pregunta antes; «sí, hágale» lo hace
+    await decir("elimina el Ejemplo, digo, el Repetidor 1");
+    await chat.getByText(/Le entendí: «elimina el Repetidor 1»\. Como eso borra o reemplaza algo, ¿lo hago\?/i).first().waitFor({ timeout: 15000 });
+    afirmar((await nodosEnLista(page)) === n0 + 1, "Antes de confirmar no debería borrar nada");
+    await esperarEstado(/^(atento|esperando)$/);
+    await callado();
+    await decir("sí, hágale");
+    await page.waitForFunction((n) => document.querySelectorAll("[data-tour=lista-antenas] > li").length === n, n0, { timeout: 15000 });
+    afirmar((await page.locator("[data-tour=lista-antenas]").getByText(/^Ejemplo$/).count()) === 1, "Ejemplo debería seguir en el mapa");
+  },
+  { hablar: true, preparar: (page) => page.addInitScript(manosLibresDeMentira) },
+);
+
 let fallos = 0;
 for (const r of resultados) {
   console.log(`${r.ok ? "✓" : "✗"} ${r.nombre}${r.ok ? "" : ` — ${r.error}`}`);

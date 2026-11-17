@@ -11,7 +11,7 @@
 // leerla y las frases del asistente.
 import { idioma, tx, type Idioma } from "@/lib/idioma";
 
-import { normalizarDictado } from "./dictado";
+import { normalizarDictado, quitarTartamudeo } from "./dictado";
 import { numerosEnPalabras, numerosEnPalabrasEn } from "./numeros";
 import { paraHablar } from "./voz";
 
@@ -116,8 +116,9 @@ export type ControlVoz =
 
 /** Lo que se dice para manejar la conversación (no son órdenes del simulador). */
 export function controlDeVoz(frase: string): ControlVoz | null {
-  const t = normal(frase).replace(/^(melki|oye|hola)\s+/, "");
-  if (!t) return null;
+  const t0 = normal(frase).replace(/^(melki|oye|hola)\s+/, "");
+  if (!t0) return null;
+  const t = respuestaCorta(t0);
   if (/^(para|pare|parale|detente|detengase|silencio|callate|callese|calla|basta|stop|ya basta|suficiente|ya esta bien|ok para|espera)$/.test(t)) return { tipo: "callar" };
   if (/^(repite|repitelo|repitemelo|repiteme|otra vez|de nuevo|que dijiste|no te (entendi|escuche|oi)|no escuche|como dijiste|perdon que dijiste)$/.test(t)) return { tipo: "repetir" };
   if (/^(mas detalles?|dame (mas )?detalles?|con detalle|explicame( mas| mejor)?|explica( mas| mejor)?|leelo todo|leeme todo|lee todo|dime todo|completo|la respuesta completa|amplia|amplialo|cuentame mas|y que mas|sigue)$/.test(t)) return { tipo: "detalle" };
@@ -142,7 +143,85 @@ export function controlDeVoz(frase: string): ControlVoz | null {
     return { tipo: "accion", indice: i };
   }
   if (/^(ayuda|ayudame|que (te )?puedo (decir|pedir)|que (le )?puedo decir|que sabes hacer|que puedes hacer por voz|como (te )?(uso|hablo|funciona esto)|comandos( de voz)?|que te digo)$/.test(t)) return { tipo: "ayuda" };
-  return controlEnIngles(t.replace(/^(hey|hi|hello|ok|okay)\s+(melki\s+)?/, ""));
+  return controlEnIngles(respuestaCortaEn(t0.replace(/^(hey|hi|hello|ok|okay)\s+(melki\s+)?/, "")));
+}
+
+/**
+ * v17.7 · Las respuestas cortas como se dicen en el llano, en la forma que conocen los controles: «sí, hágale», «dele
+ * pues», «sí señor», «claro que sí», «listo, hágale», «ajá, sí» → «si»; «no, deje así», «no señor», «ninguna», «déjelo
+ * quieto», «no no no» → «no»; «la primerita», «la de arriba» → «la primera»; «la del medio» → «la segunda»; «la de
+ * abajo», «la del final», «la ultimita» → «la ultima». Solo frases enteras y cortas (una orden no cambia).
+ */
+/** Lo que puede acompañar un «sí» o un «no» sin volverlo otra cosa («sí, eso era lo que quería decir», «no, así déjelo»). */
+const ACOMPANA_SI_ES = new Set("si eso esa es era lo que queria decir senor claro por favor hagale dele dale de una pues exacto correcto asi listo bueno hazlo hagalo".split(" "));
+const ACOMPANA_NO_ES = new Set("no gracias senor espere espera cancele cancela cancelalo cancelelo eso asi dejelo dejalo deje deja ahorita ahora todavia mejor ninguna ninguno de esas fue lo que dije era queria decir por nada quieto haga hagas".split(" "));
+const ORDINAL_ES: Record<string, string> = { uno: "primera", una: "primera", "1": "primera", dos: "segunda", "2": "segunda", tres: "tercera", "3": "tercera" };
+
+function respuestaCorta(t0: string): string {
+  // (v17.7 · el titubeo al empezar: «eh, la primera opción», «bueno, sí»)
+  const t = t0.replace(/^(?:(?:eh+|ah+|uh+|em+|mmm*|este|bueno)\s+)+(?=\S)/, "");
+  if (t.split(" ").length > 8) return t0;
+  const palabras = t.split(" ");
+  if (palabras[0] === "no" && palabras.length > 1 && palabras.every((w) => ACOMPANA_NO_ES.has(w))) return "no";
+  if (palabras.length > 2 && palabras.includes("no") && palabras.every((w) => ACOMPANA_NO_ES.has(w))) return "no";
+  if (palabras[0] === "si" && palabras.length > 2 && palabras.every((w) => ACOMPANA_SI_ES.has(w))) return "si";
+  const numero = t.match(/^(?:la|el)\s+(?:numero|opcion)\s+(uno|una|dos|tres|1|2|3)$/);
+  if (numero) return `la ${ORDINAL_ES[numero[1]]}`;
+  if (t.split(" ").length > 6) return t0;
+  const u = t
+    .replace(/\b(primerit[oa]|primeritic[oa])\b/g, "primera")
+    .replace(/\b(segundit[oa])\b/g, "segunda")
+    .replace(/\b(tercerit[oa])\b/g, "tercera")
+    .replace(/\b(ultimit[oa])\b/g, "ultima")
+    // (la cortesía y las muletillas de los bordes no cambian la respuesta)
+    .replace(/(?:^|\s)(?:pues|mijo|mija|sumerce|senor|senora|mi senor|don|dona|ve|vea|oiga|hombre|mano|parce|porfa|por favor|de una)(?=\s|$)/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!u) return t;
+  if (/^(si|aja si|aja|eso si|claro que si|claro|si claro|si esa|si esa es|esa es|asi es|correcto|exacto|listo|ok|okey|dale|dele|hagale|hagale pues|si hagale|si dele|si dale|listo hagale|listo dele|listo dale|hagale de una|dele de una|si si|si si si|como no|de una|hagamosle|hagale entonces|si senor|bueno si|bueno hagale|bueno dale)$/.test(u))
+    return u === "listo" || u === "ok" || u === "okey" ? u : "si";
+  if (/^(no no|no no no|no deje asi|no dejelo asi|deje asi|dejelo asi|dejelo quieto|deje quieto|dejelo|no lo haga|no haga nada|mejor no|no gracias|no mejor no|ninguna|ninguno|ninguna de esas|no ninguna|no ninguna de esas|no ninguna de las dos|cancele|cancele eso|cancelelo|olvidelo|olvide eso|no senor|nada|no nada|no eso no|eso no|no esa no)$/.test(u)) return "no";
+  if (/^(?:la|el|esa|ese)? ?(?:de arriba|primera de arriba|que esta arriba)$/.test(u)) return "la primera";
+  if (/^(?:la|el|esa|ese)? ?(?:del medio|de la mitad|del centro)$/.test(u)) return "la segunda";
+  if (/^(?:la|el|esa|ese)? ?(?:de abajo|de abajo del todo|del final|del fondo|ultima de abajo|que esta abajo)$/.test(u)) return "la ultima";
+  return u.replace(/^(?:esa|ese) /, "la ").replace(/ (?:opcion|pues)$/, "");
+}
+
+/** v17.7 · Lo mismo en inglés con acento («jes plis», «sure thing», «nope», «the fur stone», «de one at de bottom»). */
+const ACOMPANA_SI_EN = new Set("yes yeah yep sure ok okay please do it that thats what i meant mean why not go ahead thing the one sir exactly right correct of course absolutely".split(" "));
+const ACOMPANA_NO_EN = new Set("no nope nah not wait dont do that cancel it now thanks thank you leave like never mind please sir what i said meant mean its thats the one this".split(" "));
+
+function respuestaCortaEn(t0: string): string {
+  // (v17.7 · el titubeo al empezar y el «yeah» del final: «uh, sure, why not», «option one, yeah»)
+  const t = t0.replace(/'/g, "").replace(/^(?:(?:uh+|um+|er+|ah+|hm+|well|so)\s+)+(?=\S)/, "").replace(/\s+(?:yeah|yes|please)$/, "");
+  if (t.split(" ").length > 9) return t0;
+  const palabras = t.split(" ");
+  if (/^(?:no|nope|nah|not)$/.test(palabras[0]) && palabras.length > 1 && palabras.every((w) => ACOMPANA_NO_EN.has(w))) return "no";
+  if (/^(?:yes|yeah|yep|sure|uh)$/.test(palabras[0]) && palabras.length > 1 && palabras.every((w) => ACOMPANA_SI_EN.has(w))) return "yes";
+  if (/^the one at the (?:end|very end|bottom)$/.test(t)) return "last";
+  if (t.split(" ").length > 7) return t0;
+  const u = t
+    .replace(/'/g, "")
+    .replace(/\bde\b/g, "the")
+    .replace(/\bokey\b/g, "okay")
+    .replace(/\bdat\b/g, "that")
+    .replace(/\b(?:jes|jess|yess|yea)\b/g, "yes")
+    .replace(/\b(?:shur|shure)\b/g, "sure")
+    .replace(/\b(?:plis|pliz|pleace)\b/g, "please")
+    .replace(/\b(?:tanks|tenks)\b/g, "thanks")
+    .replace(/\b(?:fur stone|fir stone|furst|firs|fist)\b/g, "first")
+    .replace(/\b(?:sec and|secon)\b/g, "second")
+    .replace(/\b(?:turd|tird|terd|thirt)\b/g, "third")
+    .replace(/\bnumber tree\b/g, "number three")
+    .replace(/\b(?:lass|lust)\b/g, "last")
+    .replace(/\s+(?:please|sir|mam|maam|buddy|man)$/g, "")
+    .trim();
+  if (/^(yes|yeah|yep|yup|sure|sure thing|of course|okay go|ok go|okay go ahead|ok go ahead|go|yes go ahead|yeah go ahead|yeah go a head|yes go a head|go a head|yes thats right|thats right|yes sir|yes thats it|thats it|thats the one|yes that one|yeah that one|yeah the one|that one|yes do it please|yes please do|absolutely|definitely|affirmative|do that|yes yes)$/.test(u)) return "yes";
+  if (/^(nope|nah|no no|no no no|no dont|dont|no dont do it|dont do it|not that|not that one|no wait|none|none of them|none of those|no thanks|no thank you|no sir|no not that|cancel that|stop that)$/.test(u)) return "no";
+  if (/^(?:the )?(?:one )?(?:on top|at the top|top one|first one on top|the top one)$|^the one on top$|^the one at the top$/.test(u)) return "first";
+  if (/^(?:the )?(?:middle one|one in the middle|the middle)$|^the one in the middle$/.test(u)) return "second";
+  if (/^(?:the )?(?:one at the bottom|bottom one|final one|the final one|last one at the bottom)$|^the one at the bottom$/.test(u)) return "last";
+  return u.replace(/^number (one|two|three|four|1|2|3|4)$/, "$1").replace(/ option$/, "");
 }
 
 /** Los mismos controles dichos en inglés («stop», «say that again», «tell me more», «yes, do it», «the second one»…). */
@@ -178,11 +257,109 @@ export function limpiarComando(frase: string, lengua: Idioma = idioma()): string
   let t = frase.replace(/\s+/g, " ").trim();
   t = numerosEnPalabras(t);
   t = normalizarDictado(t);
+  t = hablaLlanera(sinRuidoEnMedio(t));
   // Muletillas al empezar o al terminar («eh», «este», «o sea», «bueno», «mmm»), también repetidas al hablar rápido
   // (v17.5 · también «de una» y «ahorita», que no cambian la orden)
   for (let i = 0; i < 3; i++) t = t.replace(/^(eh+|em+|m+|este|bueno|pues|a ver|mira|oye|o sea|osea|entonces|digamos|ehm+|listo|vale|okey|ok|de una)[, ]+(?=\S)/i, "");
   t = t.replace(/[, ]+(eh+|por favor|porfa|porfavor|gracias|pues|o sea|ya|de una|ahorita|orita)$/i, "");
+  // (v17.7 · también «mijo» o «sumercé» al final, salvo en un nombre nuevo: «renombra la Torre 2 como Finca Mijo»)
+  if (!/\b(?:renombr|ren[oó]mbr|nombre|ll[aá]m[aeo]|como\s)/i.test(t)) t = t.replace(/[, ]+(mijo|mija|sumerc[eé]|pues)$/i, "");
+  t = preguntaIndirecta(t);
   return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+/**
+ * v17.7 · El ruido que el reconocimiento escribe en medio de lo dicho: «uh», «eh», «mmm», los puntos sueltos («show the.
+ * legend. please») y la palabra repetida al titubear («envía envía quince pagos», «turn
+ * on the the ruler»). No toca «no, no», los números (tampoco «to», que puede ser «two»: «Person to to…») ni lo que va
+ * entre comillas.
+ */
+const NO_SE_REPITE = /^(?:no|si|sí|ya|muy|very|bye|chao|ja|ha|to|too|tu|for|fore|won|tree|free|fife|oh|zero|one|two|three|four|five|six|seven|eight|nine|ten|cero|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|cien|mil|hundred|thousand)$/i;
+
+function sinRuidoEnMedio(texto: string): string {
+  if (/["«“]/.test(texto)) return texto;
+  let t = texto
+    .replace(/(?:^|[\s,.;]+)(?:uh+|um+|eh+|ehm+|hm+|hmm+|ah+|mmm*|erm?)(?=[\s,.;!?]|$)[,.;]?/gi, " ")
+    .replace(/(?<=\p{L})\.\s+(?=\p{Ll})/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  t = t.replace(/(?<![\p{L}\d])(\p{L}{2,})(?:\s*,?\s+\1)+(?![\p{L}\d])/giu, (m, w: string) => (NO_SE_REPITE.test(w) ? m : w));
+  return quitarTartamudeo(t);
+}
+
+/**
+ * v17.7 · El español del llano, como lo entiende el intérprete: la cortesía y las muletillas al empezar («oiga», «vea»,
+ * «sumercé», «mijo», «hágale pues», «dele pues», «ahorita»), los diminutivos («un repetidorcito», «al ladito», «cerquita»,
+ * «pegadito», «un poquitico») y «el repe 1». «Hágale zoom» o «dele zoom» siguen siendo órdenes (solo se quita con «pues»
+ * o con una pausa).
+ */
+function hablaLlanera(texto: string): string {
+  let t = texto;
+  for (let i = 0; i < 4; i++)
+    t = t.replace(/^(?:oiga|oigan|vea|sumerc[eé]|mijo|mija|mi señor|señor|ahorita|orita|porfa|ay|uy|aj[aá]|h[aá]gale\s+pues|dele\s+pues|listo\s+pues|bueno\s+pues|h[aá]gale(?=\s*,)|dele(?=\s*,))[, ]+(?=\S)/i, "");
+  return t
+    .replace(/\brepetidorcit[oa]s?\b/gi, (m) => (/s$/i.test(m) ? "repetidores" : "repetidor"))
+    .replace(/\bpersonitas?\b/gi, (m) => (/s$/i.test(m) ? "personas" : "persona"))
+    .replace(/\b(antenit|torrecit|nodit)(a|o)(s?)\b/gi, (_m, r: string, _v: string, pl: string) => ({ antenit: "antena", torrecit: "torre", nodit: "nodo" })[r.toLowerCase()] + pl)
+    .replace(/\bladito\b/gi, "lado")
+    .replace(/\bcerquit(?:a|ica)\b/gi, "cerca")
+    .replace(/\bpegadit(o|a)\b/gi, "pegad$1")
+    .replace(/\b(?:poquitico|poquitito|tantico|tantito)\b/gi, "poquito")
+    .replace(/\brepe\b(?=\s+(?:\d|uno|dos|tres|cuatro)\b)/gi, "repetidor")
+    .replace(/\bvillavo\b/gi, "Villavicencio")
+    .replace(/\bjopal\b/gi, "Yopal")
+    .replace(/\bmallitas?\b/gi, (m) => (/s$/i.test(m) ? "mallas" : "malla"))
+    .replace(/\bredecitas?\b/gi, (m) => (/s$/i.test(m) ? "redes" : "red"))
+    .replace(/\bkilom[eé]trico\b/gi, "kilómetro")
+    .replace(/\bce\s+ese\s+ve\b/gi, "CSV")
+    .replace(/\bka\s+eme\s+zeta\b/gi, "KMZ")
+    .replace(/\bpe\s+de\s+efe\b/gi, "PDF")
+    .replace(/(?<![\d.])(\d+)\s+punto\s+(\d+)(?=\s*(?:m|metros|km|kil[oó]metros|%)(?![\p{L}]))/giu, "$1.$2")
+    // «un kilómetro doscientos» (1,2 km), «dos kilómetros quinientos» (2,5 km)
+    .replace(/(?<![\p{L}\d])(\d+|un|uno)\s+kil[oó]metros?\s+(\d{3})(?!\d)(?!\s*(?:m|metros|mts)(?![\p{L}]))/giu, (_m, a: string, b: string) => `${((/^\d/.test(a) ? Number(a) : 1) + Number(b) / 1000).toString()} km`);
+}
+
+/**
+ * v17.7 · Una pregunta dicha como pedido («dime por qué el Repetidor 2 no se conecta», «quiero saber cuántas personas
+ * aguanta», «muéstrame cuáles nodos quedaron sin señal»): es la pregunta, con sus signos, para que no se tome como la
+ * orden de algún verbo de adentro («conecta»).
+ */
+function preguntaIndirecta(t: string): string {
+  const m = t.match(/^(?:(?:melki|oye)[, ]+)?(?:d[ií]me|d[ií]game|cu[eé]ntame|cu[eé]nteme|expl[ií]came|expl[ií]queme|quiero saber|quisiera saber|me gustar[ií]a saber|me dices|me puedes decir|me puede decir|mu[eé]strame|mu[eé]streme)[, ]+(?:si[, ]+)?((?:qu[eé]|cu[aá]nto|cu[aá]ntos|cu[aá]ntas|cu[aá]nta|cu[aá]l|cu[aá]les|d[oó]nde|por qu[eé]|c[oó]mo|hasta d[oó]nde|hasta cu[aá]ntos|hasta cu[aá]ntas|a cu[aá]nto|qui[eé]n)(?=\s).+?)[?.!]*$/i);
+  return m ? `¿${m[1]}?` : t;
+}
+
+/**
+ * v17.7 · Lo mismo en inglés: «tell me how much the network costs» → «how much does the network cost?», «I want to know
+ * how many people Repeater 1 can handle» → «how many people can Repeater 1 handle?», «tell me if Person 2 has coverage»
+ * → «does Person 2 have coverage?», «explain why Repeater 2 doesn't connect» → «why doesn't Repeater 2 connect?».
+ */
+function preguntaIndirectaEn(t: string): string {
+  const m = t.match(/^(?:(?:melki|hey melki)[, ]+)?(?:(?:can|could) you |please )?(?:tell me|let me know|i want to know|i wanna know|i'?d like to know|i would like to know|i need to know|i wonder|explain(?: to me)?)[, ]+(.+?)[?.!]*$/i);
+  if (!m) return t;
+  let q = m[1].trim();
+  const r: [RegExp, string][] = [
+    [/^(?:if|whether) (there) (is|are) (.+)$/i, "$2 $1 $3"],
+    [/^(?:if|whether) (i|we) (should|can|could) (.+)$/i, "$2 $1 $3"],
+    [/^(?:if|whether) (i|we) (need|have) (.+)$/i, "do $1 $2 $3"],
+    [/^(?:if|whether) (.+?) (has|have) (.+)$/i, "does $1 have $3"],
+    [/^(?:if|whether) (.+?) (is|are|can|will) (.+)$/i, "$2 $1 $3"],
+    [/^why (.+?) (doesn'?t|does not|don'?t|do not|isn'?t|is not|aren'?t|can'?t|cannot|won'?t|didn'?t) (.+)$/i, "why $2 $1 $3"],
+    [/^(how far|where|what|which \w+) (.+?) (is|are) (from|to|between|for|in|on|at)\b(.*)$/i, "$1 $3 $2 $4$5"],
+    [/^(how many \w+|how much|what|which \w+) (.+?) (can|could|will|would|should) (\w+)(.*)$/i, "$1 $3 $2 $4$5"],
+    [/^(how much|what) (it|that|this) (would|will|could) (\w+)(.*)$/i, "$1 $3 $2 $4$5"],
+    [/^(how much|what) (the .+?) (costs|covers|needs)\b(.*)$/i, "$1 does $2 $3$4"],
+    [/^how many (\w+) (there are|there is)\b(.*)$/i, "how many $1 are there$3"],
+    [/^what (.+?) (is|means)$/i, "what $2 $1"],
+    [/^(the (?:total )?(?:cost|price|distance|coverage)\b.*)$/i, "what is $1"],
+  ];
+  for (const [re, por] of r) {
+    if (re.test(q)) {
+      q = q.replace(re, por).replace(/\bdoes (.+?) (costs|covers|needs)\b/i, (_x, a: string, v: string) => `does ${a} ${v.replace(/s$/, "")}`).replace(/\bwhat means\b/i, "what does").replace(/\bwhat does (.+)$/i, "what does $1 mean");
+      return `${q}?`;
+    }
+  }
+  return /^(how|what|why|where|which|who)\b/i.test(q) ? `${q}?` : t;
 }
 
 const COSA_A_LA_VISTA =
@@ -209,11 +386,32 @@ function soEsShow(t: string): string {
 
 /** Lo dicho en inglés, listo para Melki: números en cifras y sin muletillas («um», «so», «okay so»). */
 function limpiarComandoIngles(frase: string): string {
-  let t = numerosEnPalabrasEn(frase.replace(/\s+/g, " ").trim());
+  let t = numerosEnPalabrasEn(cifrasOidasEn(sinRuidoEnMedio(frase.replace(/\s+/g, " ").trim())));
   t = soEsShow(t);
-  for (let i = 0; i < 3; i++) t = t.replace(/^(um+|uh+|er+|erm|hmm+|so|well|like|okay so|ok so|right|alright|now|let me see|you know)[, ]+/i, "");
-  t = t.replace(/[, ]+(um+|uh+|please|thanks|thank you)$/i, "");
+  for (let i = 0; i < 3; i++) t = t.replace(/^(um+|uh+|er+|erm|hm+|hmm+|ah+|so|well|like|okay so|ok so|right|alright|now|let me see|you know)[, ]+/i, "");
+  for (let i = 0; i < 2; i++) t = t.replace(/[, ]+(um+|uh+|hm+|ah+|er+|please|thanks|thank you)$/i, "");
+  t = preguntaIndirectaEn(t);
   return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+/**
+ * v17.7 · Las cifras dichas con acento dentro de un número («four point two tree minus seventy tree point six one», «for
+ * point two», «ninety fife percent», «tirty five meters»): «tree», «for», «fife», «to» y «won» solo cuentan como números
+ * pegados a otro número o a «point» (fuera de un número son palabras: «a mesh for 100 users», «move it to 4.25»).
+ */
+function cifrasOidasEn(texto: string): string {
+  const MAPA: Record<string, string> = { tree: "three", fife: "five", for: "four", to: "two", too: "two", won: "one", tirty: "thirty", tventy: "twenty", fourty: "forty" };
+  let t = texto.replace(/\b(tirty|tventy|fourty)\b/gi, (m) => MAPA[m.toLowerCase()]);
+  // Después de las decenas: «seventy tree», «ninety fife» (no «to» ni «for»: «from thirty to forty», «ninety for all»)
+  t = t.replace(/(\b(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)\s+)(tree|fife|won)\b/gi, (_m, a: string, w: string) => a + MAPA[w.toLowerCase()]);
+  // Los decimales después de «point» dentro de un número («four point two tree»; «point to the gateway» es otra cosa)
+  for (let i = 0; i < 4; i++)
+    t = t.replace(new RegExp(String.raw`((?:\d|\b(?:zero|oh|one|two|three|four|five|six|seven|eight|nine|tree|fife))\s+point(?:\s+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine|\d))*\s+)(tree|fife|for|to|too|won)\b`, "gi"), (_m, a: string, w: string) => a + MAPA[w.toLowerCase()]);
+  // Antes de «point»: «for point two», «tree point five»
+  t = t.replace(/\b(tree|fife|for|won)(?=\s+point\s+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine|tree|fife|for|to|too|won|\d)\b)/gi, (w) => MAPA[w.toLowerCase()]);
+  // «tree» o «fife» delante de una unidad o de «hundred»: «tree meters», «fife hundred»
+  t = t.replace(/\b(tree|fife)(?=\s+(?:hundred|thousand|meters?|metres?|kilomet\w*|km|miles?|feet|ft|percent|degrees|d\s*b|dbi|dbm)\b)/gi, (w) => MAPA[w.toLowerCase()]);
+  return t;
 }
 
 /**
