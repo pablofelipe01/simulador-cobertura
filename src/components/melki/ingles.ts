@@ -1107,9 +1107,15 @@ const USTED: Record<string, string> = {
   // v17.4 · También los que se oyen mucho por voz
   deje: "deja", dejelo: "déjalo", anime: "anima", pone: "pon", ponele: "ponle", ensene: "enseña", vuelva: "vuelve", empiece: "empieza",
   cubrame: "cúbreme", calculeme: "calcúlame", pase: "pasa", inscribalo: "inscríbelo",
+  // v17.7 · Los del llano: «coloque», «meta», «muévame», «súbame», «bájeme», «agrégueme»
+  coloque: "coloca", coloquelo: "colócalo", coloqueme: "colócame", metale: "métele", metame: "méteme", muevame: "mueve",
+  muevamelo: "muévelo", subame: "sube", subamelo: "súbelo", bajeme: "baja", bajemelo: "bájalo", agregueme: "agrega", quiteme: "quítame",
+  borreme: "borra", corrame: "córreme", arrimeme: "arrima", acerqueme: "acerca", subeme: "sube", bajame: "baja", mueveme: "mueve", eliminemelo: "elimínalo", acerquemelo: "acércalo", alejemelo: "aléjalo", arrimemelo: "arrímalo",
 };
 const sinTildes = (x: string) => x.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-function conElTu(t: string): string {
+function conElTu(t0: string): string {
+  // («Meta» también es el departamento: solo es «mete» antes de lo que se mete)
+  const t = t0.replace(/^(\s*(?:(?:melki|por favor|porfa|oiga|oye|señor|señora|bueno|listo|ok)[,\s]+)*)(m)eta(?=\s+(?:un|una|el|la|los|las|otro|otra)\b)/i, "$1$2ete");
   return t.replace(/^(\s*(?:(?:melki|por favor|porfa|oiga|oye|señor|señora|bueno|listo|ok)[,\s]+)*)([A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+)/i, (m, antes: string, v: string) => {
     const tu = USTED[sinTildes(v)];
     if (!tu) return m;

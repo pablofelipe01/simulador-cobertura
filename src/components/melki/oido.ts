@@ -179,6 +179,42 @@ const REGLAS_EN: Regla[] = [
   segura(/\b(?:geitwey|geitwei|geitguey|gueitwey|gueitguey|geitgüey)\b/gi, "gateway", 0.4),
   segura(/\b(?:netguork|n[eé]tguork|netuork|netwerk)\b/gi, "network", 0.4),
   segura(/\b(?:kaverech|k[aá]berech|caverech|coberech)\b/gi, "coverage", 0.4),
+  // v17.7 · Más del inglés escrito como suena con acento del llano («repiter», «pipol», «lejend», «meshur», «dissain»…)
+  segura(/\b(?:repiter|repitter|ripiter|ripiter|repiters|repitters|ripiters)\b/gi, (m: string) => (/s$/i.test(m) ? "repeaters" : "repeater"), 0.4),
+  segura(/\b(?:geitway|gueitway|geit\s+wey|geit\s+way)\b/gi, "gateway", 0.4),
+  segura(/\b(?:pipol|pipel|pipols)\b/gi, "people", 0.4),
+  segura(/\b(?:lejend|lejen|leyend|leyen|lechend)\b/gi, "legend", 0.4),
+  segura(/\b(?:handel|jandel|jandle)\b/gi, "handle", 0.4),
+  segura(/\b(?:dissain|disain|dissein|disein)\b/gi, "design", 0.4),
+  segura(/\b(?:meshur|mesher|meshure|mezur)\b/gi, "measure", 0.4),
+  segura(/\b(?:distans|distanse)\b/gi, "distance", 0.4),
+  segura(/\b(?:chein|cheinch|cheinsh|chench)\b/gi, "change", 0.4),
+  segura(/^(?:hau|jau)\b/gi, "how", 0.4),
+  segura(/^(?:fain|faind)\b/gi, "find", 0.4),
+  segura(/^(?:tek|teik)\s+mi\b/gi, "take me", 0.4),
+  segura(/^(?:sou|sho|chou)\s+(?:de|da|the)\b/gi, "show the", 0.4),
+  segura(/\b(?:es\s+ef|ese\s+efe)\b/gi, "SF", 0.4),
+  segura(/\b(?:plis|pliz|pliss)\s*$/gi, "please", 0.3),
+  segura(/(?<=\b(?:of|to|on|at|in|from|with|show|move|delete|remove|add|measure|change|raise|select)\s+)de\s+(?=(?:gateway|geitwey|repeaters?|legend|distance|map|network|coverage|SF|es\s+ef|nodes?|people|person|tower|est|east|nort|north|south|west|wes)\b)/gi, "the ", 0.4),
+  segura(/(?<=\bto\s+)de\s+(?=(?:nort|north|south|est|east|west|wes)\b)/gi, "the ", 0.4),
+  segura(/(?<=\d\s*(?:km|kilomet\w*|meters?|m)\s+(?:to\s+)?(?:the\s+)?)est\b/gi, "east", 0.4),
+  segura(/\s+an\s+(?=simulate\b|simulate\s+again\b)/gi, " and ", 0.4),
+  segura(/\bwit\s+(?=a\b|the\b|an\b)/gi, "with ", 0.4),
+  segura(/(?<=\b(?:delete|remove|erase|wipe|move|raise|show|hide|connect|select|populate)\s+)ol\s+(?=(?:the|de|da)\b)/gi, "all ", 0.5),
+  regla(/^(?:mof|mob|muf|muv)\b/gi, "move", 0.7),
+  regla(/^(?:pot|poot)\s+(?=a\b|an\b|the\b)/gi, "put ", 0.7),
+  // (lo que borra nunca es seguro: «delit» solo como versión dudosa, y entonces Melki pregunta «¿lo hago?»)
+  regla(/^(?:delit|dilit|delet)\b/gi, "delete", 0.7),
+  // Los municipios dichos en inglés o mal oídos («cue maral», «tower mena», «monte rey», «port o lopez»)
+  segura(/\b(?:cue\s*mar\s*al|cue\s+maral|coo\s*maral|cu\s+maral)\b/gi, "Cumaral", 0.4),
+  segura(/\b(?:tower\s+mena|taura\s+mena|tau\s+ramena|towel\s+mena)\b/gi, "Tauramena", 0.4),
+  segura(/\bmonte\s+rey\b/gi, "Monterrey", 0.4),
+  segura(/\b(?:port\s+o\s+lopez|porto\s+lopez|puerto\s+lopes|port\s+lopez)\b/gi, "Puerto López", 0.4),
+  segura(/\b(?:villa\s*visensio|villa\s*bisencio|villavisensio|villabisencio|bia\s+vicencio)\b/gi, "Villavicencio", 0.4),
+  segura(/\b(?:a\s+casias|a\s+cacias)\b/gi, "Acacías", 0.4),
+  segura(/\b(?:agua\s+sul|agua\s+zul|aqua\s+sul)\b/gi, "Aguazul", 0.4),
+  segura(/\b(\d+)\s+d\s+b\b/gi, "$1 dB", 0.4),
+  segura(/(?<=\bpoint\s+(?:it|repeater\s+\w+|person\s+\w+|tower\s+\w+|ejemplo|the\s+gateway|gateway)\s+)(?:sauce|sout|souse)\s*$/gi, "south", 0.4),
   // Siglas deletreadas y coordenadas dichas («k m z», «4 point 25 minus 73 point 4»)
   segura(/\bk\.?\s+m\.?\s+z\b|\bkay\s+em\s+zee\b/gi, "KMZ", 0.4),
   segura(/\bc\.?\s+s\.?\s+v\b|\bsee\s+ess\s+vee\b/gi, "CSV", 0.4),
@@ -255,7 +291,9 @@ const REGLAS_EN: Regla[] = [
   segura(/\bproto\s+(?:call|col|cole)\b/gi, "protocol", 0.4),
   segura(/(?<=\d\s*(?:km|kms|kilomet\w*|meters?|metres?|m|miles?)\s+)with\s+in\b|\bwith\s+in(?=\s+\d)/gi, "within", 0.3),
   segura(/(?<=\b(?:\d+\s*(?:km|kms|kilomet\w*|meters?|metres?|m|miles?)|people|persons|users|nodes)\s+)a\s+round\b|\ba\s+round(?=\s+(?:the\s+)?(?:repeater|gateway|person|node|tower|antenna|each|every|it|here)\b)/gi, "around", 0.3),
-  segura(/(?<=\b(?:actual|real|flat|plain|on|use|the|with|without|no)\s+)(?:the\s+rain|terrane|ter\s+rain|tear\s+rain|train)\b/gi, "terrain", 0.5),
+  // (v17.7 · «the rain» solo después de «actual», «real», «flat», «plain» o «use»: «with the rain» es la lluvia)
+  segura(/(?<=\b(?:actual|real|flat|plain|use)\s+)the\s+rain\b/gi, "terrain", 0.5),
+  segura(/(?<=\b(?:actual|real|flat|plain|on|use|the|with|without|no)\s+)(?:terrane|ter\s+rain|tear\s+rain|train)\b/gi, "terrain", 0.5),
   segura(/\b(?:pen\s+seal|pen\s+sill|pencil's|pen\s+sell)\b/gi, "pencil", 0.4),
   segura(/\b(?:rule\s+her|ruler's|rule\s+or)\b/gi, "ruler", 0.4),
   segura(/\bgoogle\s+(?:art|earth|her|erth|ert|earth's)\b/gi, "Google Earth", 0.3),
@@ -873,7 +911,7 @@ const REGLAS_ES: Regla[] = [
   segura(/^a\s+garr(a|e)\b/i, "agarr$1", 0.4),
   segura(/(?<=\b(?:mapa|vista|capa|relieve)\s+)tipogr[aá]fico\b/gi, "topográfico", 0.4),
   // «Pa'» es «para»; «la re» al final, «la red»; «qué no dos», «qué nodos»; «cuánta persona», «cuántas personas»
-  segura(/\bpa'?\s+(?=[A-ZÁÉÍÓÚÑ]|el\b|la\b|los\b|las\b|un\b|una\b|cumaral|restrepo|granada|yopal|villavicencio|villavo|villanueva|acac[ií]as|puerto)/g, "para ", 0.4),
+  segura(/\bpa'?\s+(?=[A-ZÁÉÍÓÚÑ]|el\b|la\b|los\b|las\b|un\b|una\b|cumaral|restrepo|granada|yopal|villavicencio|villavo|villanueva|acac[ií]as|puerto|paratebueno|cabuyaro|tauramena|aguazul|man[ií]\b|monterrey|barranca|guamal|castilla|san\s+mart[ií]n|orocu[eé]|trinidad|sabanalarga)/g, "para ", 0.4),
   segura(/\b(la|una|mi|esta|toda\s+la)\s+re\b(?=\s*[?.!]?\s*$)/gi, "$1 red", 0.4),
   segura(/(?<=\b(?:qu[eé]|cu[aá]les|los|cu[aá]ntos|esos|estos|todos\s+los)\s+)no\s+dos\b/gi, "nodos", 0.4),
   segura(/\bcu[aá]nta\s+(persona|antena|torre)\b/gi, (_m: string, p: string) => `cuántas ${p}s`, 0.4),
@@ -1717,6 +1755,27 @@ const CHARLA_CERCANA = new RegExp(
     // pregunta así: «¿qué nodos están fallando?», «¿cuántas personas están usando la red?»)
     String.raw`\b(?:estan|estaban|estamos|estoy|estaba)\s+(?!(?:usando|fallando|llegando|funcionando|conectando|recibiendo|enviando|mandando|transmitiendo|retransmitiendo|repitiendo|cubriendo|perdiendo|saturando|colapsando|esperando|saltando|rebotando|buscando|cayendo)\b)\p{L}+(?:ando|iendo|yendo)\b`,
     String.raw`\bvamos\s+a\s+(?:comprar|almorzar|comer|salir|pasear|ver\s+la\s+novela)\b`,
+    // v17.7 · El coleo, la vaquería, el ventilador, lo que se cobra o se manda, a quién buscan y quién viene; lo que uno
+    // caminó, perdió o no le llegó, y lo que otros están haciendo («they're putting up a new tower…»)
+    String.raw`\b(?:camine|caminamos|anduve|anduvimos|walked|drove|rode)\b|\bi\s+lost\s+(?:signal|the\s+signal|my|it)\b|\bme\s+quede\s+sin\b|\bno\s+me\s+(?:salieron|llegaron|entraron|cargaron)\b|\bthey(?:'re|\s+are)\s+\w+ing\b`,
+    String.raw`\b(?:coleo|vaqueria|parrando|joropo|bazaa?r|bazar)\b`,
+    String.raw`\b(?:ventilador|abanico|aire\s+acondicionado|persiana|hamaca|televisor|lavadora|licuadora)\b|\b(?:the\s+)?(?:fan|ac|air\s+conditioning|blinds|hammock)\b`,
+    String.raw`\b(?:te|me|le|les|nos)\s+cobr\w+|\b(?:te|le|les)\s+mand(?:e|o|aste|amos|aron)\b|\bun\s+audio\b|\b(?:i'?ll|i\s+will|let\s+me)\s+send\s+you\b|\bsend\s+you\s+the\s+(?:location|address|photo|picture|audio)\b`,
+    String.raw`\b(?:lo|la|los|las|te|me|le)\s+esta(?:n)?\s+buscando\b|\b(?:take|get)\s+me\s+off\b|\bsacame\s+de\b`,
+    String.raw`\b(?:viene|vienen|llega|llegan|vuelve|vuelven)\s+(?:la\s+otra\s+semana|manana|hoy|pasado\s+manana|el\s+(?:lunes|martes|miercoles|jueves|viernes|sabado|domingo))\b`,
+  ].join("|"),
+  "u",
+);
+
+/** v17.7 · La vida del llano que roza las órdenes (las vías, ir a pie o en moto): charla si no se pide nada. */
+const CHARLA_DEL_LLANO = new RegExp(
+  [
+    // v17.7 · Las vías cerradas o con derrumbe, cómo se va (a pie, en moto) y lo que no se debe hacer («don't cross…»):
+    // charla solo si no se pide nada («pon un repetidor junto a la vía donde hay derrumbe» sí es una orden)
+    String.raw`\b(?:the\s+)?road\b.*\b(?:is|was|are|were)\s+(?:closed|open|blocked|flooded|full|bad|terrible|washed\s+out)\b|\b(?:pave|paving|potholes?|landslide|mudslide)\b`,
+    String.raw`\b(?:carretera|via|trocha|camino)\b.*\b(?:derrumbe|cerrad[ao]|huecos|trancon|pavimenta\w*|inund\w*|tapad[ao]|bloquead[ao])\b|\b(?:derrumbe|trancon)\b`,
+    String.raw`\b(?:don'?t|do\s+not)\s+(?:cross|walk|drive|swim|touch|worry|eat|drink|go\s+out)\b`,
+    String.raw`\b(?:vamos|voy|vamonos|fuimos|me\s+fui|ir|llegamos|vinimos|go|going|went|walk|drive)\b.*(?:\ba\s+pie\b(?!\s+de\s+monte)|\ben\s+(?:la\s+|el\s+)?(?:moto|bus|buseta|carro|camioneta|bicicleta|cicla|caballo|mula|lancha|chalupa)\b|\bon\s+foot\b|\bby\s+(?:bus|car|bike|motorcycle|horse|boat)\b)|\b(?:mi|tu|su)\s+(?:moto|cicla|bicicleta|caballo|mula|lancha)\b|\b(?:te|me|le)\s+costo\b`,
   ].join("|"),
   "u",
 );
@@ -1737,7 +1796,9 @@ export function pareceCharla(texto: string): boolean {
   // (el pasado con tilde, en lo dicho tal cual: «el médico le mandó…»; sin tildes sería «mando», una orden)
   // («se cayó la red», «¿qué me dijiste?», «¿a la Persona 2 le llegó?», «¿qué le pasó al Repetidor 1?» sí pueden ser
   // para Melki: solo lo que otro le hizo a alguien más)
-  return CHARLA_CERCANA.test(limpioParaVer(visto)) || /(?<![\p{L}])(?:le|les)\s+(?!(?:llegó|sirvió|funcionó|alcanzó|falló|cubrió|pasó|quedó|faltó|respondió|contestó|conectó|cayó|salió|tocó)(?![\p{L}]))\p{L}+ó(?![\p{L}])|(?<![\p{L}])(?:le|les|me)\s+(?:dijo|hizo|puso|trajo|dio|regaló)(?![\p{L}])/iu.test(visto);
+  const limpio = limpioParaVer(visto);
+  if (CHARLA_DEL_LLANO.test(limpio) && (esPregunta(visto) || !(VERBO_PEDIDO_EN.test(limpio) || VERBO_PEDIDO_ES.test(limpio))) && !trasUnaPausaPide(visto)) return true;
+  return CHARLA_CERCANA.test(limpio) || /(?<![\p{L}])(?:le|les)\s+(?!(?:llegó|sirvió|funcionó|alcanzó|falló|cubrió|pasó|quedó|faltó|respondió|contestó|conectó|cayó|salió|tocó)(?![\p{L}]))\p{L}+ó(?![\p{L}])|(?<![\p{L}])(?:le|les|me)\s+(?:dijo|hizo|puso|trajo|dio|regaló)(?![\p{L}])/iu.test(visto);
 }
 
 /* ───────────── Cuál versión usar ───────────── */
@@ -1893,4 +1954,195 @@ export function decidirVariante<O>(vs: VarianteEntendida<O>[], o: { clave: (v: V
   if (dudosas.length) return { tipo: "dudas", opciones: [v, ...dudosas] };
   if (o.destructiva(v)) return { tipo: "confirmar", variante: v };
   return { tipo: "hacer", variante: v };
+}
+
+/* ───────────── v17.7 · Sin su nombre: los temas, su propia voz, las frases a medias y las autocorrecciones ───────────── */
+
+/** Más palabras del simulador, para saber si un tema del cerebro se le dijo a Melki (la leyenda, el SF, la frecuencia…). */
+const ANCLA_TEMA =
+  /\b(?:legend|leyenda|maps?|mapas?|sf|esf|spreading\s+factor|spending\s+factor|factor\s+(?:de\s+)?dispersion|ese\s+efe|frequenc(?:y|ies)|frecuencias?|mhz|megahertz|mega\s+hertz|dbm|dbi|db|debe\s+eme|reliability|confiabilidad|vegetation|vegetacion|oil\s+palm|yagi|projects?|proyectos?|flow|flujo|redundan\w*|backup|back\s+up|respaldo|limits|limites|measur\w*|medicion\w*|bands?|bandas?|inge|calles|streets|nods|solar(?:es)?)\b/i;
+/** Lo de todos los días que nombra una pieza sin ser del simulador («la señal del celular», «a solar panel»). */
+const AJENO_EN = /\b(?:cell(?:\s*phone)?\s+(?:towers?|signal|service|coverage|network)|(?:phone|cell|wifi|wi-fi)\s+(?:signal|service|coverage)|solar\s+panels?|satellite\s+(?:internet|dish|tv)|church\s+towers?|power\s+(?:lines?|towers?)|water\s+towers?|data\s+plan|tv\s+antennas?|radio\s+station)\b/gi;
+const AJENO_ES = /\b(?:se[nñ]al\s+(?:de(?:l)?\s+)?(?:celular|tel[eé]fono|wifi|la\s+tele)|cobertura\s+(?:de(?:l)?\s+)?(?:celular|claro|movistar|tigo)|panel(?:es)?\s+solar(?:es)?|internet\s+satelital|torres?\s+de\s+(?:la\s+iglesia|energ[ií]a|claro|movistar|tigo|agua)|plan\s+de\s+datos|antenas?\s+de\s+(?:claro|movistar|tigo|televisi[oó]n|la\s+tele|directv))\b/gi;
+
+/**
+ * v17.7 · Con la barra abierta y sin su nombre, ¿cuenta un tema del cerebro? Solo si nombra algo del simulador (una
+ * pieza, una capa, una medida, el SF, la leyenda…): «the weather is really nice today» no es una pregunta por la lluvia
+ * ni «cuánto vale el kilo de carne» por los precios. Lo de todos los días que roza una pieza («la señal del celular», «a
+ * solar panel») solo cuenta si se pregunta («¿qué pasa de noche con los paneles solares?»). «Dime cuánto cuesta la red»
+ * sigue contando (nombra la red). Con su nombre o por escrito, todo cuenta igual que antes.
+ */
+const DEL_CELULAR = /\b(?:celular|cel|telefono|plan\s+de\s+datos|minutos|recarga|wifi|cell\s*phone|phone|data\s+plan|cell)\b/i;
+const GENERICAS_CELULAR = /\b(?:se[nñ]al|cobertura|red|internet|pagos?|signal|coverage|network|payments?)\b/gi;
+
+const AFIRMA_EN = /\b(?:is|are|was|were|has|have|had|looks|seems|went|got|did|does|doesn'?t|don'?t|didn'?t|can'?t|isn'?t|wasn'?t|haven'?t|hasn'?t|said|says|rained|rose|flooded|fixed|broke|repairing|fixing|dropped|came)\b/i;
+const AFIRMA_ES = /\b(?:es|esta|estan|estaba|estaban|era|fue|fueron|son|tiene|tienen|tenia|hay|habia|dice|dijo|dicen|pusieron|quede|quedo|queda|cambiaron|llovio|subio|se\s+ve|me\s+gusta|cayo|dañaron|danaron)\b/i;
+
+export function temaSinNombre(texto: string, lengua: LenguaOido, nombres: string[] = []): boolean {
+  const pregunta = esPregunta(texto);
+  // (sin preguntar ni pedir, lo que se cuenta de algo —«the tower of the church is very high», «la torre del cerro es
+  // altísima»— es charla, salvo que nombre un nodo del mapa: «el Repetidor 2 está muy bajo»)
+  const plano = sinTildes(texto).replace(/[¿?¡!.,;:«»"]/g, " ").replace(/\s+/g, " ").trim();
+  const pide = (lengua === "en" ? VERBO_PEDIDO_EN : VERBO_PEDIDO_ES).test(plano);
+  const deLaRed = /\b(?:repeaters?|repetidor\w*|gateways?|nodes?|nodos?|mesh|malla|meshcore|lora|simulat\w*|simulacion)\b/.test(plano);
+  if (!pregunta && !pide && !deLaRed && plano.split(" ").length > 4 && (lengua === "en" ? AFIRMA_EN : AFIRMA_ES).test(plano) && !nombresNormalizados(nombres).some((n) => n.length >= 3 && plano.includes(n))) return false;
+  let t = pregunta ? texto : texto.replace(lengua === "en" ? AJENO_EN : AJENO_ES, " ");
+  // (sin preguntar, lo que se cuenta del celular —«el celular no me coge señal en la casa»— es de todos los días)
+  if (!pregunta && DEL_CELULAR.test(sinTildes(t))) t = t.replace(GENERICAS_CELULAR, " ");
+  return anclaDelSimulador(t, lengua, nombres) || ANCLA_TEMA.test(sinTildes(t));
+}
+
+/** Lo que Melki dice al responder (y que, con parlantes, puede volver a entrar por el micrófono). */
+const VOZ_DE_MELKI_ES = new RegExp(
+  [
+    // Lo que hizo, en primera persona del pasado («Listo, agregué…», «Moví el gateway…», «Puse la vista satelital»)
+    String.raw`^(?:(?:listo|hecho|ya|bueno|perfecto|claro)[,.]?\s+)?(?:ya\s+)?(?:le\s+)?(?:agregué|moví|puse|borré|eliminé|quité|cambié|diseñé|exporté|renombré|subí|bajé|simulé|guardé|activé|desactivé|apagué|prendí|mostré|oculté|centré|llevé|abrí|cerré|apliqué|volví\s+a|armé|poblé|mandé|envié|calculé|ubiqué|conecté|sembré|inscribí|dupliqué|giré|orienté|apunté|acerqué|alejé)(?![\p{L}])`,
+    // Lo que pregunta antes de hacer algo
+    String.raw`^¿?\s*quiso\s+decir\b|^¿\s*(?:le\s+|lo\s+|la\s+)?(?:borro|aplico|pongo|agrego|muevo|quito|subo|bajo|simulo|cambio|exporto|elimino|guardo|conecto)(?![\p{L}])|^(?:el|la)\s+(?:repetidor|persona|torre|gateway|nodo|red|cobertura|se[nñ]al|enlace|malla)\b[^,;]*?\b(?:queda|es|est[aá]|aguanta|llega|cubre|cuesta|tiene)\b[^,;]*?(?:\bunos?\s+\d|\bunas\s+\d|\bcerca\s+de\s+\d|\bmenos\s+\d|\bde\s+-\d|\ba\s+\d+[.,]\d)|^le\s+entend[ií](?![\p{L}])|\b(?:¿\s*)?(?:lo|la|los|las)\s+(?:hago|aplico|borro|quito|muevo)\s*\?|¿\s*sigo\s*\?|^¿?\s*quiere\s+que\s+(?:le\s+|lo\s+|la\s+)?\p{L}+|^no\s+estoy\s+seguro\s+de\s+haberle\s+o[ií]do|^perd[oó]n,?\s+no\s+le\s+(?:entend[ií]|o[ií])`,
+    // Lo que cuenta de la red, como respuesta («La red cuesta…», «Cada repetidor aguanta…», «La distancia entre… es de…»)
+    String.raw`^(?:la\s+red|la\s+malla)\s+(?:cuesta|cubre)\b|^cada\s+(?:repetidor|nodo|gateway)\s+aguanta\b|^la\s+distancia\s+entre\b.*\bes\s+de\b|^(?:la\s+prueba\s+de\s+(?:estr[eé]s|carga)|la\s+simulaci[oó]n|la\s+optimizaci[oó]n)\s+(?:termin[oó]|est[aá]\s+lista|qued[oó])(?![\p{L}])|^hay\s+(?:\d+|dos|tres|cuatro|cinco|un|una)\s+nodos?\s+sin\s+se[nñ]al\b|^(?:el|la)\s+\p{L}+(?:\s+\d+)?\s+(?:no\s+tiene\s+se[nñ]al\s+porque|qued[oó]\s+a\s+\d)|^el\s+enlace\s+entre\b.*\btiene\b|^le\s+recomiendo\b|^simulando\b`,
+  ].join("|"),
+  "iu",
+);
+const VOZ_DE_MELKI_EN = new RegExp(
+  [
+    String.raw`^(?:(?:done|okay|ok|alright|all\s+right|sure|right|got\s+it|perfect)[,.]?\s+)?i(?:'ve|\s+have)?\s+(?:just\s+)?(?:moved|added|put|placed|deleted|removed|switched|changed|designed|exported|renamed|raised|lowered|simulated|saved|turned|showed|hid|centered|took\s+you|opened|closed|applied|built|populated|sent|calculated|connected|seeded|duplicated|pointed|recommend|understood|zoomed)\b`,
+    String.raw`^did\s+you\s+mean\b|^shall\s+i\b|^(?:the\s+)?(?:repeater|person|tower|gateway|node|network|coverage|signal|link|mesh)\b[^,;]*?\b(?:is|are|has|can\s+handle|reaches|covers|costs)\b[^,;]*?\b(?:about|around|approximately|roughly|now\s+at|minus)\s+\d|^(?:tower|repeater|person|gateway)\s+\d\s+is\s+\d|^done[,.!]|\bshall\s+i\s+go\s+ahead\b|\bdo\s+you\s+want\s+me\s+to\b|^i'?m\s+not\s+sure\s+i\s+heard\s+you\b|^sorry,?\s+i\s+didn'?t\s+(?:catch|get|understand|hear)\b`,
+    String.raw`^the\s+(?:network|mesh)\s+(?:costs|covers|needs|has)\b|^each\s+(?:repeater|node|gateway)\s+can\s+handle\b|^the\s+distance\s+between\b.*\bis\b|^the\s+(?:stress\s+test|load\s+test|simulation|optimization)\s+(?:finished|is\s+ready|is\s+done)\b|^(?:\d+|two|three|four|five|one)\s+nodes?\s+(?:have|has)\s+no\s+signal\b|\bhas\s+no\s+signal\s+because\b|^(?:repeater|person|tower|gateway)\b.*\bis\s+now\s+\d|^the\s+link\s+between\b.*\bhas\b|^(?:spreading\s+factor|sf|the\s+sf)\s+(?:changed|set)\s+to\b|^switched\s+to\b|^simulating\b`,
+  ].join("|"),
+  "iu",
+);
+
+/**
+ * v17.7 · ¿Lo oído suena a lo que Melki mismo responde («Listo, agregué un repetidor…», «I understood: delete Person 2.
+ * Shall I go ahead?», «La red cuesta unos 45 millones»)? Con parlantes y sin su nombre, eso no es un pedido: pasa sin
+ * hacerse aunque ya no esté entre lo que acaba de decir (la otra guarda, la de lo dicho hace poco, sigue igual).
+ */
+export function pareceVozDeMelki(texto: string): boolean {
+  const t = texto.normalize("NFC").replace(/[“”«»"]/g, "").replace(/\s+/g, " ").trim();
+  if (!(VOZ_DE_MELKI_ES.test(t) || VOZ_DE_MELKI_EN.test(t))) return false;
+  // («Le entendí: borra la Persona 2. ¿Lo hago?» es siempre de Melki, aunque repita la orden)
+  if (/^(?:le\s+entend[ií]|i\s+understood)\b|\b(?:lo|la)\s+hago\s*\?|\bshall\s+i\s+go\s+ahead\b|\bdo\s+you\s+want\s+me\s+to\b|¿\s*sigo\s*\?/iu.test(t)) return true;
+  // (si después viene un pedido —«I moved Repeater 1, simulate again», «la Persona 2 quedó a 3 km, acércala…»— es de la
+  // persona, no de Melki)
+  return !trasUnaPausaPide(t);
+}
+
+/** v17.7 · ¿Después de una pausa («,», «.», «y», «and», «then», «ahora»…) viene un pedido? */
+function trasUnaPausaPide(t: string): boolean {
+  return sinTildes(t)
+    .split(/[,;.:!?]|\s(?:and|then|now|so|y|luego|entonces|ahora|pero|but)\s/)
+    .slice(1)
+    .map((x) => x.trim())
+    .some((x) => x && (VERBO_PEDIDO_EN.test(x) || VERBO_PEDIDO_ES.test(x) || /^(?:dont|don't)\s+forget\b/.test(x) || /^[a-z]+[aei](?:lo|la|los|las|le|les|me)\b/.test(x)));
+}
+
+const COLGANDO_ES =
+  /\b(en|de|del|a|al|y|o|para|con|que|la|el|los|las|un|una|hasta|por|sobre|entre|cerca|ubicame|llevame|muestrame|pon|ponme|arma|armame|disena|disename|hazme|crea|creame|agrega|busca|vamos|cubre|cubra|municipio|departamento|coordenadas)$/;
+const COLGANDO_EN =
+  /\b(in|of|to|at|on|and|or|for|with|that|the|a|an|near|between|from|by|around|within|me|put|place|build|design|make|create|add|find|cover|show|take|move|municipality|department|coordinates)$/;
+
+/**
+ * v17.7 · ¿Lo oído quedó a medias y conviene esperar un poco más a que siga («ubícame en…», «add a repeater», «mueve el
+ * Repetidor 1», «rename Person 1»)? Lo es si termina en una palabra que pide algo más, si es una orden a la que le falta
+ * dónde (`incompleta`) o si son pocas palabras que todavía no se entienden. Una orden completa se hace enseguida.
+ */
+export function quedaAMedias(texto: string, lengua: LenguaOido, incompleta: boolean): boolean {
+  const t = sinTildes(texto).replace(/[.,;:!?¿¡]+$/g, "").trim();
+  if (!t) return false;
+  if ((lengua === "en" ? COLGANDO_EN : COLGANDO_ES).test(t)) return true;
+  return incompleta && t.split(/\s+/).length <= 7;
+}
+
+/** Dónde se corrige lo que se acaba de decir: «…, no, …», «…, digo, …», «… I mean …», «… no wait …». */
+// (v17.7 · solo correcciones dichas como tal: «…, no, …» con la pausa después del «no», «digo», «perdón», «mejor dicho»,
+// «I mean», «sorry», «no wait». «Al norte, no al sur» o «en Cumaral, no en Restrepo» dicen lo contrario: no se tocan)
+const MARCA_CORRECCION_ES = /(?:\s*,\s*no\s*,\s*(?:mejor\s+|espera\s*,?\s*|perd[oó]n\s*,?\s*)?)|(?:\s*,?\s+(?:digo|perd[oó]n|mejor\s+dicho|no\s+espera|no\s+perd[oó]n)\s*,?\s+)|(?:\s+no\s*,\s+)/giu;
+const MARCA_CORRECCION_EN = /(?:\s*,\s*no\s*,\s*(?:wait\s*,?\s*|sorry\s*,?\s*)?)|(?:\s*,?\s+(?:i\s+mean|no\s+wait|no\s+sorry|sorry)\s*,?\s+)|(?:\s+no\s*,\s+)/giu;
+const RUMBO_PALABRA = /^(?:north|south|east|west|northeast|northwest|southeast|southwest|norte|sur|este|oeste|oriente|occidente|nororiente|noroccidente|suroriente|suroccidente|noreste|noroeste|sureste|suroeste)$/;
+const UNIDAD_PALABRA = /^(?:m|km|kms|mts?|ft|mi|meters?|metres?|kilomet\w*|feet|foot|miles?|metros?|kilometros?|millas?|pies|grados|degrees|%|percent|por|porciento|hectareas?|hectares?|dbi?|db|mhz)$/;
+const PIEZA_PALABRA = /^(?:repeaters?|persons?|people|towers?|gateways?|nodes?|antennas?|ejemplo|example|repetidor(?:es)?|personas?|torres?|nodos?|antenas?|tower)$/;
+const GENERO: Record<string, string> = { la: "el", las: "los", una: "un", unas: "unos", todas: "todos", esta: "este", esa: "ese", al: "al", del: "del" };
+const clave = (w: string) => {
+  const k = sinTildes(w).replace(/^[¿¡"«(]+|[.,;:!?"»)]+$/g, "");
+  return GENERO[k] ?? k;
+};
+const categoria = (w: string) => {
+  const k = clave(w);
+  if (/^-?\d+(?:[.,]\d+)?(?:%|°)?$/.test(k)) return "numero";
+  if (RUMBO_PALABRA.test(k)) return "rumbo";
+  if (UNIDAD_PALABRA.test(k)) return "unidad";
+  if (PIEZA_PALABRA.test(k)) return "pieza";
+  return `=${k}`;
+};
+
+/**
+ * v17.7 · Lo que se corrige a mitad de la frase, como se haría al hablar: «sube la Torre 2 a 40 metros, no, a 45» →
+ * «sube la Torre 2 a 45 metros»; «move Repeater 1, I mean Repeater 2, north 1 km» → «move Repeater 2, north 1 km»; «add
+ * a person 1 km west of the gateway, no, east» → «… east of the gateway». Lo corregido reemplaza lo que se dijo antes del
+ * mismo tipo (un número, un rumbo, un nodo o lo que empieza igual); si empieza con otro verbo, es otra orden. `null` si
+ * no hay corrección. Melki solo la usa si lo que queda es una orden completa, la muestra («Le entendí: …») y, si borra o
+ * reemplaza algo, pregunta antes («¿lo hago?»).
+ */
+export function autocorreccion(texto: string, lengua: LenguaOido): string | null {
+  return corregirCon(texto, lengua === "en" ? MARCA_CORRECCION_EN : MARCA_CORRECCION_ES);
+}
+
+/** Un «no» sin pausa después, delante de lo que se cambiaría («… west no east», «… al este no al occidente»). */
+const MARCA_DUDOSA_ES = /(?:\s*,?\s+no\s+(?=(?:a|al|en|de|del|desde|hacia|entre|norte|sur|este|oeste|oriente|occidente|nororiente|noroccidente|suroriente|suroccidente|el|la|los|las|repetidor|persona|torre|gateway|ejemplo)\b|-?\d))/giu;
+const MARCA_DUDOSA_EN = /(?:\s*,?\s+no\s+(?=(?:to|on|in|at|from|between|north|south|east|west|northeast|northwest|southeast|southwest|the|repeater|person|tower|gateway|ejemplo)\b|-?\d))|(?:\s*,\s*wait\s*,\s*)/giu;
+
+/**
+ * v17.7 · Lo que puede ser una corrección o lo contrario: «move the gateway 800 meters west no east» (¿corrige?) o «mueve
+ * el Repetidor 1 al norte, no al sur» (lo contrario). Melki no decide solo: pregunta «¿quiso decir…?» con las dos. `null`
+ * si no hay nada así.
+ */
+export function correccionDudosa(texto: string, lengua: LenguaOido): string | null {
+  return corregirCon(texto, lengua === "en" ? MARCA_DUDOSA_EN : MARCA_DUDOSA_ES);
+}
+
+function corregirCon(texto: string, re: RegExp): string | null {
+  const t = texto.replace(/\s+/g, " ").trim();
+  re.lastIndex = 0;
+  let ultima: RegExpExecArray | null = null;
+  for (let x = re.exec(t); x; x = re.exec(t)) {
+    if (x.index > 0) ultima = x;
+    if (x[0].length === 0) re.lastIndex++;
+  }
+  if (!ultima) return null;
+  const antes = t
+    .slice(0, ultima.index)
+    .replace(/[\s,]+(?:uh+|um+|eh+|ah+|mmm*|este)$/i, "")
+    .trim();
+  const despues = t
+    .slice(ultima.index + ultima[0].length)
+    .replace(/^(?:(?:mejor|better|rather|uh+|um+|eh+|let'?s\s+say|digamos)[\s,]+)+/i, "")
+    .replace(/[\s,.!?]+$/, "")
+    .trim();
+  const w1 = antes.split(" ").filter(Boolean);
+  const w2 = despues.split(" ").filter(Boolean);
+  if (w1.length < 2 || !w2.length) return null;
+  const c2 = w2.map(categoria);
+  const alineada = (j: number) => c2.every((c, i) => j + i >= w1.length || categoria(w1[j + i]) === c);
+  const empieza = (j: number) => categoria(w1[j]) === c2[0];
+  let j = -1;
+  // (primero donde cabe entera: «4.30, -73.45, no, 4.30, -73.40» reemplaza la coordenada completa)
+  for (let k = w1.length - w2.length; k >= 0 && j < 0; k--) if (empieza(k) && alineada(k)) j = k;
+  for (let k = w1.length - 1; k >= 0 && j < 0; k--) if (empieza(k) && alineada(k)) j = k;
+  let largo = w2.length;
+  if (j < 0) {
+    for (let k = w1.length - 1; k >= 0 && j < 0; k--) if (empieza(k)) j = k;
+    largo = Infinity;
+  }
+  if (j < 0) {
+    // Otra orden entera («open the legend, no, close the panels»)
+    return VERBO_PEDIDO_EN.test(despues) || VERBO_PEDIDO_ES.test(sinTildes(despues)) ? despues : null;
+  }
+  // Lo de antes que sigue a lo corregido queda («… 1 km west of the gateway, no, east» → «… east of the gateway»), salvo
+  // que lo nuevo traiga más (entonces lo nuevo reemplaza hasta el final)
+  // (el número de un nodo va con él: «elimina Torre 2, digo, elimina Ejemplo» no deja el «2»)
+  if (largo !== Infinity && categoria(w2[w2.length - 1]) === "pieza" && categoria(w1[j + largo - 1] ?? "") === "pieza" && categoria(w1[j + largo] ?? "") === "numero") largo++;
+  const cola = largo === Infinity || j + largo >= w1.length ? [] : w1.slice(j + largo);
+  const salida = [...w1.slice(0, j), ...w2.map((w, i) => (i === w2.length - 1 && cola.length ? w.replace(/[,.;]+$/, "") : w)), ...cola].join(" ");
+  return salida.replace(/\s+,/g, ",").trim() === t ? null : salida.replace(/\s+,/g, ",").trim();
 }
